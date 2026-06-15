@@ -104,7 +104,8 @@ class BottomStatusBarTest {
         assertEquals(2, lines.size());
         assertTrue(lines.get(0).toString().contains("YOLO"), "status row should show current mode");
         if (AnsiStyle.isEnabled()) {
-            assertTrue(lines.get(1).toAnsi().contains("[2m"), "footer row should use subtle style");
+            assertFalse(lines.get(1).toAnsi().contains("[2m"), "footer row should no longer be dim/faint");
+            assertTrue(lines.get(1).toAnsi().contains("["), "footer row should be styled (bold cyan)");
         } else {
             assertFalse(lines.get(1).toAnsi().contains("\u001B["), "NO_COLOR should keep footer plain");
         }

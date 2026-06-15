@@ -2820,11 +2820,17 @@ public class Main {
         String capabilities = "ReAct · Plan · MCP · Browser · Image · Tools · Memory · RAG";
         String state = mcp + " · " + skills + " · ReAct";
         List<String> lines = new ArrayList<>(List.of(
-                "   " + AnsiStyle.section("██████████") + "    " + AnsiStyle.emphasis("Wraith CLI") + " " + AnsiStyle.section("π") + "  " + AnsiStyle.subtle("v" + VERSION),
-                "   " + AnsiStyle.section("  ██  ██") + "    " + AnsiStyle.subtle(ready),
-                "   " + AnsiStyle.section("  ██  ██") + "    " + AnsiStyle.subtle(state),
-                "   " + AnsiStyle.section("  ██  ██") + "    " + AnsiStyle.subtle(capabilities),
-                "   " + AnsiStyle.section("  ██  ██"),
+                "   " + AnsiStyle.section("██╗    ██╗██████╗  █████╗ ██╗████████╗██╗  ██╗"),
+                "   " + AnsiStyle.section("██║    ██║██╔══██╗██╔══██╗██║╚══██╔══╝██║  ██║"),
+                "   " + AnsiStyle.section("██║ █╗ ██║██████╔╝███████║██║   ██║   ███████║"),
+                "   " + AnsiStyle.section("██║███╗██║██╔══██╗██╔══██║██║   ██║   ██╔══██║"),
+                "   " + AnsiStyle.section("╚███╔███╔╝██║  ██║██║  ██║██║   ██║   ██║  ██║"),
+                "   " + AnsiStyle.section(" ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝"),
+                "",
+                "   " + AnsiStyle.section("Wraith CLI") + "  " + AnsiStyle.heading("v" + VERSION),
+                "   " + AnsiStyle.heading(ready),
+                "   " + AnsiStyle.heading(state),
+                "   " + AnsiStyle.heading(capabilities),
                 "",
                 "Tips for getting started:",
                 "1. Type " + AnsiStyle.emphasis("/") + " for commands and Tab completion",

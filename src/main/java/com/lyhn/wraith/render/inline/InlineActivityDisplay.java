@@ -28,7 +28,7 @@ final class InlineActivityDisplay implements AutoCloseable {
     private static final int MAX_REASONING_ROWS = 4;
     private static final String[] SPINNER_FRAMES = {"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"};
     private static final AttributedStyle STATUS_STYLE = AttributedStyle.DEFAULT.italic();
-    private static final AttributedStyle QUOTE_STYLE = AttributedStyle.DEFAULT.faint().italic();
+    private static final AttributedStyle QUOTE_STYLE = AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN).bold();
 
     private final Terminal terminal;
     private final PrintStream renderLock;

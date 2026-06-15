@@ -33,11 +33,11 @@ public final class AnsiStyle {
     }
 
     public static String subtle(String text) {
-        return wrap(DIM + GRAY, text);
+        return wrap(BOLD + CYAN, text);
     }
 
     public static String thinking(String text) {
-        return wrap(ITALIC + GRAY, text);
+        return wrap(BOLD + CYAN, text);
     }
 
     public static String userMessageBlock(String text, int columns) {

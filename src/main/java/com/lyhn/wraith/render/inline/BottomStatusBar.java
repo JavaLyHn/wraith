@@ -29,7 +29,7 @@ public final class BottomStatusBar implements AutoCloseable {
 
     private static final int CONTEXT_BAR_WIDTH = 8;
     private static final Pattern SUMMARY_RATIO = Pattern.compile("(?i)^(?:MCP|Skill)\\s+(\\d+)/(\\d+)$");
-    private static final AttributedStyle BASE_STYLE = style(AttributedStyle.DEFAULT.faint());
+    private static final AttributedStyle BASE_STYLE = style(AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN).bold());
     private static final AttributedStyle MODE_YOLO_STYLE = style(AttributedStyle.DEFAULT
             .foreground(AttributedStyle.YELLOW)
             .bold());
@@ -60,7 +60,7 @@ public final class BottomStatusBar implements AutoCloseable {
     private static final AttributedStyle TOKEN_LABEL_STYLE = style(AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW));
     private static final AttributedStyle CACHE_LABEL_STYLE = style(AttributedStyle.DEFAULT.foreground(AttributedStyle.MAGENTA));
     private static final AttributedStyle ELAPSED_STYLE = style(AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW));
-    private static final AttributedStyle CWD_STYLE = style(AttributedStyle.DEFAULT.faint());
+    private static final AttributedStyle CWD_STYLE = style(AttributedStyle.DEFAULT.foreground(AttributedStyle.CYAN).bold());
 
     private final Terminal terminal;
     private final PrintStream out;
