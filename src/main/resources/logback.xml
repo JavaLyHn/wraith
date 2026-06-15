@@ -1,0 +1,25 @@
+<configuration>
+    <property name="LOG_DIR" value="${wraith-cli.log.dir:-${user.home}/.wraith-cli/logs}"/>
+    <property name="LOG_LEVEL" value="${wraith-cli.log.level:-INFO}"/>
+    <property name="LOG_MAX_HISTORY" value="${wraith-cli.log.maxHistory:-7}"/>
+    <property name="LOG_MAX_FILE_SIZE" value="${wraith-cli.log.maxFileSize:-10MB}"/>
+    <property name="LOG_TOTAL_SIZE_CAP" value="${wraith-cli.log.totalSizeCap:-100MB}"/>
+
+    <appender name="ROLLING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>${LOG_DIR}/wraith-cli.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_DIR}/wraith-cli.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>${LOG_MAX_FILE_SIZE}</maxFileSize>
+            <maxHistory>${LOG_MAX_HISTORY}</maxHistory>
+            <totalSizeCap>${LOG_TOTAL_SIZE_CAP}</totalSizeCap>
+            <cleanHistoryOnStart>true</cleanHistoryOnStart>
+        </rollingPolicy>
+    </appender>
+
+    <root level="${LOG_LEVEL}">
+        <appender-ref ref="ROLLING_FILE"/>
+    </root>
+</configuration>

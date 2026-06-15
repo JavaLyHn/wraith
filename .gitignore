@@ -1,0 +1,27 @@
+# 环境变量文件（包含敏感信息）
+.env
+.wraith-cli/*
+!.wraith-cli/
+!.wraith-cli/WRAITH.md
+WRAITH.local.md
+
+# 编译输出
+target/
+*.class
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Claude Code 本地会话配置（不提交，保留 .claude/launch.json）
+.claude/settings.local.json
+
+# 日志
+*.log
+
+# 操作系统
+.DS_Store
+Thumbs.db
+/reports
+temp_articles.json
