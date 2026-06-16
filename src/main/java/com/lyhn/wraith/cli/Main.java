@@ -1631,9 +1631,66 @@ public class Main {
         }
         new AutosuggestionWidgets(lineReader).enable();
         new AutopairWidgets(lineReader).enable();
+        // Smart Tab：光标在行尾、且正显示历史预测(灰色 autosuggestion)时，Tab 一键整段补全；
+        // 否则(以 / 开头的命令、或无预测)回退到原有的命令补全 expand-or-complete。
+        lineReader.getWidgets().put("wraith-smart-tab", () -> acceptSuggestionOrComplete(lineReader));
+        Reference smartTab = new Reference("wraith-smart-tab");
+        bindKeyToWidget(lineReader, LineReader.MAIN, smartTab, "\t");
+        bindKeyToWidget(lineReader, LineReader.EMACS, smartTab, "\t");
+        bindKeyToWidget(lineReader, LineReader.VIINS, smartTab, "\t");
         // JLine TailTipWidgets 会通过 Status 预留多行底部区域；如果在首屏前 enable，
         // banner 前会出现大段空白，输入行下方也会长期空出一块。命令说明后续用
         // 不预留布局的方式展示，避免破坏 Claude Code / Qoder 风格的 inline 体验。
+    }
+
+    /** Smart Tab：行尾有历史预测时整段补全，否则回退到命令补全。 */
+    private static boolean acceptSuggestionOrComplete(LineReader lineReader) {
+        var buffer = lineReader.getBuffer();
+        if (buffer.cursor() == buffer.length()) {
+            String text = buffer.upToCursor();
+            if (!text.isEmpty() && !text.startsWith("/")) {
+                String tail = historySuggestionTail(lineReader, text);
+                if (tail != null && !tail.isEmpty()) {
+                    buffer.write(tail);
+                    return true;
+                }
+            }
+        }
+        lineReader.callWidget(LineReader.EXPAND_OR_COMPLETE);
+        return true;
+    }
+
+    private static String historySuggestionTail(LineReader lineReader, String prefix) {
+        History history = lineReader.getHistory();
+        if (history == null) {
+            return null;
+        }
+        List<String> lines = new ArrayList<>();
+        for (History.Entry entry : history) {
+            lines.add(entry.line());
+        }
+        return suggestionTail(lines, prefix);
+    }
+
+    /** 取最近一条以 prefix 开头的历史(historyLines 按旧→新)，返回其剩余部分；无则 null。 */
+    static String suggestionTail(List<String> historyLines, String prefix) {
+        if (prefix == null || prefix.isEmpty() || historyLines == null) {
+            return null;
+        }
+        String match = null;
+        for (String line : historyLines) {
+            if (line != null && line.length() > prefix.length() && line.startsWith(prefix)) {
+                match = line;
+            }
+        }
+        return match == null ? null : match.substring(prefix.length());
+    }
+
+    private static void bindKeyToWidget(LineReader lineReader, String keyMapName, Reference ref, String keySeq) {
+        KeyMap<org.jline.reader.Binding> keyMap = lineReader.getKeyMaps().get(keyMapName);
+        if (keyMap != null) {
+            keyMap.bind(ref, keySeq);
+        }
     }
 
     static LinkedHashMap<String, CmdDesc> slashCommandTailTips() {

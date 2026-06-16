@@ -19,6 +19,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MainInputNormalizationTest {
@@ -69,6 +70,15 @@ class MainInputNormalizationTest {
         assertTrue(lines.stream().noneMatch(line -> line.contains("────────────────")));
         assertTrue(lines.stream().noneMatch(line -> line.endsWith("║")),
                 "banner should not depend on a padded right border");
+    }
+
+    @Test
+    void suggestionTailReturnsNewestHistoryMatchRemainder() {
+        List<String> history = List.of("git status", "git commit -m x", "mvn test");
+        assertEquals(" commit -m x", Main.suggestionTail(history, "git"));
+        assertNull(Main.suggestionTail(history, "docker"), "no match -> null");
+        assertNull(Main.suggestionTail(history, ""), "empty prefix -> null");
+        assertNull(Main.suggestionTail(List.of("ls"), "ls"), "equal-length match has no remainder");
     }
 
     @Test
