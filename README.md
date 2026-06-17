@@ -83,8 +83,9 @@ mvn test -DskipTests=false
 ### 第八期：多模型适配 + 运行时切换
 
 - `LlmClient` 接口抽象 + `AbstractOpenAiCompatibleClient` 模板基类
-- 内置 `GLMClient`、`DeepSeekClient`、`StepClient`、`KimiClient`、`FreeLlmApiClient` 五个瘦实现
-- `/model glm-5.1` / `/model glm-5v-turbo` 明确切 GLM 模型；`/model deepseek` / `/model step` / `/model kimi` / `/model freellmapi` 切 provider 并读取配置里的具体模型
+- 内置 `GLMClient`、`DeepSeekClient`、`StepClient`、`KimiClient`、`FreeLlmApiClient`、`XfyunMaaSClient` 六个瘦实现
+- `/model glm-5.1` / `/model glm-5v-turbo` 明确切 GLM 模型；`/model deepseek` / `/model step` / `/model kimi` / `/model freellmapi` / `/model xfyun` 切 provider 并读取配置里的具体模型
+- `freellmapi` 同时是通用 **OpenAI 兼容**入口：把 `--base-url` 指向任意 OpenAI 兼容端点即可接入自定义模型，无需改代码（例：SophNet 托管的 `DeepSeek-V4-Flash`，base 需带 `/v1`）
 - 配置持久化到 `~/.wraith-cli/config.json`，API Key 可从配置、环境变量或 `.env` 读取
 
 ### 第九期：联网能力 + Web 工具
@@ -173,6 +174,8 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 - 兼容旧设置：`WRAITH_TUI=true` 自动映射为 `WRAITH_RENDERER=lanterna`（已 deprecated）
 - `WRAITH_NO_STATUSBAR=true` 在 inline 模式下禁用 JLine 底部 dock（不适合 ANSI 光标控制的终端）
 - `NO_COLOR=1` 禁用所有 ANSI 颜色，保留布局
+- Smart Tab：输入行展示 fish 风格历史预测（灰色 autosuggestion）时，行尾按 `Tab` 整段补全该建议；否则 `Tab` 仍走 `/` 命令补全
+- 开屏 banner 为 ANSI-Shadow 立体 `WRAITH` 字标（绿色），下方 model / MCP / 能力等信息行为粗体青色高亮
 
 ### 第十七期：LSP 诊断注入（MVP）
 
@@ -257,11 +260,17 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 当前启动输出以命令行实际产物为准：
 
 ```text
-   ████████    Wraith CLI π  v16.1.0
-     ██  ██    Model step-3.5-flash-2603 (step)
-     ██  ██    MCP 4/4 · 61 tools · 2/2 skills · ReAct
-     ██  ██    ReAct · Plan · MCP · Browser · Image
-     ██  ██
+   ██╗    ██╗██████╗  █████╗ ██╗████████╗██╗  ██╗
+   ██║    ██║██╔══██╗██╔══██╗██║╚══██╔══╝██║  ██║
+   ██║ █╗ ██║██████╔╝███████║██║   ██║   ███████║
+   ██║███╗██║██╔══██╗██╔══██║██║   ██║   ██╔══██║
+   ╚███╔███╔╝██║  ██║██║  ██║██║   ██║   ██║  ██║
+    ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝
+
+   Wraith CLI  v16.1.0
+   Model DeepSeek-V4-Flash (freellmapi)
+   MCP 1/1 · 29 tools · 1/1 skills · ReAct
+   ReAct · Plan · MCP · Browser · Image · Tools · Memory · RAG
 
 Tips for getting started:
 1. Type / for commands and Tab completion
@@ -325,8 +334,9 @@ Tips for getting started:
 
 ### 第八期
 
-- 🔄 GLM-5.1、GLM-5V-Turbo、DeepSeek V4、阶跃星辰 StepFun、Kimi K2.6 与 FreeLLMAPI 多模型，`/model glm-5.1` / `/model glm-5v-turbo` 明确切 GLM 模型，`/model deepseek` / `/model step` / `/model kimi` / `/model freellmapi` 读取配置模型
-- 🧱 `LlmClient` 接口 + 模板方法基类，新增 provider 只需 ~20 行
+- 🔄 GLM-5.1、GLM-5V-Turbo、DeepSeek V4、阶跃星辰 StepFun、Kimi K2.6、FreeLLMAPI 与讯飞星辰 MaaS（xfyun）多模型，`/model glm-5.1` / `/model glm-5v-turbo` 明确切 GLM 模型，`/model deepseek` / `/model step` / `/model kimi` / `/model freellmapi` / `/model xfyun` 读取配置模型
+- 🧱 `LlmClient` 接口 + `AbstractOpenAiCompatibleClient` 模板方法基类，新增 provider 只需 ~20 行
+- 🔌 自定义模型接入：任意 OpenAI 兼容端点走 `freellmapi`（`/config provider freellmapi --base-url <url/v1> --api-key <key> --model <id> --default`），无需改代码
 - 💾 默认模型持久化到 `~/.wraith-cli/config.json`
 
 ### 第九期
@@ -348,7 +358,7 @@ Tips for getting started:
 
 ### 1. 配置 API Key
 
-复制 `.env.example` 为 `.env`，并填入你的 GLM、DeepSeek、StepFun、Kimi 或 FreeLLMAPI API Key：
+复制 `.env.example` 为 `.env`，并填入你的 GLM、DeepSeek、StepFun、Kimi、FreeLLMAPI 或讯飞星辰 MaaS（xfyun）API Key：
 
 ```bash
 cp .env.example .env
@@ -706,11 +716,17 @@ I
 ### 第三期：当前运行效果
 
 ```text
-   ████████    Wraith CLI π  v16.1.0
-     ██  ██    Model glm-5.1 (glm)
-     ██  ██    MCP 4/4 · 61 tools · 2/2 skills · ReAct
-     ██  ██    ReAct · Plan · MCP · Browser · Image
-     ██  ██
+   ██╗    ██╗██████╗  █████╗ ██╗████████╗██╗  ██╗
+   ██║    ██║██╔══██╗██╔══██╗██║╚══██╔══╝██║  ██║
+   ██║ █╗ ██║██████╔╝███████║██║   ██║   ███████║
+   ██║███╗██║██╔══██╗██╔══██║██║   ██║   ██╔══██║
+   ╚███╔███╔╝██║  ██║██║  ██║██║   ██║   ██║  ██║
+    ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝
+
+   Wraith CLI  v16.1.0
+   Model glm-5.1 (glm)
+   MCP 4/4 · 61 tools · 2/2 skills · ReAct
+   ReAct · Plan · MCP · Browser · Image · Tools · Memory · RAG
 
 Tips for getting started:
 1. Type / for commands and Tab completion
@@ -735,7 +751,7 @@ Tips for getting started:
 
 - Java 17
 - Maven
-- GLM-5.1 API
+- 多 LLM Provider（GLM / DeepSeek / StepFun / Kimi / FreeLLMAPI / 讯飞星辰，均 OpenAI 兼容）
 - OkHttp
 - Jackson
 - JLine 4（终端交互、Status、输入 widgets）
@@ -759,11 +775,15 @@ src/main/java/com/lyhn/wraith
 │   ├── CliCommandParser.java   # 命令解析
 │   └── PlanReviewInputParser.java  # 计划审核输入
 ├── llm/
-│   ├── GLMClient.java          # GLM API 客户端；glm-5.1 走 Coding endpoint，glm-5v-turbo 走多模态 endpoint
-│   ├── DeepSeekClient.java     # DeepSeek API 客户端
-│   ├── StepClient.java         # 阶跃星辰 StepFun API 客户端
-│   ├── KimiClient.java         # Kimi / Moonshot API 客户端
-│   └── FreeLlmApiClient.java   # 本地 FreeLLMAPI OpenAI-compatible 网关客户端
+│   ├── LlmClient.java          # provider 抽象接口（能力声明：window / prompt cache）
+│   ├── AbstractOpenAiCompatibleClient.java  # OpenAI 兼容模板基类（Authorization: Bearer）
+│   ├── LlmClientFactory.java   # provider 名 → 具体 Client 的工厂
+│   ├── GLMClient.java          # GLM；glm-5.1 走 Coding endpoint，glm-5v-turbo 走多模态 endpoint
+│   ├── DeepSeekClient.java     # DeepSeek V4 客户端
+│   ├── StepClient.java         # 阶跃星辰 StepFun 客户端
+│   ├── KimiClient.java         # Kimi / Moonshot 客户端
+│   ├── FreeLlmApiClient.java   # 通用 OpenAI 兼容网关客户端（自定义模型接入入口）
+│   └── XfyunMaaSClient.java    # 讯飞星辰 MaaS 客户端
 ├── context/
 │   ├── ContextMode.java        # short / balanced / long 模式
 │   ├── ContextProfile.java     # 模型窗口与上下文策略
@@ -789,6 +809,22 @@ src/main/java/com/lyhn/wraith
 │   ├── CodeRelation.java       # 代码关系模型
 │   ├── CodeIndex.java          # 索引管理器
 │   └── CodeRetriever.java      # 检索入口
-└── tool/
-    └── ToolRegistry.java       # 工具注册表
+├── tool/
+│   └── ToolRegistry.java       # 工具注册表（11 个内置工具）
+├── config/                     # WraithConfig：provider / api key / model / base_url（读写 ~/.wraith-cli/config.json）
+├── mcp/                        # MCP 客户端：stdio + Streamable HTTP、resources、step_search、@mention 展开
+├── web/                        # web_search（智谱/SerpAPI/SearXNG）、web_fetch（Jsoup readability）、网络安全策略
+├── browser/                    # Chrome DevTools MCP 会话、CDP 复用、敏感页面策略、/browser 命令
+├── skill/                      # Skill 系统：SKILL.md 加载、load_skill、内置 web-access
+├── hitl/                       # Human-in-the-Loop 审批流（Renderer / Terminal 两种 handler）
+├── policy/                     # PathGuard 路径围栏、CommandGuard 命令黑名单、AuditLog 审计
+├── prompt/                     # PromptAssembler 分层 prompt 组装（resources/prompts/ + 用户/项目级覆盖）
+├── lsp/                        # 第17期 LSP 诊断注入（JavaParser 语法诊断）
+├── snapshot/                   # 第18期 Side-Git 快照与回滚（JGit）
+├── runtime/                    # 第20期 异步后台任务（SQLite 队列）+ Runtime HTTP API
+├── image/                      # 第21期 图片输入：读取 / 压缩 / 缩放、@image: 解析
+├── wechat/                     # 第23期 微信 iLink 通道（文本 MVP）
+├── render/                     # Renderer 接口 + inline 流式 / plain 实现、行内 diff、底部状态栏
+├── tui/                        # lanterna 全屏 TUI、代码高亮、对话历史快照
+└── util/                       # AnsiStyle、Markdown 渲染等公共工具
 ```
