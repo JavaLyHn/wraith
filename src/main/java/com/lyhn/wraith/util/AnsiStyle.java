@@ -40,6 +40,11 @@ public final class AnsiStyle {
         return wrap(BOLD + CYAN, text);
     }
 
+    /** 分隔线 / 输入框横线:暗灰,作为结构线而非内容。 */
+    public static String rule(String text) {
+        return wrap(GRAY, text);
+    }
+
     public static String thinking(String text) {
         return wrap(BOLD + CYAN, text);
     }

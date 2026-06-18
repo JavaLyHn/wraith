@@ -9,7 +9,9 @@ import com.lyhn.wraith.render.StatusInfo;
 import com.lyhn.wraith.util.AnsiStyle;
 import org.jline.reader.LineReader;
 import org.jline.reader.Widget;
+import org.jline.terminal.Size;
 import org.jline.terminal.Terminal;
+import org.jline.utils.InfoCmp;
 
 import java.io.OutputStream;
 import java.io.PrintStream;
@@ -44,6 +46,14 @@ public final class InlineRenderer implements Renderer {
     private boolean redrawing;
     private volatile boolean started;
     private volatile boolean closed;
+
+    // —— 常驻顶部 banner(字标 + 信息行,冻结在左上角)——
+    private PinnedBanner pinnedBanner;
+    private volatile boolean pinnedActive;
+    private int pinnedHeight;
+    private volatile Thread resizeWatcher;
+    private static final int MIN_TRANSCRIPT_ROWS = 3;
+    private static final long RESIZE_POLL_MS = 120L;
 
     // —— 代码块折叠状态机字段（仅供 createTranscriptStream 内部使用）——
     private final StringBuilder lineBuffer = new StringBuilder();
@@ -106,6 +116,9 @@ public final class InlineRenderer implements Renderer {
             statusBar.prepareInputLine();
             statusBar.flushNow();
         }
+        if (pinnedActive) {
+            paintBanner(); // 每轮输入前补画,吸收轮次间/ resize 后可能的覆盖
+        }
     }
 
     @Override
@@ -115,14 +128,29 @@ public final class InlineRenderer implements Renderer {
         }
     }
 
+    /** 输入提示符可见字形 {@code  │ › }(5 单元:空格 │ 空格 › 空格),用于行宽计算。 */
+    private static final String INPUT_GLYPH = " │ › ";
+    /**
+     * 输入提示符占据的前导整行数 = 0(单行)。整宽顶线活在滚动区里,resize 时 JLine 清不干净、
+     * reflow 会把它打散成满屏 {@code ─} 残影,故不用顶线。改为"左下半框":输入行带左竖线 {@code │},
+     * 配合下方 dock 自绘的 {@code ╰────} 下线(同列对齐),既有框感又 resize 不散。
+     */
+    private static final int INPUT_PROMPT_LEADING_LINES = 0;
+
+    /**
+     * 输入提示符:{@code  │ › }。左竖线 {@code │} 与 dock 下线的 {@code ╰} 同列,构成左下半框。
+     */
     @Override
     public String inputPrompt() {
-        return "* ";
+        if (!AnsiStyle.isEnabled()) {
+            return INPUT_GLYPH;
+        }
+        return " " + AnsiStyle.rule("│") + " › ";
     }
 
     @Override
     public String inputRightPrompt() {
-        return "message / @path / @image";
+        return "⏎ send  ·  / commands  ·  @path  ·  @image";
     }
 
     @Override
@@ -131,6 +159,11 @@ public final class InlineRenderer implements Renderer {
             return;
         }
         closed = true;
+        pinnedActive = false;
+        Thread watcher = resizeWatcher;
+        if (watcher != null) {
+            watcher.interrupt();
+        }
         if (activityDisplay != null) {
             activityDisplay.close();
         }
@@ -229,6 +262,121 @@ public final class InlineRenderer implements Renderer {
             }
             return ok;
         });
+    }
+
+    /**
+     * 安装常驻顶部 banner(字标 + 信息行,冻结在左上角,resize 自适应)。Tips 不在这里——它走
+     * {@link #installStartupScreen} 进滚动区随对话滚走(留住滚动区非空,避免 resize 后输入误锚顶部)。
+     *
+     * <p>仅在支持滚动区且终端够高时启用;否则返回 {@code false},调用方降级到把整块打进滚动历史。
+     *
+     * @param contentLines 已上色的字标 + 信息行(不含分隔线)
+     * @return 是否成功启用固定区
+     */
+    public boolean installPinnedBanner(List<String> contentLines) {
+        if (statusBar == null || closed || contentLines == null || contentLines.isEmpty()) {
+            return false;
+        }
+        PinnedBanner banner = new PinnedBanner(contentLines);
+        int h = banner.height();
+        if (!hasRoomForPinned(h)) {
+            return false; // 终端太矮:降级到滚动 banner
+        }
+        this.pinnedBanner = banner;
+        this.pinnedHeight = h;
+        this.pinnedActive = true;
+        engagePinnedBanner();
+        return pinnedActive;
+    }
+
+    private boolean hasRoomForPinned(int h) {
+        Size size = TerminalCapabilities.safeSize(terminal);
+        return size.getRows() >= h + statusBar.reservedRows() + MIN_TRANSCRIPT_ROWS;
+    }
+
+    private void engagePinnedBanner() {
+        try {
+            statusBar.setTopReserved(pinnedHeight);
+            statusBar.reassertNow(); // DECSTBM 顶边设到固定区下方,冻结顶部
+            paintBanner();
+            startResizeWatcher();
+        } catch (Exception e) {
+            pinnedActive = false; // 任何异常都退场,绝不挡住启动
+        }
+    }
+
+    /**
+     * 去抖尺寸监视线程。{@code readLine} 期间 WINCH 被 JLine 自己的处理器接管(它把滚动区顶边重置回 0
+     * 并重排,却不触达我们的代码),靠它在尺寸稳定后重建固定区 + 重画 banner——绕开 JLine 的信号归属。
+     */
+    private void startResizeWatcher() {
+        Thread t = new Thread(() -> {
+            Size applied = TerminalCapabilities.safeSize(terminal);
+            Size pending = applied;
+            while (!closed && pinnedActive) {
+                try {
+                    Thread.sleep(RESIZE_POLL_MS);
+                } catch (InterruptedException e) {
+                    return;
+                }
+                Size now = TerminalCapabilities.safeSize(terminal);
+                if (sameSize(now, applied)) {
+                    pending = now;
+                    continue;
+                }
+                if (sameSize(now, pending)) {
+                    onResize(); // 尺寸稳定一拍 → JLine 多半已处理完,安全补救
+                    applied = now;
+                } else {
+                    pending = now; // 还在拖动,继续等
+                }
+            }
+        }, "wraith-banner-resize-watcher");
+        t.setDaemon(true);
+        this.resizeWatcher = t;
+        t.start();
+    }
+
+    private static boolean sameSize(Size a, Size b) {
+        return a.getRows() == b.getRows() && a.getColumns() == b.getColumns();
+    }
+
+    /** 在固定区(0..pinnedHeight-1 行)绝对定位绘制 banner;save/restore cursor 不打扰输入区。 */
+    private void paintBanner() {
+        PinnedBanner banner = pinnedBanner;
+        if (!pinnedActive || banner == null || closed) {
+            return;
+        }
+        PrintWriter writer = terminal.writer();
+        if (writer == null) {
+            return;
+        }
+        int cols = Math.max(1, TerminalCapabilities.safeSize(terminal).getColumns());
+        List<String> lines = banner.lines(cols);
+        synchronized (out) {
+            terminal.puts(InfoCmp.Capability.save_cursor);
+            for (int i = 0; i < lines.size() && i < pinnedHeight; i++) {
+                terminal.puts(InfoCmp.Capability.cursor_address, i, 0);
+                terminal.puts(InfoCmp.Capability.clr_eol);
+                writer.print(lines.get(i));
+            }
+            terminal.puts(InfoCmp.Capability.restore_cursor);
+            terminal.flush();
+        }
+    }
+
+    private void onResize() {
+        if (!pinnedActive || closed) {
+            return;
+        }
+        try {
+            if (statusBar != null) {
+                statusBar.resize(); // 重算 dock + 重设固定区顶边
+            }
+            paintBanner();          // 按新列宽重画 banner
+        } catch (Exception ignored) {
+            // resize 处理失败不致命
+        }
     }
 
     /**
@@ -506,12 +654,24 @@ public final class InlineRenderer implements Renderer {
 
     private int acceptedInputRows(String input) {
         int cols = Math.max(1, TerminalCapabilities.safeSize(terminal).getColumns());
+        return submittedInputRows(input, displayWidth(INPUT_GLYPH), INPUT_PROMPT_LEADING_LINES, cols);
+    }
+
+    /**
+     * 提交后该输入在屏幕上占用的物理行数 = 提示符前导行(上横线) + ({@code 提示符尾 + 各输入行})
+     * 按 {@code cols} 折行后的行数。纯函数,便于单测(见 {@code InlineInputBoxTest})。
+     *
+     * @param promptTailCells 输入行提示符的可见单元数(如 {@code " › "} = 3)
+     * @param leadingLines    提示符占据的前导整行数(上横线 = 1)
+     */
+    static int submittedInputRows(String input, int promptTailCells, int leadingLines, int cols) {
+        int c = Math.max(1, cols);
         String text = input == null ? "" : input;
         String[] parts = text.split("\\R", -1);
-        int rows = 0;
+        int rows = Math.max(0, leadingLines);
         for (int i = 0; i < parts.length; i++) {
-            int cells = displayWidth(parts[i]) + (i == 0 ? displayWidth(inputPrompt()) : 0);
-            rows += Math.max(1, (cells + cols - 1) / cols);
+            int cells = displayWidth(parts[i]) + (i == 0 ? promptTailCells : 0);
+            rows += Math.max(1, (cells + c - 1) / c);
         }
         return Math.max(1, rows);
     }
