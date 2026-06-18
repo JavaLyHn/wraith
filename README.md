@@ -163,7 +163,7 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 
 | 形态 | 启用方式 | 视觉风格 |
 |---|---|---|
-| **inline 流式 TUI**（默认） | 直接运行 / `WRAITH_RENDERER=inline` | Claude Code / Qoder 风格：π 主题彩色开屏、主屏直出、transcript 当前位置的 `* ` 输入提示、JLine `Status` 托管的底部 dock（YOLO/HITL、MCP、Skill、model、ctx、token、cwd 等关键字段带克制彩色高亮；ctx 是当前上下文估算，in/out/cache 是调用统计）、右侧输入提示、行内可折叠工具块（`Read 3 files (ctrl+o to expand)`）、行内 git diff、HITL 单字符 `[y/n/a/s/m]` 提示 |
+| **inline 流式 TUI**（默认） | 直接运行 / `WRAITH_RENDERER=inline` | Claude Code / Qoder 风格：WRAITH 开场动画 + 常驻左上角 banner、主屏直出、`│ › ` 左下半框输入、JLine `Status` 托管的底部 dock（YOLO/HITL、MCP、Skill、model、ctx、token、cwd 等关键字段带克制彩色高亮；ctx 是当前上下文估算，in/out/cache 是调用统计）、右侧输入提示、行内可折叠工具块（`Read 3 files (ctrl+o to expand)`）、行内 git diff、HITL 单字符 `[y/n/a/s/m]` 提示 |
 | **lanterna 全屏 TUI** | `WRAITH_RENDERER=lanterna`（或兼容旧 `WRAITH_TUI=true`） | v16 三栏全屏：文件树 + 对话流 + 状态栏 + 底部输入栏，HITL 模态弹窗 |
 | **plain 兜底** | `WRAITH_RENDERER=plain` | 纯 println，无折叠 / 状态栏，等价 v15 行为 |
 
@@ -175,7 +175,8 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 - `WRAITH_NO_STATUSBAR=true` 在 inline 模式下禁用 JLine 底部 dock（不适合 ANSI 光标控制的终端）
 - `NO_COLOR=1` 禁用所有 ANSI 颜色，保留布局
 - Smart Tab：输入行展示 fish 风格历史预测（灰色 autosuggestion）时，行尾按 `Tab` 整段补全该建议；否则 `Tab` 仍走 `/` 命令补全
-- 开屏 banner 为 ANSI-Shadow 立体 `WRAITH` 字标（绿色），下方 model / MCP / 能力等信息行为粗体青色高亮
+- 开屏先播一段 WRAITH 开场动画；`WRAITH` 字标为 ANSI-Shadow 立体白色，下方 model / MCP / 能力等信息行粗体青色高亮，**常驻冻结在左上角**（对话滚动时保持可见；终端过矮或不支持滚动区时自动降级为随对话滚动）
+- 输入框为「左下半框」：行首暗灰竖线 `│` + `› ` 提示符，配下方 dock 自绘的 ` ╰────` 下线（`╰` 与 `│` 同列对齐）
 
 ### 第十七期：LSP 诊断注入（MVP）
 
