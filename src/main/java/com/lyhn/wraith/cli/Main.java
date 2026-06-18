@@ -23,6 +23,9 @@ import com.lyhn.wraith.render.Renderer;
 import com.lyhn.wraith.render.RendererFactory;
 import com.lyhn.wraith.render.StatusInfo;
 import com.lyhn.wraith.render.inline.InlineRenderer;
+import com.lyhn.wraith.render.WraithWordmark;
+import com.lyhn.wraith.render.intro.IntroAnimation;
+import com.lyhn.wraith.render.intro.IntroGate;
 import com.lyhn.wraith.image.ClipboardImage;
 import com.lyhn.wraith.mcp.McpServer;
 import com.lyhn.wraith.mcp.McpServerManager;
@@ -278,6 +281,7 @@ public class Main {
                 inline.bindLineReader(lineReader);
             }
             PrintStream ui = renderer.stream();
+            playIntroIfEnabled(terminal, renderer);
             renderer.start();
             renderer.updateStatus(statusInfo(llmClient, hitlHandler, "idle", mcpServerManager, null));
 
@@ -2852,6 +2856,21 @@ public class Main {
         return lines;
     }
 
+    private static void playIntroIfEnabled(Terminal terminal, Renderer renderer) {
+        try {
+            boolean inline = renderer instanceof InlineRenderer;
+            boolean realTty = System.console() != null
+                    && terminal.getType() != null
+                    && !"dumb".equalsIgnoreCase(terminal.getType());
+            if (IntroGate.shouldPlay(inline, AnsiStyle.isEnabled(), realTty,
+                    terminal.getWidth(), System.getenv("WRAITH_INTRO"))) {
+                IntroAnimation.play(terminal);
+            }
+        } catch (Exception ignored) {
+            // 开场动画不是关键路径,任何异常都不能挡住启动
+        }
+    }
+
     static List<String> startupBannerLines() {
         return startupBannerLines(new StartupScreenInfo(
                 "auto",
@@ -2877,14 +2896,14 @@ public class Main {
         String capabilities = "ReAct · Plan · MCP · Browser · Image · Tools · Memory · RAG";
         String state = mcp + " · " + skills + " · ReAct";
         List<String> lines = new ArrayList<>(List.of(
-                "   " + AnsiStyle.section("██╗    ██╗██████╗  █████╗ ██╗████████╗██╗  ██╗"),
-                "   " + AnsiStyle.section("██║    ██║██╔══██╗██╔══██╗██║╚══██╔══╝██║  ██║"),
-                "   " + AnsiStyle.section("██║ █╗ ██║██████╔╝███████║██║   ██║   ███████║"),
-                "   " + AnsiStyle.section("██║███╗██║██╔══██╗██╔══██║██║   ██║   ██╔══██║"),
-                "   " + AnsiStyle.section("╚███╔███╔╝██║  ██║██║  ██║██║   ██║   ██║  ██║"),
-                "   " + AnsiStyle.section(" ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝"),
+                "   " + AnsiStyle.wordmark(WraithWordmark.LINES.get(0)),
+                "   " + AnsiStyle.wordmark(WraithWordmark.LINES.get(1)),
+                "   " + AnsiStyle.wordmark(WraithWordmark.LINES.get(2)),
+                "   " + AnsiStyle.wordmark(WraithWordmark.LINES.get(3)),
+                "   " + AnsiStyle.wordmark(WraithWordmark.LINES.get(4)),
+                "   " + AnsiStyle.wordmark(WraithWordmark.LINES.get(5)),
                 "",
-                "   " + AnsiStyle.section("Wraith CLI") + "  " + AnsiStyle.heading("v" + VERSION),
+                "   " + AnsiStyle.wordmark("Wraith CLI") + "  " + AnsiStyle.heading("v" + VERSION),
                 "   " + AnsiStyle.heading(ready),
                 "   " + AnsiStyle.heading(state),
                 "   " + AnsiStyle.heading(capabilities),

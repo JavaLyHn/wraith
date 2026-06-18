@@ -28,6 +28,10 @@ public final class AnsiStyle {
         return wrap(BOLD + GREEN, text);
     }
 
+    public static String wordmark(String text) {
+        return wrap(BOLD + (char) 27 + "[97m", text);
+    }
+
     public static String answerMarker() {
         return wrap(BOLD + GREEN, "▪");
     }
