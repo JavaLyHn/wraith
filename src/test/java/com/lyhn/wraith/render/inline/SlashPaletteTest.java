@@ -61,4 +61,22 @@ class SlashPaletteTest {
         int decision = SlashPalette.handleKey('q', 0, 5);
         assertEquals(-1, decision);
     }
+
+    @Test
+    void fitTruncatesByDisplayWidthToAvoidWrap() {
+        // 窄列下截断到 < cols(留 1 列余量),防止行回绕打乱画布行数(导致 dock 错位)
+        String fitted = SlashPalette.fit("会话标题非常长非常长非常长非常长", 10);
+        int width = 0;
+        for (int i = 0; i < fitted.length(); ) {
+            int cp = fitted.codePointAt(i);
+            width += (Character.UnicodeBlock.of(cp) == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS) ? 2 : 1;
+            i += Character.charCount(cp);
+        }
+        assertTrue(width <= 9, "截断后显示宽度应 <= cols-1, 实际=" + width);
+    }
+
+    @Test
+    void fitKeepsShortLineIntact() {
+        assertEquals("abc", SlashPalette.fit("abc", 80));
+    }
 }

@@ -10,11 +10,13 @@ import java.util.List;
 /**
  * 临时浮起的命令选择列表。
  *
- * <p>渲染策略：在当前光标位置直接打印列表（占 N+2 行），用 raw mode 读单键
- * 处理 {@code ↑↓Enter}/数字/Esc。结束后用 {@code [<n>A[J} 把列表清掉，
- * 不留痕迹（行内 palette 风格，类似 Claude Code 的 slash command 展开）。
+ * <p>渲染策略(参考 {@link com.lyhn.wraith.render.intro.IntroAnimation}):先用换行
+ * <b>预留</b> H 行画布(只在当前滚动区内向上滚出空间),随后每次重绘都「回到画布顶端 +
+ * 逐行 {@code CLEAR_LINE} 就地重画」。<b>绝不</b>使用清到屏幕底部的 {@code ESC[J}——
+ * 那会抹掉常驻在底部的状态栏 / 输入框 dock,导致它被重画到错位处(往下滑)。结束时只精确
+ * 清掉这 H 行,光标停回画布顶端,供调用方接着打印。
  *
- * <p>不支持光标动画 / 模糊搜索（留作后续增强）。
+ * <p>不支持光标动画 / 模糊搜索(留作后续增强)。
  */
 public final class SlashPalette {
 
@@ -27,23 +29,23 @@ public final class SlashPalette {
     }
 
     /**
-     * 打开 palette，阻塞等待用户选择。
+     * 打开 palette,阻塞等待用户选择。
      *
-     * @return 选中项的下标；用户取消（Esc）返回 -1
+     * @return 选中项的下标;用户取消(Esc)返回 -1
      */
     public int open(String title, List<String> items) {
         if (items == null || items.isEmpty()) {
             return -1;
         }
         int selected = 0;
-        int rendered = 0;
+        int h = items.size() + 2; // 标题 + N 项 + 底部提示
+        boolean reserved = false;
         try {
+            reserveSpace(h);
+            reserved = true;
             while (true) {
-                rendered = render(title, items, selected);
+                draw(title, items, selected, h);
                 int key = readKey();
-                // 清掉本次渲染
-                erase(rendered);
-                rendered = 0;
                 int decision = handleKey(key, selected, items.size());
                 if (decision == DECISION_CANCEL) {
                     return -1;
@@ -52,7 +54,7 @@ public final class SlashPalette {
                     return selected;
                 }
                 if (decision >= 0 && decision < items.size()) {
-                    return decision;  // 数字快捷键直接选定
+                    return decision; // 数字快捷键直接选定
                 }
                 if (decision == DECISION_UP) {
                     selected = (selected - 1 + items.size()) % items.size();
@@ -61,36 +63,97 @@ public final class SlashPalette {
                 }
             }
         } finally {
-            erase(rendered);
-        }
-    }
-
-    private int render(String title, List<String> items, int selected) {
-        out.println();
-        out.println(AnsiStyle.heading("┌─ " + (title == null ? "选择" : title) + " ─"));
-        for (int i = 0; i < items.size(); i++) {
-            String prefix = (i == selected) ? "▶ " : "  ";
-            String numberHint = i < 9 ? "[" + (i + 1) + "] " : "    ";
-            String line = "│ " + prefix + numberHint + items.get(i);
-            if (i == selected) {
-                out.println(AnsiStyle.emphasis(line));
-            } else {
-                out.println(line);
+            if (reserved) {
+                clearBlock(h);
             }
         }
-        out.println(AnsiStyle.subtle("└─ ↑↓ 切换  Enter 确认  Esc 取消  数字键直选"));
-        out.flush();
-        return items.size() + 3;
     }
 
-    private void erase(int lines) {
-        if (lines <= 0) return;
+    /** 预留 H 行画布:从当前光标向下滚出 H 行(在当前滚动区内滚动,不触及下方 dock)。 */
+    private void reserveSpace(int h) {
         synchronized (out) {
-            out.print(AnsiSeq.moveUp(lines));
-            out.print("\r");
-            out.print(AnsiSeq.CLEAR_TO_EOS);
+            for (int i = 0; i < h; i++) {
+                out.print("\r\n");
+            }
             out.flush();
         }
+    }
+
+    /** 回到画布顶端,逐行就地重绘(每行先 CLEAR_LINE);不向屏幕底部清除,故不动 dock。 */
+    private void draw(String title, List<String> items, int selected, int h) {
+        int cols = Math.max(20, safeWidth());
+        synchronized (out) {
+            out.print(AnsiSeq.moveUp(h));
+            out.print("\r");
+            drawLine(AnsiStyle.heading(fit("┌─ " + (title == null ? "选择" : title) + " ─", cols)));
+            for (int i = 0; i < items.size(); i++) {
+                String prefix = (i == selected) ? "▶ " : "  ";
+                String numberHint = i < 9 ? "[" + (i + 1) + "] " : "    ";
+                String line = fit("│ " + prefix + numberHint + items.get(i), cols);
+                drawLine(i == selected ? AnsiStyle.emphasis(line) : line);
+            }
+            drawLine(AnsiStyle.subtle(fit("└─ ↑↓ 切换  Enter 确认  Esc 取消  数字键直选", cols)));
+            out.flush();
+        }
+    }
+
+    private void drawLine(String styled) {
+        out.print(AnsiSeq.CLEAR_LINE);
+        out.print(styled);
+        out.print("\r\n");
+    }
+
+    /** 精确清掉 H 行画布,光标停回画布顶端;只清这 H 行,绝不向屏幕底部清除。 */
+    private void clearBlock(int h) {
+        synchronized (out) {
+            out.print(AnsiSeq.moveUp(h));
+            out.print("\r");
+            for (int r = 0; r < h; r++) {
+                out.print(AnsiSeq.CLEAR_LINE);
+                if (r < h - 1) {
+                    out.print("\n");
+                }
+            }
+            out.print(AnsiSeq.moveUp(h - 1));
+            out.print("\r");
+            out.flush();
+        }
+    }
+
+    private int safeWidth() {
+        try {
+            int w = terminal.getWidth();
+            return w > 0 ? w : 80;
+        } catch (Exception e) {
+            return 80;
+        }
+    }
+
+    /** 按显示宽度截断,避免行回绕打乱画布行数(CJK 记 2 宽)。 */
+    static String fit(String s, int cols) {
+        int budget = Math.max(1, cols - 1);
+        int width = 0;
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < s.length(); ) {
+            int cp = s.codePointAt(i);
+            int w = isWide(cp) ? 2 : 1;
+            if (width + w > budget) {
+                break;
+            }
+            sb.appendCodePoint(cp);
+            width += w;
+            i += Character.charCount(cp);
+        }
+        return sb.toString();
+    }
+
+    private static boolean isWide(int cp) {
+        Character.UnicodeBlock b = Character.UnicodeBlock.of(cp);
+        return b == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS
+                || b == Character.UnicodeBlock.CJK_SYMBOLS_AND_PUNCTUATION
+                || b == Character.UnicodeBlock.HALFWIDTH_AND_FULLWIDTH_FORMS
+                || b == Character.UnicodeBlock.HIRAGANA
+                || b == Character.UnicodeBlock.KATAKANA;
     }
 
     private int readKey() {
