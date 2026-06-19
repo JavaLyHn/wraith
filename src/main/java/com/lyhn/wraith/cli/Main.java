@@ -52,6 +52,7 @@ import com.lyhn.wraith.snapshot.TurnSnapshot;
 import com.lyhn.wraith.skill.SkillRegistry;
 import com.lyhn.wraith.tool.ToolRegistry;
 import com.lyhn.wraith.util.AnsiStyle;
+import com.lyhn.wraith.util.TerminalMarkdownRenderer;
 import com.lyhn.wraith.wechat.IlinkClient;
 import com.lyhn.wraith.wechat.WechatAccount;
 import com.lyhn.wraith.wechat.WechatAccountStore;
@@ -926,13 +927,13 @@ public class Main {
             case CONTINUE -> {
                 Optional<SessionMeta> latest = store.latest();
                 if (latest.isPresent()) {
-                    restoreSessionById(store, agent, ui, latest.get().id(), latest.get().title());
+                    restoreSessionById(store, agent, renderer, ui, latest.get().id(), latest.get().title());
                 } else {
                     ui.println("ℹ️ 本项目无可续接会话,开新会话\n");
                 }
             }
             case ID -> {
-                if (!restoreSessionById(store, agent, ui, intent.id(), null)) {
+                if (!restoreSessionById(store, agent, renderer, ui, intent.id(), null)) {
                     ui.println("⚠️ 未找到会话 " + intent.id() + ",开新会话\n");
                 }
             }
@@ -946,7 +947,7 @@ public class Main {
     private static void handleResumeCommand(String payload, SessionStore store, Agent agent,
                                             Renderer renderer, PrintStream ui) {
         if (payload != null && !payload.isBlank()) {
-            if (!restoreSessionById(store, agent, ui, payload.trim(), null)) {
+            if (!restoreSessionById(store, agent, renderer, ui, payload.trim(), null)) {
                 ui.println("⚠️ 未找到会话 " + payload.trim() + "\n");
             }
             return;
@@ -970,10 +971,10 @@ public class Main {
             return;
         }
         SessionMeta chosen = metas.get(idx);
-        restoreSessionById(store, agent, ui, chosen.id(), chosen.title());
+        restoreSessionById(store, agent, renderer, ui, chosen.id(), chosen.title());
     }
 
-    private static boolean restoreSessionById(SessionStore store, Agent agent, PrintStream ui,
+    private static boolean restoreSessionById(SessionStore store, Agent agent, Renderer renderer, PrintStream ui,
                                               String id, String titleHint) {
         List<LlmClient.Message> msgs = store.resume(id);
         if (msgs.isEmpty()) {
@@ -981,33 +982,56 @@ public class Main {
         }
         agent.restoreHistory(msgs);
         String title = titleHint != null && !titleHint.isBlank() ? titleHint : id;
-        ui.println("🔄 已恢复会话「" + title + "」(" + msgs.size() + " 条上下文)");
-        String lastUser = lastUserMessage(msgs);
-        if (lastUser != null) {
-            ui.println("   ↳ 上次:" + truncateForNotice(lastUser, 60));
-        }
+        // beginTurn 释放冻结 banner(启动续接时)并清理流式状态,随后把历史对话整段回放到
+        // transcript —— 否则用户只看到一行摘要,看不到“完整内容”。
+        renderer.beginTurn();
+        ui.println("🔄 已恢复会话「" + title + "」· " + msgs.size() + " 条上下文");
+        ui.println(AnsiStyle.subtle("──────── 以下为历史对话 ────────"));
+        ui.println();
+        replayConversation(renderer, ui, msgs);
+        ui.println(AnsiStyle.subtle("──────── 历史结束,可继续对话 ────────"));
         ui.println();
         return true;
+    }
+
+    /**
+     * 续接会话后把历史对话回放到 transcript,让用户看到完整上下文。
+     * 渲染方式对齐实时输出:user → 用户块、assistant 正文 → Markdown、assistant 工具调用 → 折叠块。
+     * 跳过 system(在 system prompt 内)与 tool 结果(模型内部上下文,已由折叠的工具调用块代表)。
+     */
+    static void replayConversation(Renderer renderer, PrintStream ui, List<LlmClient.Message> msgs) {
+        if (msgs == null || msgs.isEmpty()) {
+            return;
+        }
+        int cols = Math.max(20, renderer.terminalColumns());
+        for (LlmClient.Message m : msgs) {
+            if (m == null) {
+                continue;
+            }
+            String role = m.role();
+            String content = m.content();
+            if ("user".equals(role)) {
+                if (content != null && !content.isBlank()) {
+                    printSubmittedInput(renderer, ui, content);
+                }
+            } else if ("assistant".equals(role)) {
+                if (content != null && !content.isBlank()) {
+                    String rendered = TerminalMarkdownRenderer.render(content, cols);
+                    ui.print(rendered);
+                    if (!rendered.endsWith("\n")) {
+                        ui.println();
+                    }
+                }
+                if (m.toolCalls() != null && !m.toolCalls().isEmpty()) {
+                    renderer.appendToolCalls(m.toolCalls());
+                }
+            }
+        }
     }
 
     private static String formatSessionItem(SessionMeta m) {
         String title = m.title() == null || m.title().isBlank() ? "(无标题)" : m.title();
         return title + "   ·   " + relativeTime(m.updatedAt()) + "   ·   " + m.turns() + " 轮   ·   " + m.model();
-    }
-
-    private static String lastUserMessage(List<LlmClient.Message> msgs) {
-        for (int i = msgs.size() - 1; i >= 0; i--) {
-            LlmClient.Message m = msgs.get(i);
-            if ("user".equals(m.role()) && m.content() != null && !m.content().isBlank()) {
-                return m.content().strip();
-            }
-        }
-        return null;
-    }
-
-    private static String truncateForNotice(String s, int max) {
-        String one = s.replaceAll("\\s+", " ").strip();
-        return one.length() > max ? one.substring(0, max) + "…" : one;
     }
 
     private static String relativeTime(String iso) {
