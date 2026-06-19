@@ -285,6 +285,7 @@ public class Main {
                 inline.bindLineReader(lineReader);
             }
             PrintStream ui = renderer.stream();
+            clearTerminalScreen(terminal); // 启动先清屏(含回滚缓冲),再播开场动画 / 装常驻 banner
             playIntroIfEnabled(terminal, renderer);
             renderer.start();
             renderer.updateStatus(statusInfo(llmClient, hitlHandler, "idle", mcpServerManager, null));
@@ -425,6 +426,7 @@ public class Main {
                         ui.println("\n👋 再见!");
                         wechatRuntime.stop();
                         renderer.close();
+                        clearTerminalScreen(terminal); // 退出清屏:不留 TUI 内容,回到干净提示符
                         return;
                     }
                     case CANCEL -> {
@@ -859,6 +861,7 @@ public class Main {
             ui.println("\n👋 再见!");
             wechatRuntime.stop();
             renderer.close();
+            clearTerminalScreen(terminal); // 退出清屏(Ctrl+D 路径):不留 TUI 内容
 
         } catch (IOException e) {
             System.err.println("❌ 终端初始化失败: " + e.getMessage());
@@ -2889,6 +2892,34 @@ public class Main {
         return out;
     }
 
+
+    /**
+     * 启动即清屏:抹掉运行 wraith 前终端里的残留内容,给开场动画 / 常驻 banner 一块干净画布。
+     * ESC[3J 清回滚缓冲(scrollback)、ESC[H 光标归位左上、ESC[2J 清可见屏——顺序同 ncurses
+     * 的 {@code clear}(E3 + clear_screen),确保连向上滚也看不到旧内容。
+     *
+     * <p>仅在真实交互终端执行:避免把清屏序列写进被管道 / 重定向的输出里。
+     */
+    private static void clearTerminalScreen(Terminal terminal) {
+        if (terminal == null) {
+            return;
+        }
+        boolean realTty = System.console() != null
+                && terminal.getType() != null
+                && !"dumb".equalsIgnoreCase(terminal.getType());
+        if (!realTty) {
+            return;
+        }
+        try {
+            var writer = terminal.writer();
+            if (writer != null) {
+                writer.print("[r[3J[H[2J");
+                writer.flush();
+            }
+        } catch (Exception ignored) {
+            // 清屏失败不致命,继续启动
+        }
+    }
 
     private static void playIntroIfEnabled(Terminal terminal, Renderer renderer) {
         try {
