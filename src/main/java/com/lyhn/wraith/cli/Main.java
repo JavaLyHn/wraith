@@ -355,6 +355,7 @@ public class Main {
                     reactAgent.getToolRegistry().getProjectPath(),
                     llmClient.getProviderName(), llmClient.getModelName());
             applyResumeAtLaunch(resumeIntent, sessionStore, reactAgent, renderer, ui);
+            reactAgent.getToolRegistry().setTodoSink(renderer::renderTodos); // 实时 TODO 面板(todo_write)
 
             boolean nextTaskUsePlanMode = false;
             boolean nextTaskUseTeamMode = false;
@@ -448,6 +449,7 @@ public class Main {
                         reactAgent.clearHistory();
                         hitlHandler.clearApprovedAll();
                         sessionStore.startNew(); // /clear 开新会话文件,旧会话留存
+                        renderer.renderTodos(List.of()); // 清空实时 TODO 面板
                         renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));
                         ui.println("🗑️ 当前对话历史已清空，长期记忆保持不变\n");
                         continue;

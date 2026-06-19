@@ -12,6 +12,8 @@ import com.lyhn.wraith.context.ContextProfile;
 import com.lyhn.wraith.lsp.LspDiagnosticReport;
 import com.lyhn.wraith.lsp.LspManager;
 import com.lyhn.wraith.mcp.protocol.McpToolDescriptor;
+import com.lyhn.wraith.tool.todo.TodoItem;
+import com.lyhn.wraith.tool.todo.TodoStatus;
 import com.lyhn.wraith.rag.CodeRetriever;
 import com.lyhn.wraith.rag.SearchResultFormatter;
 import com.lyhn.wraith.rag.VectorStore;
@@ -95,6 +97,7 @@ public class ToolRegistry {
     private BrowserGuard browserGuard;
     private BrowserConnector browserConnector;
     private BiConsumer<String, String> memorySaver;
+    private Consumer<List<TodoItem>> todoSink;
     private SkillRegistry skillRegistry;
     private SkillContextBuffer skillContextBuffer;
     private java.util.function.BiConsumer<String, String[]> writeFileObserver = (p, ba) -> {};
@@ -125,6 +128,7 @@ public class ToolRegistry {
         registerMemoryTools();
         registerSkillTools();
         registerSnapshotTools();
+        registerTodoTools();
     }
 
     /**
@@ -180,6 +184,11 @@ public class ToolRegistry {
 
     public void setScopedMemorySaver(BiConsumer<String, String> memorySaver) {
         this.memorySaver = memorySaver;
+    }
+
+    /** 注入实时 TODO 面板的渲染回调;todo_write 工具被调用时回灌完整清单(仿 memorySaver 注入范式)。 */
+    public void setTodoSink(Consumer<List<TodoItem>> todoSink) {
+        this.todoSink = todoSink;
     }
 
     public void setSkillRegistry(SkillRegistry skillRegistry) {
@@ -1003,6 +1012,50 @@ public class ToolRegistry {
     /**
      * 创建参数定义
      */
+    private void registerTodoTools() {
+        // 手搭 schema:todos 是「对象数组」,createParameters 只支持扁平标量参数,故这里直接构造
+        ObjectNode schema = mapper.createObjectNode();
+        schema.put("type", "object");
+        ObjectNode props = schema.putObject("properties");
+        ObjectNode todosProp = props.putObject("todos");
+        todosProp.put("type", "array");
+        todosProp.put("description", "完整任务清单(每次传全量,整体替换)");
+        ObjectNode items = todosProp.putObject("items");
+        items.put("type", "object");
+        ObjectNode itemProps = items.putObject("properties");
+        itemProps.putObject("content").put("type", "string").put("description", "任务描述(简短一句)");
+        itemProps.putObject("status").put("type", "string")
+                .put("description", "pending | in_progress | completed");
+        items.putArray("required").add("content").add("status");
+        schema.putArray("required").add("todos");
+
+        tools.put("todo_write", new Tool(
+                "todo_write",
+                "维护给用户看的实时任务清单。多步任务必须用:"
+                        + "① 一开始就把计划列成清单(全 pending);"
+                        + "② 每开始做一步,立刻调用本工具把该步标 in_progress;"
+                        + "③ 该步做完,立刻再调用把它标 completed、并把下一步标 in_progress。"
+                        + "每个步骤切换都要单独调用一次——这是用户实时看到进度的唯一方式,别只在开头列一次就不更新。"
+                        + "每次都传【完整】清单整体替换;同一时刻最多一个 in_progress。仅一两步的琐碎任务可不用。",
+                schema,
+                args -> {
+                    List<TodoItem> parsed = TodoItem.parseList(args.get("todos"), mapper);
+                    if (todoSink != null) {
+                        try {
+                            todoSink.accept(parsed);
+                        } catch (Exception ignored) {
+                            // 渲染失败不影响工具结果
+                        }
+                    }
+                    long done = parsed.stream().filter(t -> t.status() == TodoStatus.COMPLETED).count();
+                    if (parsed.isEmpty()) {
+                        return "任务清单已清空";
+                    }
+                    return "已更新任务清单:" + parsed.size() + " 项," + done + " 完成";
+                }
+        ));
+    }
+
     private JsonNode createParameters(Param... params) {
         ObjectNode parameters = mapper.createObjectNode();
         parameters.put("type", "object");
@@ -1144,8 +1197,11 @@ public class ToolRegistry {
 
             JsonNode args = mapper.readTree(argumentsJson);
             Map<String, String> argMap = new HashMap<>();
-            args.fields().forEachRemaining(entry ->
-                    argMap.put(entry.getKey(), entry.getValue().asText()));
+            args.fields().forEachRemaining(entry -> {
+                JsonNode value = entry.getValue();
+                // 数组/对象参数(如 todo_write 的 todos)用 JSON 串保留;asText() 对容器节点会返回空串
+                argMap.put(entry.getKey(), value.isContainerNode() ? value.toString() : value.asText());
+            });
             String result = tool.executor().execute(argMap);
             if (shouldAudit) {
                 auditLog.record(AuditLog.AuditEntry.allow(name, argumentsJson, elapsedMillis(start), auditMetadata));

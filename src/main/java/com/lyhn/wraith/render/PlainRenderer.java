@@ -6,6 +6,8 @@ import com.lyhn.wraith.hitl.ApprovalPolicy;
 import com.lyhn.wraith.hitl.ApprovalRequest;
 import com.lyhn.wraith.hitl.ApprovalResult;
 import com.lyhn.wraith.llm.LlmClient;
+import com.lyhn.wraith.tool.todo.TodoItem;
+import com.lyhn.wraith.tool.todo.TodoStatus;
 import com.lyhn.wraith.util.AnsiStyle;
 
 import java.io.BufferedReader;
@@ -92,6 +94,29 @@ public final class PlainRenderer implements Renderer {
         int beforeLen = before == null ? 0 : before.length();
         int afterLen = after == null ? 0 : after.length();
         out.println(AnsiStyle.subtle("  " + beforeLen + " → " + afterLen + " 字符"));
+    }
+
+    @Override
+    public void renderTodos(List<TodoItem> todos) {
+        printTodos(out, todos);
+    }
+
+    /** 纯文本打印任务清单(plain 形态;inline degraded 无 dock 时也复用)。 */
+    public static void printTodos(PrintStream out, List<TodoItem> todos) {
+        if (todos == null || todos.isEmpty()) {
+            return;
+        }
+        long done = todos.stream().filter(t -> t.status() == TodoStatus.COMPLETED).count();
+        out.println(AnsiStyle.heading("Tasks " + done + "/" + todos.size()));
+        for (TodoItem t : todos) {
+            String marker = switch (t.status()) {
+                case COMPLETED -> "[x]";
+                case IN_PROGRESS -> "[>]";
+                case PENDING -> "[ ]";
+            };
+            out.println("  " + marker + " " + t.content());
+        }
+        out.println();
     }
 
     @Override
