@@ -51,7 +51,9 @@ public final class TuiBootstrap {
         if (!isTuiRequested()) {
             return false;
         }
-        try (Terminal terminal = TerminalBuilder.builder().system(true).dumb(true).build()) {
+        // graphemeCluster(false): 同 Main——关掉 JLine 的 mode 2027 探测,避免在不支持
+        // DECRQM 的终端上把 ESC[?2027$p 的尾字符 'p' 漏到屏幕上。
+        try (Terminal terminal = TerminalBuilder.builder().system(true).dumb(true).graphemeCluster(false).build()) {
             return shouldUseTui(terminal);
         } catch (IOException e) {
             System.err.println("⚠️ 已显式启用 TUI，但终端检测失败，降级到 CLI 模式: " + e.getMessage());
