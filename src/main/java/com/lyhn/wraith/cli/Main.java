@@ -331,7 +331,12 @@ public class Main {
             renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));
             StartupScreenInfo startupScreenInfo = startupScreenInfo(llmClient, mcpServerManager, skillRegistry, startupNote);
             if (renderer instanceof InlineRenderer inline) {
-                inline.installStartupScreen(startupScreenLines(startupScreenInfo));
+                // WRAITH 字标 + 信息行常驻冻结在左上角;Tips 走 printAbove 进滚动区,随对话滚走
+                //(留住滚动区非空,避免 resize 后输入误锚顶部)。终端太矮/不支持则整块降级到滚动历史。
+                boolean pinned = inline.installPinnedBanner(pinnedBannerContentLines(startupScreenInfo));
+                inline.installStartupScreen(pinned
+                        ? startupTipsLines(startupScreenInfo)
+                        : startupScreenLines(startupScreenInfo));
             } else {
                 printStartupScreen(ui, startupScreenInfo);
             }
@@ -2855,6 +2860,31 @@ public class Main {
         lines.add("");
         return lines;
     }
+
+    /**
+     * 常驻固定区内容:字标(6 行)+ 信息行(Wraith CLI / Model / 状态 / 能力,4 行),不含 Tips、不含分隔线。
+     * 从 {@link #startupBannerLines} 切片:art=[0..5]、空行=[6]、info=[7..10]、空行=[11]、Tips=[12..]。
+     */
+    static List<String> pinnedBannerContentLines(StartupScreenInfo info) {
+        List<String> all = startupBannerLines(info);
+        if (all.size() < 11) {
+            return List.of(); // 结构异常 → 让调用方降级
+        }
+        List<String> out = new ArrayList<>();
+        out.addAll(all.subList(0, 6));   // WRAITH 字标
+        out.addAll(all.subList(7, 11));  // 信息行(跳过 [6] 空行)
+        return out;
+    }
+
+    /** 固定 banner 启用时,滚动历史里打 Tips 区块(+ 可能的启动提示):从 [11] 起(空行 + Tips + note)。 */
+    static List<String> startupTipsLines(StartupScreenInfo info) {
+        List<String> all = startupBannerLines(info);
+        int from = Math.min(11, all.size());
+        List<String> out = new ArrayList<>(all.subList(from, all.size()));
+        out.add("");
+        return out;
+    }
+
 
     private static void playIntroIfEnabled(Terminal terminal, Renderer renderer) {
         try {

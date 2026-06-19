@@ -148,7 +148,11 @@ class InlineRendererTest {
             renderer.afterInput();
 
             String emitted = sink.toString(StandardCharsets.UTF_8);
-            assertEquals("* ", renderer.inputPrompt());
+            String prompt = renderer.inputPrompt();
+            assertTrue(prompt.contains("›"), "prompt should use › : " + prompt);
+            assertFalse(prompt.contains("*"), "old * prompt should be gone: " + prompt);
+            assertTrue(prompt.endsWith("› "), "input line tail should be the › prompt: " + prompt);
+            assertFalse(prompt.contains("─"), "input prompt must not carry a full-width rule (resize-scatter): " + prompt);
             assertTrue(renderer.inputRightPrompt().contains("@path"));
             assertFalse(emitted.contains("[39;1H"), "LineReader should own the input row: " + emitted);
             assertFalse(emitted.contains("[37;1H"), "renderer should not force transcript cursor rows: " + emitted);

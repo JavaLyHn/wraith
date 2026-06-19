@@ -11,6 +11,7 @@ import org.jline.utils.Status;
 
 import java.io.PrintStream;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -68,6 +69,8 @@ public final class BottomStatusBar implements AutoCloseable {
     private Status status;
     private volatile boolean started;
     private volatile boolean closed;
+    /** 顶部固定区(常驻 banner)保留的行数;0 表示未启用。 */
+    private volatile int topReserved;
 
     public BottomStatusBar(Terminal terminal) {
         this.terminal = terminal;
@@ -87,7 +90,8 @@ public final class BottomStatusBar implements AutoCloseable {
         }
         status = Status.getStatus(terminal);
         if (status != null) {
-            status.setBorder(true);
+            // 关掉 JLine 默认边框,改由我们自绘带 ╰ 拐角的"输入框下线"(与输入行的 │ 同列对齐)。
+            status.setBorder(false);
         }
         started = true;
         renderDock();
@@ -127,8 +131,70 @@ public final class BottomStatusBar implements AutoCloseable {
         }
         int cols = TerminalCapabilities.safeSize(terminal).getColumns();
         synchronized (out) {
-            dock.update(formatStatusLines(info, cols));
+            List<AttributedString> dockLines = new ArrayList<>();
+            dockLines.add(boxBottomRule(cols)); // 输入框下线(╰────),JLine 保留区自管、resize 不散
+            dockLines.addAll(formatStatusLines(info, cols));
+            dock.update(dockLines);
+            reassertTopScrollRegion(cols);
         }
+    }
+
+    /** 输入框下线:{@code  ╰────…},左拐角 {@code ╰} 与输入行的 {@code │} 同列(第 2 列)对齐。 */
+    static AttributedString boxBottomRule(int cols) {
+        int w = Math.max(2, cols);
+        return AttributedString.fromAnsi(AnsiStyle.rule(" ╰" + "─".repeat(w - 2)));
+    }
+
+    /** 顶部固定区(常驻 banner)占用的行数;0 关闭。InlineRenderer 启用 banner 时调用。 */
+    void setTopReserved(int rows) {
+        this.topReserved = Math.max(0, rows);
+    }
+
+    /** dock 自身占用的物理行数(下线 + 状态 + footer)。 */
+    int reservedRows() {
+        int cols = TerminalCapabilities.safeSize(terminal).getColumns();
+        StatusInfo info = current != null ? current : StatusInfo.idle("", 0L, false);
+        return formatStatusLines(info, cols).size() + 1; // + 自绘的输入框下线(boxBottomRule)
+    }
+
+    /** 立即把滚动区顶边重设到固定区下方(冻结顶部 banner)。 */
+    void reassertNow() {
+        synchronized (out) {
+            reassertTopScrollRegion(TerminalCapabilities.safeSize(terminal).getColumns());
+        }
+    }
+
+    /** 终端尺寸变化:让 JLine 重算 dock 尺寸,再重设固定区顶边。 */
+    void resize() {
+        Status dock = status;
+        if (dock == null || closed || !started) {
+            return;
+        }
+        synchronized (out) {
+            dock.resize();
+            renderDock();
+        }
+    }
+
+    /**
+     * 把滚动区顶边重设到固定区下方(0-based 第 {@code topReserved} 行起),保留 JLine 算出的底边。
+     * JLine {@code Status} 把顶边硬编码为 0、且只在行数变化/resize 时重设;这里在每次 dock 更新后纠正
+     * 回去,从而冻结顶部 banner。用 save/restore cursor 包裹,避免 DECSTBM 把光标弹回左上角。
+     */
+    private void reassertTopScrollRegion(int cols) {
+        int top = topReserved;
+        if (top <= 0 || status == null || closed || !started) {
+            return;
+        }
+        int rows = TerminalCapabilities.safeSize(terminal).getRows();
+        int bottom0 = rows - 1 - reservedRows(); // 0-based 底边,与 JLine 口径一致
+        if (bottom0 <= top) {
+            return; // 空间不足,别把滚动区设崩
+        }
+        terminal.puts(InfoCmp.Capability.save_cursor);
+        terminal.puts(InfoCmp.Capability.change_scroll_region, top, bottom0);
+        terminal.puts(InfoCmp.Capability.restore_cursor);
+        terminal.flush();
     }
 
     private void moveCursorToDockInputRow() {
