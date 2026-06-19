@@ -37,6 +37,15 @@ class IntroAnimationFramesTest {
     }
 
     @Test
+    void hasFullWidthFillFrameFromCenterExpansion() {
+        int cols = 80;
+        List<List<String>> frames = IntroAnimation.frames(cols);
+        String fullRow = "█".repeat(cols);
+        boolean anyFull = frames.stream().anyMatch(f -> f.stream().allMatch(fullRow::equals));
+        assertTrue(anyFull, "应有一帧:满宽横线从中线向上下铺满整块画布");
+    }
+
+    @Test
     void tooNarrowYieldsNoFrames() {
         assertTrue(IntroAnimation.frames(WraithWordmark.width()).isEmpty(), "no margin -> no frames");
         assertTrue(IntroAnimation.frames(10).isEmpty(), "tiny terminal -> no frames");

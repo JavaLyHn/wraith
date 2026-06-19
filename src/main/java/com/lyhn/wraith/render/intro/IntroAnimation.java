@@ -29,7 +29,6 @@ public final class IntroAnimation {
     private static final String SHOW_CURSOR = ESC + "[?25h";
     private static final int FRAME_MS = 38;
     private static final int REVEAL_STEPS = 12;
-    private static final int SPLIT_FRAMES = 6;
     private static final int[] SWAY = {2, 1, 0, -1, -2, -1, 0, 1, 0};
 
     /** 逐帧画面;每帧是 height() 行的原始字符(无 ANSI),每行列宽 ≤ cols。空字符串表示空行。 */
@@ -56,16 +55,23 @@ public final class IntroAnimation {
             }
             frames.add(f);
         }
-        // 1b) 中线裂开,两半向两侧退去(中间空隙逐渐变满)
-        for (int i = 1; i <= SPLIT_FRAMES; i++) {
-            int gap = (int) ((double) i / SPLIT_FRAMES * w);
-            int half = Math.max(0, (w - gap) / 2);
+        // 1b) 满宽横线从中线向上、下两侧逐帧铺满整块画布,再整屏淡出,过渡到字标显现
+        int reach = Math.max(mid, h - 1 - mid);
+        for (int r = 0; r <= reach; r++) {
             List<String> f = blank(h);
-            if (half > 0) {
-                f.set(mid, repeat('█', half) + repeat(' ', w - 2 * half) + repeat('█', half));
+            int top = Math.max(0, mid - r);
+            int bottom = Math.min(h - 1, mid + r);
+            for (int row = top; row <= bottom; row++) {
+                f.set(row, repeat('█', w));
             }
             frames.add(f);
         }
+        // 铺满后整屏淡一下(█ → ▒),让位给随后逐列显现的字标
+        List<String> dim = new ArrayList<>(h);
+        for (int row = 0; row < h; row++) {
+            dim.add(repeat('▒', w));
+        }
+        frames.add(dim);
         // 2) 字标自左向右逐列显现
         for (int s = 1; s <= REVEAL_STEPS; s++) {
             int reveal = (int) Math.ceil(width * (double) s / REVEAL_STEPS);
