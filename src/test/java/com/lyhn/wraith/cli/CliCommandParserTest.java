@@ -104,6 +104,20 @@ class CliCommandParserTest {
     }
 
     @Test
+    void parsesResumeWithoutId() {
+        CliCommandParser.ParsedCommand command = CliCommandParser.parse("/resume");
+        assertEquals(CliCommandParser.CommandType.RESUME, command.type());
+        assertEquals("", command.payload());
+    }
+
+    @Test
+    void parsesResumeWithId() {
+        CliCommandParser.ParsedCommand command = CliCommandParser.parse("/resume 20260619-185500-test");
+        assertEquals(CliCommandParser.CommandType.RESUME, command.type());
+        assertEquals("20260619-185500-test", command.payload());
+    }
+
+    @Test
     void parsesProviderConfigUpdate() {
         Main.ProviderConfigUpdate update = Main.parseProviderConfigUpdate(
                 "provider free-llm-api --base-url http://localhost:5173/v1 --api-key sk-test --model auto --default");

@@ -652,6 +652,8 @@ I
 - `wraith-cli wechat start` - 前台启动微信通道
 - `wraith-cli wechat status` - 查看绑定状态和 daemon pid
 - `wraith-cli wechat daemon start|stop|restart|status|logs` - 管理本机微信通道后台进程
+- `wraith --continue` - 启动并续接当前项目最近一次会话
+- `wraith --resume [id]` - 续接指定会话;不带 id 则列出本项目历史会话供选择
 
 交互式斜杠命令：
 
@@ -692,7 +694,8 @@ I
 - `/index [路径]` - 索引代码库（默认当前目录）
 - `/search <查询>` - 语义检索代码（RAG 辅助路径）
 - `/graph <类名>` - 查看代码关系图谱
-- `/clear` - 清空当前对话历史、短期记忆、待注入 Skill 上下文和上一轮检索记忆注入；长期记忆保留
+- `/clear` - 清空当前对话历史、短期记忆、待注入 Skill 上下文和上一轮检索记忆注入；长期记忆保留(并开一个新会话文件)
+- `/resume` - 续接本项目历史会话(弹面板选择);`/resume <id>` 直接续接指定会话
 - `/exit` / `/quit` - 退出程序
 
 ## 运行效果

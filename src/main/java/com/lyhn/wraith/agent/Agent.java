@@ -274,6 +274,25 @@ public class Agent {
     }
 
     /**
+     * 续接会话:保留当前 system[0],清掉其余,把恢复的 user/assistant/tool 消息灌回。
+     * 不在此触发压缩——交给下一轮的 {@link ConversationHistoryCompactor} 按 window 处理。
+     */
+    public void restoreHistory(List<LlmClient.Message> restored) {
+        LlmClient.Message system = conversationHistory.isEmpty()
+                ? LlmClient.Message.system(buildSystemPrompt(""))
+                : conversationHistory.get(0);
+        conversationHistory.clear();
+        conversationHistory.add(system);
+        if (restored != null) {
+            for (LlmClient.Message m : restored) {
+                if (m != null && !"system".equals(m.role())) {
+                    conversationHistory.add(m);
+                }
+            }
+        }
+    }
+
+    /**
      * 手动压缩当前 ReAct 对话历史，不等待上下文窗口阈值触发。
      */
     public CompactionResult compactHistoryNow() {
