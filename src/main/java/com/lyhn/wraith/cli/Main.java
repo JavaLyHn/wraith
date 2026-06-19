@@ -228,7 +228,11 @@ public class Main {
         }
         AtomicReference<LlmClient> llmClientRef = new AtomicReference<>(llmClient);
 
-        try (Terminal terminal = TerminalBuilder.builder().system(true).dumb(true).build()) {
+        // graphemeCluster(false): 禁掉 JLine 启动时的 mode 2027(grapheme cluster)探测。
+        // 该探测会写 ESC[?2027$p(DECRQM 查询),不支持此查询的终端(如 Apple Terminal)
+        // 会把序列尾字符 'p' 直接打印出来——表现为启动后左上角冒出一个 'p'。探测对这类终端
+        // 本就返回 false(100ms 超时无应答),关掉它不丢任何能力,只是不再写那串探测字节。
+        try (Terminal terminal = TerminalBuilder.builder().system(true).dumb(true).graphemeCluster(false).build()) {
             refreshTerminalColumns(terminal);
             TerminalHitlHandler terminalHitlHandler = new TerminalHitlHandler(false);
             SwitchableHitlHandler hitlHandler = new SwitchableHitlHandler(terminalHitlHandler);
