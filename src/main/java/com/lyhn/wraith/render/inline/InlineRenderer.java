@@ -156,6 +156,18 @@ public final class InlineRenderer implements Renderer {
         return "⏎ send  ·  / commands  ·  @path  ·  @image";
     }
 
+    /**
+     * 多行/续行时的左侧提示:保持左竖线 {@code │} 在多行间连续(与 dock 下线同列),
+     * 去掉 {@code ›} 箭头,与 {@link #inputPrompt()} 等宽(5 列)对齐。
+     */
+    @Override
+    public String continuationPrompt() {
+        if (!AnsiStyle.isEnabled()) {
+            return " │   ";
+        }
+        return " " + AnsiStyle.rule("│") + "   ";
+    }
+
     @Override
     public void close() {
         if (closed) {
