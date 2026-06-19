@@ -3,6 +3,7 @@ package com.lyhn.wraith.render;
 import com.lyhn.wraith.hitl.ApprovalRequest;
 import com.lyhn.wraith.hitl.ApprovalResult;
 import com.lyhn.wraith.llm.LlmClient;
+import com.lyhn.wraith.tool.todo.TodoItem;
 
 import java.io.PrintStream;
 import java.util.List;
@@ -131,6 +132,10 @@ public interface Renderer extends AutoCloseable {
      * @param after    修改后内容（null 表示删除）
      */
     void appendDiff(String filePath, String before, String after);
+
+    /** 实时 TODO 任务清单更新(Agent 通过 todo_write 维护)。默认不显示;inline 形态画成常驻面板。 */
+    default void renderTodos(List<TodoItem> todos) {
+    }
 
     /** 更新底部状态栏 / StatusPane。允许频繁调用，渲染器内部自行节流。 */
     void updateStatus(StatusInfo status);

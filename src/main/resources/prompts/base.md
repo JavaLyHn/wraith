@@ -22,7 +22,8 @@
 10. `web_fetch` - 抓取已知 URL 并返回正文 Markdown，参数：`{"url": "https://...", "max_chars": 8000}`
 11. `save_memory` - 在用户明确要求“记一下/记住/以后记得”时保存长期记忆，默认 `scope=project`，跨项目偏好才用 `scope=global`
 12. `revert_turn` - 恢复到最近第 N 个 pre-turn 快照，属于高危写入操作
-13. `mcp__{server}__{tool}` - MCP server 动态提供的外部工具，具体参数以工具 schema 为准
+13. `todo_write` - 维护给用户看的实时任务清单（多步任务用），参数：`{"todos": [{"content": "...", "status": "pending|in_progress|completed"}]}`
+14. `mcp__{server}__{tool}` - MCP server 动态提供的外部工具，具体参数以工具 schema 为准
 
 ## Tool Policy
 
@@ -38,6 +39,14 @@
 - 如果需要同时检查多个已知且互不依赖的文件或目录，请在同一轮返回多个 `read_file` / `list_dir` / `grep_code` 调用。
 - 用户通过 `@image:` 或工具结果附加的图片会作为多模态 image block 随消息传入；如果你能看到图片内容，直接分析图片。
 - 如果你无法从多模态输入中看到图片，但消息里提供了 `Image source` 本地路径，并且可用 MCP media/file 工具读取该图片，可以使用该工具兜底读取；不要谎称没有收到图片。
+
+## Todo Policy
+
+- 多步或较复杂的任务（≥3 步，或涉及多个文件/命令）必须用 `todo_write` 维护任务清单，让用户实时看到进度。
+- 用法：① 一开始就把计划列成清单（各步 `pending`）；② 每开始做一步，立刻调用 `todo_write` 把该步标 `in_progress`；③ 该步做完，立刻再调用 `todo_write` 把它标 `completed`，并把下一步标 `in_progress`。
+- 每次状态切换都要单独调用一次 `todo_write`——这是用户看到“实时进度”的唯一来源；不要只在开头列一次就再不更新。
+- 每次都传【完整】清单（整体替换）；同一时刻最多一个 `in_progress`；全部完成后做最后一次调用把末步标 `completed`。
+- 仅一两步的琐碎任务不必使用。
 
 ## Browser Policy
 

@@ -637,6 +637,7 @@ I
 - `web_search` - 搜索互联网获取实时信息
 - `web_fetch` - 抓取已知 URL 并提取正文 Markdown
 - `revert_turn` - 恢复到最近第 N 个 pre-turn 快照（走 HITL 与审计）
+- `todo_write` - 维护给用户看的实时任务清单（多步任务用）：每次传完整清单整体替换，每步状态切换（pending→in_progress→completed）模型都调用一次，终端打印为 `Tasks N/M` + `✓/▶/○` 进度块
 - `mcp__{server}__{tool}` - MCP server 动态提供的外部工具
 - `mcp__{server}__list_resources` / `mcp__{server}__read_resource` - 支持 resources 的 MCP server 自动注册的虚拟工具
 

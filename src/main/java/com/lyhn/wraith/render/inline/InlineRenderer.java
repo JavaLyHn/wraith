@@ -6,6 +6,8 @@ import com.lyhn.wraith.llm.LlmClient;
 import com.lyhn.wraith.render.PlainRenderer;
 import com.lyhn.wraith.render.Renderer;
 import com.lyhn.wraith.render.StatusInfo;
+import com.lyhn.wraith.tool.todo.TodoItem;
+import com.lyhn.wraith.tool.todo.TodoStatus;
 import com.lyhn.wraith.util.AnsiStyle;
 import org.jline.reader.LineReader;
 import org.jline.reader.Widget;
@@ -485,6 +487,36 @@ public final class InlineRenderer implements Renderer {
             return fallback.openPalette(title, items);
         }
         return new SlashPalette(out, terminal).open(title, items);
+    }
+
+    @Override
+    public void renderTodos(List<TodoItem> todos) {
+        // 每次 todo_write 把当前清单作为一块打进 transcript(随对话滚动)。比塞进 JLine dock
+        // 原地刷新可靠得多——后者动态高度会留残影/错位。空清单(含 /clear)不打印。
+        if (todos == null || todos.isEmpty()) {
+            return;
+        }
+        emit(formatTodoBlock(todos) + "\n");
+    }
+
+    private static String formatTodoBlock(List<TodoItem> todos) {
+        long done = todos.stream().filter(t -> t.status() == TodoStatus.COMPLETED).count();
+        StringBuilder sb = new StringBuilder();
+        sb.append(AnsiStyle.emphasis(" Tasks  " + done + "/" + todos.size())).append('\n');
+        for (TodoItem t : todos) {
+            String marker = switch (t.status()) {
+                case COMPLETED -> "✓";
+                case IN_PROGRESS -> "▶";
+                case PENDING -> "○";
+            };
+            String line = "   " + marker + " " + t.content();
+            sb.append(switch (t.status()) {
+                case COMPLETED -> AnsiStyle.rule(line);     // 暗灰
+                case IN_PROGRESS -> AnsiStyle.emphasis(line); // 粗体
+                case PENDING -> line;
+            }).append('\n');
+        }
+        return sb.toString();
     }
 
     /** 测试可见：当前实例是否启动了 status bar。 */
