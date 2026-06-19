@@ -62,6 +62,7 @@ import com.lyhn.wraith.wechat.WechatQrLogin;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.jline.terminal.Attributes;
+import org.jline.reader.Buffer;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
 import org.jline.reader.MaskingCallback;
@@ -387,6 +388,8 @@ public class Main {
             spaciousPrompt = defaultSpaciousPrompt(spaciousPrompt);
             bindCtrlVToClipboardImage(lineReader);
             bindEscToClearInput(lineReader);
+            configureMultilineInput(lineReader, renderer);
+            enableMouseIfAvailable(terminal, lineReader);
 
             while (true) {
                 refreshTerminalColumns(terminal);
@@ -2212,6 +2215,93 @@ public class Main {
             return;
         }
         lineReader.getBuffer().clear();
+    }
+
+    /**
+     * 多行输入:{@code \}+Enter 续行、Ctrl+J(及尽力 Alt+Enter)插入换行、Enter 提交。
+     * 见 docs/specs/2026-06-19-multiline-input-and-mouse.md。
+     *
+     * <p>不改 parser、不做提交后归一化:粘贴走 BRACKETED_PASTE 不经 accept-line widget,
+     * 故粘贴内容里的 {@code \}+换行原样保留(编码 agent 会贴 C 宏 / shell 续行)。
+     * 只有用户亲手按 Enter 且光标前是 {@code \} 时,才消费该反斜杠并插入真换行。
+     */
+    static void configureMultilineInput(LineReader lineReader, Renderer renderer) {
+        if (lineReader == null) {
+            return;
+        }
+        // 续行提示符(secondary prompt):保持左侧 │ 竖线在多行间连续。
+        if (renderer != null) {
+            String continuation = renderer.continuationPrompt();
+            if (continuation != null) {
+                lineReader.setVariable(LineReader.SECONDARY_PROMPT_PATTERN, continuation);
+            }
+        }
+
+        // 自定义 Enter:光标前是 \ → 删掉它并插入换行(续行,不提交);否则正常 ACCEPT_LINE 提交。
+        lineReader.getWidgets().put("wraith-accept-or-continue", () -> {
+            Buffer buf = lineReader.getBuffer();
+            if (buf != null && buf.prevChar() == '\\') {
+                buf.backspace();
+                buf.write('\n');
+                lineReader.callWidget(LineReader.REDISPLAY);
+                return true;
+            }
+            lineReader.callWidget(LineReader.ACCEPT_LINE);
+            return true;
+        });
+
+        // Ctrl+J(LF)/ Alt+Enter:在光标处插入真换行,不提交。
+        lineReader.getWidgets().put("wraith-insert-newline", () -> {
+            Buffer buf = lineReader.getBuffer();
+            if (buf != null) {
+                buf.write('\n');
+            }
+            lineReader.callWidget(LineReader.REDISPLAY);
+            return true;
+        });
+
+        Reference accept = new Reference("wraith-accept-or-continue");
+        Reference newline = new Reference("wraith-insert-newline");
+        String enter = "\r";              // CR(Enter / Ctrl+M)
+        String ctrlJ = KeyMap.ctrl('J');  // LF(0x0A)
+        for (String mapName : new String[]{LineReader.MAIN, LineReader.EMACS, LineReader.VIINS}) {
+            KeyMap<org.jline.reader.Binding> map = lineReader.getKeyMaps().get(mapName);
+            if (map == null) {
+                continue;
+            }
+            map.bind(accept, enter);
+            map.bind(newline, ctrlJ);
+            // Alt+Enter 尽力支持:ReAct 默认路径可用;Plan/Team 的 Esc-prefill 会先吃掉 Esc。
+            map.bind(newline, KeyMap.alt('\r'));
+            map.bind(newline, KeyMap.alt('\n'));
+        }
+    }
+
+    /**
+     * 鼠标点击定位:启用 JLine 内建 {@code mouse()} widget(多行/换行/续行提示符感知)。
+     * 默认开,{@code WRAITH_MOUSE=off/0/false/no} 关闭;终端不支持鼠标时静默跳过。
+     * JLine 仅在 readLine 期间 trackMouse,输出/回看期间原生鼠标选区照常。
+     */
+    static void enableMouseIfAvailable(Terminal terminal, LineReader lineReader) {
+        if (terminal == null || lineReader == null) {
+            return;
+        }
+        if (!mouseEnabled(System.getenv("WRAITH_MOUSE"))) {
+            return;
+        }
+        if (!terminal.hasMouseSupport()) {
+            return;
+        }
+        lineReader.option(LineReader.Option.MOUSE, true);
+    }
+
+    /** WRAITH_MOUSE 解析:null / 其它 = 开;off / 0 / false / no(大小写不敏感)= 关。 */
+    static boolean mouseEnabled(String env) {
+        if (env == null) {
+            return true;
+        }
+        String v = env.trim().toLowerCase(java.util.Locale.ROOT);
+        return !(v.equals("off") || v.equals("0") || v.equals("false") || v.equals("no"));
     }
 
     private static void handleExportCommand(PrintStream out, Agent reactAgent) {

@@ -96,6 +96,11 @@ public interface Renderer extends AutoCloseable {
         return null;
     }
 
+    /** 多行/续行时的左侧续行提示符（secondary prompt）；默认与 inputPrompt 等宽对齐。 */
+    default String continuationPrompt() {
+        return "  ";
+    }
+
     @Override
     void close();
 
