@@ -164,6 +164,29 @@ public final class BottomStatusBar implements AutoCloseable {
         }
     }
 
+    /**
+     * 释放顶部固定区:顶边收回 0,并显式把滚动区重设为全屏(仅保留底部 dock)。
+     * 不能走 {@link #reassertTopScrollRegion}——它在 top<=0 时直接返回(那是"无 banner"语义),
+     * 会留下旧的固定区不动。这里直接发 DECSTBM 把顶边设回 0,让 banner 不再冻结、随对话上滚。
+     */
+    void releaseTopReserved() {
+        this.topReserved = 0;
+        if (status == null || closed || !started) {
+            return;
+        }
+        synchronized (out) {
+            int rows = TerminalCapabilities.safeSize(terminal).getRows();
+            int bottom0 = rows - 1 - reservedRows();
+            if (bottom0 <= 0) {
+                return;
+            }
+            terminal.puts(InfoCmp.Capability.save_cursor);
+            terminal.puts(InfoCmp.Capability.change_scroll_region, 0, bottom0);
+            terminal.puts(InfoCmp.Capability.restore_cursor);
+            terminal.flush();
+        }
+    }
+
     /** 终端尺寸变化:让 JLine 重算 dock 尺寸,再重设固定区顶边。 */
     void resize() {
         Status dock = status;

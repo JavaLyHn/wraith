@@ -16,6 +16,8 @@ import com.lyhn.wraith.hitl.SwitchableHitlHandler;
 import com.lyhn.wraith.hitl.RendererHitlHandler;
 import com.lyhn.wraith.hitl.TerminalHitlHandler;
 import com.lyhn.wraith.llm.LlmClient;
+import com.lyhn.wraith.session.SessionMeta;
+import com.lyhn.wraith.session.SessionStore;
 import com.lyhn.wraith.llm.LlmClientFactory;
 import com.lyhn.wraith.memory.LongTermMemory;
 import com.lyhn.wraith.memory.MemoryEntry;
@@ -82,11 +84,13 @@ import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Optional;
 import java.util.Locale;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
@@ -227,6 +231,7 @@ public class Main {
             System.exit(1);
         }
         AtomicReference<LlmClient> llmClientRef = new AtomicReference<>(llmClient);
+        ResumeIntent resumeIntent = ResumeIntent.from(args); // --continue / --resume [id]
 
         // graphemeCluster(false): 禁掉 JLine 启动时的 mode 2027(grapheme cluster)探测。
         // 该探测会写 ESC[?2027$p(DECRQM 查询),不支持此查询的终端(如 Apple Terminal)
@@ -345,6 +350,12 @@ public class Main {
             } else {
                 printStartupScreen(ui, startupScreenInfo);
             }
+
+            SessionStore sessionStore = SessionStore.open(home,
+                    reactAgent.getToolRegistry().getProjectPath(),
+                    llmClient.getProviderName(), llmClient.getModelName());
+            applyResumeAtLaunch(resumeIntent, sessionStore, reactAgent, renderer, ui);
+
             boolean nextTaskUsePlanMode = false;
             boolean nextTaskUseTeamMode = false;
 
@@ -436,8 +447,13 @@ public class Main {
                     case CLEAR -> {
                         reactAgent.clearHistory();
                         hitlHandler.clearApprovedAll();
+                        sessionStore.startNew(); // /clear 开新会话文件,旧会话留存
                         renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));
                         ui.println("🗑️ 当前对话历史已清空，长期记忆保持不变\n");
+                        continue;
+                    }
+                    case RESUME -> {
+                        handleResumeCommand(command.payload(), sessionStore, reactAgent, renderer, ui);
                         continue;
                     }
                     case COMPACT -> {
@@ -857,6 +873,7 @@ public class Main {
                     ui.println(response);
                     ui.println();
                 }
+                sessionStore.persist(reactAgent.getConversationHistory()); // 每轮落盘,供续接
             }
             ui.println("\n👋 再见!");
             wechatRuntime.stop();
@@ -866,6 +883,146 @@ public class Main {
         } catch (IOException e) {
             System.err.println("❌ 终端初始化失败: " + e.getMessage());
             System.exit(1);
+        }
+    }
+
+    /** 启动参数里的会话续接意图:--continue / --resume [id]。 */
+    private record ResumeIntent(Mode mode, String id) {
+        enum Mode { NONE, CONTINUE, PICK, ID }
+
+        static ResumeIntent from(String[] args) {
+            if (args == null) {
+                return new ResumeIntent(Mode.NONE, null);
+            }
+            for (int i = 0; i < args.length; i++) {
+                String a = args[i];
+                if ("--continue".equalsIgnoreCase(a) || "-c".equalsIgnoreCase(a)) {
+                    return new ResumeIntent(Mode.CONTINUE, null);
+                }
+                if ("--resume".equalsIgnoreCase(a) || "-r".equalsIgnoreCase(a)) {
+                    String next = i + 1 < args.length ? args[i + 1] : null;
+                    if (next != null && !next.startsWith("-")) {
+                        return new ResumeIntent(Mode.ID, next.trim());
+                    }
+                    return new ResumeIntent(Mode.PICK, null);
+                }
+            }
+            return new ResumeIntent(Mode.NONE, null);
+        }
+    }
+
+    /** 启动时按意图续接(--continue 接最近 / --resume id 直接接 / --resume 弹面板)。 */
+    private static void applyResumeAtLaunch(ResumeIntent intent, SessionStore store, Agent agent,
+                                            Renderer renderer, PrintStream ui) {
+        if (intent == null) {
+            return;
+        }
+        switch (intent.mode()) {
+            case CONTINUE -> {
+                Optional<SessionMeta> latest = store.latest();
+                if (latest.isPresent()) {
+                    restoreSessionById(store, agent, ui, latest.get().id(), latest.get().title());
+                } else {
+                    ui.println("ℹ️ 本项目无可续接会话,开新会话\n");
+                }
+            }
+            case ID -> {
+                if (!restoreSessionById(store, agent, ui, intent.id(), null)) {
+                    ui.println("⚠️ 未找到会话 " + intent.id() + ",开新会话\n");
+                }
+            }
+            case PICK -> pickAndRestoreSession(store, agent, renderer, ui);
+            default -> {
+            }
+        }
+    }
+
+    /** 会话内 /resume:带 id 直接接,否则弹面板选。 */
+    private static void handleResumeCommand(String payload, SessionStore store, Agent agent,
+                                            Renderer renderer, PrintStream ui) {
+        if (payload != null && !payload.isBlank()) {
+            if (!restoreSessionById(store, agent, ui, payload.trim(), null)) {
+                ui.println("⚠️ 未找到会话 " + payload.trim() + "\n");
+            }
+            return;
+        }
+        pickAndRestoreSession(store, agent, renderer, ui);
+    }
+
+    private static void pickAndRestoreSession(SessionStore store, Agent agent, Renderer renderer, PrintStream ui) {
+        List<SessionMeta> metas = store.list(20);
+        if (metas.isEmpty()) {
+            ui.println("📭 本项目暂无历史会话\n");
+            return;
+        }
+        List<String> items = new ArrayList<>();
+        for (SessionMeta m : metas) {
+            items.add(formatSessionItem(m));
+        }
+        int idx = renderer.openPalette("续接会话", items);
+        if (idx < 0 || idx >= metas.size()) {
+            ui.println("已取消\n");
+            return;
+        }
+        SessionMeta chosen = metas.get(idx);
+        restoreSessionById(store, agent, ui, chosen.id(), chosen.title());
+    }
+
+    private static boolean restoreSessionById(SessionStore store, Agent agent, PrintStream ui,
+                                              String id, String titleHint) {
+        List<LlmClient.Message> msgs = store.resume(id);
+        if (msgs.isEmpty()) {
+            return false;
+        }
+        agent.restoreHistory(msgs);
+        String title = titleHint != null && !titleHint.isBlank() ? titleHint : id;
+        ui.println("🔄 已恢复会话「" + title + "」(" + msgs.size() + " 条上下文)");
+        String lastUser = lastUserMessage(msgs);
+        if (lastUser != null) {
+            ui.println("   ↳ 上次:" + truncateForNotice(lastUser, 60));
+        }
+        ui.println();
+        return true;
+    }
+
+    private static String formatSessionItem(SessionMeta m) {
+        String title = m.title() == null || m.title().isBlank() ? "(无标题)" : m.title();
+        return title + "   ·   " + relativeTime(m.updatedAt()) + "   ·   " + m.turns() + " 轮   ·   " + m.model();
+    }
+
+    private static String lastUserMessage(List<LlmClient.Message> msgs) {
+        for (int i = msgs.size() - 1; i >= 0; i--) {
+            LlmClient.Message m = msgs.get(i);
+            if ("user".equals(m.role()) && m.content() != null && !m.content().isBlank()) {
+                return m.content().strip();
+            }
+        }
+        return null;
+    }
+
+    private static String truncateForNotice(String s, int max) {
+        String one = s.replaceAll("\\s+", " ").strip();
+        return one.length() > max ? one.substring(0, max) + "…" : one;
+    }
+
+    private static String relativeTime(String iso) {
+        if (iso == null) {
+            return "?";
+        }
+        try {
+            long sec = Math.max(0, Duration.between(Instant.parse(iso), Instant.now()).getSeconds());
+            if (sec < 60) {
+                return sec + " 秒前";
+            }
+            if (sec < 3600) {
+                return (sec / 60) + " 分钟前";
+            }
+            if (sec < 86400) {
+                return (sec / 3600) + " 小时前";
+            }
+            return (sec / 86400) + " 天前";
+        } catch (Exception e) {
+            return iso;
         }
     }
 
@@ -1592,6 +1749,7 @@ public class Main {
                 new SlashCommandHint("/search ", "/search <查询>", "语义检索代码（RAG 辅助）"),
                 new SlashCommandHint("/graph ", "/graph <类名>", "查看代码关系图谱"),
                 new SlashCommandHint("/clear", "/clear", "清空当前对话历史"),
+                new SlashCommandHint("/resume", "/resume", "续接本项目历史会话"),
                 new SlashCommandHint("/compact", "/compact", "手动压缩当前对话历史"),
                 new SlashCommandHint("/init", "/init", "生成项目级记忆 WRAITH.md"),
                 new SlashCommandHint("/init --force", "/init --force", "重写项目级记忆 WRAITH.md"),

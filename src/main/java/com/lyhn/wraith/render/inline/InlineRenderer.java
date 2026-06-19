@@ -85,6 +85,7 @@ public final class InlineRenderer implements Renderer {
 
     @Override
     public void beginTurn() {
+        releasePinnedBanner(); // 第一条消息起:banner 脱离冻结,随对话向上滚走,腾出空间
         synchronized (transcriptLock) {
             transcript.clear();
             renderedRows = 0;
@@ -376,6 +377,30 @@ public final class InlineRenderer implements Renderer {
             paintBanner();          // 按新列宽重画 banner
         } catch (Exception ignored) {
             // resize 处理失败不致命
+        }
+    }
+
+    /**
+     * 释放常驻 banner:发出第一条消息后调用。把滚动区顶边收回到 0(只留底部 dock),
+     * 停掉每轮重画与 resize 监视——此刻顶部那几行 banner 就变成普通内容,随后续对话
+     * 一起向上滚走,腾出消息空间。释放后整个会话不再回到冻结态。空会话时仍冻结在左上角。
+     */
+    private void releasePinnedBanner() {
+        if (!pinnedActive) {
+            return;
+        }
+        pinnedActive = false;
+        Thread watcher = resizeWatcher;
+        if (watcher != null) {
+            watcher.interrupt();
+            resizeWatcher = null;
+        }
+        if (statusBar != null) {
+            try {
+                statusBar.releaseTopReserved(); // 顶边收回 0 并显式重设滚动区为全屏,banner 不再冻结
+            } catch (Exception ignored) {
+                // 释放失败不致命,顶多 banner 多停留一会儿
+            }
         }
     }
 
