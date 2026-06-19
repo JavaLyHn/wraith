@@ -343,12 +343,20 @@ public class Main {
             renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));
             StartupScreenInfo startupScreenInfo = startupScreenInfo(llmClient, mcpServerManager, skillRegistry, startupNote);
             if (renderer instanceof InlineRenderer inline) {
-                // WRAITH 字标 + 信息行常驻冻结在左上角;Tips 走 printAbove 进滚动区,随对话滚走
-                //(留住滚动区非空,避免 resize 后输入误锚顶部)。终端太矮/不支持则整块降级到滚动历史。
-                boolean pinned = inline.installPinnedBanner(pinnedBannerContentLines(startupScreenInfo));
-                inline.installStartupScreen(pinned
-                        ? startupTipsLines(startupScreenInfo)
-                        : startupScreenLines(startupScreenInfo));
+                if (inline.isTopAnchorMode()) {
+                    // 顶部对齐:banner 不冻结,作为首块随对话从顶往下铺(填满后整体上滚);
+                    // 首次发送后清掉 Tips。banner 与 Tips 分开传,便于首轮只清 Tips、保留 banner。
+                    inline.installTopAnchorStartup(
+                            pinnedBannerContentLines(startupScreenInfo),
+                            startupTipsLines(startupScreenInfo));
+                } else {
+                    // WRAITH 字标 + 信息行常驻冻结在左上角;Tips 走 printAbove 进滚动区,随对话滚走
+                    //(留住滚动区非空,避免 resize 后输入误锚顶部)。终端太矮/不支持则整块降级到滚动历史。
+                    boolean pinned = inline.installPinnedBanner(pinnedBannerContentLines(startupScreenInfo));
+                    inline.installStartupScreen(pinned
+                            ? startupTipsLines(startupScreenInfo)
+                            : startupScreenLines(startupScreenInfo));
+                }
             } else {
                 printStartupScreen(ui, startupScreenInfo);
             }

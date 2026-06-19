@@ -49,6 +49,13 @@ public final class InlineRenderer implements Renderer {
     private volatile boolean started;
     private volatile boolean closed;
 
+    // —— 顶部对齐(top-anchored)实验:内容从顶往下画,填满 dock 之上区域后再切 printAbove 上滚 ——
+    private final boolean topAnchorMode;
+    private volatile boolean topAnchored;   // 仍在顶部对齐区(true)还是已切 printAbove 上滚(false)
+    private int taRow;                       // 顶部对齐下一行绝对行号(跨轮累积)
+    private int taBannerHeight;              // banner 占的行数(首次发送后保留、清掉下面的 Tips)
+    private boolean taFirstTurnHandled;      // 首次发送是否已处理(清 Tips)
+
     // —— 常驻顶部 banner(字标 + 信息行,冻结在左上角)——
     private PinnedBanner pinnedBanner;
     private volatile boolean pinnedActive;
@@ -83,11 +90,108 @@ public final class InlineRenderer implements Renderer {
                 : new InlineActivityDisplay(terminal, out, statusBar);
         this.blockRegistry = new BlockRegistry();
         this.stream = createTranscriptStream(out);
+        String ta = System.getenv("WRAITH_TOP_ANCHOR");
+        this.topAnchorMode = statusBar != null && ta != null
+                && (ta.equals("1") || ta.equalsIgnoreCase("on") || ta.equalsIgnoreCase("true"));
+        this.topAnchored = topAnchorMode;
+    }
+
+    public boolean isTopAnchorMode() {
+        return topAnchorMode;
+    }
+
+    /** dock 之上可用内容行数 = 终端行数 - dock 预留行 - 1(输入行)。 */
+    private int contentAreaHeight() {
+        int rows = TerminalCapabilities.safeSize(terminal).getRows();
+        int reserved = statusBar != null ? statusBar.reservedRows() : 1;
+        return Math.max(1, rows - reserved - 1);
+    }
+
+    /**
+     * 顶部对齐画法:内容未填满 dock 之上区域时,用绝对光标定位从 {@code renderedRows} 行往下画
+     * (save/restore cursor 不打扰底部输入行,与 paintBanner 同理);填满后切回 printAbove 上滚。
+     */
+    private void emitTopAnchored(String text) {
+        int rows = estimateRows(text);
+        int areaH = contentAreaHeight();
+        synchronized (out) {
+            if (topAnchored && taRow + rows <= areaH) {
+                // 全程走 out(与状态栏 / 其余 transcript 同一缓冲),不混用 terminal.writer()/puts——
+                // 两条缓冲对同一 fd 交错会把转义序列拆碎,在真实终端留下游离的 '['。
+                out.print(AnsiSeq.SAVE_CURSOR);
+                out.print(AnsiSeq.moveCursor(taRow + 1, 1));
+                out.print(text.replace("\r\n", "\n").replace("\n", "\r\n"));
+                out.print(AnsiSeq.RESTORE_CURSOR);
+                out.flush();
+                taRow += rows;
+            } else {
+                topAnchored = false; // 区域已满:此后整体随 printAbove 上滚(banner 先滚出)
+                LineReader reader = activePrintAboveReader();
+                if (reader != null) {
+                    reader.printAbove(text);
+                } else {
+                    out.print(text);
+                    out.flush();
+                }
+            }
+        }
+    }
+
+    /**
+     * 顶部对齐模式启动:把 banner 与 Tips 顶部对齐画在最上方(banner 不冻结)。
+     * 记下 banner 高度,首次发送时清掉下方 Tips、把绘制游标收回到 banner 之下。
+     */
+    public void installTopAnchorStartup(List<String> bannerLines, List<String> tipsLines) {
+        LineReader reader = lineReader;
+        if (reader == null) {
+            return;
+        }
+        String bannerBlock = joinLines(bannerLines);
+        String tipsBlock = joinLines(tipsLines);
+        this.taBannerHeight = estimateRows(bannerBlock);
+        startupScreenPrinted.set(false);
+        Widget previous = reader.getWidgets().get(LineReader.CALLBACK_INIT);
+        reader.getWidgets().put(LineReader.CALLBACK_INIT, () -> {
+            boolean ok = previous == null || previous.apply();
+            if (startupScreenPrinted.compareAndSet(false, true)) {
+                taRow = 0;
+                topAnchored = true;
+                emitTopAnchored(bannerBlock);
+                if (!tipsBlock.isEmpty()) {
+                    emitTopAnchored(tipsBlock);
+                }
+            }
+            return ok;
+        });
+    }
+
+    /** 顶部对齐:首次发送时清掉 banner 下方的 Tips,绘制游标收回到 banner 之下。 */
+    private void handleFirstTopAnchorTurn() {
+        if (taFirstTurnHandled || !topAnchorMode) {
+            return;
+        }
+        taFirstTurnHandled = true;
+        synchronized (out) {
+            if (taRow > taBannerHeight) {
+                out.print(AnsiSeq.SAVE_CURSOR);
+                for (int r = taBannerHeight; r < taRow; r++) {
+                    out.print(AnsiSeq.moveCursor(r + 1, 1));
+                    out.print(AnsiSeq.CLEAR_TO_EOL); // 只清 Tips 行,绝不 CLEAR_TO_EOS(会伤 dock)
+                }
+                out.print(AnsiSeq.RESTORE_CURSOR);
+                out.flush();
+            }
+            taRow = taBannerHeight;
+            topAnchored = true;
+        }
     }
 
     @Override
     public void beginTurn() {
         releasePinnedBanner(); // 第一条消息起:banner 脱离冻结,随对话向上滚走,腾出空间
+        if (topAnchorMode) {
+            handleFirstTopAnchorTurn(); // 首次发送:清 Tips,游标收回 banner 之下;taRow 跨轮不重置
+        }
         synchronized (transcriptLock) {
             transcript.clear();
             renderedRows = 0;
@@ -200,12 +304,15 @@ public final class InlineRenderer implements Renderer {
 
     @Override
     public boolean supportsThinkingPanel() {
-        return activityDisplay != null;
+        // 顶部对齐模式下关闭转圈面板:它在 250ms 定时线程上走 terminal.writer() 缓冲,
+        // 与主线程 out 缓冲的绝对定位绘制抢同一 fd,会把光标转义序列拆碎(屏幕上漏出游离 '[')。
+        // 关掉后 agent 改走行内推理(经 emit 顶部对齐打出,单线程单缓冲,安全)。
+        return activityDisplay != null && !topAnchorMode;
     }
 
     @Override
     public void beginThinking(String label) {
-        if (activityDisplay != null && !closed) {
+        if (activityDisplay != null && !closed && !topAnchorMode) {
             activityDisplay.begin(label);
         }
     }
@@ -226,12 +333,12 @@ public final class InlineRenderer implements Renderer {
 
     @Override
     public boolean supportsActivityPanel() {
-        return activityDisplay != null;
+        return activityDisplay != null && !topAnchorMode;
     }
 
     @Override
     public void beginActivity(String label, String detail) {
-        if (activityDisplay != null && !closed) {
+        if (activityDisplay != null && !closed && !topAnchorMode) {
             activityDisplay.beginActivity(label, detail);
         }
     }
@@ -273,7 +380,11 @@ public final class InlineRenderer implements Renderer {
         reader.getWidgets().put(LineReader.CALLBACK_INIT, () -> {
             boolean ok = previous == null || previous.apply();
             if (startupScreenPrinted.compareAndSet(false, true)) {
-                reader.printAbove(joinLines(snapshot));
+                if (topAnchorMode) {
+                    emitTopAnchored(joinLines(snapshot));
+                } else {
+                    reader.printAbove(joinLines(snapshot));
+                }
             }
             return ok;
         });
@@ -617,7 +728,9 @@ public final class InlineRenderer implements Renderer {
             codeHeaderLine = stripTrailingNewline(line);
             codeBodyLines.clear();
             codeStartTranscriptIndex = transcript.size();
-            codeHeaderEmitted = activePrintAboveReader() == null;
+            // 顶部对齐模式禁用"直写 out + moveUp 覆盖 header"路径(会绕过 emitTopAnchored、且 clr_eos 伤 dock);
+            // 改走 emit 路径(折叠头作为新内容顶部对齐打出)。
+            codeHeaderEmitted = !topAnchorMode && activePrintAboveReader() == null;
             if (codeHeaderEmitted) {
                 emit(line);
                 transcript.add(new TextEntry(line));
@@ -702,6 +815,10 @@ public final class InlineRenderer implements Renderer {
 
     private void emit(String text) {
         if (text == null || text.isEmpty()) {
+            return;
+        }
+        if (topAnchorMode && !redrawing) {
+            emitTopAnchored(text);
             return;
         }
         LineReader reader = activePrintAboveReader();
