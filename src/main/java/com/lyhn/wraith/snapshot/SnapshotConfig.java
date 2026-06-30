@@ -15,7 +15,7 @@ public record SnapshotConfig(
 ) {
     private static final List<String> DEFAULT_EXCLUDES = List.of(
             ".git",
-            ".wraith-cli/snapshots",
+            ".wraith/snapshots",
             "target",
             "node_modules",
             "dist",
@@ -25,11 +25,11 @@ public record SnapshotConfig(
     );
 
     public static SnapshotConfig fromEnvironment() {
-        boolean enabled = readBoolean("wraith-cli.snapshot.enabled", "WRAITH_SNAPSHOT_ENABLED", true);
-        Path root = Path.of(readString("wraith-cli.snapshot.dir", "WRAITH_SNAPSHOT_DIR",
-                Path.of(System.getProperty("user.home"), ".wraith-cli", "snapshots").toString()));
-        int max = readInt("wraith-cli.snapshot.max", "WRAITH_SNAPSHOT_MAX", 50);
-        List<String> excludes = mergeExcludes(readString("wraith-cli.snapshot.excludes", "WRAITH_SNAPSHOT_EXCLUDES", ""));
+        boolean enabled = readBoolean("wraith.snapshot.enabled", "WRAITH_SNAPSHOT_ENABLED", true);
+        Path root = Path.of(readString("wraith.snapshot.dir", "WRAITH_SNAPSHOT_DIR",
+                Path.of(System.getProperty("user.home"), ".wraith", "snapshots").toString()));
+        int max = readInt("wraith.snapshot.max", "WRAITH_SNAPSHOT_MAX", 50);
+        List<String> excludes = mergeExcludes(readString("wraith.snapshot.excludes", "WRAITH_SNAPSHOT_EXCLUDES", ""));
         return new SnapshotConfig(enabled, root, Math.max(1, max), excludes);
     }
 

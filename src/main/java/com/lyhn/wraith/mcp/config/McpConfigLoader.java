@@ -26,8 +26,8 @@ public class McpConfigLoader {
 
     public McpConfigLoader(Path projectDir) {
         this(
-                Path.of(System.getProperty("user.home"), ".wraith-cli", "mcp.json"),
-                projectDir.resolve(".wraith-cli").resolve("mcp.json"),
+                Path.of(System.getProperty("user.home"), ".wraith", "mcp.json"),
+                projectDir.resolve(".wraith").resolve("mcp.json"),
                 projectDir
         );
     }

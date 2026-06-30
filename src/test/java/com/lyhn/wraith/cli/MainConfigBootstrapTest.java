@@ -14,7 +14,7 @@ class MainConfigBootstrapTest {
     void createsDefaultChromeDevtoolsMcpConfigWhenMissing(@TempDir Path tempHome) throws Exception {
         Main.McpConfigBootstrapResult result = Main.ensureDefaultMcpConfig(tempHome);
 
-        Path config = tempHome.resolve(".wraith-cli").resolve("mcp.json");
+        Path config = tempHome.resolve(".wraith").resolve("mcp.json");
         assertTrue(result.created());
         assertTrue(Files.exists(config));
         String content = Files.readString(config);
@@ -25,7 +25,7 @@ class MainConfigBootstrapTest {
 
     @Test
     void doesNotOverwriteExistingUserConfig(@TempDir Path tempHome) throws Exception {
-        Path config = tempHome.resolve(".wraith-cli").resolve("mcp.json");
+        Path config = tempHome.resolve(".wraith").resolve("mcp.json");
         Files.createDirectories(config.getParent());
         String original = """
                 {

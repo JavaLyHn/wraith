@@ -73,7 +73,7 @@ class SessionStoreTest {
         store.persist(sampleHistory());
         SessionMeta meta = store.list(10).get(0);
 
-        Path dir = home.resolve(".wraith-cli").resolve("sessions").resolve(SessionStore.hash("/proj/a"));
+        Path dir = home.resolve(".wraith").resolve("sessions").resolve(SessionStore.hash("/proj/a"));
         Path file = dir.resolve(meta.id() + ".jsonl");
         Files.writeString(file, "this is not json\n", StandardOpenOption.APPEND);
 

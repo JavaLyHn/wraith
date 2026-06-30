@@ -21,8 +21,8 @@ public class VectorStore implements AutoCloseable {
 
     public VectorStore(String projectPath) throws SQLException {
         this.projectPath = projectPath;
-        String dbDir = System.getProperty("wraith-cli.rag.dir",
-                System.getProperty("user.home") + "/.wraith-cli/rag");
+        String dbDir = System.getProperty("wraith.rag.dir",
+                System.getProperty("user.home") + "/.wraith/rag");
         java.io.File dir = new java.io.File(dbDir);
         if (!dir.exists()) {
             dir.mkdirs();

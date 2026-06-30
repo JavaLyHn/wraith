@@ -125,7 +125,7 @@
 
 - `TerminalCapabilities.supportsScrollRegion(terminal)` 为真(含真 TTY、非 dumb、`rows≥5`);
 - 且 `rows ≥ H + dockH + 3`(给滚动区留至少 3 行可视空间);
-- 未设 `WRAITH_NO_STATUSBAR` / `wraith-cli.no.statusbar`。
+- 未设 `WRAITH_NO_STATUSBAR` / `wraith.no.statusbar`。
 
 降级时输入框两横线仍生效(Phase 1 与滚动区无关)。
 
@@ -166,7 +166,7 @@
 - **顶边纠正**:`BottomStatusBar.renderDock()` 在每次 `dock.update()` 后调 `reassertTopScrollRegion()`,用 save/restore cursor 包裹,把顶边设回 `change_scroll_region(H, rows-4)`。这是单一咽喉点,覆盖"首次 0→3 增长"与任何行数变化。
 - **banner 绘制**:`InlineRenderer.paintBanner()` 在 0..H-1 行绝对定位绘制(save/restore cursor + clr_eol),仅在 engage / WINCH / 每轮 `beforeInput` 触发,流式期间不重画(免闪)。
 - **WINCH**:`terminal.handle(WINCH, …)` → `statusBar.resize()`(JLine 重算 + 重设固定区)+ `paintBanner()`。
-- **降级**:不支持滚动区 / `rows < H + dock(3) + 3` / `WRAITH_NO_PINNED_BANNER`(或 `-Dwraith-cli.no.pinned.banner`)→ 不固定,banner 走老的滚动历史路径。
+- **降级**:不支持滚动区 / `rows < H + dock(3) + 3` / `WRAITH_NO_PINNED_BANNER`(或 `-Dwraith.no.pinned.banner`)→ 不固定,banner 走老的滚动历史路径。
 
 ### resize 期间的 WINCH 归属(关键修复)
 读 `LineReaderImpl` 源码确认:`readLine` 期间它把 WINCH 处理器换成自己的(line 677),WINCH 时调 `status.resize()` 把滚动区**顶边重置回 0**、重排,且全程不触达我们的代码——所以"在 prompt 处拉伸窗口"会让 banner 消失(实测 bug)。`Status` 由 `AbstractTerminal` 内部 `new` 出来,**无法注入子类**,JLine 也没有可挂的 redisplay 钩子。

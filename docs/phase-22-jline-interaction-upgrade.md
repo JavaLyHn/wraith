@@ -102,8 +102,8 @@ Terminal
 目标：历史好用，但不泄露敏感内容。
 
 - 已接入 `WraithHistory`，基于 JLine `DefaultHistory` 做 Wraith CLI 过滤策略。
-- 默认配置 `~/.wraith-cli/history/input.history` 持久化，可用 `wraith-cli.history.file` / `WRAITH_HISTORY_FILE` 覆盖；如果配置值指向目录，则使用该目录下的 `input.history`。
-- 已设置 history size / file size，默认 `2000` / `10000`，可用 `wraith-cli.history.size`、`wraith-cli.history.fileSize` 或对应环境变量覆盖。
+- 默认配置 `~/.wraith/history/input.history` 持久化，可用 `wraith.history.file` / `WRAITH_HISTORY_FILE` 覆盖；如果配置值指向目录，则使用该目录下的 `input.history`。
+- 已设置 history size / file size，默认 `2000` / `10000`，可用 `wraith.history.size`、`wraith.history.fileSize` 或对应环境变量覆盖。
 - 已忽略空白、重复、超长输入。
 - 已过滤 API key、Bearer、Authorization、password、secret、token、private key、base64 图片等敏感内容。
 - 已禁用 event expansion，避免 `!` 类历史展开产生意外行为。
@@ -182,4 +182,4 @@ HITL：
 - Ctrl+O、ESC、Ctrl+V、Tab、上下键正常。
 - Plan review 方向键不误判 ESC。
 - HITL 审批期间不吞输入。
-- `java -jar target/wraith-cli-1.0-SNAPSHOT.jar` 真机验证。
+- `java -jar target/wraith-1.0-SNAPSHOT.jar` 真机验证。

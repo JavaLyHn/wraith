@@ -100,17 +100,17 @@ class AgentBudgetTest {
 
     @Test
     void systemPropertyCanStillOverrideDynamicTokenBudget() {
-        String old = System.getProperty("wraith-cli.react.token.budget");
+        String old = System.getProperty("wraith.react.token.budget");
         try {
-            System.setProperty("wraith-cli.react.token.budget", "12345");
+            System.setProperty("wraith.react.token.budget", "12345");
             AgentBudget budget = AgentBudget.fromLlmClient(new GLMClient("test-key"));
 
             assertEquals(12345, budget.tokenBudget());
         } finally {
             if (old == null) {
-                System.clearProperty("wraith-cli.react.token.budget");
+                System.clearProperty("wraith.react.token.budget");
             } else {
-                System.setProperty("wraith-cli.react.token.budget", old);
+                System.setProperty("wraith.react.token.budget", old);
             }
         }
     }

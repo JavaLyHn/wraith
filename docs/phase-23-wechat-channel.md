@@ -4,7 +4,7 @@
 
 ## Summary
 
-- 新增 Wraith CLI 内置 WeChat Channel，默认关闭；只有显式执行 `wraith-cli wechat ...` 才启动 iLink。
+- 新增 Wraith CLI 内置 WeChat Channel，默认关闭；只有显式执行 `wraith wechat ...` 才启动 iLink。
 - 不做 Skill、不走 Runtime API；微信接收用 iLink `getupdates` long-poll，回复流式体验靠 `sendmessage` 分块。
 - iLink 协议层出站回复仍是 `text_item.text` 文本消息，没有显式 Markdown parse mode；Wraith CLI 保留 ClawBot 稳定支持的 Markdown 子集，并对标题、表格和非代码 fenced block 做移动端友好的归一化。
 - 微信通道**不是关闭 HITL，而是用「非交互式默认拒绝策略」替代交互式审批**：远程入口不能弹窗等人，所以危险操作默认拒绝而非默认放行；PathGuard / CommandGuard / 绑定用户校验 / 审计日志 / 工作区边界全部保留并强化。
@@ -72,12 +72,12 @@ getupdates → [鉴权: boundUserId?] → [分类]
   - `/wechat`：在 Wraith CLI 主交互内扫码确认绑定并在当前进程后台启动 long-poll；已绑定时直接启动。
   - `/wechat setup`：重新扫码绑定并启动。
   - `/wechat status` / `/wechat stop`：查看或关闭当前进程内通道。
-  - `wraith-cli wechat setup`：进程级扫码确认绑定，保存 token/baseUrl/botId/boundUserId/workspace/策略配置，不启动轮询。
-  - `wraith-cli wechat start`：进程级前台启动 long-poll，适合脚本 / daemon。
-  - `wraith-cli wechat daemon start|stop|restart|status|logs`：后台服务管理。
+  - `wraith wechat setup`：进程级扫码确认绑定，保存 token/baseUrl/botId/boundUserId/workspace/策略配置，不启动轮询。
+  - `wraith wechat start`：进程级前台启动 long-poll，适合脚本 / daemon。
+  - `wraith wechat daemon start|stop|restart|status|logs`：后台服务管理。
 - 新增 `com.lyhn.wraith.wechat` 结构：
   - `IlinkClient`：QR、`getupdates`、`sendmessage`、`sendtyping`、`getuploadurl`、`notifystart/notifystop`。
-  - `WechatAccountStore`：`~/.wraith-cli/wechat/` 下保存账号、session、sync buf、media、logs；敏感字段脱敏，文件权限 `600`。
+  - `WechatAccountStore`：`~/.wraith/wechat/` 下保存账号、session、sync buf、media、logs；敏感字段脱敏，文件权限 `600`。
   - `WechatMessageLoop`：long-poll、cursor、去重、退避、登录过期、限流重试、启动停止通知；**鉴权 + 控制命令旁路在此层完成**。
   - `WechatPolicyDecider`：非交互式危险工具裁决（见安全模型 §1），接入现有 AuditLog。
   - `WechatAgentSession`：无 JLine 初始化，复用 Wraith CLI config、LLM、MCP、Skill、Memory、ToolRegistry；注入 `WechatPolicyDecider` 替代交互式 HITL handler。
@@ -90,7 +90,7 @@ getupdates → [鉴权: boundUserId?] → [分类]
 - 媒体规则：
   - 图片下载解密后保存本地，再用现有 `@image:<path>` 链路进入 `ImageReferenceParser`。
   - 非图片文件保存本地，并把文件名和路径注入提示词；是否读取由 Agent 工具决定。
-  - **文件推送只走显式 `/send <path>` 或「本 turn 工具产物登记表」**；不再「检测到回复里出现的本地路径就自动上传」——避免把 `~/.ssh/id_rsa`、`~/.wraith-cli/config.json` 等路径无意外发。推送路径同样受 workspace / 白名单约束。
+  - **文件推送只走显式 `/send <path>` 或「本 turn 工具产物登记表」**；不再「检测到回复里出现的本地路径就自动上传」——避免把 `~/.ssh/id_rsa`、`~/.wraith/config.json` 等路径无意外发。推送路径同样受 workspace / 白名单约束。
 
 ## Test Plan
 

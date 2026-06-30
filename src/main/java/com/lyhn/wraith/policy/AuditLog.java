@@ -21,7 +21,7 @@ import java.util.Locale;
  *
  * 落盘策略：
  * - 一行一条 JSON（JSONL 格式），按天分文件 audit-YYYY-MM-DD.jsonl
- * - 默认目录 ~/.wraith-cli/audit，可通过 -Dwraith-cli.audit.dir 或 WRAITH_AUDIT_DIR 覆盖
+ * - 默认目录 ~/.wraith/audit，可通过 -Dwraith.audit.dir 或 WRAITH_AUDIT_DIR 覆盖
  * - 写入失败只在 stderr 提示，不抛出，避免审计故障影响主流程
  *
  * 设计意图：
@@ -111,7 +111,7 @@ public class AuditLog {
     }
 
     private static Path defaultAuditDir() {
-        String prop = System.getProperty("wraith-cli.audit.dir");
+        String prop = System.getProperty("wraith.audit.dir");
         if (prop != null && !prop.isBlank()) {
             return Path.of(prop);
         }
@@ -119,7 +119,7 @@ public class AuditLog {
         if (env != null && !env.isBlank()) {
             return Path.of(env);
         }
-        return Path.of(System.getProperty("user.home"), ".wraith-cli", "audit");
+        return Path.of(System.getProperty("user.home"), ".wraith", "audit");
     }
 
     private static String truncate(String s) {

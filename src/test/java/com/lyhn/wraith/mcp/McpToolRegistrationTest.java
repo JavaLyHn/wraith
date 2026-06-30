@@ -122,15 +122,15 @@ class McpToolRegistrationTest {
     }
 
     private static void withAuditDir(Path tempDir, ThrowingRunnable body) throws Exception {
-        String previous = System.getProperty("wraith-cli.audit.dir");
-        System.setProperty("wraith-cli.audit.dir", tempDir.resolve("audit").toString());
+        String previous = System.getProperty("wraith.audit.dir");
+        System.setProperty("wraith.audit.dir", tempDir.resolve("audit").toString());
         try {
             body.run();
         } finally {
             if (previous == null) {
-                System.clearProperty("wraith-cli.audit.dir");
+                System.clearProperty("wraith.audit.dir");
             } else {
-                System.setProperty("wraith-cli.audit.dir", previous);
+                System.setProperty("wraith.audit.dir", previous);
             }
         }
     }

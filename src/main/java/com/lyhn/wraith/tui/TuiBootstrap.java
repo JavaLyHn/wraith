@@ -23,8 +23,8 @@ import java.util.Objects;
  * 3. TUI 模式时创建 {@link LanternaWindow} 并启动主循环
  *
  * <p>TUI 触发条件：
- * - {@code WRAITH_RENDERER=lanterna|tui} 环境变量或 {@code -Dwraith-cli.renderer=lanterna|tui}
- * - 兼容旧入口：{@code WRAITH_TUI=true} 环境变量或 {@code -Dwraith-cli.tui=true} 系统属性
+ * - {@code WRAITH_RENDERER=lanterna|tui} 环境变量或 {@code -Dwraith.renderer=lanterna|tui}
+ * - 兼容旧入口：{@code WRAITH_TUI=true} 环境变量或 {@code -Dwraith.tui=true} 系统属性
  *
  * <p>即使显式启用，以下情况仍降级：
  * - {@code NO_TUI=true} 环境变量
@@ -33,9 +33,9 @@ import java.util.Objects;
 public final class TuiBootstrap {
 
     private static final String TUI_ENV = "WRAITH_TUI";
-    private static final String TUI_PROPERTY = "wraith-cli.tui";
+    private static final String TUI_PROPERTY = "wraith.tui";
     private static final String RENDERER_ENV = "WRAITH_RENDERER";
-    private static final String RENDERER_PROPERTY = "wraith-cli.renderer";
+    private static final String RENDERER_PROPERTY = "wraith.renderer";
     private static final int MIN_COLS = 80;
     private static final int MIN_ROWS = 24;
 

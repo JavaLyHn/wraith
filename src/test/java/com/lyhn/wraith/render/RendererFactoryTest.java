@@ -13,52 +13,52 @@ class RendererFactoryTest {
 
     @BeforeEach
     void saveProp() {
-        savedProp = System.getProperty("wraith-cli.renderer");
+        savedProp = System.getProperty("wraith.renderer");
     }
 
     @AfterEach
     void restoreProp() {
         if (savedProp == null) {
-            System.clearProperty("wraith-cli.renderer");
+            System.clearProperty("wraith.renderer");
         } else {
-            System.setProperty("wraith-cli.renderer", savedProp);
+            System.setProperty("wraith.renderer", savedProp);
         }
     }
 
     @Test
     void defaultsToInlineWhenUnset() {
-        System.clearProperty("wraith-cli.renderer");
+        System.clearProperty("wraith.renderer");
         // We can't easily clear env vars in tests; only verify property path
         assertEquals(RendererFactory.Mode.INLINE, RendererFactory.resolveMode());
     }
 
     @Test
     void propertyValueLanternaResolves() {
-        System.setProperty("wraith-cli.renderer", "lanterna");
+        System.setProperty("wraith.renderer", "lanterna");
         assertEquals(RendererFactory.Mode.LANTERNA, RendererFactory.resolveMode());
     }
 
     @Test
     void propertyValuePlainResolves() {
-        System.setProperty("wraith-cli.renderer", "plain");
+        System.setProperty("wraith.renderer", "plain");
         assertEquals(RendererFactory.Mode.PLAIN, RendererFactory.resolveMode());
     }
 
     @Test
     void propertyValueIsCaseInsensitive() {
-        System.setProperty("wraith-cli.renderer", "LANTERNA");
+        System.setProperty("wraith.renderer", "LANTERNA");
         assertEquals(RendererFactory.Mode.LANTERNA, RendererFactory.resolveMode());
     }
 
     @Test
     void unknownValueFallsBackToInline() {
-        System.setProperty("wraith-cli.renderer", "weird");
+        System.setProperty("wraith.renderer", "weird");
         assertEquals(RendererFactory.Mode.INLINE, RendererFactory.resolveMode());
     }
 
     @Test
     void tuiAliasResolvesToLanterna() {
-        System.setProperty("wraith-cli.renderer", "tui");
+        System.setProperty("wraith.renderer", "tui");
         assertEquals(RendererFactory.Mode.LANTERNA, RendererFactory.resolveMode());
     }
 

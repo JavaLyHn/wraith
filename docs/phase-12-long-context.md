@@ -17,7 +17,7 @@
   - long：`>= 100000`
 - `AgentBudget` 动态预算：
   - 默认 `80% * maxContextWindow`
-  - 仍可用 `-Dwraith-cli.react.token.budget=...` 覆盖
+  - 仍可用 `-Dwraith.react.token.budget=...` 覆盖
 - Memory 策略：
   - short / balanced 保留压缩
   - long 跳过自动摘要压缩，扩大短期记忆预算
@@ -43,7 +43,7 @@
 - 不实现 Anthropic `cache_control` 块
 - 不向 GLM / DeepSeek 请求体注入未确认兼容的私有 cache 字段
 - 不把 MCP resource body 自动塞进 system prompt
-- 不改变 `pom.xml` 的 Maven 产物版本，Jar 仍是 `wraith-cli-1.0-SNAPSHOT.jar`
+- 不改变 `pom.xml` 的 Maven 产物版本，Jar 仍是 `wraith-1.0-SNAPSHOT.jar`
 
 ## 3. 核心文件
 

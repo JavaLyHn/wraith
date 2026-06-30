@@ -9,11 +9,11 @@
 ## 0. 启动前置
 
 ```bash
-cd /Users/JavaLyHn/Documents/GitHub/wraith-cli
+cd /Users/JavaLyHn/Documents/GitHub/wraith
 mvn -q clean package -DskipTests
 ```
 
-产物：`target/wraith-cli-1.0-SNAPSHOT.jar`，所有用例都基于这个 jar 启动。
+产物：`target/wraith-1.0-SNAPSHOT.jar`，所有用例都基于这个 jar 启动。
 
 清理副作用：跑完后用 `rm hello*.txt a.txt b.txt c.txt renamed.txt hello-test.txt 2>/dev/null` 清掉测试文件。
 
@@ -23,7 +23,7 @@ mvn -q clean package -DskipTests
 
 **启动**：
 ```bash
-java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 **预期**：
@@ -216,7 +216,7 @@ Ctrl+O 展开后看到三个文件路径都在 `└` 缩进列表里。
 ## 10. 形态切换 — Lanterna 全屏（用例 9）
 
 ```bash
-WRAITH_RENDERER=lanterna java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+WRAITH_RENDERER=lanterna java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 **预期**：进 alternate screen，三栏 Lanterna 窗口（文件树 + 对话流 + 状态栏 + 底部输入栏）。
@@ -232,7 +232,7 @@ WRAITH_RENDERER=lanterna java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 ## 11. 形态切换 — 兼容旧 WRAITH_TUI（用例 10）
 
 ```bash
-WRAITH_TUI=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+WRAITH_TUI=true java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 **预期**：
@@ -244,7 +244,7 @@ WRAITH_TUI=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 ## 12. 形态切换 — Plain 兜底（用例 11）
 
 ```bash
-WRAITH_RENDERER=plain java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+WRAITH_RENDERER=plain java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 **输入**：
@@ -264,7 +264,7 @@ WRAITH_RENDERER=plain java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 ## 13. 禁色（用例 12）
 
 ```bash
-NO_COLOR=1 java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+NO_COLOR=1 java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 **预期**：
@@ -277,7 +277,7 @@ NO_COLOR=1 java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 ## 14. 未知 RENDERER 值的回退（用例 13）
 
 ```bash
-WRAITH_RENDERER=weird java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+WRAITH_RENDERER=weird java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 **预期**：stderr `⚠️ 未识别的 WRAITH_RENDERER='weird'，回退到 inline`，正常进 inline 模式。
@@ -287,7 +287,7 @@ WRAITH_RENDERER=weird java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 ## 15. dumb 终端自动降级（用例 14）
 
 ```bash
-TERM=dumb java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+TERM=dumb java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 **预期**：stderr `⚠️ 终端不支持 ANSI，inline 模式回退到 plain`，行为等同用例 12。
@@ -411,7 +411,7 @@ HITL 通过后**预期**：
 │   [3] HITL: OFF
 │   [4] Skill 启用数: 3
 │   [5] 渲染器: InlineRenderer
-│   [6] 配置文件: ~/.wraith-cli/config.json (只读视图，编辑请用编辑器)
+│   [6] 配置文件: ~/.wraith/config.json (只读视图，编辑请用编辑器)
 └─ ↑↓ 切换  Enter 确认  Esc 取消  数字键直选
 ```
 
@@ -434,7 +434,7 @@ HITL 通过后**预期**：
 ## 22. /config palette — Lanterna 模式（用例 20）
 
 ```bash
-WRAITH_RENDERER=lanterna java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+WRAITH_RENDERER=lanterna java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 TUI 输入框输入 `/config`。
@@ -446,7 +446,7 @@ TUI 输入框输入 `/config`。
 ## 23. WRAITH_NO_STATUSBAR 禁用状态栏
 
 ```bash
-WRAITH_NO_STATUSBAR=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+WRAITH_NO_STATUSBAR=true java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 **预期**：
@@ -461,7 +461,7 @@ WRAITH_NO_STATUSBAR=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 **手动操作**：把终端窗口拖到 `< 5 行` 或 `< 20 列`。
 
 ```bash
-java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 **预期**：`TerminalCapabilities.supportsScrollRegion` 返回 false，inline 模式禁用状态栏，但其它特性不变。

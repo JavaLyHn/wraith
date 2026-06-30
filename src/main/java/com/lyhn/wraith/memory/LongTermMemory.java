@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
  */
 public class LongTermMemory implements Memory {
     private static final Logger log = LoggerFactory.getLogger(LongTermMemory.class);
-    private static final String STORAGE_DIR_PROPERTY = "wraith-cli.memory.dir";
+    private static final String STORAGE_DIR_PROPERTY = "wraith.memory.dir";
     private static final String STORAGE_DIR_ENV = "WRAITH_MEMORY_DIR";
     private static final String STORAGE_FILE = "long_term_memory.json";
     private final Map<String, MemoryEntry> entries;
@@ -180,7 +180,7 @@ public class LongTermMemory implements Memory {
         if (configuredDir != null && !configuredDir.isBlank()) {
             return new File(configuredDir);
         }
-        return new File(new File(System.getProperty("user.home"), ".wraith-cli"), "memory");
+        return new File(new File(System.getProperty("user.home"), ".wraith"), "memory");
     }
 
     /**

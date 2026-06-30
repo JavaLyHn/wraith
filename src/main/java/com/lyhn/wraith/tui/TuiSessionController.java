@@ -69,7 +69,7 @@ public final class TuiSessionController implements AutoCloseable {
         this.uiExecutor = Objects.requireNonNull(uiExecutor);
         this.history = new ConversationSnapshot(ConversationSnapshot.generateSessionId());
         this.executor = Executors.newSingleThreadExecutor(r -> {
-            Thread thread = new Thread(r, "wraith-cli-tui-agent-runner");
+            Thread thread = new Thread(r, "wraith-tui-agent-runner");
             thread.setDaemon(true);
             return thread;
         });

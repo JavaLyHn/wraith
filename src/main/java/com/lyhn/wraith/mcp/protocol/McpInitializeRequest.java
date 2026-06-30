@@ -15,7 +15,7 @@ public final class McpInitializeRequest {
         ObjectNode capabilities = root.putObject("capabilities");
         capabilities.putObject("tools");
         ObjectNode clientInfo = root.putObject("clientInfo");
-        clientInfo.put("name", "wraith-cli");
+        clientInfo.put("name", "wraith");
         clientInfo.put("version", "11.0.0");
         return root;
     }

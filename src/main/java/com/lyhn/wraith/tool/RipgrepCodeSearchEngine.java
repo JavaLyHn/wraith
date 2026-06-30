@@ -32,7 +32,7 @@ final class RipgrepCodeSearchEngine implements CodeSearchEngine {
 
     @Override
     public CodeSearchResult search(CodeSearchRequest request) {
-        if (Boolean.getBoolean("wraith-cli.search.disable.rg") || !isRipgrepAvailable()) {
+        if (Boolean.getBoolean("wraith.search.disable.rg") || !isRipgrepAvailable()) {
             return fallback(request);
         }
 
@@ -45,7 +45,7 @@ final class RipgrepCodeSearchEngine implements CodeSearchEngine {
             process = pb.start();
 
             readerExecutor = Executors.newSingleThreadExecutor(r -> {
-                Thread thread = new Thread(r, "wraith-cli-rg-reader");
+                Thread thread = new Thread(r, "wraith-rg-reader");
                 thread.setDaemon(true);
                 return thread;
             });

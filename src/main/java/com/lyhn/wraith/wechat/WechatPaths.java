@@ -7,12 +7,12 @@ public final class WechatPaths {
     }
 
     public static Path root() {
-        String configured = System.getProperty("wraith-cli.wechat.dir");
+        String configured = System.getProperty("wraith.wechat.dir");
         if (configured == null || configured.isBlank()) {
             configured = System.getenv("WRAITH_WECHAT_DIR");
         }
         if (configured == null || configured.isBlank()) {
-            configured = Path.of(System.getProperty("user.home"), ".wraith-cli", "wechat").toString();
+            configured = Path.of(System.getProperty("user.home"), ".wraith", "wechat").toString();
         }
         return Path.of(configured);
     }
@@ -34,6 +34,6 @@ public final class WechatPaths {
     }
 
     public static Path pidFile() {
-        return root().resolve("wraith-cli-wechat.pid");
+        return root().resolve("wraith-wechat.pid");
     }
 }

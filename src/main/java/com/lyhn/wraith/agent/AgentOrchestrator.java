@@ -411,7 +411,7 @@ public class AgentOrchestrator {
                                   Map<String, Integer> retryCount) {
         int parallelism = Math.min(batch.size(), workers.size());
         ExecutorService executor = Executors.newFixedThreadPool(parallelism, r -> {
-            Thread t = new Thread(r, "wraith-cli-multi-agent");
+            Thread t = new Thread(r, "wraith-multi-agent");
             t.setDaemon(true);
             return t;
         });

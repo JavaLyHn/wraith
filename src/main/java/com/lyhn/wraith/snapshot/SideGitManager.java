@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class SideGitManager {
-    private static final PersonIdent SNAPSHOT_IDENT = new PersonIdent("Wraith CLI Snapshot", "snapshot@wraith-cli.local");
+    private static final PersonIdent SNAPSHOT_IDENT = new PersonIdent("Wraith CLI Snapshot", "snapshot@wraith.local");
 
     private final Path projectRoot;
     private final SnapshotConfig config;

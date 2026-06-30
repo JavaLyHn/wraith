@@ -93,7 +93,7 @@ public class IlinkClient {
         var msg = MAPPER.createObjectNode()
                 .put("from_user_id", account.accountId())
                 .put("to_user_id", toUserId)
-                .put("client_id", "wraith-cli-" + System.currentTimeMillis() + "-" + Integer.toHexString(RANDOM.nextInt()))
+                .put("client_id", "wraith-" + System.currentTimeMillis() + "-" + Integer.toHexString(RANDOM.nextInt()))
                 .put("message_type", 2)
                 .put("message_state", 2)
                 .put("context_token", contextToken == null ? "" : contextToken);

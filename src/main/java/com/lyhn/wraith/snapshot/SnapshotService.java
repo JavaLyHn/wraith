@@ -16,7 +16,7 @@ public class SnapshotService implements AutoCloseable {
     public SnapshotService(SideGitManager manager) {
         this.manager = manager;
         this.executor = Executors.newSingleThreadExecutor(r -> {
-            Thread thread = new Thread(r, "wraith-cli-snapshot-writer");
+            Thread thread = new Thread(r, "wraith-snapshot-writer");
             thread.setDaemon(true);
             return thread;
         });

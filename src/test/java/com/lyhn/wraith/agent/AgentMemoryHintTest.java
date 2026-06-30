@@ -22,8 +22,8 @@ class AgentMemoryHintTest {
 
     @Test
     void explicitChromeRememberRequestStoresSitePreferenceInLongTermMemory() {
-        String oldMemoryDir = System.getProperty("wraith-cli.memory.dir");
-        System.setProperty("wraith-cli.memory.dir", tempDir.toString());
+        String oldMemoryDir = System.getProperty("wraith.memory.dir");
+        System.setProperty("wraith.memory.dir", tempDir.toString());
         try {
             StubGLMClient llmClient = new StubGLMClient(List.of(
                     new LlmClient.ChatResponse("assistant", "已打开链接。", null, 20, 10),
@@ -43,9 +43,9 @@ class AgentMemoryHintTest {
             assertEquals("global", agent.getMemoryManager().getLongTermMemory().getAll().get(0).getMetadata().get("scope"));
         } finally {
             if (oldMemoryDir == null) {
-                System.clearProperty("wraith-cli.memory.dir");
+                System.clearProperty("wraith.memory.dir");
             } else {
-                System.setProperty("wraith-cli.memory.dir", oldMemoryDir);
+                System.setProperty("wraith.memory.dir", oldMemoryDir);
             }
         }
     }

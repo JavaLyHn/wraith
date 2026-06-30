@@ -16,7 +16,7 @@ class VectorStoreTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        System.setProperty("wraith-cli.rag.dir", "/tmp/wraith-cli-test-rag");
+        System.setProperty("wraith.rag.dir", "/tmp/wraith-test-rag");
         store = new VectorStore(TEST_PROJECT);
         store.clearProject();
     }

@@ -127,9 +127,9 @@ public class StdioTransport implements McpTransport {
                     }
                 }
             } catch (Exception e) {
-                appendStderr("[wraith-cli] stdout reader stopped: " + e.getMessage());
+                appendStderr("[wraith] stdout reader stopped: " + e.getMessage());
             }
-        }, "wraith-cli-mcp-stdio-stdout");
+        }, "wraith-mcp-stdio-stdout");
         thread.setDaemon(true);
         thread.start();
     }
@@ -143,9 +143,9 @@ public class StdioTransport implements McpTransport {
                     appendStderr(line);
                 }
             } catch (IOException e) {
-                appendStderr("[wraith-cli] stderr reader stopped: " + e.getMessage());
+                appendStderr("[wraith] stderr reader stopped: " + e.getMessage());
             }
-        }, "wraith-cli-mcp-stdio-stderr");
+        }, "wraith-mcp-stdio-stderr");
         thread.setDaemon(true);
         thread.start();
     }

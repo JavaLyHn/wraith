@@ -98,13 +98,13 @@ class MainInputNormalizationTest {
 
     @Test
     void mcpStartupWaitCanBeTunedForTerminalSmoke() {
-        String old = System.getProperty("wraith-cli.mcp.startup.wait.seconds");
+        String old = System.getProperty("wraith.mcp.startup.wait.seconds");
         try {
-            System.setProperty("wraith-cli.mcp.startup.wait.seconds", "2");
+            System.setProperty("wraith.mcp.startup.wait.seconds", "2");
 
             assertEquals(Duration.ofSeconds(2), Main.mcpStartupWait());
         } finally {
-            restoreProperty("wraith-cli.mcp.startup.wait.seconds", old);
+            restoreProperty("wraith.mcp.startup.wait.seconds", old);
         }
     }
 

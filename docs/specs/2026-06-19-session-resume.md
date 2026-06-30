@@ -30,7 +30,7 @@
 
 ## 3. 存储格式与位置
 
-- 位置:`~/.wraith-cli/sessions/<project_hash>/<session_id>.jsonl`
+- 位置:`~/.wraith/sessions/<project_hash>/<session_id>.jsonl`
   - 与 `snapshots/<project_hash>/`、`audit/`、`history/` 一致的"按项目分目录"风格。
 - 格式:**JSONL**,首行 meta,后续每行一条消息。
   - 第 1 行(meta):
@@ -99,7 +99,7 @@
 ## 8. 验证计划
 
 - 用 Python pty 驱动(本会话已验证该手段可靠):
-  1. 启动 → 发一条消息 → 退出;断言 `~/.wraith-cli/sessions/<hash>/*.jsonl` 生成且含该消息。
+  1. 启动 → 发一条消息 → 退出;断言 `~/.wraith/sessions/<hash>/*.jsonl` 生成且含该消息。
   2. `wraith --continue` 启动 → 断言屏幕回放提示出现、`conversationHistory` 恢复(可加一条"刚才我说了什么"验证模型能看到)。
   3. `/resume` 面板选择 → 断言切换并回放。
 - 纯函数单测:`SessionMessageCodec` 往返(Message→JSON→Message)、`SessionStore.list` 排序/截断、坏行跳过。

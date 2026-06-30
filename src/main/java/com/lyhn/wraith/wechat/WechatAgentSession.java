@@ -19,7 +19,7 @@ import java.util.concurrent.Future;
 
 public class WechatAgentSession implements AutoCloseable {
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
-        Thread thread = new Thread(r, "wraith-cli-wechat-agent");
+        Thread thread = new Thread(r, "wraith-wechat-agent");
         thread.setDaemon(true);
         return thread;
     });

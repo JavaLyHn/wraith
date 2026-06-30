@@ -41,7 +41,7 @@ class WraithHistoryTest {
 
         Main.configureHistory(lineReader, tempDir);
 
-        Path expected = tempDir.resolve(".wraith-cli").resolve("history").resolve("input.history")
+        Path expected = tempDir.resolve(".wraith").resolve("history").resolve("input.history")
                 .toAbsolutePath().normalize();
         assertEquals(expected, lineReader.getVariable(LineReader.HISTORY_FILE));
         assertEquals(2_000, lineReader.getVariable(LineReader.HISTORY_SIZE));
@@ -64,7 +64,7 @@ class WraithHistoryTest {
         Main.clearLineReaderHistory(lineReader);
 
         assertTrue(history.isEmpty());
-        Path expected = tempDir.resolve(".wraith-cli").resolve("history").resolve("input.history")
+        Path expected = tempDir.resolve(".wraith").resolve("history").resolve("input.history")
                 .toAbsolutePath().normalize();
         assertFalse(Files.exists(expected) && !Files.readString(expected).isBlank());
     }

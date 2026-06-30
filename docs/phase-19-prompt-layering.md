@@ -82,15 +82,15 @@ handoff
 同一路径按下面优先级读取：
 
 1. jar 内置：`src/main/resources/prompts/...`
-2. 用户级覆盖：`~/.wraith-cli/prompts/...`
-3. 项目级覆盖：`.wraith-cli/prompts/...`
+2. 用户级覆盖：`~/.wraith/prompts/...`
+3. 项目级覆盖：`.wraith/prompts/...`
 
 例如：
 
 ```text
-~/.wraith-cli/prompts/base.md
-~/.wraith-cli/prompts/modes/agent.md
-.wraith-cli/prompts/modes/team-worker.md
+~/.wraith/prompts/base.md
+~/.wraith/prompts/modes/agent.md
+.wraith/prompts/modes/team-worker.md
 ```
 
 覆盖是“整文件替换”，不是局部 merge。
@@ -109,8 +109,8 @@ handoff
 
 - [x] 新增 `PromptMode` / `PromptContext` / `PromptRepository` / `PromptAssembler`
 - [x] 新增内置 Markdown prompt 资源
-- [x] 支持用户级覆盖 `~/.wraith-cli/prompts/...`
-- [x] 支持项目级覆盖 `.wraith-cli/prompts/...`
+- [x] 支持用户级覆盖 `~/.wraith/prompts/...`
+- [x] 支持项目级覆盖 `.wraith/prompts/...`
 - [x] 校验 `## Language`
 - [x] ReAct 接入
 - [x] Plan task executor 接入

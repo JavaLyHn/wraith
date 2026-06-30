@@ -79,7 +79,7 @@ public final class WechatCommandMain {
     private static int start() {
         WechatAccountStore store = WechatAccountStore.createDefault();
         WechatAccount account = store.loadLatest()
-                .orElseThrow(() -> new IllegalStateException("未找到微信账号，请先执行 wraith-cli wechat setup"));
+                .orElseThrow(() -> new IllegalStateException("未找到微信账号，请先执行 wraith wechat setup"));
         System.out.println("Wraith CLI 微信通道启动中，账号: " + account.accountId());
         new WechatMessageLoop(new IlinkClient(), store, account).run();
         return 0;
@@ -89,7 +89,7 @@ public final class WechatCommandMain {
         WechatAccountStore store = WechatAccountStore.createDefault();
         Optional<WechatAccount> account = store.loadLatest();
         if (account.isEmpty()) {
-            System.out.println("微信通道未绑定。执行 `wraith-cli wechat setup` 开始绑定。");
+            System.out.println("微信通道未绑定。执行 `wraith wechat setup` 开始绑定。");
             return 0;
         }
         System.out.println("微信通道已绑定");
@@ -214,16 +214,16 @@ public final class WechatCommandMain {
     private static void printHelp() {
         System.out.println("""
                 Wraith CLI 微信通道：
-                  wraith-cli wechat setup
-                  wraith-cli wechat start
-                  wraith-cli wechat status
-                  wraith-cli wechat daemon start|stop|restart|status|logs
+                  wraith wechat setup
+                  wraith wechat start
+                  wraith wechat status
+                  wraith wechat daemon start|stop|restart|status|logs
                 """.trim());
     }
 
     private static void printStartHint() {
-        System.out.println("启动: java -jar target/wraith-cli-1.0-SNAPSHOT.jar wechat start");
-        System.out.println("如果已安装全局命令，也可以执行: wraith-cli wechat start");
+        System.out.println("启动: java -jar target/wraith-1.0-SNAPSHOT.jar wechat start");
+        System.out.println("如果已安装全局命令，也可以执行: wraith wechat start");
     }
 
     private static String mask(String value) {

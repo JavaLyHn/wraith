@@ -24,8 +24,8 @@ class CodeSearchGoldenSetTest {
         registry.setProjectPath(projectRoot.toString());
         List<GoldenCase> cases = loadGoldenSet();
 
-        String previous = System.getProperty("wraith-cli.search.disable.rg");
-        System.setProperty("wraith-cli.search.disable.rg", "true");
+        String previous = System.getProperty("wraith.search.disable.rg");
+        System.setProperty("wraith.search.disable.rg", "true");
         try {
             for (GoldenCase goldenCase : cases) {
                 Path expectedFile = projectRoot.resolve(goldenCase.expectedPath()).normalize();
@@ -52,7 +52,7 @@ class CodeSearchGoldenSetTest {
                         () -> goldenCase.id() + " did not read expected context. Output:\n" + readResult);
             }
         } finally {
-            restoreSystemProperty("wraith-cli.search.disable.rg", previous);
+            restoreSystemProperty("wraith.search.disable.rg", previous);
         }
     }
 

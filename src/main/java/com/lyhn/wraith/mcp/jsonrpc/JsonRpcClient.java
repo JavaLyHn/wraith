@@ -24,7 +24,7 @@ public class JsonRpcClient implements AutoCloseable {
     private final AtomicLong ids = new AtomicLong(1);
     private final ConcurrentHashMap<Long, CompletableFuture<JsonNode>> pending = new ConcurrentHashMap<>();
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread thread = new Thread(r, "wraith-cli-mcp-jsonrpc-timeout");
+        Thread thread = new Thread(r, "wraith-mcp-jsonrpc-timeout");
         thread.setDaemon(true);
         return thread;
     });

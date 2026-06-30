@@ -51,7 +51,7 @@ final class InlineActivityDisplay implements AutoCloseable {
         this.terminal = terminal;
         this.renderLock = renderLock;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "wraith-cli-activity-display");
+            Thread t = new Thread(r, "wraith-activity-display");
             t.setDaemon(true);
             return t;
         });

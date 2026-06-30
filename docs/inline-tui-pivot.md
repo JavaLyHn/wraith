@@ -185,7 +185,7 @@ public final class RendererFactory {
     }
 
     private static String resolveMode() {
-        String prop = System.getProperty("wraith-cli.renderer");
+        String prop = System.getProperty("wraith.renderer");
         if (prop != null && !prop.isBlank()) return prop.toLowerCase();
         String env = System.getenv("WRAITH_RENDERER");
         if (env != null && !env.isBlank()) return env.toLowerCase();

@@ -96,7 +96,7 @@ final class SkillCommandHandler {
             return "❌ Skill 未找到: " + name;
         }
         stateStore.disable(name);
-        return "⏸️ 已禁用 skill: " + name + "（已写入 ~/.wraith-cli/skills.json，下一轮 LLM 调用生效）";
+        return "⏸️ 已禁用 skill: " + name + "（已写入 ~/.wraith/skills.json，下一轮 LLM 调用生效）";
     }
 
     private static String abbreviate(String s, int max) {

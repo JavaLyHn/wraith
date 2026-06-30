@@ -41,8 +41,8 @@ WRAITH_LSP_MAX_DIAGNOSTICS=20
 系统属性同样支持：
 
 ```bash
--Dwraith-cli.lsp.enabled=false
--Dwraith-cli.lsp.max.diagnostics=20
+-Dwraith.lsp.enabled=false
+-Dwraith.lsp.max.diagnostics=20
 ```
 
 ## 当前边界

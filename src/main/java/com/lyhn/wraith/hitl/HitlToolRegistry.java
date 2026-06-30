@@ -16,7 +16,7 @@ import java.util.concurrent.TimeUnit;
  * 如果 HITL 未启用，行为与父类完全相同，无额外开销。
  *
  * HITL 拒绝 / 跳过路径会写一行 audit（approver=hitl），HITL 通过后由父类 ToolRegistry 写
- * allow / policy-deny / error，HITL 审批与策略拦截共用同一份 ~/.wraith-cli/audit/ 文件。
+ * allow / policy-deny / error，HITL 审批与策略拦截共用同一份 ~/.wraith/audit/ 文件。
  */
 public class HitlToolRegistry extends ToolRegistry {
 
