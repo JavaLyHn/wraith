@@ -3242,7 +3242,7 @@ public class Main {
                 "   " + AnsiStyle.wordmark(WraithWordmark.LINES.get(4)),
                 "   " + AnsiStyle.wordmark(WraithWordmark.LINES.get(5)),
                 "",
-                "   " + AnsiStyle.wordmark("Wraith CLI") + "  " + AnsiStyle.heading("v" + VERSION),
+                "   " + AnsiStyle.wordmark("Wraith") + "  " + AnsiStyle.heading("v" + VERSION),
                 "   " + AnsiStyle.heading(ready),
                 "   " + AnsiStyle.heading(state),
                 "   " + AnsiStyle.heading(capabilities),
