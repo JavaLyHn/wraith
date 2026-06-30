@@ -32,7 +32,7 @@ public class ProjectMemoryLoader {
     }
 
     public static ProjectMemoryLoader createDefault(Path projectRoot) {
-        return new ProjectMemoryLoader(Path.of(System.getProperty("user.home"), ".wraith-cli"), projectRoot);
+        return new ProjectMemoryLoader(Path.of(System.getProperty("user.home"), ".wraith"), projectRoot);
     }
 
     public String loadForPrompt() {
@@ -69,9 +69,9 @@ public class ProjectMemoryLoader {
             sources.add(new MemorySource(userConfigDir.resolve("WRAITH.md"), userConfigDir));
         }
         sources.add(new MemorySource(projectRoot.resolve("WRAITH.md"), projectRoot));
-        sources.add(new MemorySource(projectRoot.resolve(".wraith-cli").resolve("WRAITH.md"), projectRoot));
+        sources.add(new MemorySource(projectRoot.resolve(".wraith").resolve("WRAITH.md"), projectRoot));
         sources.add(new MemorySource(projectRoot.resolve("WRAITH.local.md"), projectRoot));
-        sources.add(new MemorySource(projectRoot.resolve(".wraith-cli").resolve("WRAITH.local.md"), projectRoot));
+        sources.add(new MemorySource(projectRoot.resolve(".wraith").resolve("WRAITH.local.md"), projectRoot));
         return sources;
     }
 

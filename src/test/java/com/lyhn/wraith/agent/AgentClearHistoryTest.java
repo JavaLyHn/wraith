@@ -23,8 +23,8 @@ class AgentClearHistoryTest {
 
     @Test
     void clearHistoryRebuildsSystemPromptAndDropsPendingSkillContext() {
-        String oldMemoryDir = System.getProperty("wraith-cli.memory.dir");
-        System.setProperty("wraith-cli.memory.dir", tempDir.toString());
+        String oldMemoryDir = System.getProperty("wraith.memory.dir");
+        System.setProperty("wraith.memory.dir", tempDir.toString());
         try {
             RecordingClient llmClient = new RecordingClient(List.of(
                     new LlmClient.ChatResponse("assistant", "ok", null, 50_000, 1_000)
@@ -53,9 +53,9 @@ class AgentClearHistoryTest {
                     "status ctx should reflect the cleared conversation instead of the previous LLM usage");
         } finally {
             if (oldMemoryDir == null) {
-                System.clearProperty("wraith-cli.memory.dir");
+                System.clearProperty("wraith.memory.dir");
             } else {
-                System.setProperty("wraith-cli.memory.dir", oldMemoryDir);
+                System.setProperty("wraith.memory.dir", oldMemoryDir);
             }
         }
     }

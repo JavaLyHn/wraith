@@ -88,7 +88,7 @@ public class McpServerManager implements AutoCloseable {
         ExecutorService executor = Executors.newFixedThreadPool(
                 Math.min(targets.size(), 8),
                 r -> {
-                    Thread t = new Thread(r, "wraith-cli-mcp-startup-" + threadId.incrementAndGet());
+                    Thread t = new Thread(r, "wraith-mcp-startup-" + threadId.incrementAndGet());
                     t.setDaemon(true);
                     return t;
                 });
@@ -169,7 +169,7 @@ public class McpServerManager implements AutoCloseable {
             } catch (InterruptedException ignored) {
                 Thread.currentThread().interrupt();
             }
-        }, "wraith-cli-mcp-startup-progress");
+        }, "wraith-mcp-startup-progress");
         thread.setDaemon(true);
         thread.start();
         return thread;
@@ -248,7 +248,7 @@ public class McpServerManager implements AutoCloseable {
     public String formatStatus() {
         StringBuilder sb = new StringBuilder("🔌 MCP Servers\n");
         if (servers.isEmpty()) {
-            sb.append("  未配置 MCP server。配置文件: ~/.wraith-cli/mcp.json 或 .wraith-cli/mcp.json");
+            sb.append("  未配置 MCP server。配置文件: ~/.wraith/mcp.json 或 .wraith/mcp.json");
             return sb.toString();
         }
         for (McpServer server : servers()) {
@@ -274,7 +274,7 @@ public class McpServerManager implements AutoCloseable {
 
     public String startupSummary() {
         if (servers.isEmpty()) {
-            return "🔌 MCP server：未配置（可创建 ~/.wraith-cli/mcp.json 或 .wraith-cli/mcp.json）";
+            return "🔌 MCP server：未配置（可创建 ~/.wraith/mcp.json 或 .wraith/mcp.json）";
         }
         long ready = servers.values().stream().filter(s -> s.status() == McpServerStatus.READY).count();
         int tools = servers.values().stream().mapToInt(s -> s.tools().size()).sum();

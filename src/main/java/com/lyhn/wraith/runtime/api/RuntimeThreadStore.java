@@ -22,12 +22,12 @@ public class RuntimeThreadStore implements AutoCloseable {
     }
 
     public static Path defaultDbPath() {
-        String configured = System.getProperty("wraith-cli.runtime.dir");
+        String configured = System.getProperty("wraith.runtime.dir");
         if (configured == null || configured.isBlank()) {
             configured = System.getenv("WRAITH_RUNTIME_DIR");
         }
         if (configured == null || configured.isBlank()) {
-            configured = Path.of(System.getProperty("user.home"), ".wraith-cli", "runtime").toString();
+            configured = Path.of(System.getProperty("user.home"), ".wraith", "runtime").toString();
         }
         return Path.of(configured).resolve("runtime.db");
     }

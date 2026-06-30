@@ -1,6 +1,6 @@
 # Prompt 质量审计模板
 
-每次修改 `src/main/resources/prompts/` 或覆盖 `~/.wraith-cli/prompts/` / `.wraith-cli/prompts/` 后，建议按下面模板做一次审计。
+每次修改 `src/main/resources/prompts/` 或覆盖 `~/.wraith/prompts/` / `.wraith/prompts/` 后，建议按下面模板做一次审计。
 
 ## Change
 

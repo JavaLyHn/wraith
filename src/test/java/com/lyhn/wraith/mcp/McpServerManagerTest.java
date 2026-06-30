@@ -172,7 +172,7 @@ class McpServerManagerTest {
     @Test
     void restartWithArgsUpdatesServerConfig() {
         McpServerConfig config = new McpServerConfig();
-        config.setCommand("definitely-missing-wraith-cli-test-command");
+        config.setCommand("definitely-missing-wraith-test-command");
         config.setArgs(List.of("old"));
         loadServersFromMap(Map.of("demo", config));
 

@@ -10,7 +10,7 @@ For the primary entry point, see `/AGENTS.md`.
 
 ### API Key
 
-1. `~/.wraith-cli/config.json` 中对应 provider 的 `apiKey`
+1. `~/.wraith/config.json` 中对应 provider 的 `apiKey`
 2. 环境变量：`GLM_API_KEY` / `DEEPSEEK_API_KEY` / `STEP_API_KEY` / `KIMI_API_KEY` / `FREELLMAPI_API_KEY` / `XFYUN_MAAS_API_KEY`（Kimi 兼容 `MOONSHOT_API_KEY`，讯飞 MaaS 兼容 `XFYUN_API_KEY`）
 3. 仓库当前目录下的 `.env`
 4. 用户主目录下的 `.env`
@@ -19,16 +19,16 @@ For the primary entry point, see `/AGENTS.md`.
 
 | 数据 | 默认路径 | 覆盖方式 |
 |------|----------|----------|
-| 长期记忆 | `~/.wraith-cli/memory/long_term_memory.json` | `-Dwraith-cli.memory.dir` |
-| 项目级记忆 | `WRAITH.md` / `.wraith-cli/WRAITH.md` / `WRAITH.local.md` | 用户级稳定偏好：`~/.wraith-cli/WRAITH.md` |
-| RAG 索引 | `~/.wraith-cli/rag/codebase.db` | `-Dwraith-cli.rag.dir` |
-| 审计日志 | `~/.wraith-cli/audit/audit-YYYY-MM-DD.jsonl` | `WRAITH_AUDIT_DIR` / `-Dwraith-cli.audit.dir` |
-| Side-Git 快照 | `~/.wraith-cli/snapshots/<project_hash>/<worktree_hash>/.git` | `WRAITH_SNAPSHOT_DIR` / `-Dwraith-cli.snapshot.dir` |
-| 后台任务 | `~/.wraith-cli/tasks/tasks.db` | — |
+| 长期记忆 | `~/.wraith/memory/long_term_memory.json` | `-Dwraith.memory.dir` |
+| 项目级记忆 | `WRAITH.md` / `.wraith/WRAITH.md` / `WRAITH.local.md` | 用户级稳定偏好：`~/.wraith/WRAITH.md` |
+| RAG 索引 | `~/.wraith/rag/codebase.db` | `-Dwraith.rag.dir` |
+| 审计日志 | `~/.wraith/audit/audit-YYYY-MM-DD.jsonl` | `WRAITH_AUDIT_DIR` / `-Dwraith.audit.dir` |
+| Side-Git 快照 | `~/.wraith/snapshots/<project_hash>/<worktree_hash>/.git` | `WRAITH_SNAPSHOT_DIR` / `-Dwraith.snapshot.dir` |
+| 后台任务 | `~/.wraith/tasks/tasks.db` | — |
 
 ### Snapshot Config
 
-系统属性 > 环境变量 > 默认值：`wraith-cli.snapshot.enabled`(true) / `wraith-cli.snapshot.max`(50) / `wraith-cli.snapshot.excludes`(.git,.wraith-cli/snapshots,target,node_modules,dist,.idea,*.class,*.jar) / `wraith-cli.snapshot.dir`(~/.wraith-cli/snapshots)
+系统属性 > 环境变量 > 默认值：`wraith.snapshot.enabled`(true) / `wraith.snapshot.max`(50) / `wraith.snapshot.excludes`(.git,.wraith/snapshots,target,node_modules,dist,.idea,*.class,*.jar) / `wraith.snapshot.dir`(~/.wraith/snapshots)
 
 ### Embedding Config
 
@@ -36,17 +36,17 @@ For the primary entry point, see `/AGENTS.md`.
 
 ### Log Config
 
-系统属性 > 环境变量/.env > 默认值：`WRAITH_LOG_DIR`(~/.wraith-cli/logs) / `WRAITH_LOG_LEVEL`(INFO) / `WRAITH_LOG_MAX_HISTORY`(7) / `WRAITH_LOG_MAX_FILE_SIZE`(10MB) / `WRAITH_LOG_TOTAL_SIZE_CAP`(100MB)
+系统属性 > 环境变量/.env > 默认值：`WRAITH_LOG_DIR`(~/.wraith/logs) / `WRAITH_LOG_LEVEL`(INFO) / `WRAITH_LOG_MAX_HISTORY`(7) / `WRAITH_LOG_MAX_FILE_SIZE`(10MB) / `WRAITH_LOG_TOTAL_SIZE_CAP`(100MB)
 
 ### ReAct/SubAgent Budget Config
 
-系统属性 > 默认值：`wraith-cli.react.token.budget`(Integer.MAX_VALUE) / `wraith-cli.react.stagnation.window`(3) / `wraith-cli.react.hard.max.iterations`(50)
+系统属性 > 默认值：`wraith.react.token.budget`(Integer.MAX_VALUE) / `wraith.react.stagnation.window`(3) / `wraith.react.hard.max.iterations`(50)
 
 设计取舍：长上下文模型默认不再以 80% x window 为硬限。死循环防护由 stagnation 检测（连续 3 轮相同工具调用）和 hardMaxIterations（50 轮）兜底。Token 显示行 `📊 Token: 已用 X / Y` 的 Y 是软提示，不代表强制限制。
 
 ### LLM HTTP Timeout Config
 
-系统属性 > 默认值：`wraith-cli.llm.connect.timeout.seconds`(60) / `wraith-cli.llm.read.timeout.seconds`(300) / `wraith-cli.llm.write.timeout.seconds`(60) / `wraith-cli.llm.call.timeout.seconds`(600)
+系统属性 > 默认值：`wraith.llm.connect.timeout.seconds`(60) / `wraith.llm.read.timeout.seconds`(300) / `wraith.llm.write.timeout.seconds`(60) / `wraith.llm.call.timeout.seconds`(600)
 
 SSE 流式下 readTimeout 是两次 read 间最大间隔，GLM-5.1 生成大段 reasoning 时可能长时间静默，所以放宽到 300 秒。
 DeepSeek 流式调用默认使用 HTTP/1.1，避免部分 HTTP/2 网关在长 SSE 响应中重置 stream，表现为 `stream was reset: INTERNAL_ERROR`。
@@ -65,8 +65,8 @@ scheme 白名单(http/https) / 主机黑名单(localhost/loopback/link-local/sit
 
 ### MCP Config
 
-1. 用户级：`~/.wraith-cli/mcp.json`
-2. 项目级：`.wraith-cli/mcp.json`
+1. 用户级：`~/.wraith/mcp.json`
+2. 项目级：`.wraith/mcp.json`
 3. 按 server 名 merge，项目级覆盖用户级
 
 格式兼容 Claude Code：`command` + `args` = stdio，`url` + `headers` = Streamable HTTP。内置变量：`${PROJECT_DIR}`、`${HOME}`；其他 `${VAR}` 从系统环境变量、系统属性、项目 `.env`、用户 `~/.env` 读取。
@@ -105,7 +105,7 @@ scheme 白名单(http/https) / 主机黑名单(localhost/loopback/link-local/sit
 - 长期记忆只保存跨会话稳定事实，不保存临时指令；默认项目级作用域，跨项目通用偏好才用 global
 - 长期记忆管理命令：`/memory list`、`/memory search <关键词>`、`/memory delete <id>`、`/memory clear`
 - `WRAITH.md` 不是 `/save` 长期记忆：它是启动时注入 system prompt 的项目指令文件，适合团队共享、长期稳定、可进 git 的规则
-- 加载顺序：`~/.wraith-cli/WRAITH.md` → `WRAITH.md` → `.wraith-cli/WRAITH.md` → `WRAITH.local.md` → `.wraith-cli/WRAITH.local.md`
+- 加载顺序：`~/.wraith/WRAITH.md` → `WRAITH.md` → `.wraith/WRAITH.md` → `WRAITH.local.md` → `.wraith/WRAITH.local.md`
 - `WRAITH.md` 中独占一行的 `@relative/path.md` 会被展开；导入路径必须留在用户配置目录或项目根内，总注入内容按预算截断
 - `/init` 生成精简 `WRAITH.md`，只写 commands / project positioning / architecture / pitfalls / don'ts；已有文件默认不覆盖，`/init --force` 重写
 
@@ -166,7 +166,7 @@ scheme 白名单(http/https) / 主机黑名单(localhost/loopback/link-local/sit
 
 ### Skill System
 
-- 三层加载：jar 内置 < 用户级 ~/.wraith-cli/skills/ < 项目级 .wraith-cli/skills/
+- 三层加载：jar 内置 < 用户级 ~/.wraith/skills/ < 项目级 .wraith/skills/
 - frontmatter：name(必填) / description(必填,<=500) / version / author / tags
 - system prompt 索引段注入到三处提示词末尾，上限 20 个 / 4KB
 - load_skill 工具把 SKILL.md 正文(5KB 截断)写入 SkillContextBuffer
@@ -184,7 +184,7 @@ scheme 白名单(http/https) / 主机黑名单(localhost/loopback/link-local/sit
 - BottomStatusBar 是 JLine `Status` 托管的底部 dock：由 JLine 负责滚动区域和状态行位置，不再手写 `\n`、`moveUp`、`CLEAR_TO_EOS` 或绝对光标行号；dock 上层展示 YOLO/HITL 与 MCP/Skill 摘要，下层展示 model、phase、ctx、token、cost、elapsed 与 cwd。关键字段可用 JLine `AttributedString` 做克制彩色高亮，但纯文本格式和列宽裁剪仍要稳定。`ctx` 只表示当前仍会带入下一轮请求的上下文估算，`in/out/cache` 表示最近任务调用统计。
 - `/clear` 清空当前 ReAct conversationHistory、shortTermMemory 和待注入 SkillContextBuffer，并重建不含上一轮检索记忆的 system prompt；长期记忆条目保留，后续只会按新查询重新检索注入。
 - `/compact` 手动压缩当前 ReAct conversationHistory，压缩期间显示动态 activity 面板，成功后刷新底部 ctx；不会清空 shortTermMemory、长期记忆或待注入 SkillContextBuffer。
-- `/export` 导出当前 ReAct conversationHistory 为 Markdown 到 `~/.wraith-cli/exports/session-*.md`；包含完整 system prompt，便于检查 LLM 实际接收前的指令，命令不接受路径参数。
+- `/export` 导出当前 ReAct conversationHistory 为 Markdown 到 `~/.wraith/exports/session-*.md`；包含完整 system prompt，便于检查 LLM 实际接收前的指令，命令不接受路径参数。
 - 普通任务和斜杠命令提交后都会以 `>` 暗色整行块回写原始输入，避免 JLine accept 后清掉编辑行导致结果区看不到刚执行的命令
 - InlineRenderer 不使用独立 JLine `Display.update()` 维护 thinking 临时区；真实终端验证发现独立 Display 会在 transcript/status 输出后从错误位置向上清屏。当前实现用固定高度 live 区重写自身行，content/tool 边界先清理 live 区再追加 transcript。
 - 交互期输出优先走 `Renderer.stream()`；`Main`、`PlanExecuteAgent`、`Planner`、`AgentOrchestrator` 都可接收同一个 renderer 输出流，避免绕过 inline renderer 直接写 stdout
@@ -198,7 +198,7 @@ scheme 白名单(http/https) / 主机黑名单(localhost/loopback/link-local/sit
 
 ### Git Side-History Snapshot (Phase 18)
 
-- side-git 在 ~/.wraith-cli/snapshots/ 维护独立仓库（JGit，不依赖系统 git）
+- side-git 在 ~/.wraith/snapshots/ 维护独立仓库（JGit，不依赖系统 git）
 - pre-turn 同步，post-turn 异步
 - revert_turn 纳入 HITL/AuditLog，恢复前先创建 pre-restore 快照
 
@@ -207,7 +207,7 @@ scheme 白名单(http/https) / 主机黑名单(localhost/loopback/link-local/sit
 - 组装顺序：base → personality → mode → approval → runtime_context → project_context → skills → context_mgmt → handoff
 - runtime_context 每轮注入当前日期和系统时区，供相对日期理解使用
 - project_context 顺序：`WRAITH.md` 项目记忆 → 相关长期记忆 → MCP resources 索引
-- 覆盖优先级：jar 内置 < 用户级 ~/.wraith-cli/prompts/ < 项目级 .wraith-cli/prompts/
+- 覆盖优先级：jar 内置 < 用户级 ~/.wraith/prompts/ < 项目级 .wraith/prompts/
 - 必要校验：base.md 和最终 prompt 必须包含 `## Language`
 
 ### Async Tasks + Runtime API (Phase 20)
@@ -295,14 +295,14 @@ EMBEDDING_MODEL=nomic-embed-text:latest
 EMBEDDING_BASE_URL=http://localhost:11434
 # EMBEDDING_API_KEY=your_api_key_here
 # WRAITH_LOG_LEVEL=INFO
-# WRAITH_LOG_DIR=/Users/yourname/.wraith-cli/logs
+# WRAITH_LOG_DIR=/Users/yourname/.wraith/logs
 # WRAITH_LOG_MAX_HISTORY=7
 # WRAITH_LOG_MAX_FILE_SIZE=10MB
 # WRAITH_LOG_TOTAL_SIZE_CAP=100MB
 # WRAITH_SNAPSHOT_ENABLED=true
 # WRAITH_SNAPSHOT_MAX=50
-# WRAITH_SNAPSHOT_EXCLUDES=.git,.wraith-cli/snapshots,target,node_modules,dist,.idea,*.class,*.jar
-# WRAITH_SNAPSHOT_DIR=/Users/yourname/.wraith-cli/snapshots
+# WRAITH_SNAPSHOT_EXCLUDES=.git,.wraith/snapshots,target,node_modules,dist,.idea,*.class,*.jar
+# WRAITH_SNAPSHOT_DIR=/Users/yourname/.wraith/snapshots
 # WRAITH_TUI=true
 # NO_TUI=true
 ```

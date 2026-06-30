@@ -42,7 +42,7 @@ public final class LspDiagnosticFormatter {
     }
 
     static int maxDiagnostics() {
-        String property = System.getProperty("wraith-cli.lsp.max.diagnostics");
+        String property = System.getProperty("wraith.lsp.max.diagnostics");
         if (property == null || property.isBlank()) {
             property = System.getenv("WRAITH_LSP_MAX_DIAGNOSTICS");
         }

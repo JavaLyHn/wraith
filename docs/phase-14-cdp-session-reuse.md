@@ -24,7 +24,7 @@
 - `chrome-devtools` server 支持两种运行模式 `isolated`（默认）/ `shared`（复用带登录态的调试 Chrome），运行时切换并自动重启
 - 新增 CLI 命令组 `/browser`：`status` / `connect` / `disconnect` / `tabs`
 - 默认 `--autoConnect` 连接已允许远程调试的本机 Chrome；显式 `/browser connect <port>` 保留 9222 等旧式 CDP 端口探活 + 三平台 Chrome 启动命令引导（macOS / Linux / Windows）
-- 敏感页面识别（默认规则 + 用户级 `~/.wraith-cli/sensitive_patterns.txt`）+ 命中后强制单步审批（绕过 `approvedAllByServer`）
+- 敏感页面识别（默认规则 + 用户级 `~/.wraith/sensitive_patterns.txt`）+ 命中后强制单步审批（绕过 `approvedAllByServer`）
 - `close_page` 工具硬保护：只允许关闭 Wraith CLI 当次会话 `new_page` 出来的 tab，否则抛 `PolicyException`
 - `AuditLog.AuditEntry` 新增可选 `metadata` 字段，记录 `browser_mode` / `sensitive` / `target_url`
 - `Agent` / `PlanExecuteAgent` / `SubAgent` 三处提示词加「shared 模式 = 真实登录态，按用户视角操作」段落
@@ -90,12 +90,12 @@ public synchronized String restartWithArgs(String name, List<String> newArgs)
 
 实现：把 `McpServer.config().setArgs(newArgs)` 改完后走 `restart(name)` 现有路径。`McpServerConfig` 当前 args 字段如果是不可变 list，需要补一个 setter（保持包内可见，避免外部滥用）。
 
-**默认行为不变**：`~/.wraith-cli/mcp.json` 不存在时仍生成 `--isolated=true`（向后兼容第 13 期用户）。`browser_connect` / `/browser connect` 是运行期动作，不主动改用户 mcp.json 文件，**只在内存中切换 args**；用户重启 Wraith CLI 后回到 isolated。这样：
+**默认行为不变**：`~/.wraith/mcp.json` 不存在时仍生成 `--isolated=true`（向后兼容第 13 期用户）。`browser_connect` / `/browser connect` 是运行期动作，不主动改用户 mcp.json 文件，**只在内存中切换 args**；用户重启 Wraith CLI 后回到 isolated。这样：
 - 默认安全（isolated 仍是默认）
 - 运行时按需 connect
 - 用户的 mcp.json 不被 Wraith CLI 偷偷改动
 
-如果用户希望默认就走 shared，文档里明示：自己改 `~/.wraith-cli/mcp.json` 把 args 改成 `["-y", "chrome-devtools-mcp@latest", "--autoConnect"]`。旧式端口可用 `["-y", "chrome-devtools-mcp@latest", "--browser-url=http://127.0.0.1:9222"]`。
+如果用户希望默认就走 shared，文档里明示：自己改 `~/.wraith/mcp.json` 把 args 改成 `["-y", "chrome-devtools-mcp@latest", "--autoConnect"]`。旧式端口可用 `["-y", "chrome-devtools-mcp@latest", "--browser-url=http://127.0.0.1:9222"]`。
 
 ### 3.2 `/browser` CLI 命令组
 
@@ -138,7 +138,7 @@ public synchronized String restartWithArgs(String name, List<String> newArgs)
   - `*://*/auth*`
   - `*://*/2fa*`
   - `*://*/password*`
-- 用户级追加：`~/.wraith-cli/sensitive_patterns.txt`，每行一个 glob（`#` 开头注释、空行忽略）。文件不存在视为空
+- 用户级追加：`~/.wraith/sensitive_patterns.txt`，每行一个 glob（`#` 开头注释、空行忽略）。文件不存在视为空
 - 匹配走 `java.nio.file.FileSystems.getDefault().getPathMatcher("glob:...")` 不合适（路径匹配语义不对），改用简单 `*` / `?` glob → regex 转换：`*` → `.*`，`?` → `.`，其他元字符 quote
 - 大小写不敏感
 - 只匹配 URL 本身（含 scheme + host + path + query），不解析 host 域名归属
@@ -299,7 +299,7 @@ if (BrowserGuard.requiresPerCallApproval(toolName, argsJson)) {
 
 ### 4.1 `mcp.json` 默认模板
 
-**保持第 13 期不变**：`~/.wraith-cli/mcp.json` 不存在时仍生成 `--isolated=true`。本期不修改默认模板。理由见 §3.1。
+**保持第 13 期不变**：`~/.wraith/mcp.json` 不存在时仍生成 `--isolated=true`。本期不修改默认模板。理由见 §3.1。
 
 ### 4.2 `.env.example` 新增
 
@@ -311,13 +311,13 @@ if (BrowserGuard.requiresPerCallApproval(toolName, argsJson)) {
 #   macOS:   open -a "Google Chrome" --args --remote-debugging-port=9222
 #   Linux:   google-chrome --remote-debugging-port=9222
 #   Windows: chrome.exe --remote-debugging-port=9222
-# 用户级敏感页面规则：~/.wraith-cli/sensitive_patterns.txt（每行一个 glob，# 开头注释）
+# 用户级敏感页面规则：~/.wraith/sensitive_patterns.txt（每行一个 glob，# 开头注释）
 # 默认敏感规则：*/settings* */admin* */billing* */account* */security* */oauth* */auth* */2fa* */password*
 ```
 
 ### 4.3 用户级敏感规则文件
 
-`~/.wraith-cli/sensitive_patterns.txt`（**Wraith CLI 不主动创建**，只读取）：
+`~/.wraith/sensitive_patterns.txt`（**Wraith CLI 不主动创建**，只读取）：
 
 ```
 # 用户自定义敏感页面规则（每行一个 glob）
@@ -566,7 +566,7 @@ if (BrowserGuard.requiresPerCallApproval(toolName, argsJson)) {
 
 ### 7.6 用户级敏感规则文件
 
-写入 `~/.wraith-cli/sensitive_patterns.txt`：
+写入 `~/.wraith/sensitive_patterns.txt`：
 
 ```
 *://*.example-bank.com/*
@@ -609,7 +609,7 @@ if (BrowserGuard.requiresPerCallApproval(toolName, argsJson)) {
 5. **`AuditEntry` 加字段的反序列化兼容**：必须先写测试验证旧 7 字段 JSONL 能读，再 commit。Jackson 对 record 的容忍取决于 mapper 配置，宁可保守加 `@JsonCreator` 注解或显式 builder。
 6. **`/browser` 命令撞上 `/browser` 自然语言**：如果用户输入「browser 怎么用」走的是 Agent，没事；只在 `/` 开头才走命令解析。这是项目既有约定（AGENTS.md §2 输入解析），保持。
 8. **shared 模式启动慢**：`--autoConnect` / `--browser-url` 模式因为不用启 Chromium，通常比 isolated 快。但首次仍可能 npx 拉包慢，沿用第 13 期的进度打印逻辑即可。
-9. **跨平台路径**：`~/.wraith-cli/sensitive_patterns.txt` 在 Windows 是 `%USERPROFILE%\.wraith-cli\sensitive_patterns.txt`。沿用项目既有约定 `Path.of(System.getProperty("user.home"), ".wraith-cli", ...)` 不要硬编码 `/`。
+9. **跨平台路径**：`~/.wraith/sensitive_patterns.txt` 在 Windows 是 `%USERPROFILE%\.wraith\sensitive_patterns.txt`。沿用项目既有约定 `Path.of(System.getProperty("user.home"), ".wraith", ...)` 不要硬编码 `/`。
 9. **测试隔离**：`BrowserSession` 单例容易污染测试。**必须**在 `BrowserSessionTest` 等用例里 `@BeforeEach` reset。或者干脆把 BrowserSession 做成**非全局单例**，由 `Main` 持有引用并注入 ToolRegistry / HitlToolRegistry——更可测，推荐这条路。
 10. **HITL 弹窗在敏感页面隐藏 `[a]`**：`TerminalHitlHandler` 的 `promptUntilDecision` 当前对所有请求展示同一组选项。要么按 `request.sensitiveNotice != null` 条件渲染不同的 prompt 文本，要么把「全放行」选项变成可选 flag。**采用前者**，无侵入。
 
@@ -813,7 +813,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 | 敏感页面识别在哪一层 | 策略层 `BrowserGuard`，与 `PathGuard` / `CommandGuard` 同级 |
 | 敏感命中升级哪些工具 | **只升级改写型工具**，读型仍受全放行 |
 | 敏感命中是否绕过 server 全放行 | **绕过**，强制单步审批，弹窗不展示 `[a]` |
-| 敏感规则数据源 | **默认内置 9 条 + 用户级 `~/.wraith-cli/sensitive_patterns.txt`** |
+| 敏感规则数据源 | **默认内置 9 条 + 用户级 `~/.wraith/sensitive_patterns.txt`** |
 | `close_page` 保护 | shared 模式硬保护，PolicyException；isolated 模式跳过 |
 | `close_page` pageId 无法解析时 | **保守拒绝**，让用户手动 |
 | AuditEntry 加字段方式 | 加可选 `metadata` 字段（JSON 字符串），保留所有现有工厂签名 |

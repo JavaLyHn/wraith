@@ -21,10 +21,10 @@ public abstract class AbstractOpenAiCompatibleClient implements LlmClient {
     // callTimeout 作为整体兜底，覆盖极端情况下的连接半死状态。
     // 三项均可通过系统属性覆盖，便于不同模型 / 网络环境调优。
     protected static final OkHttpClient SHARED_HTTP_CLIENT = new OkHttpClient.Builder()
-            .connectTimeout(readTimeoutSeconds("wraith-cli.llm.connect.timeout.seconds", 60), TimeUnit.SECONDS)
-            .readTimeout(readTimeoutSeconds("wraith-cli.llm.read.timeout.seconds", 300), TimeUnit.SECONDS)
-            .writeTimeout(readTimeoutSeconds("wraith-cli.llm.write.timeout.seconds", 60), TimeUnit.SECONDS)
-            .callTimeout(readTimeoutSeconds("wraith-cli.llm.call.timeout.seconds", 600), TimeUnit.SECONDS)
+            .connectTimeout(readTimeoutSeconds("wraith.llm.connect.timeout.seconds", 60), TimeUnit.SECONDS)
+            .readTimeout(readTimeoutSeconds("wraith.llm.read.timeout.seconds", 300), TimeUnit.SECONDS)
+            .writeTimeout(readTimeoutSeconds("wraith.llm.write.timeout.seconds", 60), TimeUnit.SECONDS)
+            .callTimeout(readTimeoutSeconds("wraith.llm.call.timeout.seconds", 600), TimeUnit.SECONDS)
             .build();
 
     private static long readTimeoutSeconds(String key, long defaultValue) {

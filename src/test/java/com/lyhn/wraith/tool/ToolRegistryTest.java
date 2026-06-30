@@ -122,8 +122,8 @@ class ToolRegistryTest {
 
     @Test
     void shouldExposePartialWhenGrepReachesHeadLimit(@TempDir Path tempDir) throws Exception {
-        String previous = System.getProperty("wraith-cli.search.disable.rg");
-        System.setProperty("wraith-cli.search.disable.rg", "true");
+        String previous = System.getProperty("wraith.search.disable.rg");
+        System.setProperty("wraith.search.disable.rg", "true");
         try {
             Files.writeString(tempDir.resolve("Many.java"), String.join("\n",
                     "class Many {",
@@ -143,14 +143,14 @@ class ToolRegistryTest {
             assertTrue(result.contains("suggested_reads"));
             assertTrue(result.contains("read_file {\"path\":\"Many.java\""));
         } finally {
-            restoreSystemProperty("wraith-cli.search.disable.rg", previous);
+            restoreSystemProperty("wraith.search.disable.rg", previous);
         }
     }
 
     @Test
     void shouldExposePartialWhenGrepResultReachesCharacterBudget(@TempDir Path tempDir) throws Exception {
-        String previous = System.getProperty("wraith-cli.search.disable.rg");
-        System.setProperty("wraith-cli.search.disable.rg", "true");
+        String previous = System.getProperty("wraith.search.disable.rg");
+        System.setProperty("wraith.search.disable.rg", "true");
         try {
             String longNeedleLine = "needle " + "x".repeat(1200);
             Files.writeString(tempDir.resolve("Budget.java"), String.join("\n",
@@ -168,7 +168,7 @@ class ToolRegistryTest {
             assertTrue(result.contains("partial: true"));
             assertTrue(result.contains("max_chars=1000"));
         } finally {
-            restoreSystemProperty("wraith-cli.search.disable.rg", previous);
+            restoreSystemProperty("wraith.search.disable.rg", previous);
         }
     }
 

@@ -19,10 +19,10 @@ class ProjectMemoryLoaderTest {
         Path userDir = tempDir.resolve("user");
         Path projectRoot = tempDir.resolve("project");
         Files.createDirectories(userDir);
-        Files.createDirectories(projectRoot.resolve(".wraith-cli"));
+        Files.createDirectories(projectRoot.resolve(".wraith"));
         Files.writeString(userDir.resolve("WRAITH.md"), "- user rule");
         Files.writeString(projectRoot.resolve("WRAITH.md"), "- project rule");
-        Files.writeString(projectRoot.resolve(".wraith-cli").resolve("WRAITH.md"), "- dot project rule");
+        Files.writeString(projectRoot.resolve(".wraith").resolve("WRAITH.md"), "- dot project rule");
         Files.writeString(projectRoot.resolve("WRAITH.local.md"), "- local rule");
 
         String context = new ProjectMemoryLoader(userDir, projectRoot).loadForPrompt();

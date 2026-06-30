@@ -24,7 +24,7 @@ public class NotificationRouter implements Consumer<JsonNode>, AutoCloseable {
     public NotificationRouter() {
         AtomicInteger threadId = new AtomicInteger();
         this.dispatcher = Executors.newSingleThreadExecutor(r -> {
-            Thread t = new Thread(r, "wraith-cli-mcp-notifications-" + threadId.incrementAndGet());
+            Thread t = new Thread(r, "wraith-mcp-notifications-" + threadId.incrementAndGet());
             t.setDaemon(true);
             return t;
         });

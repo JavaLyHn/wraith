@@ -74,7 +74,7 @@ public class ToolRegistry {
     private static final String STEP_SEARCH_TOOL = "mcp__" + STEP_SEARCH_SERVER + "__web_search";
     private static final String STEP_FETCH_TOOL = "mcp__" + STEP_SEARCH_SERVER + "__web_fetch";
     private static final Set<String> SEARCH_EXCLUDED_DIRS = Set.of(
-            ".git", ".wraith-cli", "target", "node_modules", "dist", "build", "coverage", ".idea", ".gradle"
+            ".git", ".wraith", "target", "node_modules", "dist", "build", "coverage", ".idea", ".gradle"
     );
     // write_file 单次写入字节数上限。LLM 想塞超大内容时通常是误生成（重复粘贴 / hallucinate 大段日志），
     // 5MB 对常规代码生成 / 文档撰写完全够用，超过即拒，避免磁盘灌满与误覆盖。
@@ -1267,7 +1267,7 @@ public class ToolRegistry {
 
         int parallelism = Math.min(invocations.size(), MAX_PARALLEL_TOOLS);
         ExecutorService executor = Executors.newFixedThreadPool(parallelism, r -> {
-            Thread thread = new Thread(r, "wraith-cli-tool-executor");
+            Thread thread = new Thread(r, "wraith-tool-executor");
             thread.setDaemon(true);
             return thread;
         });
@@ -1352,7 +1352,7 @@ public class ToolRegistry {
         }
 
         ExecutorService outputReaderExecutor = Executors.newSingleThreadExecutor(r -> {
-            Thread thread = new Thread(r, "wraith-cli-command-output");
+            Thread thread = new Thread(r, "wraith-command-output");
             thread.setDaemon(true);
             return thread;
         });

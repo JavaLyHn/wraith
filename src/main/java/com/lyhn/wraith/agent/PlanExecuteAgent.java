@@ -381,7 +381,7 @@ public class PlanExecuteAgent {
         out.println("⚡ 本轮并行执行 " + executableTasks.size() + " 个任务: " + parallelTaskIds);
 
         ExecutorService executor = Executors.newFixedThreadPool(Math.min(executableTasks.size(), 4), r -> {
-            Thread t = new Thread(r, "wraith-cli-plan-executor");
+            Thread t = new Thread(r, "wraith-plan-executor");
             t.setDaemon(true);
             return t;
         });

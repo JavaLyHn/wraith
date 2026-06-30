@@ -25,8 +25,8 @@ public class PromptRepository {
     }
 
     public static PromptRepository createDefault() {
-        Path home = Path.of(System.getProperty("user.home"), ".wraith-cli", "prompts");
-        Path project = Path.of(".wraith-cli", "prompts").toAbsolutePath().normalize();
+        Path home = Path.of(System.getProperty("user.home"), ".wraith", "prompts");
+        Path project = Path.of(".wraith", "prompts").toAbsolutePath().normalize();
         return new PromptRepository(home, project);
     }
 

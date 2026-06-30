@@ -57,10 +57,10 @@ public final class SessionStore {
         this.model = model == null ? "" : model;
     }
 
-    /** 以项目目录定位会话存储:~/.wraith-cli/sessions/&lt;project_hash&gt;/。 */
+    /** 以项目目录定位会话存储:~/.wraith/sessions/&lt;project_hash&gt;/。 */
     public static SessionStore open(Path home, String projectPath, String provider, String model) {
         String key = projectPath == null || projectPath.isBlank() ? "default" : projectPath;
-        Path dir = home.resolve(".wraith-cli").resolve("sessions").resolve(hash(key));
+        Path dir = home.resolve(".wraith").resolve("sessions").resolve(hash(key));
         return new SessionStore(dir, key, provider, model);
     }
 

@@ -43,18 +43,18 @@ public class DurableTaskManager implements Closeable {
     }
 
     public static Path defaultDbPath() {
-        String configured = System.getProperty("wraith-cli.task.dir");
+        String configured = System.getProperty("wraith.task.dir");
         if (configured == null || configured.isBlank()) {
             configured = System.getenv("WRAITH_TASK_DIR");
         }
         if (configured == null || configured.isBlank()) {
-            configured = Path.of(System.getProperty("user.home"), ".wraith-cli", "tasks").toString();
+            configured = Path.of(System.getProperty("user.home"), ".wraith", "tasks").toString();
         }
         return Path.of(configured).resolve("tasks.db");
     }
 
     private static int workerCount() {
-        String configured = System.getProperty("wraith-cli.task.workers");
+        String configured = System.getProperty("wraith.task.workers");
         if (configured == null || configured.isBlank()) {
             configured = System.getenv("WRAITH_TASK_WORKERS");
         }
@@ -74,7 +74,7 @@ public class DurableTaskManager implements Closeable {
         }
         running = true;
         workers = Executors.newFixedThreadPool(workerCount, r -> {
-            Thread thread = new Thread(r, "wraith-cli-task-worker");
+            Thread thread = new Thread(r, "wraith-task-worker");
             thread.setDaemon(true);
             return thread;
         });

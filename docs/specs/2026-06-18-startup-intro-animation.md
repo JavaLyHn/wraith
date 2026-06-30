@@ -11,7 +11,7 @@
 
 ## 1. 目标
 
-打开终端运行 `java -jar wraith-cli-1.0-SNAPSHOT.jar` 时,先播一段黑底纯白的 WRAITH 开场动画,再进入正常 banner / 交互。动画形态对应需求提示词:
+打开终端运行 `java -jar wraith-1.0-SNAPSHOT.jar` 时,先播一段黑底纯白的 WRAITH 开场动画,再进入正常 banner / 交互。动画形态对应需求提示词:
 
 > 黑底纯白;多条白色横向扫描线自上而下、在中间裂开;扫描线溶解淡出的同时大号 `WRAITH` 逐步显现并铺满屏宽;最后巨大的纯白 `WRAITH` 在黑屏上左右摆动。
 

@@ -17,20 +17,20 @@ class TuiBootstrapTest {
 
     @AfterEach
     void tearDown() {
-        System.clearProperty("wraith-cli.tui");
-        System.clearProperty("wraith-cli.renderer");
+        System.clearProperty("wraith.tui");
+        System.clearProperty("wraith.renderer");
     }
 
     @Test
     void shouldKeepCliByDefault() {
-        System.clearProperty("wraith-cli.tui");
+        System.clearProperty("wraith.tui");
 
         assertFalse(TuiBootstrap.shouldUseTui(null));
     }
 
     @Test
     void shouldDegradeWhenTuiRequestedButTerminalUnavailable() {
-        System.setProperty("wraith-cli.tui", "true");
+        System.setProperty("wraith.tui", "true");
         PrintStream originalOut = System.out;
         try {
             System.setOut(new PrintStream(new ByteArrayOutputStream()));
@@ -43,7 +43,7 @@ class TuiBootstrapTest {
 
     @Test
     void shouldUseTuiWhenRendererModeIsLanterna() {
-        System.setProperty("wraith-cli.renderer", "lanterna");
+        System.setProperty("wraith.renderer", "lanterna");
         Terminal terminal = mock(Terminal.class);
         when(terminal.getSize()).thenReturn(new Size(120, 40));
 
@@ -52,8 +52,8 @@ class TuiBootstrapTest {
 
     @Test
     void rendererModeOverridesLegacyTuiFlag() {
-        System.setProperty("wraith-cli.renderer", "inline");
-        System.setProperty("wraith-cli.tui", "true");
+        System.setProperty("wraith.renderer", "inline");
+        System.setProperty("wraith.tui", "true");
 
         assertFalse(TuiBootstrap.shouldUseTui(null));
     }

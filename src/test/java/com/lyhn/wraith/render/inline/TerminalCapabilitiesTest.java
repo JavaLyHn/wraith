@@ -17,15 +17,15 @@ class TerminalCapabilitiesTest {
 
     @BeforeEach
     void save() {
-        savedSysProp = System.getProperty("wraith-cli.no.statusbar");
+        savedSysProp = System.getProperty("wraith.no.statusbar");
     }
 
     @AfterEach
     void restore() {
         if (savedSysProp == null) {
-            System.clearProperty("wraith-cli.no.statusbar");
+            System.clearProperty("wraith.no.statusbar");
         } else {
-            System.setProperty("wraith-cli.no.statusbar", savedSysProp);
+            System.setProperty("wraith.no.statusbar", savedSysProp);
         }
     }
 
@@ -66,7 +66,7 @@ class TerminalCapabilitiesTest {
 
     @Test
     void noStatusbarPropertyDisablesScrollRegion() {
-        System.setProperty("wraith-cli.no.statusbar", "true");
+        System.setProperty("wraith.no.statusbar", "true");
         Terminal normal = Mockito.mock(Terminal.class);
         Mockito.when(normal.getType()).thenReturn("xterm-256color");
         Mockito.when(normal.getSize()).thenReturn(new Size(120, 40));

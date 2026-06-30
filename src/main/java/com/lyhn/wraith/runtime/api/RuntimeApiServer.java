@@ -21,14 +21,14 @@ public class RuntimeApiServer implements AutoCloseable {
     private final String apiKey;
     private final HttpServer server;
     private final ExecutorService executor = Executors.newCachedThreadPool(r -> {
-        Thread thread = new Thread(r, "wraith-cli-runtime-api");
+        Thread thread = new Thread(r, "wraith-runtime-api");
         thread.setDaemon(true);
         return thread;
     });
 
     public RuntimeApiServer(RuntimeThreadStore store, TaskRunner runner, int port, String apiKey) throws IOException {
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalArgumentException("Runtime API 需要配置 WRAITH_RUNTIME_API_KEY 或 -Dwraith-cli.runtime.api.key");
+            throw new IllegalArgumentException("Runtime API 需要配置 WRAITH_RUNTIME_API_KEY 或 -Dwraith.runtime.api.key");
         }
         this.store = store;
         this.runner = runner;
@@ -39,7 +39,7 @@ public class RuntimeApiServer implements AutoCloseable {
     }
 
     public static String configuredApiKey() {
-        String configured = System.getProperty("wraith-cli.runtime.api.key");
+        String configured = System.getProperty("wraith.runtime.api.key");
         if (configured == null || configured.isBlank()) {
             configured = System.getenv("WRAITH_RUNTIME_API_KEY");
         }

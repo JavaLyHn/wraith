@@ -545,7 +545,7 @@ public final class TerminalMarkdownRenderer {
     }
 
     private static int resolveTerminalColumns() {
-        String sysValue = System.getProperty("wraith-cli.render.columns");
+        String sysValue = System.getProperty("wraith.render.columns");
         if (sysValue != null && !sysValue.isBlank()) {
             try {
                 return Math.max(40, Integer.parseInt(sysValue.trim()));

@@ -21,13 +21,13 @@ import java.util.Locale;
  * 这三个条件按"先到先触发"判定，任何一个命中都会让循环结束。
  *
  * 配置读取顺序（以 {@link #fromSystemProperties()} 为准）：
- * 1. 系统属性：{@code wraith-cli.react.token.budget} / {@code wraith-cli.react.stagnation.window} /
- *    {@code wraith-cli.react.hard.max.iterations}
+ * 1. 系统属性：{@code wraith.react.token.budget} / {@code wraith.react.stagnation.window} /
+ *    {@code wraith.react.hard.max.iterations}
  * 2. 默认值：token 预算 = Integer.MAX_VALUE（实质不限）/ 连续 3 次相同工具调用 / 50 轮
  *
  * 设计取舍：长上下文模型（GLM-5.1 200k / DeepSeek V4 1M）配合套餐用户的"无限 token"诉求，
  * 默认不再以 80% × window 为硬限——让 LLM 自然停在它该停的地方。需要严格成本控制的
- * 场景（CI / 自动化批跑）通过 {@code -Dwraith-cli.react.token.budget=N} 显式启用。
+ * 场景（CI / 自动化批跑）通过 {@code -Dwraith.react.token.budget=N} 显式启用。
  * 死循环防护交给 stagnation 检测和 hardMaxIterations 两道兜底。
  */
 public class AgentBudget {
@@ -75,11 +75,11 @@ public class AgentBudget {
     public static AgentBudget fromLlmClient(LlmClient llmClient) {
         // ContextProfile 仍按 80% × window 计算 agentTokenBudget，用于 /context 与 token stats 的"软提示"显示；
         // 但 AgentBudget 的硬限默认走 Integer.MAX_VALUE，避免长上下文 + 套餐用户被预算墙卡住。
-        // 显式 -Dwraith-cli.react.token.budget=N 仍可启用硬预算，覆盖默认。
+        // 显式 -Dwraith.react.token.budget=N 仍可启用硬预算，覆盖默认。
         return new AgentBudget(
-                readIntProperty("wraith-cli.react.token.budget", Integer.MAX_VALUE),
-                readIntProperty("wraith-cli.react.stagnation.window", DEFAULT_STAGNATION_WINDOW),
-                readIntProperty("wraith-cli.react.hard.max.iterations", DEFAULT_HARD_MAX_ITERATIONS)
+                readIntProperty("wraith.react.token.budget", Integer.MAX_VALUE),
+                readIntProperty("wraith.react.stagnation.window", DEFAULT_STAGNATION_WINDOW),
+                readIntProperty("wraith.react.hard.max.iterations", DEFAULT_HARD_MAX_ITERATIONS)
         );
     }
 

@@ -8,7 +8,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.List;
 
 /**
- * 把 jar 内 resources/skills/&lt;name&gt;/ 解压到 ~/.wraith-cli/skills-cache/&lt;name&gt;/。
+ * 把 jar 内 resources/skills/&lt;name&gt;/ 解压到 ~/.wraith/skills-cache/&lt;name&gt;/。
  *
  * 解压策略：通过 .version 文件标记当前 jar 内置版本。版本一致跳过；不一致或缺失则覆盖整个目录。
  *

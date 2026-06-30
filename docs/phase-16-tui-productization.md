@@ -85,7 +85,7 @@
 
 ### 2.2 TUI 与现有 CLI 的兼容策略
 
-**不破坏现有命令行行为**：默认仍使用纯 CLI（JLine 行编辑器模式）。Lanterna 全屏 TUI 只在显式设置 `WRAITH_TUI=true` 或 `-Dwraith-cli.tui=true` 时启用；如果 `NO_TUI=true`、终端不可用或终端尺寸过小（`< 80×24`），仍降级为 CLI。
+**不破坏现有命令行行为**：默认仍使用纯 CLI（JLine 行编辑器模式）。Lanterna 全屏 TUI 只在显式设置 `WRAITH_TUI=true` 或 `-Dwraith.tui=true` 时启用；如果 `NO_TUI=true`、终端不可用或终端尺寸过小（`< 80×24`），仍降级为 CLI。
 
 实现：
 ```java
@@ -97,7 +97,7 @@ if (shouldUseTui()) {
 ```
 
 `shouldUseTui()` 判断：
-1. 未设置 `WRAITH_TUI=true` 且未设置 `-Dwraith-cli.tui=true` → 保持默认 CLI
+1. 未设置 `WRAITH_TUI=true` 且未设置 `-Dwraith.tui=true` → 保持默认 CLI
 2. `NO_TUI=true` → 降级
 3. 终端不可用、尺寸为 `0×0`、rows < 24 或 cols < 80 → 降级
 4. 显式启用且终端满足条件 → 启动 TUI
@@ -234,7 +234,7 @@ public record ConversationSnapshot(
 
 **配置读写**：
 - 读：`WraithConfig.load()` 已有
-- 写：`WraithConfig.save(config)` 新增，写入 `~/.wraith-cli/config.json`
+- 写：`WraithConfig.save(config)` 新增，写入 `~/.wraith/config.json`
 - 不修改 `.env`（`.env` 只读，配置持久化走 `config.json`）
 
 ### 2.8 主题系统
@@ -243,7 +243,7 @@ public record ConversationSnapshot(
 - **深色主题（默认）**：背景 `#1e1e2e`（Catppuccin Mocha 基调），文字 `#cdd6f4`，代码关键字 `#cba6f7`（紫），字符串 `#a6e3a1`（绿），注释 `#6c7086`（灰）
 - **浅色主题**：背景 `#eff1f5`（Catppuccin Latte），文字 `#4c4f69`，代码关键字 `#8839ef`，字符串 `#40a02b`，注释 `#9ca0b0`
 
-**主题持久化**：`~/.wraith-cli/config.json` 的 `theme` 字段（`"dark"` / `"light"`）
+**主题持久化**：`~/.wraith/config.json` 的 `theme` 字段（`"dark"` / `"light"`）
 
 **Lanterna 颜色映射**：用 `TextColor.ANSI.foreground(颜色编号)` 或 `TextColor.fromRGB(r, g, b)`，深色主题用 256 色或 TrueColor，浅色主题同样适配。
 
@@ -274,7 +274,7 @@ public record ConversationSnapshot(
 
 ## 3. 配置文件改动
 
-### 3.1 `~/.wraith-cli/config.json` 新增字段
+### 3.1 `~/.wraith/config.json` 新增字段
 
 ```json
 {
@@ -297,7 +297,7 @@ public record ConversationSnapshot(
 
 `tui` 字段是可选的，不存在时使用默认值。
 
-### 3.2 `~/.wraith-cli/filetree-ignore.txt`（用户级忽略规则）
+### 3.2 `~/.wraith/filetree-ignore.txt`（用户级忽略规则）
 
 文件树忽略规则，每行一个 glob：
 
@@ -349,7 +349,7 @@ dist
 | `src/main/java/com/lyhn/wraith/tui/highlight/CodeHighlighter.java` | 轻量级语法高亮器（基于 `CodeChunker` 语言识别 + 正则词法着色，输出 ANSI 256 色字符串） |
 | `src/main/java/com/lyhn/wraith/tui/highlight/SyntaxTheme.java` | 主题定义（深色 / 浅色），映射语言关键字 / 字符串 / 注释到 Lanterna `TextColor` |
 | `src/main/java/com/lyhn/wraith/tui/history/ConversationHistoryManager.java` | 对话历史管理（按 `ConversationSnapshot` 组织，支持保存 / 恢复 / 删除） |
-| `src/main/java/com/lyhn/wraith/tui/history/ConversationStore.java` | 对话历史持久化（JSONL 格式，按天分文件 `~/.wraith-cli/history/conversations-YYYY-MM-DD.jsonl`） |
+| `src/main/java/com/lyhn/wraith/tui/history/ConversationStore.java` | 对话历史持久化（JSONL 格式，按天分文件 `~/.wraith/history/conversations-YYYY-MM-DD.jsonl`） |
 | `src/main/java/com/lyhn/wraith/tui/config/ConfigEditor.java` | 配置管理面板（`/config` 命令触发，支持 API Key / 模型 / 上下文模式 / HITL / Skill 启用状态编辑） |
 | `src/main/java/com/lyhn/wraith/tui/theme/ThemeManager.java` | 主题管理器（深色 / 浅色切换，持久化到 `config.json`） |
 | `src/main/java/com/lyhn/wraith/tui/theme/ColorPalette.java` | Catppuccin Mocha / Latte 调色板（背景 / 前景 / 关键字 / 字符串 / 注释等） |
@@ -528,7 +528,7 @@ public String highlight(String code, String language) {
 🔄 使用 ReAct 模式
 
 ┌───项目结构───┬───────────────────────────────┬──状态──┐
-│ 📁 wraith-cli    │  对话开始...                   │ 🟢 Ready│
+│ 📁 wraith    │  对话开始...                   │ 🟢 Ready│
 │ 📁 src       │                               │ 💡 2k/200k│
 │ 📁 main      │                               │ ⏱ --  │
 │ 📄 pom.xml   │                               │        │
@@ -629,7 +629,7 @@ public String highlight(String code, String language) {
 │ 📁 main       │ ← ← 收起
 │ 📁 java       │
 │ 📁 com        │
-│ 📁 wraith-cli     │
+│ 📁 wraith     │
 │ 📁 agent      │
 │ 📄 Agent.java │ ← Enter 插入 @file:// 引用
 │ 📄 Main.java  │
@@ -647,19 +647,19 @@ public String highlight(String code, String language) {
 **场景 A：正常 TUI 启动**
 ```bash
 # 终端尺寸 ≥ 80×24，显式启用 TUI
-WRAITH_TUI=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+WRAITH_TUI=true java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 **期望**：Lanterna 三栏窗口正常渲染，输入框可交互，可以提交任务。
 
 **场景 B：默认 CLI**
 ```bash
-java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 **期望**：进入 JLine 行编辑器，不弹 Lanterna 全屏窗口。
 
 **场景 C：CLI 强制降级**
 ```bash
-WRAITH_TUI=true NO_TUI=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+WRAITH_TUI=true NO_TUI=true java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 **期望**：降级到 JLine 行编辑器，所有现有 CLI 功能正常。
 
@@ -786,7 +786,7 @@ WRAITH_TUI=true NO_TUI=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 
 ```
 > # 终端尺寸 79×23
-> java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+> java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 **期望**：检测到 cols < 80 或 rows < 24 → 降级 CLI 模式，Banner 加降级提示。
 
@@ -806,7 +806,7 @@ WRAITH_TUI=true NO_TUI=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 3. **代码高亮性能**：大文件（> 500 行）正则着色可能阻塞事件线程。解决：在后台线程做 `CodeHighlighter.highlight()`，完成后再 `postRunnable` 更新 UI。
 4. **JLine History 迁移**：现有 CLI 的 JLine `History` 是输入命令历史（`/plan`、`/search` 等），TUI 的 `ConversationHistoryManager` 是**对话快照历史**（用户和 Agent 的完整对话），两者不能混用。TUI 模式下 JLine History 仍可保留（按 `↑` 在输入框内展示命令历史）。
 5. **Lanterna 在 Windows ConEmu / Cmder 的兼容性**：部分 Windows 虚拟终端对 ANSI TrueColor 支持不完整，可能导致颜色显示异常。需要在 Windows 上做 fallback 到 16 色方案。
-6. **文件树的 `Files.walk` 性能**：大仓库（如 `wraith-cli` 自己，src/ 下 100+ 文件）`Files.walk` 可能 100ms+。解决：只懒加载一层（展开目录时 `Files.list`），不做预扫描。
+6. **文件树的 `Files.walk` 性能**：大仓库（如 `wraith` 自己，src/ 下 100+ 文件）`Files.walk` 可能 100ms+。解决：只懒加载一层（展开目录时 `Files.list`），不做预扫描。
 7. **`CodeChunker` 的语言识别精度**：`CodeChunker` 靠文件名后缀识别语言（`.java` → `java`），没有后缀的文件（如 `Makefile`、`Dockerfile`）拿不到语言。解决：内置 `Makefile` / `Dockerfile` / `Jenkinsfile` 等无后缀文件的扩展识别表。
 8. **Lanterna Screen 重绘频率**：流式输出每来一个 chunk 就 `postRunnable` 刷新 `TextArea`，事件线程会密集刷新屏幕。解决：做 50ms 节流（`ScheduledExecutorService.scheduleAtFixedRate`），每 50ms 批量合并多个 chunk 一次性刷新。
 9. **TUI 下的多行输入**：Lanterna `TextField` 默认是单行的。`Shift+Enter` 插入 `\n` 让输入框支持多行，提交时合并为一段。
@@ -818,15 +818,15 @@ WRAITH_TUI=true NO_TUI=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 |---|---|
 | TUI 框架 | **Lanterna 3**（不引入 Textual / Bubble Tea 等跨语言方案） |
 | 代码高亮引擎 | **自研正则词法着色**（不引入第三方高亮库，复用 `CodeChunker` 语言识别） |
-| TUI vs CLI 关系 | **CLI 为主，TUI opt-in**（`WRAITH_TUI=true` 或 `-Dwraith-cli.tui=true` 才启动全屏界面） |
+| TUI vs CLI 关系 | **CLI 为主，TUI opt-in**（`WRAITH_TUI=true` 或 `-Dwraith.tui=true` 才启动全屏界面） |
 | 文件树 Git 状态 | **不做**（留后续期） |
 | TUI 内嵌代码编辑器 | **不做**（只展示，改文件走 `write_file` 工具） |
 | 多窗口 / 分屏 | **本期不做**（单窗口） |
 | 主题数量 | **两种**（深色 / 浅色），不搞主题市场 |
 | 对话历史 | **新设计 `ConversationSnapshot`**，不依赖 JLine History |
 | `CodeHighlighter` 依赖 | **零第三方依赖**（纯正则 + 已有 `CodeChunker`） |
-| 主题持久化路径 | `~/.wraith-cli/config.json` 的 `theme` 字段 |
-| 对话历史持久化 | `~/.wraith-cli/history/conversations-YYYY-MM-DD.jsonl`（按天，JSONL） |
+| 主题持久化路径 | `~/.wraith/config.json` 的 `theme` 字段 |
+| 对话历史持久化 | `~/.wraith/history/conversations-YYYY-MM-DD.jsonl`（按天，JSONL） |
 | 降级提示文案 | 默认 CLI 不提示；显式启用 TUI 但环境不满足时才提示具体原因 |
 | TUI 启动失败 | 降级 CLI 模式，不直接退出 |
 | 快捷键冲突 | `Ctrl+C` / `Ctrl+D` / `Esc` / `Enter` / `↑↓` 保留终端默认语义，不做自定义冲突映射 |
@@ -913,7 +913,7 @@ WRAITH_TUI=true NO_TUI=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 - Banner v16.0.0 + 标语 + 快捷键提示
 - `pom.xml` 添加 Lanterna 依赖
 - **安装包分发**（参见 §6.7）：
-  - `mvn clean package` 产出 `target/wraith-cli-1.0-SNAPSHOT.jar`（pom.xml 仍保持 `1.0-SNAPSHOT`，Banner 显示 `16.0.0`）
+  - `mvn clean package` 产出 `target/wraith-1.0-SNAPSHOT.jar`（pom.xml 仍保持 `1.0-SNAPSHOT`，Banner 显示 `16.0.0`）
   - 配置 `maven-assembly-plugin` 或 `maven-shade-plugin` 做**可执行 fat jar**（包含 Lanterna 依赖，用户 `java -jar` 即可运行）
   - 编写 `INSTALL.md`（安装说明：JDK 17 + `java -jar` 两步）
   - GitHub Actions Release workflow 留给后续分发增强
@@ -996,13 +996,13 @@ WRAITH_TUI=true NO_TUI=true java -jar target/wraith-cli-1.0-SNAPSHOT.jar
 ## 13. 完成判定（DoD）
 
 - [x] `com.lyhn.wraith.tui` 包落地，`Main.java` 接入 TUI / CLI 分支
-- [x] `shouldUseTui()` 默认返回 CLI；显式 `WRAITH_TUI=true` / `-Dwraith-cli.tui=true` 才检查 TUI 条件；`NO_TUI=true` 和小终端降级
+- [x] `shouldUseTui()` 默认返回 CLI；显式 `WRAITH_TUI=true` / `-Dwraith.tui=true` 才检查 TUI 条件；`NO_TUI=true` 和小终端降级
 - [x] 三栏布局渲染：文件树 + 对话流 + 状态栏 + 底部输入栏
 - [x] TUI 输入桥接真实 Agent runtime：普通输入走 ReAct，`/plan <任务>` 走 Plan-and-Execute，`/team <任务>` 走 Multi-Agent
 - [x] TUI 支持核心命令：`/clear`、`/context`、`/memory`、`/memory clear`、`/save <事实>`、`/hitl`、`/hitl on`、`/hitl off`、`/config`、`/cancel`、`/exit`
 - [x] `CodeHighlighter` 支持 Java / Python / TypeScript / Bash / JSON / Markdown 等常见语言，`CenterPane` 可渲染高亮代码块
 - [x] HITL 弹窗 TUI 模态框（Lanterna），CLI 模式保留原有 `TerminalHitlHandler`；TUI 不默认批准危险操作
-- [x] 对话历史写入 `~/.wraith-cli/history/session_*.jsonl`
+- [x] 对话历史写入 `~/.wraith/history/session_*.jsonl`
 - [x] `pom.xml` 添加 Lanterna 依赖，`mvn clean package` 产出可执行 fat jar（含 Lanterna 依赖）
 - [x] Banner 升 v16.0.0，标语 `Terminal-First Agent IDE`
 - [x] `mvn test` 全绿（482 tests）
@@ -1033,17 +1033,17 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 | TUI 框架 | **Lanterna 3**（当前 v3.1.3） |
 | 布局 | **三栏**（文件树 25% + 对话流 65% + 状态栏 10%） |
 | 代码高亮引擎 | **自研正则词法着色**（不引入第三方高亮库） |
-| TUI vs CLI | **CLI 为主，TUI opt-in**（`WRAITH_TUI=true` 或 `-Dwraith-cli.tui=true`） |
+| TUI vs CLI | **CLI 为主，TUI opt-in**（`WRAITH_TUI=true` 或 `-Dwraith.tui=true`） |
 | 文件树 Git 状态 | **不做**（留后续期） |
 | TUI 内嵌编辑器 | **不做** |
 | 多窗口 / 分屏 | **本期不做** |
 | 主题 | **深色 / 浅色两种**，Catppuccin 调色板，`config.json` 持久化 |
-| 对话历史 | **新设计 `ConversationSnapshot`**，`~/.wraith-cli/history/` JSONL 持久化 |
+| 对话历史 | **新设计 `ConversationSnapshot`**，`~/.wraith/history/` JSONL 持久化 |
 | HITL 弹窗 | **TUI 模态框**（Lanterna）+ CLI 弹窗（原有 `TerminalHitlHandler`）双路 |
 | 流式输出节流 | **50ms**（`ScheduledExecutorService.scheduleAtFixedRate`） |
 | 代码块折叠阈值 | **20 行** |
 | 对话流保留消息数 | **最近 200 条**（历史归档到 `ConversationStore`） |
-| 文件树忽略规则 | `~/.wraith-cli/filetree-ignore.txt`（每行一个 glob），不存在用内置默认 |
+| 文件树忽略规则 | `~/.wraith/filetree-ignore.txt`（每行一个 glob），不存在用内置默认 |
 | 安装包分发 | **fat jar**（`maven-shade-plugin`），GitHub Actions Release workflow 留作后续增强 |
 | `CodeChunker` 无后缀文件识别 | **内置扩展表**（`Makefile` / `Dockerfile` / `Jenkinsfile` 等） |
 | 第 17 期范围 | **按 ROADMAP 更新为 LSP 诊断注入**，TUI 不碰；图片复制粘贴输入后移第 21 期 |
@@ -1063,7 +1063,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 **前置**：
 - Lanterna 3.1.3 依赖已引入
-- `~/.wraith-cli/config.json` 已存在（第 15 期已有）
+- `~/.wraith/config.json` 已存在（第 15 期已有）
 - `WRAITH_TUI=true`
 - 终端尺寸 ≥ 80×24
 
@@ -1116,7 +1116,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 ### 场景 C：TUI 降级 + HITL 弹窗
 
 ```
-> java -jar target/wraith-cli-1.0-SNAPSHOT.jar
+> java -jar target/wraith-1.0-SNAPSHOT.jar
 [默认 CLI 模式]
 
 > /hitl on

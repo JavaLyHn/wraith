@@ -24,7 +24,7 @@ import java.util.function.Consumer;
 public class McpClient implements AutoCloseable {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int DEFAULT_INITIALIZE_TIMEOUT_SECONDS = 60;
-    private static final String INITIALIZE_TIMEOUT_PROPERTY = "wraith-cli.mcp.initialize.timeout.seconds";
+    private static final String INITIALIZE_TIMEOUT_PROPERTY = "wraith.mcp.initialize.timeout.seconds";
     private static final String INITIALIZE_TIMEOUT_ENV = "WRAITH_MCP_INITIALIZE_TIMEOUT_SECONDS";
 
     private final String serverName;

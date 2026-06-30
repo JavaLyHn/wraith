@@ -59,7 +59,7 @@ public class WebFetcher {
                 .header("Accept", "text/html,application/xhtml+xml,*/*;q=0.9")
                 .header("Accept-Language", "zh-CN,zh;q=0.9,en;q=0.8")
                 .header("User-Agent",
-                        "Mozilla/5.0 (compatible; wraith-cli-web-fetch/1.0)")
+                        "Mozilla/5.0 (compatible; wraith-web-fetch/1.0)")
                 .get()
                 .build();
 

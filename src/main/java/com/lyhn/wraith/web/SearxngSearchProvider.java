@@ -85,7 +85,7 @@ public class SearxngSearchProvider implements SearchProvider {
                 .url(url)
                 .header("Accept", "application/json")
                 // 部分 SearXNG 实例对默认 UA 限流，伪装成普通客户端更稳
-                .header("User-Agent", "wraith-cli-web-search/1.0")
+                .header("User-Agent", "wraith-web-search/1.0")
                 .get()
                 .build();
         log.info("SearXNG search: query={}, topK={}, base={}", query, maxResults, baseUrl);

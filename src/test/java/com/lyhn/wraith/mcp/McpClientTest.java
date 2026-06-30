@@ -176,15 +176,15 @@ class McpClientTest {
 
     @Test
     void initializeTimeoutCanBeOverriddenBySystemProperty() {
-        String previous = System.getProperty("wraith-cli.mcp.initialize.timeout.seconds");
+        String previous = System.getProperty("wraith.mcp.initialize.timeout.seconds");
         try {
-            System.setProperty("wraith-cli.mcp.initialize.timeout.seconds", "17");
+            System.setProperty("wraith.mcp.initialize.timeout.seconds", "17");
             assertEquals(17, McpClient.initializeTimeoutSeconds());
         } finally {
             if (previous == null) {
-                System.clearProperty("wraith-cli.mcp.initialize.timeout.seconds");
+                System.clearProperty("wraith.mcp.initialize.timeout.seconds");
             } else {
-                System.setProperty("wraith-cli.mcp.initialize.timeout.seconds", previous);
+                System.setProperty("wraith.mcp.initialize.timeout.seconds", previous);
             }
         }
     }

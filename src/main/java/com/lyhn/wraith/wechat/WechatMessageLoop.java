@@ -43,7 +43,7 @@ public class WechatMessageLoop {
 
     public void run() {
         if (account == null) {
-            throw new IllegalStateException("未找到微信账号，请先执行 wraith-cli wechat setup");
+            throw new IllegalStateException("未找到微信账号，请先执行 wraith wechat setup");
         }
         try {
             client.notifyStart(account);

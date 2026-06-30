@@ -16,8 +16,8 @@ import java.util.stream.Collectors;
  *
  * 三层目录扫描顺序（后者整体覆盖前者同名 skill）：
  *   1. builtin（jar 内置，由 SkillBuiltinExtractor 解压到 cacheRoot）
- *   2. user：~/.wraith-cli/skills/&lt;name&gt;/SKILL.md
- *   3. project：&lt;projectDir&gt;/.wraith-cli/skills/&lt;name&gt;/SKILL.md
+ *   2. user：~/.wraith/skills/&lt;name&gt;/SKILL.md
+ *   3. project：&lt;projectDir&gt;/.wraith/skills/&lt;name&gt;/SKILL.md
  *
  * 启用状态由 SkillStateStore 提供 disabled 列表过滤。
  */

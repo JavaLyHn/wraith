@@ -19,7 +19,7 @@ class CodeIndexTest {
 
     @Test
     void testIndexCurrentProject() {
-        System.setProperty("wraith-cli.rag.dir", "/tmp/wraith-cli-test-rag-index");
+        System.setProperty("wraith.rag.dir", "/tmp/wraith-test-rag-index");
         CodeIndex indexer = new CodeIndex();
         // 索引测试资源目录
         CodeIndex.IndexResult result = indexer.index("src/test/resources/rag");

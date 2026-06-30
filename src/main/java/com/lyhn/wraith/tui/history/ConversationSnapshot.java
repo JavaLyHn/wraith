@@ -16,7 +16,7 @@ import java.util.stream.StreamSupport;
  * 对话历史快照（TUI 专用）。
  *
  * <p>职责：
- * - 持久化对话历史到 ~/.wraith-cli/history/ 目录
+ * - 持久化对话历史到 ~/.wraith/history/ 目录
  * - 支持按会话 ID 查询、列出、删除
  * - 每个会话一个 JSONL 文件（每行一条消息）
  *
@@ -24,7 +24,7 @@ import java.util.stream.StreamSupport;
  */
 public class ConversationSnapshot {
 
-    private static final Path HISTORY_DIR = Path.of(System.getProperty("user.home"), ".wraith-cli", "history");
+    private static final Path HISTORY_DIR = Path.of(System.getProperty("user.home"), ".wraith", "history");
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final AtomicLong SESSION_SEQUENCE = new AtomicLong();
 

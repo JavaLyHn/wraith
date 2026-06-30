@@ -16,7 +16,7 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class WraithConfig {
 
-    private static final Path CONFIG_DIR = Path.of(System.getProperty("user.home"), ".wraith-cli");
+    private static final Path CONFIG_DIR = Path.of(System.getProperty("user.home"), ".wraith");
     private static final Path CONFIG_FILE = CONFIG_DIR.resolve("config.json");
     private static final ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
 

@@ -143,7 +143,7 @@ MCP server 返回的 `inputSchema` 是 JSON Schema draft-07 子集，但 GLM-5.1
 
 - 有 `command` 字段 → stdio
 - 有 `url` 字段 → Streamable HTTP
-- 用户级 `~/.wraith-cli/mcp.json` + 项目级 `.wraith-cli/mcp.json`，**项目级覆盖用户级**（按 server 名 merge）
+- 用户级 `~/.wraith/mcp.json` + 项目级 `.wraith/mcp.json`，**项目级覆盖用户级**（按 server 名 merge）
 - `${VAR}` 在 args / env / headers 里展开（环境变量 + 内置变量 `${PROJECT_DIR}` `${HOME}`）
 - 缺失的 env 变量**直接报错**，让用户知道哪里没配好（不要静默保留 `${VAR}`）
 
@@ -262,7 +262,7 @@ audit 写入前对 args 做脱敏，避免 token / 凭证泄漏：
 - 环境变量缺失 → **报错**，不静默保留
 - server 启动失败 → **不阻塞** Wraith CLI 启动，标 ERROR 跳过
 - 工具描述截断长度：1000 字符
-- MCP 工具调用日志：写到 `~/.wraith-cli/logs/mcp/<server>.log`（按天滚动，复用 logback 风格但用单独 logger）
+- MCP 工具调用日志：写到 `~/.wraith/logs/mcp/<server>.log`（按天滚动，复用 logback 风格但用单独 logger）
 
 ---
 
@@ -440,7 +440,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 |---|---|
 | Streamable HTTP demo server 用哪个 | Day 6 自己找一个公开免费的；找不到就自起 Python minimal MCP server，写到 README |
 | Windows 支持 | 第一版只测 macOS + Linux，README 明示 Windows 留 follow-up |
-| 配置文件位置 | `~/.wraith-cli/mcp.json`（用户级）+ `.wraith-cli/mcp.json`（项目级，可入 git） |
+| 配置文件位置 | `~/.wraith/mcp.json`（用户级）+ `.wraith/mcp.json`（项目级，可入 git） |
 | 是否引入新依赖 | 不引入。如果中途发现需要，停下来回上游确认 |
 | Banner 升级 | 升 v10.0.0，标语改 `MCP-Enabled Agent CLI` |
 | 工具命名前缀 | `mcp__{server}__{tool}` 完整前缀，跟 Claude Code 对齐 |

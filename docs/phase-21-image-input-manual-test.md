@@ -4,7 +4,7 @@
 
 ## 前置准备
 
-1. 准备测试图片，建议放在 `~/wraith-cli-image-cases/` 下：
+1. 准备测试图片，建议放在 `~/wraith-image-cases/` 下：
    - `shot.png`：正常 PNG，<100KB
    - `large.png`：体积 >5MB（可用 `dd if=/dev/urandom of=large.png bs=1M count=6`，再手动覆盖前几个字节让 MIME 探测出 `image/png`，或直接拿一张高分辨率截图）
    - `not-image.txt`：纯文本文件
@@ -170,7 +170,7 @@ emulate 视口为 7680x4320，打开 https://www.apple.com，take_screenshot
 ```
 
 预期：
-- 自动写入 `~/.wraith-cli/cache/clip-<ts>.png`
+- 自动写入 `~/.wraith/cache/clip-<ts>.png`
 - note 行 `[已附加图片: 剪贴板 (clip-<ts>.png), mimeType=image/png, bytes=…]`
 - LLM 回复明显基于图像内容
 

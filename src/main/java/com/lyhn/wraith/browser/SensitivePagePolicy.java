@@ -29,7 +29,7 @@ public class SensitivePagePolicy {
     private final List<Rule> rules;
 
     public SensitivePagePolicy() {
-        this(Path.of(System.getProperty("user.home"), ".wraith-cli", "sensitive_patterns.txt"));
+        this(Path.of(System.getProperty("user.home"), ".wraith", "sensitive_patterns.txt"));
     }
 
     public SensitivePagePolicy(Path userRulesFile) {

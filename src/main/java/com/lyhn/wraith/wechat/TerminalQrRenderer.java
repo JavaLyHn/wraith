@@ -112,7 +112,7 @@ public final class TerminalQrRenderer {
             return true;
         }
         return System.getenv("WEZTERM_EXECUTABLE") != null
-                || Boolean.getBoolean("wraith-cli.terminal.inlineImages");
+                || Boolean.getBoolean("wraith.terminal.inlineImages");
     }
 
     private static String env(String name) {

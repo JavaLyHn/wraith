@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TerminalMarkdownRendererTest {
     static {
-        System.setProperty("wraith-cli.render.color", "false");
+        System.setProperty("wraith.render.color", "false");
     }
 
     @Test

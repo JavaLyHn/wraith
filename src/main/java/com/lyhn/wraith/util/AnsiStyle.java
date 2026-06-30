@@ -121,7 +121,7 @@ public final class AnsiStyle {
     }
 
     private static boolean determineEnabled() {
-        String property = System.getProperty("wraith-cli.render.color");
+        String property = System.getProperty("wraith.render.color");
         if (property != null && !property.isBlank()) {
             return Boolean.parseBoolean(property);
         }

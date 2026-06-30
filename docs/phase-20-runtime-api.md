@@ -7,14 +7,14 @@
 ### 后台任务
 
 - `DurableTaskManager`：SQLite 持久化任务队列
-- 默认数据库：`~/.wraith-cli/tasks/tasks.db`
+- 默认数据库：`~/.wraith/tasks/tasks.db`
 - 生命周期：
   - `enqueued`
   - `running`
   - `completed`
   - `failed`
   - `canceled`
-- Worker Pool：默认 2 个后台 worker，可用 `WRAITH_TASK_WORKERS` 或 `-Dwraith-cli.task.workers` 覆盖
+- Worker Pool：默认 2 个后台 worker，可用 `WRAITH_TASK_WORKERS` 或 `-Dwraith.task.workers` 覆盖
 - 进程启动时把上次残留的 `running` 任务恢复为 `enqueued`
 - CLI 命令：
   - `/task` 或 `/task list [N]`
@@ -30,13 +30,13 @@
 
 ```bash
 WRAITH_RUNTIME_API_KEY=your_local_api_key \
-java -jar target/wraith-cli-1.0-SNAPSHOT.jar serve --http --port 8080
+java -jar target/wraith-1.0-SNAPSHOT.jar serve --http --port 8080
 ```
 
 安全策略：
 
 - 仅监听 `127.0.0.1`
-- 必须配置 `WRAITH_RUNTIME_API_KEY` 或 `-Dwraith-cli.runtime.api.key`
+- 必须配置 `WRAITH_RUNTIME_API_KEY` 或 `-Dwraith.runtime.api.key`
 - 请求头支持：
   - `Authorization: Bearer <key>`
   - `X-Wraith CLI-API-Key: <key>`
@@ -74,5 +74,5 @@ mvn test -Dtest=DurableTaskManagerTest,RuntimeApiServerTest,CliCommandParserTest
 mvn test -Pquick
 mvn test
 mvn -q clean package -DskipTests
-WRAITH_RUNTIME_API_KEY=test java -jar target/wraith-cli-1.0-SNAPSHOT.jar serve --http --port 0
+WRAITH_RUNTIME_API_KEY=test java -jar target/wraith-1.0-SNAPSHOT.jar serve --http --port 0
 ```

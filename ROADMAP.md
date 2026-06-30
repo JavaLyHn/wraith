@@ -119,7 +119,7 @@
 **HITL 增强（后续补丁，归在本期叙事下）**：
 - `PathGuard` 路径围栏：`read_file` / `write_file` / `list_dir` / `create_project` 强制限定在项目根之内，拦截绝对路径越界、`..` 穿越、符号链接逃逸
 - `CommandGuard` 命令快速拒绝：HITL 之前的 fast-fail 黑名单（sudo / rm -rf 全盘 / mkfs / dd 写裸设备 / fork bomb / curl|sh / find / / chmod 777 / / shutdown），减少 HITL 弹窗骚扰
-- `AuditLog` 操作审计链：危险工具调用按天写 JSONL 到 `~/.wraith-cli/audit/`，含 `outcome (allow|deny|error)` 与 `approver (hitl|policy|none)`
+- `AuditLog` 操作审计链：危险工具调用按天写 JSONL 到 `~/.wraith/audit/`，含 `outcome (allow|deny|error)` 与 `approver (hitl|policy|none)`
 - `write_file` 单文件 5MB 上限
 - CLI 命令：`/policy` 看安全策略状态、`/audit [N]` 看最近审计
 
@@ -172,7 +172,7 @@
 - `AbstractOpenAiCompatibleClient` 基类：共享 SSE 流式解析、请求构建、工具调用增量合并逻辑
 - `GLMClient` / `DeepSeekClient` / `StepClient` / `KimiClient` 瘦子类：仅提供 API URL、模型名、API Key 与 provider 差异
 - 运行时模型切换：`/model glm-5.1` / `/model glm-5v-turbo` 明确切 GLM 模型；`/model deepseek` / `/model step` / `/model kimi` 切 provider 并读取配置里的具体模型
-- 配置持久化：`~/.wraith-cli/config.json` 存储默认模型，支持 `.env` 回退读取 API Key
+- 配置持久化：`~/.wraith/config.json` 存储默认模型，支持 `.env` 回退读取 API Key
 - `LlmClientFactory` 工厂：根据 provider 名称和配置创建对应客户端
 
 **核心知识点**：
@@ -220,7 +220,7 @@
 - `initialize` 握手 + capabilities 协商 + protocol version negotiation
 - `tools/list` + `tools/call`：工具按 `mcp__{server}__{tool}` 前缀注册到 `ToolRegistry`
 - MCP 返回 `content` 数组扁平化（text 拼接，image / resource 给 fallback 提示）
-- 配置文件：`~/.wraith-cli/mcp.json`（用户级）+ `.wraith-cli/mcp.json`（项目级，可入 git），格式与 Claude Code `claude_desktop_config.json` 兼容
+- 配置文件：`~/.wraith/mcp.json`（用户级）+ `.wraith/mcp.json`（项目级，可入 git），格式与 Claude Code `claude_desktop_config.json` 兼容
 - 启动时 eager 并行启动所有 server（复用第 7 期并行调度）
 - **默认开启**，`/mcp disable <name>` 关单个
 - HITL + AuditLog 集成：MCP 工具默认走 HITL，audit `tool` 字段带 `mcp__` 前缀
@@ -316,11 +316,11 @@
 **功能迭代**（详细开发任务见 `docs/phase-13-chrome-devtools-mcp.md`）：
 
 - 接入 Google 官方 `chrome-devtools-mcp@latest`（28 个工具：导航 / 输入 / 调试 / 网络 / 性能 / 模拟 / 扩展 / 内存）
-- **默认 enabled**：`~/.wraith-cli/mcp.json` 不存在时启动自动创建模板，含 chrome-devtools 条目
+- **默认 enabled**：`~/.wraith/mcp.json` 不存在时启动自动创建模板，含 chrome-devtools 条目
 - `image` content 处理走**路线 B**：fallback 文案引导 LLM 优先用 `take_snapshot`（DOM 文本快照）而非 `take_screenshot`；不做真 图片复制粘贴输入（拆到第 21 期）
 - HITL「全部放行」改为 **server 维度**：用户对 chrome-devtools 选 `a → server` 后，连续浏览器操作只需确认一次（`approvedAllByServer` 集合 + 子菜单）
 - `Agent` / `PlanExecuteAgent` / `SubAgent` 系统提示词加「web_fetch vs 浏览器 MCP」决策表，明示微信公众号 / 知乎 / 推特等典型 web_fetch 失败站点直接走浏览器
-- `McpClient.initialize` 超时 30s → 60s（chrome-devtools 首次启动需 npx 拉包 + Chrome 冷启 ≈ 20s+），可被 `wraith-cli.mcp.initialize.timeout.seconds` 覆盖
+- `McpClient.initialize` 超时 30s → 60s（chrome-devtools 首次启动需 npx 拉包 + Chrome 冷启 ≈ 20s+），可被 `wraith.mcp.initialize.timeout.seconds` 覆盖
 - `McpServerManager.startAll` 启动期间另起 status printer 线程，每 5s 打印未就绪 server 等待时长
 - 必跑端到端测试：微信公众号文章（`https://mp.weixin.qq.com/s/RB7kF_BbsJZ5_Hmu9PxWdg`），验证 web_fetch 失败 → LLM 自动 fallback 到浏览器 → take_snapshot 拿正文
 
@@ -373,12 +373,12 @@
 **目标**：做出 Wraith CLI 自己的 Skill 加载机制，把零散的工具与决策指引打包成可复用单元，并以 web-access 作为首个落地 Skill
 
 **功能迭代**（详细开发任务见 `docs/phase-15-skill-system.md`）：
-- Skill 加载机制：三层目录扫描（jar 内置 / 用户级 `~/.wraith-cli/skills/` / 项目级 `<project>/.wraith-cli/skills/`），按 name 整体覆盖，frontmatter 走手写 YAML 子集解析（不引 SnakeYAML）
+- Skill 加载机制：三层目录扫描（jar 内置 / 用户级 `~/.wraith/skills/` / 项目级 `<project>/.wraith/skills/`），按 name 整体覆盖，frontmatter 走手写 YAML 子集解析（不引 SnakeYAML）
 - 启动期把启用 skill 的 `name` + `description` 注入 system prompt 索引段（单 description ≤ 500 codepoint，启用上限 20 个，索引段 ≤ 4KB）
 - 内置工具 `load_skill(name)`：LLM 主动调用以把 SKILL.md 正文写入 `SkillContextBuffer`，下一轮 user message 自动前置注入（lazy 展开，节省 token）
 - `SkillContextBuffer`：一次性消费、最多保留 3 个 skill body、`/clear` 可 reset
 - 内置 web-access Skill：决策手册（浏览哲学四步法 + 工具选择表 + 浏览器优先级 + Jina 兜底说明）+ 6 个站点经验文件（mp.weixin / zhuanlan.zhihu / x.com / xiaohongshu / github / juejin）+ cdp-cheatsheet
-- 启动期 `SkillBuiltinExtractor` 把 jar 内置 skill 解压到 `~/.wraith-cli/skills-cache/`，按 `.version` 文件控制重建
+- 启动期 `SkillBuiltinExtractor` 把 jar 内置 skill 解压到 `~/.wraith/skills-cache/`，按 `.version` 文件控制重建
 - CLI 命令：`/skill` / `/skill list` / `/skill show <name>` / `/skill on <name>` / `/skill off <name>` / `/skill reload`
 - Jina Reader 集成：**只**在 web-access SKILL.md 写入「web_fetch 失败可让 execute_command 调 r.jina.ai」的提示，**不**改 `web_fetch` 工具内部链路（保持第 9 期纯本地约定）
 - Skill 与 HITL 协同：Skill 内调用 `execute_command` / 浏览器 MCP 等危险工具仍走 HITL 审批，沿用 `execute_command` 工具维度全放行；不给 Skill 单独审批维度
@@ -403,7 +403,7 @@
 - 终端TUI界面（Lanterna/JLine）
 - 文件树浏览
 - 代码高亮显示
-- 对话历史可视化（`~/.wraith-cli/history/session_*.jsonl`）
+- 对话历史可视化（`~/.wraith/history/session_*.jsonl`）
 - 配置文件管理（TUI `/config` 面板）
 - TUI 输入桥接真实 ReAct / Plan / Team 执行链
 - TUI HITL 模态审批（批准 / 拒绝 / 跳过）
@@ -461,7 +461,7 @@
 **目标**：Agent 每次 turn 前后自动做 workspace 快照，用户可以一键回滚到任意 turn 之前的状态，不污染用户的 `.git` 历史。对标 DeepSeek TUI 的 `snapshot/` 系统。
 
 **功能迭代**：
-- `SideGitManager`：在 `~/.wraith-cli/snapshots/<project_hash>/<worktree_hash>/.git` 维护独立 side-git 仓库，通过 JGit 纯 Java 实现，与用户的工作区 `.git` 完全隔离
+- `SideGitManager`：在 `~/.wraith/snapshots/<project_hash>/<worktree_hash>/.git` 维护独立 side-git 仓库，通过 JGit 纯 Java 实现，与用户的工作区 `.git` 完全隔离
 - `preTurnSnapshot()`：每个 turn 开始前，对 workspace 执行 JGit add/commit 并标记 `"pre-turn <turn_id>"`；MVP 采用同步 pre 快照，确保 Agent 改文件前已经保存基线
 - `postTurnSnapshot()`：turn 结束后异步执行第二次快照，commit message 标记 `"post-turn <turn_id>"`
 - `/restore <N>` 命令：从最近 N 个 turn 的 pre-turn 快照中恢复文件到工作区，不改变用户 `.git` 和对话历史
@@ -484,7 +484,7 @@
 
 **前置依赖**：第 1–16 期全链路（所有 system prompt 的累积）
 
-**当前状态**：MVP 已落地。ReAct、Plan task executor、Multi-Agent 三角色、Planner 已接入 `PromptAssembler`，内置资源位于 `src/main/resources/prompts/`，覆盖路径支持 `~/.wraith-cli/prompts/...` 与 `.wraith-cli/prompts/...`。
+**当前状态**：MVP 已落地。ReAct、Plan task executor、Multi-Agent 三角色、Planner 已接入 `PromptAssembler`，内置资源位于 `src/main/resources/prompts/`，覆盖路径支持 `~/.wraith/prompts/...` 与 `.wraith/prompts/...`。
 
 **目标**：把分散在 `Agent.java` / `PlanExecuteAgent.java` / `SubAgent.java` 三处的硬编码 system prompt 重构为编译时嵌入的 Markdown 分层，支持用户级覆盖，让 prompt 调优从"改 Java 源码 + 重编译"变成"改 Markdown 文件"。
 
@@ -495,7 +495,7 @@
   - `approvals/suggest.md` / `approvals/auto.md` / `approvals/never.md`：审批策略
   - `personalities/calm.md`：语调（保留现有 `AGENTS.md` 中的 Personality 规范）
 - `PromptAssembler`：按固定顺序组装（base → personality → mode → approval → project_context → skills → context_mgmt → handoff），遵循"volatile content last"原则以最大化 KV prefix cache 命中率
-- 用户级覆盖：`~/.wraith-cli/prompts/base.md` 可整体替换内置 base.md；`~/.wraith-cli/prompts/modes/agent.md` 可覆盖特定模式；项目级 `.wraith-cli/prompts/...` 优先级更高
+- 用户级覆盖：`~/.wraith/prompts/base.md` 可整体替换内置 base.md；`~/.wraith/prompts/modes/agent.md` 可覆盖特定模式；项目级 `.wraith/prompts/...` 优先级更高
 - 启动时校验：必含 `## Language` section（保证 reasoning_content 语言跟随）
 - 兼容旧有 API：`Agent.java` / `PlanExecuteAgent.java` / `SubAgent.java` / `Planner.java` 不再手写运行模式 prompt，改为调 `PromptAssembler.assemble(mode, context)`
 - 自带 prompt 质量审计模板（参考 DeepSeek TUI `PROMPT_ANALYSIS.md`）：每次改 prompt 都应该写 Gap 分析
@@ -531,7 +531,7 @@
 - 持久化恢复：进程重启后未完成的任务自动重入队
 
 **Runtime API**：
-- `RuntimeApiServer`：嵌入式 HTTP/SSE 服务端（`wraith-cli serve --http --port 8080`），基于已有的 OkHttp / Javalin 或 Spring Boot 内嵌
+- `RuntimeApiServer`：嵌入式 HTTP/SSE 服务端（`wraith serve --http --port 8080`），基于已有的 OkHttp / Javalin 或 Spring Boot 内嵌
 - 兼容 OpenAI Assistants API 的端点：
   - `POST /v1/threads`：创建对话线程
   - `POST /v1/threads/{id}/turns`：发起一轮 Agent 交互
@@ -548,13 +548,13 @@
 - OpenAI Assistants API 兼容层设计
 
 **当前 MVP 已落地**：
-- `DurableTaskManager`：SQLite 后台任务队列，默认 `~/.wraith-cli/tasks/tasks.db`
+- `DurableTaskManager`：SQLite 后台任务队列，默认 `~/.wraith/tasks/tasks.db`
 - `/task`、`/task add`、`/task cancel`、`/task log` CLI 闭环
 - 进程启动时将残留 `running` 任务恢复为 `enqueued`
-- Worker Pool 默认 2，可用 `WRAITH_TASK_WORKERS` / `-Dwraith-cli.task.workers` 覆盖
+- Worker Pool 默认 2，可用 `WRAITH_TASK_WORKERS` / `-Dwraith.task.workers` 覆盖
 - `RuntimeApiServer`：基于 JDK `HttpServer`，仅监听 `127.0.0.1`
 - `RuntimeThreadStore`：SQLite 保存 thread 与 event 时间线
-- Runtime API 强制 `WRAITH_RUNTIME_API_KEY` / `-Dwraith-cli.runtime.api.key`
+- Runtime API 强制 `WRAITH_RUNTIME_API_KEY` / `-Dwraith.runtime.api.key`
 - 详细实现文档：`docs/phase-20-runtime-api.md`
 
 **教程标题候选**：《不想守在终端前？后台任务 + HTTP API，Agent 可以在后台跑》

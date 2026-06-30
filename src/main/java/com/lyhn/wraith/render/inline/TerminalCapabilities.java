@@ -41,7 +41,7 @@ public final class TerminalCapabilities {
         if (Boolean.parseBoolean(System.getenv("WRAITH_NO_STATUSBAR"))) {
             return false;
         }
-        if (Boolean.parseBoolean(System.getProperty("wraith-cli.no.statusbar"))) {
+        if (Boolean.parseBoolean(System.getProperty("wraith.no.statusbar"))) {
             return false;
         }
         Size size = safeSize(terminal);

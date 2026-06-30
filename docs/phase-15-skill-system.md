@@ -27,7 +27,7 @@
 最终交付：
 
 - 通用 Skill 加载器：扫描三层目录（jar 内置 / 用户级 / 项目级），解析 frontmatter 与正文
-- Skill 启用状态持久化：`~/.wraith-cli/skills.json` 存 disabled 列表（默认全启用）
+- Skill 启用状态持久化：`~/.wraith/skills.json` 存 disabled 列表（默认全启用）
 - 启动期把所有启用 Skill 的 `name` + `description` 注入三处 Agent 系统提示词
 - 新增内置工具 `load_skill(name)`：LLM 主动调用以把 SKILL.md 正文注入下一轮上下文（lazy 展开）
 - CLI 命令组 `/skill`：`list` / `show <name>` / `on <name>` / `off <name>` / `reload`
@@ -55,8 +55,8 @@
 | 维度 | 定义 |
 |---|---|
 | 形态 | 一个目录，根文件必须是 `SKILL.md` |
-| 加载顺序 | jar 内置 < 用户级 `~/.wraith-cli/skills/` < 项目级 `<project>/.wraith-cli/skills/`（同名后者覆盖前者） |
-| 启用控制 | 默认启用；`~/.wraith-cli/skills.json` 的 `disabled` 列表关掉 |
+| 加载顺序 | jar 内置 < 用户级 `~/.wraith/skills/` < 项目级 `<project>/.wraith/skills/`（同名后者覆盖前者） |
+| 启用控制 | 默认启用；`~/.wraith/skills.json` 的 `disabled` 列表关掉 |
 | 系统提示词占位 | 启用后只把 `name` + `description` 进 system prompt（"轻量索引"） |
 | 完整指令展开 | LLM 调 `load_skill("name")` 后，Wraith CLI 把 SKILL.md 正文（去 frontmatter）拼到 next user message 的开头 |
 
@@ -123,8 +123,8 @@ tags: [web, browser, fetch]
 三层目录扫描顺序（后者覆盖前者同名 skill）：
 
 1. **内置**：jar 内 `src/main/resources/skills/<name>/SKILL.md`
-2. **用户级**：`~/.wraith-cli/skills/<name>/SKILL.md`
-3. **项目级**：`<project>/.wraith-cli/skills/<name>/SKILL.md`
+2. **用户级**：`~/.wraith/skills/<name>/SKILL.md`
+3. **项目级**：`<project>/.wraith/skills/<name>/SKILL.md`
 
 实现要点：
 - jar 内置用 `getResourceAsStream`，把 `SKILL.md` 拷到内存即可（不解压到磁盘）
@@ -149,7 +149,7 @@ frontmatter 用 SnakeYAML（项目已经依赖 Jackson + 不依赖 SnakeYAML，*
 
 ### 3.3 启用状态持久化
 
-`~/.wraith-cli/skills.json`：
+`~/.wraith/skills.json`：
 
 ```json
 {
@@ -300,7 +300,7 @@ Skill 内 SKILL.md 提示 LLM 调用危险工具时（如 `execute_command "curl
 ```
 📚 Skills 加载（3 个）...
    ✓ web-access      builtin   description 88 字符
-   ✓ wraith-cli-internal user      description 124 字符
+   ✓ wraith-internal user      description 124 字符
    ✓ project-tweaks  project   description 67 字符
    3/3 启用，索引段共 0.6KB
 ```
@@ -312,7 +312,7 @@ Skill 内 SKILL.md 提示 LLM 调用危险工具时（如 `execute_command "curl
 🔄 重新扫描 skill 目录...
 📚 Skills 加载（4 个）...
    ✓ web-access      builtin   description 88 字符
-   ✓ wraith-cli-internal user      description 124 字符
+   ✓ wraith-internal user      description 124 字符
    ✓ project-tweaks  project   description 67 字符
    ✓ new-one         user      description 102 字符
    4/4 启用，索引段共 0.8KB
@@ -323,7 +323,7 @@ Skill 内 SKILL.md 提示 LLM 调用危险工具时（如 `execute_command "curl
 
 ## 4. 配置文件改动
 
-### 4.1 `~/.wraith-cli/skills.json`
+### 4.1 `~/.wraith/skills.json`
 
 启动期检测：不存在则视为空，**不**主动创建（与 sensitive_patterns.txt 一致策略）。
 
@@ -343,9 +343,9 @@ Skill 内 SKILL.md 提示 LLM 调用危险工具时（如 `execute_command "curl
 # ========== 第 15 期：Skill 系统 ==========
 # Skill 加载位置（按优先级，后者覆盖前者）：
 #   1. jar 内置（resources/skills/）
-#   2. 用户级：~/.wraith-cli/skills/<name>/SKILL.md
-#   3. 项目级：<project>/.wraith-cli/skills/<name>/SKILL.md
-# 禁用列表持久化：~/.wraith-cli/skills.json（{"disabled": ["name1", ...]}）
+#   2. 用户级：~/.wraith/skills/<name>/SKILL.md
+#   3. 项目级：<project>/.wraith/skills/<name>/SKILL.md
+# 禁用列表持久化：~/.wraith/skills.json（{"disabled": ["name1", ...]}）
 # 内置 web-access skill 包含 6 个 site-patterns 示例，可在 references/site-patterns/ 下补充自己的
 ```
 
@@ -366,10 +366,10 @@ src/main/resources/skills/
             └── zhuanlan.zhihu.com.md
 ```
 
-注意：`references/` 内的文件在 jar 内是只读 resources，LLM 通过 `read_file` 读取时需要走特殊路径——本期约定 **`references/` 文件由用户级或项目级 skill 提供**，jar 内置 skill 的 references 在启动期解压到 `~/.wraith-cli/skills-cache/<name>/references/`，后续 LLM 用绝对路径读取。
+注意：`references/` 内的文件在 jar 内是只读 resources，LLM 通过 `read_file` 读取时需要走特殊路径——本期约定 **`references/` 文件由用户级或项目级 skill 提供**，jar 内置 skill 的 references 在启动期解压到 `~/.wraith/skills-cache/<name>/references/`，后续 LLM 用绝对路径读取。
 
 解压策略：
-- 启动期检测 `~/.wraith-cli/skills-cache/<name>/.version` 与 jar 内置版本号是否一致
+- 启动期检测 `~/.wraith/skills-cache/<name>/.version` 与 jar 内置版本号是否一致
 - 不一致或不存在 → 重写整个 cache 目录
 - 一致 → 跳过（避免每次启动 IO）
 - SKILL.md 在 `Agent` 启动注入索引时由 jar 内 `getResourceAsStream` 读，不依赖解压
@@ -387,8 +387,8 @@ src/main/resources/skills/
 | `src/main/java/com/lyhn/wraith/skill/SkillRegistry.java` | 单例（由 Main 注入），扫描三层目录、合并、过滤 disabled、对外提供 `enabledSkills()` / `findSkill(name)` / `reload()` |
 | `src/main/java/com/lyhn/wraith/skill/SkillIndexFormatter.java` | 把 enabled skills 渲染成 system prompt 索引段（§3.8 模板，含 token 预算硬上限） |
 | `src/main/java/com/lyhn/wraith/skill/SkillContextBuffer.java` | per-session 内存 buffer（§3.6），提供 push(name, body) / drain() |
-| `src/main/java/com/lyhn/wraith/skill/SkillBuiltinExtractor.java` | 启动期把 jar 内 `resources/skills/<name>/references/` 解压到 `~/.wraith-cli/skills-cache/<name>/`（§4.3） |
-| `src/main/java/com/lyhn/wraith/skill/SkillStateStore.java` | 读写 `~/.wraith-cli/skills.json` |
+| `src/main/java/com/lyhn/wraith/skill/SkillBuiltinExtractor.java` | 启动期把 jar 内 `resources/skills/<name>/references/` 解压到 `~/.wraith/skills-cache/<name>/`（§4.3） |
+| `src/main/java/com/lyhn/wraith/skill/SkillStateStore.java` | 读写 `~/.wraith/skills.json` |
 | `src/main/java/com/lyhn/wraith/skill/LoadSkillTool.java` | 内置工具实现，调用时往 SkillContextBuffer 写入 |
 
 ### 5.2 修改类
@@ -421,7 +421,7 @@ src/main/resources/skills/
 
 📚 Skills（3 个）
   ● web-access       builtin   v1.0.0  所有联网操作必须通过此 skill 处理...
-  ● wraith-cli-internal  user      v0.2.0  Wraith CLI 项目内部约定与文档导航...
+  ● wraith-internal  user      v0.2.0  Wraith CLI 项目内部约定与文档导航...
   ○ verbose-debug    project   v0.1.0  在每个工具调用前打印决策原因...
 
 提示：
@@ -437,7 +437,7 @@ src/main/resources/skills/
 
 📖 Skill: web-access (builtin, v1.0.0)
   路径: jar:resources/skills/web-access/SKILL.md
-  references/: ~/.wraith-cli/skills-cache/web-access/references/ (6 个文件)
+  references/: ~/.wraith/skills-cache/web-access/references/ (6 个文件)
 
 ---
 name: web-access
@@ -477,7 +477,7 @@ version: "1.0.0"
 > /skill off verbose-debug
 
 ⏸️ 已禁用 skill: verbose-debug
-   下一轮 LLM 调用生效；已写入 ~/.wraith-cli/skills.json
+   下一轮 LLM 调用生效；已写入 ~/.wraith/skills.json
 ```
 
 ---
@@ -488,7 +488,7 @@ version: "1.0.0"
 
 前置：
 - jar 内置 `web-access`（v1.0.0）
-- 用户级 `~/.wraith-cli/skills/web-access/SKILL.md`（v9.9.9，description 改成"用户版"）
+- 用户级 `~/.wraith/skills/web-access/SKILL.md`（v9.9.9，description 改成"用户版"）
 - 不放项目级
 
 ```
@@ -497,7 +497,7 @@ version: "1.0.0"
 
 **期望**：只显示一个 `web-access`，version `v9.9.9`，来源 `user`。
 
-再加项目级 `<project>/.wraith-cli/skills/web-access/SKILL.md`（v0.0.1）：
+再加项目级 `<project>/.wraith/skills/web-access/SKILL.md`（v0.0.1）：
 
 ```
 > /skill reload
@@ -539,13 +539,13 @@ version: "1.0.0"
 
 ### 7.4 Skill 间不影响
 
-启用两个 skill：web-access 和 wraith-cli-internal。让 LLM 完成跨域任务：
+启用两个 skill：web-access 和 wraith-internal。让 LLM 完成跨域任务：
 
 ```
 > 看下 Wraith CLI 项目的 ROADMAP.md，再去网上搜一下 LangGraph4J 最新版本
 ```
 
-**期望**：LLM 加载 wraith-cli-internal 处理 ROADMAP，加载 web-access 处理搜索；两个 skill body 都进 user message（按调用顺序拼接）。
+**期望**：LLM 加载 wraith-internal 处理 ROADMAP，加载 web-access 处理搜索；两个 skill body 都进 user message（按调用顺序拼接）。
 
 ### 7.5 `/skill off` 立即生效
 
@@ -587,9 +587,9 @@ body
 
 ### 7.8 启动期 builtin extractor
 
-清空 `~/.wraith-cli/skills-cache/`，启动 Wraith CLI：
+清空 `~/.wraith/skills-cache/`，启动 Wraith CLI：
 
-**期望**：自动重建 `~/.wraith-cli/skills-cache/web-access/references/`，6 个 site-patterns 文件齐全，`.version` 文件存在。
+**期望**：自动重建 `~/.wraith/skills-cache/web-access/references/`，6 个 site-patterns 文件齐全，`.version` 文件存在。
 
 ### 7.9 Jina Reader 走 execute_command 路径
 
@@ -626,7 +626,7 @@ body
 3. **`load_skill` 描述写不好 LLM 不主动调**：description 字段必须明确写「当 system prompt 里某个 skill 的 description 看起来匹配时调用我」。Day 5 端到端必测 LLM 真的会主动调。如果 GLM-5.1 / DeepSeek V4 不主动调，回 Day 3 重写工具 description。
 4. **SkillContextBuffer 与流式输出竞态**：LLM 流式返回 tool_calls 时，Wraith CLI 还没 flush 完上一轮 reasoning，就收到新一轮 user message——buffer drain 时机要在**新 user message 构造时**而不是上一轮 LLM 完成时，避免提前清空。
 5. **三层目录覆盖语义**：用户级 SKILL.md 必须**完整覆盖**内置版（不是字段级 merge），避免出现"用户改了 description 但 references 还指向 builtin 缓存路径"的诡异状态。
-6. **builtin extractor 与多用户**：如果系统多用户共用 `~/.wraith-cli`，extractor 写入要带文件锁。本期接受单用户假设，文档明示。
+6. **builtin extractor 与多用户**：如果系统多用户共用 `~/.wraith`，extractor 写入要带文件锁。本期接受单用户假设，文档明示。
 7. **AgentOrchestrator 多个 SubAgent 同时 load_skill**：Worker × 2 同时各自调 load_skill 写入各自 buffer，无冲突；但 Reviewer 角色不应继承 Worker 的 buffer——三个角色各自独立 buffer。
 8. **`/skill reload` 期间正在跑的 turn**：当前轮 system prompt 已发出，reload 不影响；测试要明确这一点而不是死锁等当前轮结束。
 9. **description 在多语言下截断的字符边界**：用 `String.length()` 截断会切坏中文/emoji。改用 codepoint 计数或字符位置 `Character.isHighSurrogate` 检查。
@@ -793,13 +793,13 @@ body
 - [ ] `/skill list` / `show <name>` / `on <name>` / `off <name>` / `reload` 五个子命令实现
 - [ ] frontmatter 解析容错（未知字段忽略、嵌套对象报错但不阻塞）
 - [ ] 三层目录扫描 + 优先级覆盖 + name 字典序处理
-- [ ] `~/.wraith-cli/skills.json` 读写持久化
+- [ ] `~/.wraith/skills.json` 读写持久化
 - [ ] `load_skill` 内置工具注册，写入 SkillContextBuffer
 - [ ] 三处 Agent system prompt 加 skill 索引段（含 token 预算）
 - [ ] 三处 Agent user message 构造时 drain buffer 并前置
 - [ ] AgentOrchestrator 给每个 SubAgent 分配独立 buffer
 - [ ] jar 内置 web-access skill：SKILL.md（决策手册）+ 6 个 site-patterns + cdp-cheatsheet.md
-- [ ] SkillBuiltinExtractor 启动期解压 references/ 到 `~/.wraith-cli/skills-cache/`
+- [ ] SkillBuiltinExtractor 启动期解压 references/ 到 `~/.wraith/skills-cache/`
 - [ ] description 截断（codepoint 边界）+ enabled 上限 20 + 索引段 4KB 上限
 - [ ] `mvn test` 全绿（含原有用例 + 新增）
 - [ ] §9 Day 5 手测 10 条全部跑过，结果写入 commit message
@@ -832,7 +832,7 @@ Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 | 索引段位置 | system prompt 末尾，独立段 |
 | 索引段上限 | 单 description 500 codepoint，启用 20 个，总 4KB |
 | 加载位置 | jar 内置 < 用户级 < 项目级，整体覆盖（非字段 merge） |
-| 启用状态持久化 | `~/.wraith-cli/skills.json` 的 disabled 列表 |
+| 启用状态持久化 | `~/.wraith/skills.json` 的 disabled 列表 |
 | frontmatter 格式 | YAML 子集（手写解析），不依赖 SnakeYAML |
 | 必填字段 | `name`、`description` |
 | 选填字段 | `version`、`author`、`tags` |

@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit;
 public final class ClipboardImage {
 
     private static final Path DEFAULT_CACHE_DIR = Path.of(
-            System.getProperty("user.home"), ".wraith-cli", "cache");
+            System.getProperty("user.home"), ".wraith", "cache");
 
     private ClipboardImage() {}
 

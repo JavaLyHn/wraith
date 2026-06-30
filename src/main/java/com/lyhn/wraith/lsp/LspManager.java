@@ -139,7 +139,7 @@ public class LspManager {
     }
 
     private boolean enabled() {
-        String raw = System.getProperty("wraith-cli.lsp.enabled");
+        String raw = System.getProperty("wraith.lsp.enabled");
         if (raw == null || raw.isBlank()) {
             raw = System.getenv("WRAITH_LSP_ENABLED");
         }

@@ -25,7 +25,7 @@
 src/
 demo/
 docs/
-.wraith-cli/
+.wraith/
 .qoder/
 target/
 ```

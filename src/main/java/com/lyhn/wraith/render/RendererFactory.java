@@ -9,7 +9,7 @@ import org.jline.terminal.Terminal;
  *
  * <p>选型规则：
  * <ul>
- *   <li>{@code -Dwraith-cli.renderer} > {@code WRAITH_RENDERER} 环境变量 > 默认 inline</li>
+ *   <li>{@code -Dwraith.renderer} > {@code WRAITH_RENDERER} 环境变量 > 默认 inline</li>
  *   <li>{@code lanterna} → Lanterna 全屏 TUI（由 {@code TuiBootstrap} 在 CLI 循环前接管）</li>
  *   <li>{@code plain} → {@link PlainRenderer}</li>
  *   <li>{@code inline}（默认）→ Inline 流式（Day 2 落地，先返回 plain 占位）</li>
@@ -30,7 +30,7 @@ public final class RendererFactory {
     }
 
     public static Mode resolveMode() {
-        String prop = System.getProperty("wraith-cli.renderer");
+        String prop = System.getProperty("wraith.renderer");
         if (prop != null && !prop.isBlank()) {
             return parse(prop);
         }

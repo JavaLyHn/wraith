@@ -119,14 +119,14 @@ import java.util.regex.Pattern;
 public class Main {
     private static final String VERSION = "16.1.0";
     private static final String ENV_FILE = ".env";
-    private static final String LOG_DIR_PROPERTY = "wraith-cli.log.dir";
-    private static final String LOG_LEVEL_PROPERTY = "wraith-cli.log.level";
-    private static final String LOG_MAX_HISTORY_PROPERTY = "wraith-cli.log.maxHistory";
-    private static final String LOG_MAX_FILE_SIZE_PROPERTY = "wraith-cli.log.maxFileSize";
-    private static final String LOG_TOTAL_SIZE_CAP_PROPERTY = "wraith-cli.log.totalSizeCap";
-    private static final String HISTORY_FILE_PROPERTY = "wraith-cli.history.file";
-    private static final String HISTORY_SIZE_PROPERTY = "wraith-cli.history.size";
-    private static final String HISTORY_FILE_SIZE_PROPERTY = "wraith-cli.history.fileSize";
+    private static final String LOG_DIR_PROPERTY = "wraith.log.dir";
+    private static final String LOG_LEVEL_PROPERTY = "wraith.log.level";
+    private static final String LOG_MAX_HISTORY_PROPERTY = "wraith.log.maxHistory";
+    private static final String LOG_MAX_FILE_SIZE_PROPERTY = "wraith.log.maxFileSize";
+    private static final String LOG_TOTAL_SIZE_CAP_PROPERTY = "wraith.log.totalSizeCap";
+    private static final String HISTORY_FILE_PROPERTY = "wraith.history.file";
+    private static final String HISTORY_SIZE_PROPERTY = "wraith.history.size";
+    private static final String HISTORY_FILE_SIZE_PROPERTY = "wraith.history.fileSize";
     private static final String DEFAULT_HISTORY_FILE_NAME = "input.history";
     private static final String BRACKETED_PASTE_BEGIN = "[200~";
     private static final String BRACKETED_PASTE_END = "\u001b[201~";
@@ -305,7 +305,7 @@ public class Main {
                 }
                 mcpServerManager.loadConfiguredServers();
                 mcpServerManager.startAll(ui, mcpStartupWait());
-                Runtime.getRuntime().addShutdownHook(new Thread(mcpServerManager::close, "wraith-cli-mcp-shutdown"));
+                Runtime.getRuntime().addShutdownHook(new Thread(mcpServerManager::close, "wraith-mcp-shutdown"));
             } catch (Exception e) {
                 startupNote = "MCP 初始化失败: " + e.getMessage();
             }
@@ -314,15 +314,15 @@ public class Main {
 
             // === Skill 系统初始化 ===
             Path home = Path.of(System.getProperty("user.home"));
-            Path skillsCacheDir = home.resolve(".wraith-cli/skills-cache");
-            Path userSkillsDir = home.resolve(".wraith-cli/skills");
-            Path projectSkillsDir = Path.of(".wraith-cli/skills").toAbsolutePath();
+            Path skillsCacheDir = home.resolve(".wraith/skills-cache");
+            Path userSkillsDir = home.resolve(".wraith/skills");
+            Path projectSkillsDir = Path.of(".wraith/skills").toAbsolutePath();
             try {
                 new com.lyhn.wraith.skill.SkillBuiltinExtractor(skillsCacheDir).extractAll();
             } catch (Exception e) {
                 startupNote = appendStartupNote(startupNote, "内置 skill 解压失败: " + e.getMessage());
             }
-            com.lyhn.wraith.skill.SkillStateStore skillStateStore = new com.lyhn.wraith.skill.SkillStateStore(home.resolve(".wraith-cli/skills.json"));
+            com.lyhn.wraith.skill.SkillStateStore skillStateStore = new com.lyhn.wraith.skill.SkillStateStore(home.resolve(".wraith/skills.json"));
             com.lyhn.wraith.skill.SkillRegistry skillRegistry = new com.lyhn.wraith.skill.SkillRegistry(
                     skillsCacheDir, userSkillsDir, projectSkillsDir, skillStateStore);
             skillRegistry.reload();
@@ -337,9 +337,9 @@ public class Main {
             reactAgent.setSkillContextBuffer(skillContextBuffer);
             DurableTaskManager taskManager = openTaskManager(llmClientRef);
             taskManager.start();
-            Runtime.getRuntime().addShutdownHook(new Thread(taskManager::close, "wraith-cli-task-shutdown"));
+            Runtime.getRuntime().addShutdownHook(new Thread(taskManager::close, "wraith-task-shutdown"));
             WechatRuntimeController wechatRuntime = new WechatRuntimeController(renderer);
-            Runtime.getRuntime().addShutdownHook(new Thread(wechatRuntime::stop, "wraith-cli-wechat-shutdown"));
+            Runtime.getRuntime().addShutdownHook(new Thread(wechatRuntime::stop, "wraith-wechat-shutdown"));
             renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));
             StartupScreenInfo startupScreenInfo = startupScreenInfo(llmClient, mcpServerManager, skillRegistry, startupNote);
             if (renderer instanceof InlineRenderer inline) {
@@ -1080,7 +1080,7 @@ public class Main {
             Runtime.getRuntime().addShutdownHook(new Thread(() -> {
                 server.close();
                 store.close();
-            }, "wraith-cli-runtime-api-shutdown"));
+            }, "wraith-runtime-api-shutdown"));
             server.start();
             System.out.println("✅ Wraith CLI Runtime API 已启动: http://127.0.0.1:" + server.port());
             System.out.println("   认证: Authorization: Bearer <WRAITH_RUNTIME_API_KEY>");
@@ -1248,7 +1248,7 @@ public class Main {
                 } catch (Exception e) {
                     System.err.println("微信通道已退出: " + e.getMessage());
                 }
-            }, "wraith-cli-wechat-channel");
+            }, "wraith-wechat-channel");
             this.thread.setDaemon(true);
             this.thread.start();
             return "微信通道已启动，账号: " + account.accountId();
@@ -1309,7 +1309,7 @@ public class Main {
     private static String runWithCancelSupport(Terminal terminal, PrintStream out, Callable<String> task) {
         CancellationToken token = CancellationContext.startRun();
         ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
-            Thread thread = new Thread(r, "wraith-cli-agent-runner");
+            Thread thread = new Thread(r, "wraith-agent-runner");
             thread.setDaemon(true);
             return thread;
         });
@@ -1483,7 +1483,7 @@ public class Main {
     }
 
     private static int terminalColumns() {
-        String configured = System.getProperty("wraith-cli.render.columns");
+        String configured = System.getProperty("wraith.render.columns");
         if (configured != null && !configured.isBlank()) {
             try {
                 return Math.max(40, Integer.parseInt(configured.trim()));
@@ -1504,7 +1504,7 @@ public class Main {
         if (terminal == null || terminal.getSize() == null || terminal.getSize().getColumns() <= 0) {
             return;
         }
-        System.setProperty("wraith-cli.render.columns", String.valueOf(Math.max(40, terminal.getSize().getColumns())));
+        System.setProperty("wraith.render.columns", String.valueOf(Math.max(40, terminal.getSize().getColumns())));
     }
 
     static void configureAwtForCli() {
@@ -1818,11 +1818,11 @@ public class Main {
         if (lineReader == null) {
             return;
         }
-        lineReader.getWidgets().put("wraith-cli-slash-command-hint", () -> {
+        lineReader.getWidgets().put("wraith-slash-command-hint", () -> {
             lineReader.getBuffer().write("/");
             return true;
         });
-        Reference slashHint = new Reference("wraith-cli-slash-command-hint");
+        Reference slashHint = new Reference("wraith-slash-command-hint");
         bindSlashWidget(lineReader, LineReader.MAIN, slashHint);
         bindSlashWidget(lineReader, LineReader.EMACS, slashHint);
         bindSlashWidget(lineReader, LineReader.VIINS, slashHint);
@@ -1958,7 +1958,7 @@ public class Main {
                 "HITL: " + (hitlHandler.isEnabled() ? "ON" : "OFF"),
                 "Skill 启用数: " + (skillRegistry == null ? 0 : skillRegistry.enabledSkills().size()),
                 "渲染器: " + renderer.getClass().getSimpleName(),
-                "配置文件: ~/.wraith-cli/config.json (只读视图，编辑请用编辑器)"
+                "配置文件: ~/.wraith/config.json (只读视图，编辑请用编辑器)"
         );
         int selected = renderer.openPalette("配置 / config", items);
         if (selected < 0) {
@@ -2167,12 +2167,12 @@ public class Main {
         if (lineReader == null || inline == null) {
             return;
         }
-        lineReader.getWidgets().put("wraith-cli-toggle-foldable", () -> {
+        lineReader.getWidgets().put("wraith-toggle-foldable", () -> {
             inline.toggleLastBlock();
             lineReader.callWidget(LineReader.REDISPLAY);
             return true;
         });
-        Reference ref = new Reference("wraith-cli-toggle-foldable");
+        Reference ref = new Reference("wraith-toggle-foldable");
         String ctrlO = String.valueOf((char) 15);  // Ctrl+O
         for (String mapName : new String[]{LineReader.MAIN, LineReader.EMACS, LineReader.VIINS}) {
             KeyMap<org.jline.reader.Binding> map = lineReader.getKeyMaps().get(mapName);
@@ -2182,7 +2182,7 @@ public class Main {
         }
     }
 
-    // Ctrl+V 抓系统剪贴板里的图片到 ~/.wraith-cli/cache/ 并把 @image:<path> 注入当前输入行。
+    // Ctrl+V 抓系统剪贴板里的图片到 ~/.wraith/cache/ 并把 @image:<path> 注入当前输入行。
     // 失败（无图 / headless / IO 错误）时只打提示，不破坏现有 buffer，覆盖掉 JLine 默认的
     // quoted-insert 没有交互价值。注意 macOS Cmd+V 通常被终端劫持成本地粘贴文本，所以这里
     // 绑的是 Ctrl+V（ASCII 22 / SYN），iTerm / Terminal.app 默认不会拦截。
@@ -2193,7 +2193,7 @@ public class Main {
         if (lineReader == null) {
             return;
         }
-        lineReader.getWidgets().put("wraith-cli-paste-clipboard-image", () -> {
+        lineReader.getWidgets().put("wraith-paste-clipboard-image", () -> {
             ClipboardImage.GrabResult grab = ClipboardImage.grab();
             if (!grab.ok()) {
                 lineReader.printAbove("⚠️ Ctrl+V 抓图失败: " + grab.error());
@@ -2205,7 +2205,7 @@ public class Main {
             lineReader.callWidget(LineReader.REDISPLAY);
             return true;
         });
-        Reference ref = new Reference("wraith-cli-paste-clipboard-image");
+        Reference ref = new Reference("wraith-paste-clipboard-image");
         String ctrlV = String.valueOf((char) 22);  // Ctrl+V (SYN)
         for (String mapName : new String[]{LineReader.MAIN, LineReader.EMACS, LineReader.VIINS}) {
             KeyMap<org.jline.reader.Binding> map = lineReader.getKeyMaps().get(mapName);
@@ -2219,12 +2219,12 @@ public class Main {
         if (lineReader == null) {
             return;
         }
-        lineReader.getWidgets().put("wraith-cli-clear-input", () -> {
+        lineReader.getWidgets().put("wraith-clear-input", () -> {
             clearInputBuffer(lineReader);
             lineReader.callWidget(LineReader.REDISPLAY);
             return true;
         });
-        Reference clearInput = new Reference("wraith-cli-clear-input");
+        Reference clearInput = new Reference("wraith-clear-input");
         String esc = KeyMap.esc();
         for (String mapName : new String[]{LineReader.MAIN, LineReader.EMACS, LineReader.VIINS}) {
             KeyMap<org.jline.reader.Binding> map = lineReader.getKeyMaps().get(mapName);
@@ -2335,7 +2335,7 @@ public class Main {
             return;
         }
 
-        Path exportsDir = Path.of(System.getProperty("user.home"), ".wraith-cli", "exports");
+        Path exportsDir = Path.of(System.getProperty("user.home"), ".wraith", "exports");
         try {
             Files.createDirectories(exportsDir);
         } catch (IOException e) {
@@ -2547,7 +2547,7 @@ public class Main {
                                              HitlHandler hitlHandler) {
         McpServer server = mcpServerManager.server("chrome-devtools");
         if (server == null) {
-            return "❌ 未配置 chrome-devtools MCP server，请先检查 ~/.wraith-cli/mcp.json";
+            return "❌ 未配置 chrome-devtools MCP server，请先检查 ~/.wraith/mcp.json";
         }
         List<String> oldArgs = List.copyOf(server.config().getArgs());
         List<String> autoConnectArgs = List.of("-y", "chrome-devtools-mcp@latest", "--autoConnect");
@@ -2579,7 +2579,7 @@ public class Main {
 
         McpServer server = mcpServerManager.server("chrome-devtools");
         if (server == null) {
-            return "❌ 未配置 chrome-devtools MCP server，请先检查 ~/.wraith-cli/mcp.json";
+            return "❌ 未配置 chrome-devtools MCP server，请先检查 ~/.wraith/mcp.json";
         }
         List<String> oldArgs = List.copyOf(server.config().getArgs());
         List<String> sharedArgs = List.of("-y", "chrome-devtools-mcp@latest", "--browser-url=" + probe.browserUrl());
@@ -2631,9 +2631,9 @@ public class Main {
     private static String chromeLaunchHelp(int port) {
         return """
                 请先用调试端口启动 Chrome：
-                  macOS: open -na "Google Chrome" --args --remote-debugging-port=%d --user-data-dir=/tmp/wraith-cli-chrome-profile
-                  Windows: start chrome.exe --remote-debugging-port=%d --user-data-dir=%%TEMP%%\\wraith-cli-chrome-profile
-                  Linux: google-chrome --remote-debugging-port=%d --user-data-dir=/tmp/wraith-cli-chrome-profile
+                  macOS: open -na "Google Chrome" --args --remote-debugging-port=%d --user-data-dir=/tmp/wraith-chrome-profile
+                  Windows: start chrome.exe --remote-debugging-port=%d --user-data-dir=%%TEMP%%\\wraith-chrome-profile
+                  Linux: google-chrome --remote-debugging-port=%d --user-data-dir=/tmp/wraith-chrome-profile
                 然后重新执行 /browser connect %d
                 """.formatted(port, port, port, port).trim();
     }
@@ -2825,7 +2825,7 @@ public class Main {
     }
 
     static Duration mcpStartupWait() {
-        String configured = System.getProperty("wraith-cli.mcp.startup.wait.seconds");
+        String configured = System.getProperty("wraith.mcp.startup.wait.seconds");
         if (configured == null || configured.isBlank()) {
             configured = System.getenv("WRAITH_MCP_STARTUP_WAIT_SECONDS");
         }
@@ -2935,7 +2935,7 @@ public class Main {
             return normalizeHistoryFile(Path.of(configured));
         }
         Path base = homeDir == null ? Path.of(System.getProperty("user.home")) : homeDir;
-        return base.resolve(".wraith-cli").resolve("history").resolve(DEFAULT_HISTORY_FILE_NAME)
+        return base.resolve(".wraith").resolve("history").resolve(DEFAULT_HISTORY_FILE_NAME)
                 .toAbsolutePath().normalize();
     }
 
@@ -3006,7 +3006,7 @@ public class Main {
 
     private static void configureLogging() {
         configureLogProperty(LOG_DIR_PROPERTY, "WRAITH_LOG_DIR",
-                Path.of(System.getProperty("user.home"), ".wraith-cli", "logs").toString());
+                Path.of(System.getProperty("user.home"), ".wraith", "logs").toString());
         configureLogProperty(LOG_LEVEL_PROPERTY, "WRAITH_LOG_LEVEL", "INFO");
         configureLogProperty(LOG_MAX_HISTORY_PROPERTY, "WRAITH_LOG_MAX_HISTORY", "7");
         configureLogProperty(LOG_MAX_FILE_SIZE_PROPERTY, "WRAITH_LOG_MAX_FILE_SIZE", "10MB");
@@ -3260,7 +3260,7 @@ public class Main {
     }
 
     static McpConfigBootstrapResult ensureDefaultMcpConfig(Path userHome) throws IOException {
-        Path configFile = userHome.resolve(".wraith-cli").resolve("mcp.json");
+        Path configFile = userHome.resolve(".wraith").resolve("mcp.json");
         if (Files.notExists(configFile)) {
             Files.createDirectories(configFile.getParent());
             Files.writeString(configFile, DEFAULT_CHROME_DEVTOOLS_MCP_JSON);
@@ -3271,7 +3271,7 @@ public class Main {
         String content = Files.readString(configFile);
         if (!content.contains("\"chrome-devtools\"")) {
             return new McpConfigBootstrapResult(false,
-                    "ℹ️ 检测到 ~/.wraith-cli/mcp.json 未配置 chrome-devtools，建议参考 README 添加浏览器 MCP server。");
+                    "ℹ️ 检测到 ~/.wraith/mcp.json 未配置 chrome-devtools，建议参考 README 添加浏览器 MCP server。");
         }
         return new McpConfigBootstrapResult(false, "");
     }

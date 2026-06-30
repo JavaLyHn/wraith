@@ -687,7 +687,7 @@ a { color: inherit; text-decoration: none; }
 
   <div class="install-cmd" id="installCmd" onclick="copyInstall()">
     <span class="install-prefix">>_</span>
-    <span>java -jar target/wraith-cli-1.0-SNAPSHOT.jar</span>
+    <span>java -jar target/wraith-1.0-SNAPSHOT.jar</span>
     <span class="install-copy" id="copyText">复制</span>
   </div>
 
@@ -936,7 +936,7 @@ a { color: inherit; text-decoration: none; }
 
   <div class="install-cmd reveal" style="margin-top: 40px;" onclick="copyInstall()">
     <span class="install-prefix">>_</span>
-    <span>curl -fsSL https://raw.githubusercontent.com/JavaLyHn/wraith-cli/main/install.sh | bash</span>
+    <span>curl -fsSL https://raw.githubusercontent.com/JavaLyHn/wraith/main/install.sh | bash</span>
     <span class="install-copy">复制</span>
   </div>
 
@@ -968,7 +968,7 @@ window.addEventListener('scroll', () => {
 
 // Copy install command
 function copyInstall() {
-  const cmd = 'java -jar target/wraith-cli-1.0-SNAPSHOT.jar';
+  const cmd = 'java -jar target/wraith-1.0-SNAPSHOT.jar';
   navigator.clipboard.writeText(cmd).then(() => {
     const el = document.getElementById('copyText');
     if (el) { el.textContent = '已复制'; el.classList.add('copied'); }
