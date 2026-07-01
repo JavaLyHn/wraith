@@ -1128,6 +1128,7 @@ public class Main {
                         new com.lyhn.wraith.hitl.HitlToolRegistry(hitl);
                 registry.setProjectPath(java.nio.file.Path.of(".").toAbsolutePath().normalize().toString());
                 registry.setWriteFileObserver((path, ba) -> renderer.appendDiff(path, ba[0], ba[1]));
+                registry.setCommandSandbox(buildAppServerSandbox()); // ← 新增:命令走 Seatbelt 沙箱
 
                 com.lyhn.wraith.agent.Agent agent = new com.lyhn.wraith.agent.Agent(client, registry);
                 agent.setRenderer(renderer);
@@ -1147,6 +1148,13 @@ public class Main {
         } catch (Exception e) {
             System.err.println("app-server error: " + e.getMessage());
         }
+    }
+
+    /** app-server 沙箱工厂:默认断网,-Dwraith.sandbox.network=on 全局放行网络。 */
+    static com.lyhn.wraith.policy.sandbox.CommandSandbox buildAppServerSandbox() {
+        boolean networkAllowed =
+                "on".equalsIgnoreCase(System.getProperty("wraith.sandbox.network", "off"));
+        return new com.lyhn.wraith.policy.sandbox.CommandSandbox(networkAllowed);
     }
 
     private static int parseServePort(String[] args, int defaultPort) {
