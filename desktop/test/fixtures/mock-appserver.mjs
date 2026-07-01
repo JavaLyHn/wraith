@@ -10,12 +10,26 @@
  */
 
 import readline from 'readline'
+import fs from 'node:fs'
+
+// Optional: append every received request to this file so E2E can assert
+// what the backend saw (JSONL of {method, params}).
+const recordPath = process.env['WRAITH_E2E_RECORD']
+function record(method, params) {
+  if (!recordPath) return
+  try {
+    fs.appendFileSync(recordPath, JSON.stringify({ method, params: params ?? null }) + '\n')
+  } catch {
+    /* ignore */
+  }
+}
 
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
 
-let sessionId = 'sess_mock'
+let sessionCounter = 0
+let sessionId = 'sess_mock_0'
 let turnId = 'turn_1'
 let pendingApproval = false
 
@@ -139,6 +153,7 @@ async function emitPostApprovalSequence(approved) {
 
 async function handleRequest(req) {
   const { id, method, params } = req
+  record(method, params)
 
   switch (method) {
     case 'initialize': {
@@ -158,6 +173,7 @@ async function handleRequest(req) {
     }
 
     case 'session.start': {
+      sessionId = `sess_mock_${++sessionCounter}`
       reply(id, { sessionId })
       break
     }
@@ -180,6 +196,11 @@ async function handleRequest(req) {
     }
 
     case 'turn.interrupt': {
+      reply(id, { ok: true })
+      break
+    }
+
+    case 'session.setApprovalMode': {
       reply(id, { ok: true })
       break
     }

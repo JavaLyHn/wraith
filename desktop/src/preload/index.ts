@@ -18,6 +18,7 @@ export interface WraithApi {
   interrupt(): Promise<void>
   pickWorkspace(): Promise<string | null>
   restartBackend(): Promise<void>
+  setApprovalMode(auto: boolean): Promise<{ ok: boolean }>
   onEvent(cb: (evt: BackendEvent) => void): () => void
 }
 
@@ -48,6 +49,10 @@ const wraith: WraithApi = {
 
   restartBackend() {
     return ipcRenderer.invoke('wraith:restartBackend')
+  },
+
+  setApprovalMode(auto) {
+    return ipcRenderer.invoke('wraith:setApprovalMode', auto) as Promise<{ ok: boolean }>
   },
 
   onEvent(cb) {

@@ -174,8 +174,11 @@ ipcMain.handle('wraith:interrupt', async () => {
 })
 
 ipcMain.handle('wraith:pickWorkspace', async () => {
-  // E2E test guard: skip native dialog and return null (use backend-default workspace)
-  if (process.env['WRAITH_E2E'] === '1') return null
+  // E2E test guard: skip native dialog. Return an injected dir if provided
+  // (drives the re-pick flow deterministically), else null (backend default).
+  if (process.env['WRAITH_E2E'] === '1') {
+    return process.env['WRAITH_E2E_WORKSPACE'] ?? null
+  }
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory']
   })
@@ -189,6 +192,14 @@ ipcMain.handle('wraith:restartBackend', async () => {
   currentTurnId = null
   spawnBackend()
   // Renderer is responsible for re-running initialize/startSession after restart.
+})
+
+ipcMain.handle('wraith:setApprovalMode', async (_e, auto: boolean) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.setApprovalMode', {
+    sessionId: currentSessionId,
+    auto
+  })
 })
 
 // ---------------------------------------------------------------------------
