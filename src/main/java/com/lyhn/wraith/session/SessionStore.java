@@ -106,6 +106,11 @@ public final class SessionStore {
         }
     }
 
+    /** 当前正在写入的会话 ID(首个 persist 前为 null)。 */
+    public synchronized String currentId() {
+        return currentId;
+    }
+
     /** 续接指定会话:载入历史消息,并把后续 persist 指向该文件。找不到返回空列表。 */
     public synchronized List<LlmClient.Message> resume(String id) {
         SessionRecord rec = read(id);
