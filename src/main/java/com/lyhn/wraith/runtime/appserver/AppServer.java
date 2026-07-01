@@ -62,11 +62,7 @@ public final class AppServer {
     private boolean dispatch(JsonRpc.Incoming msg) {
         switch (msg.method()) {
             case "initialize" -> writer.result(msg.id(), initializeResult);
-            case "session.start" -> {
-                sessionId = "sess_" + Long.toHexString(System.nanoTime());
-                session = factory.create(writer, sessionId, null);
-                writer.result(msg.id(), Map.of("sessionId", sessionId));
-            }
+            case "session.start" -> handleSessionStart(msg);
             case "turn.submit" -> handleTurn(msg);
             case "turn.interrupt" -> {
                 Thread t = turnThread;
@@ -83,6 +79,24 @@ public final class AppServer {
             }
         }
         return true;
+    }
+
+    private void handleSessionStart(JsonRpc.Incoming msg) {
+        String workspaceDir = null;
+        JsonNode p = msg.params();
+        if (p != null && p.hasNonNull("workspaceDir")) {
+            String wd = p.get("workspaceDir").asText();
+            if (wd != null && !wd.isBlank()) {
+                if (!java.nio.file.Files.isDirectory(java.nio.file.Path.of(wd))) {
+                    writer.error(msg.id(), -32602, "workspaceDir 不是有效目录: " + wd);
+                    return;
+                }
+                workspaceDir = wd;
+            }
+        }
+        sessionId = "sess_" + Long.toHexString(System.nanoTime());
+        session = factory.create(writer, sessionId, workspaceDir);
+        writer.result(msg.id(), Map.of("sessionId", sessionId));
     }
 
     private void handleTurn(JsonRpc.Incoming msg) {

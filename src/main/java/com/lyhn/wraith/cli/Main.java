@@ -1126,7 +1126,10 @@ public class Main {
                 hitl.setEnabled(true); // 开 HITL，审批走 EventStreamRenderer
                 com.lyhn.wraith.hitl.HitlToolRegistry registry =
                         new com.lyhn.wraith.hitl.HitlToolRegistry(hitl);
-                registry.setProjectPath(java.nio.file.Path.of(".").toAbsolutePath().normalize().toString());
+                String root = (workspaceDir != null && !workspaceDir.isBlank())
+                        ? workspaceDir
+                        : java.nio.file.Path.of(".").toAbsolutePath().normalize().toString();
+                registry.setProjectPath(root);
                 registry.setWriteFileObserver((path, ba) -> renderer.appendDiff(path, ba[0], ba[1]));
                 registry.setCommandSandbox(buildAppServerSandbox()); // ← 新增:命令走 Seatbelt 沙箱
 
