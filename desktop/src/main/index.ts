@@ -105,7 +105,7 @@ function spawnBackend(): void {
 // ---------------------------------------------------------------------------
 
 function createWindow(): void {
-  const preloadPath = path.join(__dirname, '../preload/index.mjs')
+  const preloadPath = path.join(__dirname, '../preload/index.cjs')
 
   mainWindow = new BrowserWindow({
     width: 1200,
@@ -174,6 +174,8 @@ ipcMain.handle('wraith:interrupt', async () => {
 })
 
 ipcMain.handle('wraith:pickWorkspace', async () => {
+  // E2E test guard: skip native dialog and return null (use backend-default workspace)
+  if (process.env['WRAITH_E2E']) return null
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory']
   })
