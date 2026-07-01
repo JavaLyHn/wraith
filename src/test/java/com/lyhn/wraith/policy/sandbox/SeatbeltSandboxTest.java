@@ -2,7 +2,6 @@ package com.lyhn.wraith.policy.sandbox;
 
 import org.junit.jupiter.api.Test;
 
-import java.io.File;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.file.Files;
@@ -55,17 +54,30 @@ class SeatbeltSandboxTest {
 
             // 2) workspace 外写:拒绝(文件不应出现)
             Path out = outside.resolve("out.txt");
-            assertNotEquals(0, sandboxed("printf x > '" + out + "'", ws), "workspace 外写应被拒");
+            int outExit = sandboxed("printf x > '" + out + "'", ws);
+            assertNotEquals(-1, outExit, "越界写探针不应超时");
+            assertNotEquals(0, outExit, "workspace 外写应被拒");
             assertFalse(Files.exists(out), "越界文件不应被创建");
 
             // 3) .git 只读:拒绝
             Path gitProbe = ws.resolve(".git/probe");
-            assertNotEquals(0, sandboxed("printf x > '" + gitProbe + "'", ws), ".git 写应被拒");
+            int gitExit = sandboxed("printf x > '" + gitProbe + "'", ws);
+            assertNotEquals(-1, gitExit, ".git 写探针不应超时");
+            assertNotEquals(0, gitExit, ".git 写应被拒");
             assertFalse(Files.exists(gitProbe));
 
-            // 4) $TMPDIR 内写:允许
-            assertEquals(0, sandboxed(
-                    "printf x > \"$TMPDIR/wraith_sbx_probe_$$\"", ws), "$TMPDIR 内写应成功");
+            // 4) $TMPDIR 内写:允许(用 JVM 已知路径以便断言落地并清理)
+            String tmpEnv = System.getenv("TMPDIR");
+            if (tmpEnv == null || tmpEnv.isBlank()) {
+                tmpEnv = "/tmp";
+            }
+            Path tmpProbe = Path.of(tmpEnv).toRealPath().resolve("wraith_sbx_probe_" + System.nanoTime() + ".txt");
+            try {
+                assertEquals(0, sandboxed("printf x > '" + tmpProbe + "'", ws), "$TMPDIR 内写应成功");
+                assertTrue(Files.exists(tmpProbe), "$TMPDIR 内文件应落地");
+            } finally {
+                Files.deleteIfExists(tmpProbe);
+            }
 
             // 5) 宽松读:读 workspace 外文件应成功
             assertEquals(0, sandboxed("cat /etc/hosts > /dev/null", ws), "宽松读应允许读盘外");
@@ -87,7 +99,9 @@ class SeatbeltSandboxTest {
                 String probe = "exec 3<>/dev/tcp/127.0.0.1/" + port;
 
                 // 沙箱内:网络被拒 → 非 0
-                assertNotEquals(0, sandboxed(probe, ws), "沙箱内网络连接应被拒");
+                int netExit = sandboxed(probe, ws);
+                assertNotEquals(-1, netExit, "沙箱网络探针不应超时");
+                assertNotEquals(0, netExit, "沙箱内网络连接应被拒");
 
                 // 对照:裸 bash 同一探针 → 成功(证明目标可达,拦截来自沙箱而非环境)
                 assertEquals(0, run(List.of("bash", "-c", probe), ws),
