@@ -15,6 +15,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class RuntimeApiServer implements AutoCloseable {
+    static final String API_KEY_HEADER = "X-Wraith-API-Key";
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private final RuntimeThreadStore store;
     private final TaskRunner runner;
@@ -129,7 +130,7 @@ public class RuntimeApiServer implements AutoCloseable {
 
     private boolean authorized(HttpExchange exchange) {
         String auth = exchange.getRequestHeaders().getFirst("Authorization");
-        String direct = exchange.getRequestHeaders().getFirst("X-Wraith CLI-API-Key");
+        String direct = exchange.getRequestHeaders().getFirst(API_KEY_HEADER);
         return ("Bearer " + apiKey).equals(auth) || apiKey.equals(direct);
     }
 
