@@ -331,10 +331,17 @@ describe('phase-B state additions', () => {
   it('addUserItem appends a user item', () => {
     const s = addUserItem(initialState, 'hello')
     expect(s.items[s.items.length - 1]).toEqual({ type: 'user', text: 'hello' })
+    expect(s._messageOpen).toBe(false)
   })
   it('turn.completed with sessionId updates sessionId', () => {
     const s = reduce(initialState, { kind: 'notification', method: 'turn.completed', params: { sessionId: 'sess-real' } })
     expect(s.turn).toBe('idle')
     expect(s.sessionId).toBe('sess-real')
+  })
+  it('turn.completed without sessionId keeps the existing sessionId', () => {
+    const start: TranscriptState = { ...initialState, sessionId: 'existing' }
+    const s = reduce(start, { kind: 'notification', method: 'turn.completed', params: {} })
+    expect(s.turn).toBe('idle')
+    expect(s.sessionId).toBe('existing')
   })
 })

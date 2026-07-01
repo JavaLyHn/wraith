@@ -105,7 +105,7 @@ export default function Sidebar({
               'mt-2 truncate text-[11px] ' +
               (sandbox === 'none' ? 'text-danger' : 'text-fg-subtle')
             }
-            title={sandbox === 'none' ? '命令未在沙箱内执行' : '命令在 Seatbelt 沙箱内执行'}
+            title={sandbox === 'none' ? '命令未在沙箱内执行' : sandbox === 'macos-seatbelt' ? '命令在 Seatbelt 沙箱内执行' : '沙箱状态未知'}
           >
             {sandbox === 'none' ? '⚠ 沙箱未启用' : sandbox === 'macos-seatbelt' ? '🛡 沙箱: Seatbelt' : '沙箱: —'}
           </div>

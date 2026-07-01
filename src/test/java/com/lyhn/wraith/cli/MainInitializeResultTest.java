@@ -21,4 +21,10 @@ class MainInitializeResultTest {
         Map<String, Object> caps = (Map<String, Object>) res.get("capabilities");
         assertEquals("none", caps.get("sandbox"));
     }
+
+    @Test
+    void nullModelBecomesEmptyString() {
+        java.util.Map<String, Object> res = Main.buildInitializeResult(null, true);
+        assertEquals("", res.get("model"));
+    }
 }
