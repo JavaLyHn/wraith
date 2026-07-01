@@ -12,17 +12,26 @@
     "e2e": "npm run build && playwright test"
   },
   "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.1",
+    "@radix-ui/react-switch": "^1.1.0",
+    "@radix-ui/react-tooltip": "^1.1.2",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-markdown": "^9.0.1"
+    "react-markdown": "^9.0.1",
+    "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {
     "@playwright/test": "^1.47.0",
     "@types/react": "^18.3.0",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "autoprefixer": "^10.4.19",
     "electron": "^32.0.0",
     "electron-vite": "^2.3.0",
+    "postcss": "^8.4.40",
+    "tailwindcss": "^3.4.10",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   }
