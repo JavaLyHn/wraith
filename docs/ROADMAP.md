@@ -12,16 +12,17 @@
 | **P2** 沙箱 | macOS Seatbelt(`sandbox-exec`)包裹命令子进程:默认断网、限写、宽读;fail-open 降级 + 警告 | `policy/sandbox/`;`ToolRegistry` 注入 `CommandSandbox` |
 | **P3a** 协议补全 + 流式 | 单飞守卫、`session.start` 目录校验、`initialize` 能力位;**工具卡片实时输出**(`tool.output.delta`/`tool.result`,ThreadLocal callId) | `AppServer` 4 参构造;`CommandOutputObserver` |
 | **P3b** Electron 壳 | spawn/守护 java、JSON-RPC client、transcript+markdown、可折叠思考块、工具卡片、**最小审批弹窗**、断连横幅、Playwright-electron E2E | `desktop/`(electron-vite + React18 + TS);preload CJS |
+| **Phase A** 前门 + 视觉身份 | Wraith 柔和浅色视觉身份(Tailwind + shadcn/Radix token 主题);欢迎空态`今天做点什么？`;富 Composer(**功能**:替我审批开关 + 重选目录;**占位**:附件、模型/强度只读);静态侧栏骨架;5 组件重皮;唯一后端 `session.setApprovalMode`→`hitl.setEnabled(!auto)` | 合并 `174115a`(9 提交);vitest 35 + Playwright 6 + Java 2/2;spec `docs/specs/2026-07-01-desktop-phase-a-front-door.md`、plan `docs/plans/2026-07-01-desktop-phase-a.md` |
 
-提前兑现的旧-P4 项:**工具卡片实时输出**(P3a)、**基础审批弹窗**(P3b)。
+提前兑现的旧-P4 项:**工具卡片实时输出**(P3a)、**基础审批弹窗**(P3b);Phase A 已交付旧-P4 的**替我审批模式切换** + model 展示(移入 composer)。
 
 ## 进行中 🟡
 
-| 阶段 | 状态 | 内容 |
-|---|---|---|
-| **Phase A** 前门 + 视觉身份 | spec + 8 任务实施计划已提交分支 `feat/desktop-phase-a`,子代理驱动执行中 | Wraith 柔和浅色视觉身份;欢迎空态大标题 `今天做点什么？`;富 Composer(**功能**:替我审批开关 + 重选目录;**占位**:附件、模型/强度只读);静态侧栏骨架;5 组件重皮;唯一后端改动 `session.setApprovalMode`(→ `hitl.setEnabled(!auto)`) |
+（无——Phase A 已合并 main。下一阶段 **Phase B**（侧边栏 + 多会话 + 持久化）待启动。）
 
-关联文档:`docs/specs/2026-07-01-desktop-phase-a-front-door.md`、`docs/plans/2026-07-01-desktop-phase-a.md`。
+## Phase A 遗留 Minor（Phase B 顺手清）
+
+- `class-variance-authority` 未用依赖可移除;Composer 按钮补 `disabled:cursor-not-allowed`;`resetSession` 测试补 `turn` 保留断言;`session.setApprovalMode` handler 加"单会话忽略 sessionId"注释;若干残留 inline style 收尾。
 
 ## 未实现 ⬜(Codex 对齐 A–E,取代旧 P4/P5)
 
