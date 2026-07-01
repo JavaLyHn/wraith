@@ -211,6 +211,7 @@ export default function App(): JSX.Element {
               model={state.model}
               workspace={state.workspace}
               onSwitchWorkspace={handleSwitchWorkspace}
+              centered={!state.hasStarted}
             />
           )
           return state.hasStarted ? (

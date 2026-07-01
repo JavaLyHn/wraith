@@ -33,7 +33,7 @@ export default function ApprovalModal({
     : 'bg-accent'
 
   return (
-    <Dialog open>
+    <Dialog open onOpenChange={() => {}}>
       <DialogContent>
         <div className="mb-4">
           <DialogTitle className={dangerText}>⚠ 审批请求</DialogTitle>
