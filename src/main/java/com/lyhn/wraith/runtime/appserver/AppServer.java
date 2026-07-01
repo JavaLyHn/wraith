@@ -21,6 +21,8 @@ public final class AppServer {
     public interface SessionRunner {
         EventStreamRenderer renderer();
         String runTurn(String input) throws Exception;
+        /** 切换审批模式。auto=true → 关闭 HITL（自动放行）。默认 no-op，旧实现无需改动。 */
+        default void setApprovalMode(boolean auto) { }
     }
 
     private final BufferedReader in;
@@ -70,6 +72,7 @@ public final class AppServer {
                 writer.result(msg.id(), Map.of("ok", true));
             }
             case "approval.respond" -> handleApprovalRespond(msg);
+            case "session.setApprovalMode" -> handleSetApprovalMode(msg);
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
                 return false;
@@ -144,5 +147,13 @@ public final class AppServer {
         ApprovalResult result = new ApprovalResult(d, modifiedArgs, reason);
         session.renderer().resolveApproval(approvalId, result);
         writer.result(msg.id(), java.util.Map.of("ok", true));
+    }
+
+    private void handleSetApprovalMode(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        boolean auto = p != null && p.path("auto").asBoolean(false);
+        session.setApprovalMode(auto);
+        writer.result(msg.id(), Map.of("ok", true));
     }
 }

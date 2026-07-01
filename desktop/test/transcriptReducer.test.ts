@@ -9,6 +9,10 @@ import {
   reduce,
   clearApproval,
   setModel,
+  markStarted,
+  setApprovalMode,
+  setWorkspace,
+  resetSession,
   initialState,
   type TranscriptState,
 } from '../src/shared/transcriptReducer'
@@ -249,5 +253,55 @@ describe('setModel', () => {
     const s = setModel(initialState, 'deepseek-chat')
     expect(s.model).toBe('deepseek-chat')
     expect(s).not.toBe(initialState)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Test 10: phase-A state additions
+// ---------------------------------------------------------------------------
+describe('phase-A state additions', () => {
+  it('initialState has hasStarted=false, approvalMode=ask, workspace=""', () => {
+    expect(initialState.hasStarted).toBe(false)
+    expect(initialState.approvalMode).toBe('ask')
+    expect(initialState.workspace).toBe('')
+  })
+
+  it('markStarted flips hasStarted immutably and is idempotent', () => {
+    const s1 = markStarted(initialState)
+    expect(s1.hasStarted).toBe(true)
+    expect(initialState.hasStarted).toBe(false) // original untouched
+    const s2 = markStarted(s1)
+    expect(s2.hasStarted).toBe(true)
+  })
+
+  it('setApprovalMode toggles ask/auto immutably', () => {
+    const auto = setApprovalMode(initialState, 'auto')
+    expect(auto.approvalMode).toBe('auto')
+    expect(initialState.approvalMode).toBe('ask')
+    const back = setApprovalMode(auto, 'ask')
+    expect(back.approvalMode).toBe('ask')
+  })
+
+  it('setWorkspace sets workspace immutably', () => {
+    const s = setWorkspace(initialState, '/tmp/proj')
+    expect(s.workspace).toBe('/tmp/proj')
+    expect(initialState.workspace).toBe('')
+  })
+
+  it('resetSession clears items+hasStarted+approvalMode, keeps model+connection', () => {
+    let s: TranscriptState = { ...initialState, connection: 'connected', model: 'deepseek', approvalMode: 'auto', hasStarted: true }
+    s = reduce(s, { kind: 'notification', method: 'message.delta', params: { text: 'x' } })
+    expect(s.items.length).toBe(1)
+    const r = resetSession(s, '/new/dir')
+    expect(r.items).toEqual([])
+    expect(r.hasStarted).toBe(false)
+    expect(r.approvalMode).toBe('ask')
+    expect(r.pendingApproval).toBeNull()
+    expect(r.workspace).toBe('/new/dir')
+    expect(r._messageOpen).toBe(false)
+    expect(r.model).toBe('deepseek')      // preserved
+    expect(r.connection).toBe('connected') // preserved
+    // original untouched
+    expect(s.items.length).toBe(1)
   })
 })

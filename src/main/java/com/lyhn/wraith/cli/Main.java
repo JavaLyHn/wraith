@@ -1151,6 +1151,7 @@ public class Main {
                 return new com.lyhn.wraith.runtime.appserver.AppServer.SessionRunner() {
                     public com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer() { return renderer; }
                     public String runTurn(String input) { return agent.run(input); }
+                    public void setApprovalMode(boolean auto) { hitl.setEnabled(!auto); }
                 };
             }, buildInitializeResult(client.getModelName()));
 

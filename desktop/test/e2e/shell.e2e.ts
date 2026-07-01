@@ -1,6 +1,8 @@
 import { test, expect, _electron as electron } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import fs from 'node:fs'
+import os from 'node:os'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -92,5 +94,135 @@ test('disconnect: backend crash after init shows disconnected banner', async () 
     win.locator('[data-testid="restart"]')
   ).toBeVisible({ timeout: 15000 })
 
+  await app.close()
+})
+
+// ---------------------------------------------------------------------------
+// Test 3: approval toggle — sends session.setApprovalMode with correct auto flag
+// ---------------------------------------------------------------------------
+
+test('approval toggle sends session.setApprovalMode with correct auto flag', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}.jsonl`)
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile
+    }
+  })
+  const win = await app.firstWindow()
+  const toggle = win.locator('[data-testid="approval-toggle"]')
+  await expect(toggle).toBeVisible({ timeout: 15000 })
+
+  await toggle.click() // ask → auto
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return null
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const last = [...lines].reverse().find(l => l.method === 'session.setApprovalMode')
+      return last ? last.params.auto : null
+    }, { timeout: 10000 })
+    .toBe(true)
+
+  await toggle.click() // auto → ask
+  await expect
+    .poll(() => {
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const last = [...lines].reverse().find(l => l.method === 'session.setApprovalMode')
+      return last ? last.params.auto : null
+    }, { timeout: 10000 })
+    .toBe(false)
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+})
+
+// ---------------------------------------------------------------------------
+// Test 4: workspace switch re-picks dir → second session.start + transcript reset
+// ---------------------------------------------------------------------------
+
+test('workspace switch re-picks dir → second session.start + transcript reset', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-ws.jsonl`)
+  const startupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-startup-'))
+  const repickDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-repick-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_WORKSPACE: startupDir + path.delimiter + repickDir
+    }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  // go to conversation state
+  await input.fill('hi')
+  await input.press('Enter')
+  await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 15000 })
+
+  // re-pick (resolves to repickDir — distinct from startupDir, guard lets it through)
+  await win.locator('[data-testid="workspace-switch"]').click()
+
+  // second session.start carrying repickDir (the second entry in the list)
+  await expect
+    .poll(() => {
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const starts = lines.filter(l => l.method === 'session.start')
+      return starts.length >= 2 && starts[starts.length - 1].params?.workspaceDir === repickDir
+    }, { timeout: 10000 })
+    .toBe(true)
+
+  // Task 6: WelcomeEmptyState exists, welcome heading should return after re-pick
+  await expect(win.locator('text=今天做点什么？')).toBeVisible({ timeout: 10000 })
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(startupDir, { recursive: true, force: true })
+  fs.rmSync(repickDir, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
+// Test 5: welcome empty state → submit → transcript transition
+// ---------------------------------------------------------------------------
+
+test('welcome empty state shows, then transitions to transcript on submit', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
+  })
+  const win = await app.firstWindow()
+
+  // welcome heading visible, transcript absent
+  await expect(win.locator('text=今天做点什么？')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('[data-testid="transcript"]')).toHaveCount(0)
+
+  // submit → welcome gone, transcript present
+  const input = win.locator('[data-testid="input"]')
+  await input.fill('hi')
+  await input.press('Enter')
+  await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('text=今天做点什么？')).toHaveCount(0)
+
+  await app.close()
+})
+
+// ---------------------------------------------------------------------------
+// Test 6: static sidebar shell present with disabled placeholder nav
+// ---------------------------------------------------------------------------
+
+test('static sidebar shell present with disabled placeholder nav', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="sidebar"]')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('[data-testid="nav-plugins"]')).toBeDisabled()
   await app.close()
 })

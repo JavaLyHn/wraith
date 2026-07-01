@@ -32,3 +32,6 @@ desktop/out/
 desktop/dist/
 desktop/playwright-report/
 desktop/test-results/
+
+# Workflow scratch (SDD reports, planning artifacts — stay on disk, not in git)
+.superpowers/

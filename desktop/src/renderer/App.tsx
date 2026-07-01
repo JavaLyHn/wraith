@@ -5,11 +5,18 @@ import {
   reduce,
   clearApproval,
   setModel,
+  markStarted,
+  setApprovalMode,
+  setWorkspace,
+  resetSession,
   type TranscriptState,
 } from '../shared/transcriptReducer'
 import Transcript from './components/Transcript'
+import Composer from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
 import DisconnectedBanner from './components/DisconnectedBanner'
+import WelcomeEmptyState from './components/WelcomeEmptyState'
+import Sidebar from './components/Sidebar'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -18,6 +25,10 @@ import DisconnectedBanner from './components/DisconnectedBanner'
 type LocalAction =
   | { type: 'clearApproval' }
   | { type: 'setModel'; model: string }
+  | { type: 'markStarted' }
+  | { type: 'setApprovalMode'; mode: 'ask' | 'auto' }
+  | { type: 'setWorkspace'; ws: string }
+  | { type: 'resetSession'; ws: string }
 
 type Action = BackendEvent | LocalAction
 
@@ -31,6 +42,18 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   }
   if ('type' in action && action.type === 'setModel') {
     return setModel(state, action.model)
+  }
+  if ('type' in action && action.type === 'markStarted') {
+    return markStarted(state)
+  }
+  if ('type' in action && action.type === 'setApprovalMode') {
+    return setApprovalMode(state, action.mode)
+  }
+  if ('type' in action && action.type === 'setWorkspace') {
+    return setWorkspace(state, action.ws)
+  }
+  if ('type' in action && action.type === 'resetSession') {
+    return resetSession(state, action.ws)
   }
   // BackendEvent has 'kind' field
   return reduce(state, action as BackendEvent)
@@ -69,6 +92,7 @@ export default function App(): JSX.Element {
     void (async () => {
       try {
         const ws = await window.wraith.pickWorkspace()
+        dispatch({ type: 'setWorkspace', ws: ws ?? '' })
         const init = await window.wraith.initialize(ws)
         const initObj = init as { model?: string }
         if (initObj.model) {
@@ -91,22 +115,13 @@ export default function App(): JSX.Element {
     const text = inputValue.trim()
     if (!text || state.turn === 'running') return
     setInputValue('')
+    dispatch({ type: 'markStarted' })
     try {
       await window.wraith.submitTurn(text)
     } catch (err) {
       console.error('[wraith] submitTurn error:', err)
     }
   }, [inputValue, state.turn])
-
-  const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault()
-        void handleSubmit()
-      }
-    },
-    [handleSubmit],
-  )
 
   // ── approval handlers ──────────────────────────────────────────────────────
   const handleApprove = useCallback(async () => {
@@ -145,154 +160,75 @@ export default function App(): JSX.Element {
     }
   }, [])
 
+  // ── approval mode toggle ──────────────────────────────────────────────────
+  const handleToggleApproval = useCallback(
+    async (auto: boolean) => {
+      const mode = auto ? 'auto' : 'ask'
+      dispatch({ type: 'setApprovalMode', mode })
+      try {
+        await window.wraith.setApprovalMode(auto)
+      } catch (err) {
+        console.error('[wraith] setApprovalMode error:', err)
+        dispatch({ type: 'setApprovalMode', mode: auto ? 'ask' : 'auto' }) // rollback
+      }
+    },
+    [],
+  )
+
+  // ── workspace switch ───────────────────────────────────────────────────────
+  const handleSwitchWorkspace = useCallback(async () => {
+    if (state.turn === 'running') return
+    try {
+      const ws = await window.wraith.pickWorkspace()
+      if (!ws || ws === state.workspace) return
+      await window.wraith.startSession(ws)
+      dispatch({ type: 'resetSession', ws })
+    } catch (err) {
+      console.error('[wraith] switchWorkspace error:', err)
+    }
+  }, [state.turn, state.workspace])
+
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        background: '#0d0f12',
-        color: '#cdd6e0',
-        fontFamily: 'JetBrains Mono, Consolas, monospace',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Disconnected banner — rendered above header */}
-      {state.connection === 'disconnected' && (
-        <DisconnectedBanner onRestart={handleRestart} />
-      )}
+    <div className="flex h-screen overflow-hidden bg-bg text-fg">
+      <Sidebar workspace={state.workspace} />
 
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '10px 16px',
-          borderBottom: '1px solid #1e2128',
-          flexShrink: 0,
-          marginTop: state.connection === 'disconnected' ? '38px' : 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span
-            style={{
-              color: '#3d8eff',
-              fontWeight: 700,
-              fontSize: '14px',
-              letterSpacing: '0.06em',
-            }}
-          >
-            WRAITH
-          </span>
-          {state.model && (
-            <span style={{ color: '#3a4050', fontSize: '11px' }}>
-              {state.model}
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span
-            style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              background:
-                state.connection === 'connected' ? '#27ae60' : '#c0392b',
-              display: 'inline-block',
-            }}
-          />
-          <span style={{ color: '#3a4050', fontSize: '11px' }}>
-            {state.turn === 'running' ? '运行中' : '就绪'}
-          </span>
-        </div>
-      </div>
-
-      {/* Transcript */}
-      <Transcript items={state.items} />
-      <div ref={transcriptEndRef} />
-
-      {/* Input area */}
-      <div
-        style={{
-          borderTop: '1px solid #1e2128',
-          padding: '10px 16px',
-          flexShrink: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '6px',
-        }}
-      >
-        {state.turn === 'running' && (
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <button
-              data-testid="interrupt"
-              onClick={handleInterrupt}
-              style={{
-                background: 'none',
-                border: '1px solid #5a1a1a',
-                borderRadius: '4px',
-                color: '#c0392b',
-                padding: '3px 10px',
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                fontSize: '11px',
-              }}
-            >
-              中断
-            </button>
-          </div>
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {state.connection === 'disconnected' && (
+          <DisconnectedBanner onRestart={handleRestart} />
         )}
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
-          <textarea
-            data-testid="input"
-            value={inputValue}
-            onChange={e => setInputValue(e.target.value)}
-            onKeyDown={handleKeyDown}
-            disabled={state.turn === 'running'}
-            placeholder="输入消息… (Enter 发送, Shift+Enter 换行)"
-            rows={2}
-            style={{
-              flexGrow: 1,
-              background: '#0f1114',
-              border: '1px solid #2a2d35',
-              borderRadius: '4px',
-              color: '#cdd6e0',
-              padding: '8px 10px',
-              fontFamily: 'inherit',
-              fontSize: '13px',
-              resize: 'none',
-              outline: 'none',
-              lineHeight: 1.5,
-              opacity: state.turn === 'running' ? 0.5 : 1,
-            }}
-          />
-          <button
-            onClick={handleSubmit}
-            disabled={state.turn === 'running' || !inputValue.trim()}
-            style={{
-              background: state.turn === 'running' ? '#1a2030' : '#1a2e4a',
-              border: '1px solid #3d8eff',
-              borderRadius: '4px',
-              color: '#3d8eff',
-              padding: '8px 14px',
-              cursor:
-                state.turn === 'running' || !inputValue.trim()
-                  ? 'not-allowed'
-                  : 'pointer',
-              fontFamily: 'inherit',
-              fontSize: '12px',
-              opacity:
-                state.turn === 'running' || !inputValue.trim() ? 0.4 : 1,
-              alignSelf: 'stretch',
-            }}
-          >
-            发送
-          </button>
-        </div>
+
+        {/* content: welcome ↔ transcript + composer （沿用 Task 6 的条件渲染块） */}
+        {(() => {
+          const composer = (
+            <Composer
+              value={inputValue}
+              onChange={setInputValue}
+              onSubmit={handleSubmit}
+              onInterrupt={handleInterrupt}
+              running={state.turn === 'running'}
+              approvalAuto={state.approvalMode === 'auto'}
+              onToggleApproval={handleToggleApproval}
+              model={state.model}
+              workspace={state.workspace}
+              onSwitchWorkspace={handleSwitchWorkspace}
+              centered={!state.hasStarted}
+            />
+          )
+          return state.hasStarted ? (
+            <>
+              <Transcript items={state.items} />
+              <div ref={transcriptEndRef} />
+              <div style={{ padding: '12px 16px', flexShrink: 0 }}>{composer}</div>
+            </>
+          ) : (
+            <div className="min-h-0 flex-1">
+              <WelcomeEmptyState>{composer}</WelcomeEmptyState>
+            </div>
+          )
+        })()}
       </div>
 
-      {/* Approval modal */}
+      {/* Approval modal（Task 8 换 shadcn Dialog；此处结构不变） */}
       {state.pendingApproval && (
         <ApprovalModal
           approvalId={state.pendingApproval.approvalId}
