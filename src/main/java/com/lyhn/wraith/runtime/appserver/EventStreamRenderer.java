@@ -19,6 +19,9 @@ public final class EventStreamRenderer implements Renderer {
     private final String sessionId;
     private final PrintStream discard = new PrintStream(OutputStream.nullOutputStream());
     private volatile String currentTurnId = "";
+    private final java.util.concurrent.atomic.AtomicLong approvalSeq = new java.util.concurrent.atomic.AtomicLong();
+    private final Map<String, java.util.concurrent.CompletableFuture<ApprovalResult>> pending =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     public EventStreamRenderer(JsonRpcWriter writer, String sessionId) {
         this.writer = writer;
@@ -88,8 +91,30 @@ public final class EventStreamRenderer implements Renderer {
 
     @Override public int openPalette(String title, List<String> items) { return -1; } // v1 不暴露
 
-    // 审批：Task 4 补完为异步往返；此处先同步拒绝，保证可编译/可测核心事件。
     @Override public ApprovalResult promptApproval(ApprovalRequest request) {
-        return new ApprovalResult(ApprovalResult.Decision.REJECTED, null, "approval not wired yet");
+        String approvalId = "appr_" + approvalSeq.incrementAndGet();
+        java.util.concurrent.CompletableFuture<ApprovalResult> fut = new java.util.concurrent.CompletableFuture<>();
+        pending.put(approvalId, fut);
+        Map<String, Object> p = base();
+        p.put("approvalId", approvalId);
+        p.put("toolName", request.toolName());
+        p.put("argsJson", request.arguments());
+        p.put("dangerLevel", request.dangerLevel());
+        p.put("riskDescription", request.riskDescription());
+        p.put("suggestion", request.suggestion());
+        writer.notify("approval.requested", p);
+        try {
+            return fut.get();
+        } catch (Exception e) {
+            return new ApprovalResult(ApprovalResult.Decision.REJECTED, null, "interrupted");
+        } finally {
+            pending.remove(approvalId);
+        }
+    }
+
+    /** AppServer 收到 approval.respond 时调用。 */
+    public void resolveApproval(String approvalId, ApprovalResult result) {
+        java.util.concurrent.CompletableFuture<ApprovalResult> fut = pending.get(approvalId);
+        if (fut != null) fut.complete(result);
     }
 }
