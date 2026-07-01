@@ -49,4 +49,17 @@ class CommandSandboxTest {
         assertTrue(new CommandSandbox(true).networkAllowed());
         assertFalse(new CommandSandbox(false).networkAllowed());
     }
+
+    @Test
+    void availableIsFalseOnNonMacPlatform() {
+        String prev = System.getProperty("os.name");
+        try {
+            System.setProperty("os.name", "Linux");
+            assertFalse(CommandSandbox.available(),
+                    "非 macOS 平台应报告不支持 Seatbelt(fail-open 分支)");
+        } finally {
+            if (prev == null) System.clearProperty("os.name");
+            else System.setProperty("os.name", prev);
+        }
+    }
 }
