@@ -52,4 +52,16 @@ class JsonRpcTest {
         assertEquals(7, n.get("id").asInt());
         assertEquals("s1", n.get("result").get("sessionId").asText());
     }
+
+    @Test
+    void writerEmitsErrorWithNestedObject() throws Exception {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        new JsonRpcWriter(out).error(9, -32601, "method not found");
+        com.fasterxml.jackson.databind.JsonNode n =
+            JsonRpc.MAPPER.readTree(out.toString(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals(9, n.get("id").asInt());
+        assertEquals(-32601, n.get("error").get("code").asInt());
+        assertEquals("method not found", n.get("error").get("message").asText());
+        assertFalse(n.has("result"));
+    }
 }

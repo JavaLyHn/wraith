@@ -47,6 +47,8 @@ public final class JsonRpcWriter {
                 out.write('\n');
                 out.flush();
             }
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+            throw new IllegalStateException("failed to serialize JSON-RPC message", e);
         } catch (IOException ignored) {
             // 连接断开：吞掉，主循环会因 stdin EOF 退出
         }

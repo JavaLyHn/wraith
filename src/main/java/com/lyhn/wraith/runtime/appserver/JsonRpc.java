@@ -23,7 +23,7 @@ public final class JsonRpc {
             Object id = (idNode == null || idNode.isNull()) ? null
                     : (idNode.isNumber() ? idNode.numberValue() : idNode.asText());
             return new Incoming(id, root.get("method").asText(), root.get("params"));
-        } catch (Exception e) {
+        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             return null;
         }
     }
