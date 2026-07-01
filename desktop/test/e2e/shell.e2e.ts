@@ -211,3 +211,18 @@ test('welcome empty state shows, then transitions to transcript on submit', asyn
 
   await app.close()
 })
+
+// ---------------------------------------------------------------------------
+// Test 6: static sidebar shell present with disabled placeholder nav
+// ---------------------------------------------------------------------------
+
+test('static sidebar shell present with disabled placeholder nav', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="sidebar"]')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('[data-testid="nav-plugins"]')).toBeDisabled()
+  await app.close()
+})

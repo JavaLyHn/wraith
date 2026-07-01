@@ -16,6 +16,7 @@ import Composer from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
 import DisconnectedBanner from './components/DisconnectedBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
+import Sidebar from './components/Sidebar'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -188,97 +189,45 @@ export default function App(): JSX.Element {
   }, [state.turn, state.workspace])
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100vh',
-        background: '#0d0f12',
-        color: '#cdd6e0',
-        fontFamily: 'JetBrains Mono, Consolas, monospace',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Disconnected banner — rendered above header */}
-      {state.connection === 'disconnected' && (
-        <DisconnectedBanner onRestart={handleRestart} />
-      )}
+    <div className="flex h-screen overflow-hidden bg-bg text-fg">
+      <Sidebar workspace={state.workspace} />
 
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: '10px 16px',
-          borderBottom: '1px solid #1e2128',
-          flexShrink: 0,
-          marginTop: state.connection === 'disconnected' ? '38px' : 0,
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <span
-            style={{
-              color: '#3d8eff',
-              fontWeight: 700,
-              fontSize: '14px',
-              letterSpacing: '0.06em',
-            }}
-          >
-            WRAITH
-          </span>
-          {state.model && (
-            <span style={{ color: '#3a4050', fontSize: '11px' }}>
-              {state.model}
-            </span>
-          )}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span
-            style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              background:
-                state.connection === 'connected' ? '#27ae60' : '#c0392b',
-              display: 'inline-block',
-            }}
-          />
-          <span style={{ color: '#3a4050', fontSize: '11px' }}>
-            {state.turn === 'running' ? '运行中' : '就绪'}
-          </span>
-        </div>
+      <div className="relative flex min-w-0 flex-1 flex-col">
+        {state.connection === 'disconnected' && (
+          <DisconnectedBanner onRestart={handleRestart} />
+        )}
+
+        {/* content: welcome ↔ transcript + composer （沿用 Task 6 的条件渲染块） */}
+        {(() => {
+          const composer = (
+            <Composer
+              value={inputValue}
+              onChange={setInputValue}
+              onSubmit={handleSubmit}
+              onInterrupt={handleInterrupt}
+              running={state.turn === 'running'}
+              approvalAuto={state.approvalMode === 'auto'}
+              onToggleApproval={handleToggleApproval}
+              model={state.model}
+              workspace={state.workspace}
+              onSwitchWorkspace={handleSwitchWorkspace}
+            />
+          )
+          return state.hasStarted ? (
+            <>
+              <Transcript items={state.items} />
+              <div ref={transcriptEndRef} />
+              <div style={{ padding: '12px 16px', flexShrink: 0 }}>{composer}</div>
+            </>
+          ) : (
+            <div className="min-h-0 flex-1">
+              <WelcomeEmptyState>{composer}</WelcomeEmptyState>
+            </div>
+          )
+        })()}
       </div>
 
-      {(() => {
-        const composer = (
-          <Composer
-            value={inputValue}
-            onChange={setInputValue}
-            onSubmit={handleSubmit}
-            onInterrupt={handleInterrupt}
-            running={state.turn === 'running'}
-            approvalAuto={state.approvalMode === 'auto'}
-            onToggleApproval={handleToggleApproval}
-            model={state.model}
-            workspace={state.workspace}
-            onSwitchWorkspace={handleSwitchWorkspace}
-          />
-        )
-        return state.hasStarted ? (
-          <>
-            <Transcript items={state.items} />
-            <div ref={transcriptEndRef} />
-            <div style={{ padding: '12px 16px', flexShrink: 0 }}>{composer}</div>
-          </>
-        ) : (
-          <div style={{ flexGrow: 1, minHeight: 0 }}>
-            <WelcomeEmptyState>{composer}</WelcomeEmptyState>
-          </div>
-        )
-      })()}
-
-      {/* Approval modal */}
+      {/* Approval modal（Task 8 换 shadcn Dialog；此处结构不变） */}
       {state.pendingApproval && (
         <ApprovalModal
           approvalId={state.pendingApproval.approvalId}
