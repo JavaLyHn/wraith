@@ -11,7 +11,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AppServerTest {
     /** 假会话：runTurn 用脚本化序列驱动真实 EventStreamRenderer。 */
     private AppServer.SessionRunnerFactory fakeFactory() {
-        return (writer, sessionId) -> {
+        return (writer, sessionId, workspaceDir) -> {
             EventStreamRenderer r = new EventStreamRenderer(writer, sessionId);
             return new AppServer.SessionRunner() {
                 public EventStreamRenderer renderer() { return r; }
