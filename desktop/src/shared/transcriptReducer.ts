@@ -28,6 +28,7 @@ export interface ToolCard {
 }
 
 export type Item =
+  | { type: 'user'; text: string }
   | { type: 'message'; text: string }
   | { type: 'thinking'; label: string; text: string; done: boolean }
   | { type: 'tool'; card: ToolCard }
@@ -50,6 +51,10 @@ export interface TranscriptState {
   approvalMode: 'ask' | 'auto'
   /** 当前工作目录（驱动 composer 的项目按钮显示）。 */
   workspace: string
+  /** 当前活跃会话 id(turn.completed / resume 更新)。 */
+  sessionId: string
+  /** 沙箱状态(来自 initialize.capabilities.sandbox)。 */
+  sandbox: 'macos-seatbelt' | 'none' | 'unknown'
   /** Internal flag: true when the last message item is still open for appending. */
   _messageOpen: boolean
 }
@@ -67,6 +72,8 @@ export const initialState: TranscriptState = {
   hasStarted: false,
   approvalMode: 'ask',
   workspace: '',
+  sessionId: '',
+  sandbox: 'unknown',
   _messageOpen: false,
 }
 
@@ -110,7 +117,10 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
     case 'turn.started':
       return { ...state, turn: 'running' }
 
-    case 'turn.completed':
+    case 'turn.completed': {
+      const sid = typeof p['sessionId'] === 'string' ? p['sessionId'] : ''
+      return { ...state, turn: 'idle', ...(sid ? { sessionId: sid } : {}) }
+    }
     case 'turn.failed':
       return { ...state, turn: 'idle' }
 
@@ -258,5 +268,26 @@ export function resetSession(state: TranscriptState, ws: string): TranscriptStat
     approvalMode: 'ask',
     pendingApproval: null,
     workspace: ws,
+    sessionId: '',
   }
+}
+
+/** 用回放的 items 整体替换 transcript(切换/resume 时)。 */
+export function loadHistory(state: TranscriptState, items: Item[]): TranscriptState {
+  return { ...state, items, _messageOpen: false }
+}
+
+/** 设置活跃会话 id。 */
+export function setSessionId(state: TranscriptState, sessionId: string): TranscriptState {
+  return { ...state, sessionId }
+}
+
+/** 设置沙箱状态。 */
+export function setSandbox(state: TranscriptState, sandbox: 'macos-seatbelt' | 'none' | 'unknown'): TranscriptState {
+  return { ...state, sandbox }
+}
+
+/** 提交时 echo 一条 user 气泡(封口当前 message)。 */
+export function addUserItem(state: TranscriptState, text: string): TranscriptState {
+  return { ...state, items: [...state.items, { type: 'user', text }], _messageOpen: false }
 }

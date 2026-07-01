@@ -114,3 +114,35 @@ export interface BackendConnectionEvent {
 
 /** Union of all events the transcriptReducer handles. */
 export type BackendEvent = BackendNotificationEvent | BackendConnectionEvent
+
+// ---------------------------------------------------------------------------
+// Phase B: session persistence / resume wire types
+// ---------------------------------------------------------------------------
+
+/** One session's metadata (mirrors Java SessionMeta record). */
+export interface SessionMeta {
+  id: string
+  cwd: string
+  createdAt: string
+  updatedAt: string
+  provider: string
+  model: string
+  title: string
+  turns: number
+}
+
+/** A tool call inside a resumed assistant message (mirrors SessionMessageCodec). */
+export interface ResumedToolCall {
+  id: string
+  name: string
+  arguments: string
+}
+
+/** A stored message returned by session.resume (SessionMessageCodec.toJson shape). */
+export interface ResumedMessage {
+  role: string
+  content: string | null
+  reasoningContent?: string
+  toolCallId?: string
+  toolCalls?: ResumedToolCall[]
+}

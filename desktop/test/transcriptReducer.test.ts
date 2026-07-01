@@ -13,6 +13,10 @@ import {
   setApprovalMode,
   setWorkspace,
   resetSession,
+  loadHistory,
+  setSessionId,
+  setSandbox,
+  addUserItem,
   initialState,
   type TranscriptState,
 } from '../src/shared/transcriptReducer'
@@ -303,5 +307,34 @@ describe('phase-A state additions', () => {
     expect(r.connection).toBe('connected') // preserved
     // original untouched
     expect(s.items.length).toBe(1)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Test 11: phase-B state additions
+// ---------------------------------------------------------------------------
+describe('phase-B state additions', () => {
+  it('initial has sessionId="" and sandbox="unknown"', () => {
+    expect(initialState.sessionId).toBe('')
+    expect(initialState.sandbox).toBe('unknown')
+  })
+  it('loadHistory replaces items immutably', () => {
+    const s = loadHistory(initialState, [{ type: 'user', text: 'x' }])
+    expect(s.items).toEqual([{ type: 'user', text: 'x' }])
+    expect(s._messageOpen).toBe(false)
+    expect(initialState.items).toEqual([])
+  })
+  it('setSessionId / setSandbox', () => {
+    expect(setSessionId(initialState, 'abc').sessionId).toBe('abc')
+    expect(setSandbox(initialState, 'none').sandbox).toBe('none')
+  })
+  it('addUserItem appends a user item', () => {
+    const s = addUserItem(initialState, 'hello')
+    expect(s.items[s.items.length - 1]).toEqual({ type: 'user', text: 'hello' })
+  })
+  it('turn.completed with sessionId updates sessionId', () => {
+    const s = reduce(initialState, { kind: 'notification', method: 'turn.completed', params: { sessionId: 'sess-real' } })
+    expect(s.turn).toBe('idle')
+    expect(s.sessionId).toBe('sess-real')
   })
 })
