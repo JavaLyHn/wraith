@@ -13,22 +13,24 @@
 | **P3a** 协议补全 + 流式 | 单飞守卫、`session.start` 目录校验、`initialize` 能力位;**工具卡片实时输出**(`tool.output.delta`/`tool.result`,ThreadLocal callId) | `AppServer` 4 参构造;`CommandOutputObserver` |
 | **P3b** Electron 壳 | spawn/守护 java、JSON-RPC client、transcript+markdown、可折叠思考块、工具卡片、**最小审批弹窗**、断连横幅、Playwright-electron E2E | `desktop/`(electron-vite + React18 + TS);preload CJS |
 | **Phase A** 前门 + 视觉身份 | Wraith 柔和浅色视觉身份(Tailwind + shadcn/Radix token 主题);欢迎空态`今天做点什么？`;富 Composer(**功能**:替我审批开关 + 重选目录;**占位**:附件、模型/强度只读);静态侧栏骨架;5 组件重皮;唯一后端 `session.setApprovalMode`→`hitl.setEnabled(!auto)` | 合并 `174115a`(9 提交);vitest 35 + Playwright 6 + Java 2/2;spec `docs/specs/2026-07-01-desktop-phase-a-front-door.md`、plan `docs/plans/2026-07-01-desktop-phase-a.md` |
+| **Phase B** 多会话 + 持久化 + 侧栏 | 单活跃会话:接现有 `SessionStore` 持久化(每轮落盘)、会话列表、**功能侧栏**(新建/切换=resume 静态回放 `messagesToItems`)、重连自动 resume、sandbox 徽标、对话视图加 user 气泡;`turn.completed` 回真实持久化 id 对齐 activeSessionId | 合并 `6d707ac`(9 提交);Java AppServerSessionTest 3/3 + MainInitializeResultTest 3/3 + 回归、vitest 54、Playwright 10/10;spec/plan `docs/*/2026-07-01-desktop-phase-b*.md` |
 
-提前兑现的旧-P4 项:**工具卡片实时输出**(P3a)、**基础审批弹窗**(P3b);Phase A 已交付旧-P4 的**替我审批模式切换** + model 展示(移入 composer)。
+提前兑现的旧-P4 项:**工具卡片实时输出**(P3a)、**基础审批弹窗**(P3b);Phase A 交付旧-P4 的**替我审批模式切换** + model 展示(移入 composer);Phase B 交付旧-P4 的**重启重连 / `session.resume` / `sandbox.unavailable`**。
 
 ## 进行中 🟡
 
-（无——Phase A 已合并 main。下一阶段 **Phase B**（侧边栏 + 多会话 + 持久化）待启动。）
+（无——Phase A、B 已合并 main。下一阶段 **Phase B.5**（富对话视图:Monaco per-hunk diff / 富审批 / token 状态)待启动。）
 
-## Phase A 遗留 Minor（Phase B 顺手清）
+## 遗留 Minor（后续阶段顺手清)
 
-- `class-variance-authority` 未用依赖可移除;Composer 按钮补 `disabled:cursor-not-allowed`;`resetSession` 测试补 `turn` 保留断言;`session.setApprovalMode` handler 加"单会话忽略 sessionId"注释;若干残留 inline style 收尾。
+- **Phase A**:`class-variance-authority` 未用依赖可移除;Composer 按钮补 `disabled:cursor-not-allowed`;残留 inline style 收尾。
+- **Phase B**:`session.list`/`session.resume` 无 session 负路径测试;`SessionStore.currentId()` 直测;reducer `turn.failed` 回归 + `loadHistory` 保留字段断言;`handleSelectSession` 补 `void fetchSessions()`(一致性,功能 no-op)。
+- **待眼验(非自动覆盖)**:重连 auto-resume 真·断连往返;真 `java` 落盘/list/resume 端到端(需重建 `~/.wraith/wraith.jar`)。建议 `npm run dev` 实机跑一遍。
 
 ## 未实现 ⬜(Codex 对齐 A–E,取代旧 P4/P5)
 
 | 阶段 | 内容 | 需后端? | 吸收的旧条目 |
 |---|---|---|---|
-| **Phase B** 侧边栏 + 多会话 + 持久化 | 真实多会话路由、会话列表/切换、持久化;重启重连 | 是(`RuntimeThreadStore`/每 Agent 隔离已有底子) | 旧-P4 重启重连 / `session.resume` / `sandbox.unavailable` |
 | **Phase B.5** 富对话视图 | Monaco per-hunk diff、富审批(改参 / 本次放行网络)、token 状态展示 | 部分(放行网络需沙箱联动) | 旧-P4 Monaco diff / 富审批 / 状态栏 |
 | **Phase C** 项目工作区 | 多项目并存、项目列表、项目侧栏 | 可能 | (新) |
 | **Phase D** 插件 / 自动化 | MCP 插件管理 UI、自动化流程 | 是 | (新) |
