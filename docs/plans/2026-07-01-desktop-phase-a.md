@@ -860,13 +860,14 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 ### Task 5: 富 Composer（功能性审批开关 + 重选目录 + 占位控件）
 
 **Files:**
+- Create: `desktop/src/renderer/lib/paths.ts`（共享 `baseName`，Task 7 侧栏也用）
 - Create: `desktop/src/renderer/components/Composer.tsx`
 - Modify: `desktop/src/renderer/App.tsx`
 - Test: `desktop/test/e2e/shell.e2e.ts`
 
 **Interfaces:**
 - Consumes: Task 2 的 `setApprovalMode`/`resetSession`/`setWorkspace`/`markStarted`；Task 3 的 `window.wraith.setApprovalMode`；Task 4 的 `Switch`/`Tooltip*`。
-- Produces: `Composer` 组件（props 见下）；新增 `data-testid`：`approval-toggle`、`workspace-switch`、`attach`（禁用占位）。保留既有 `input`/`interrupt`。
+- Produces: `lib/paths.ts` 导出 `baseName(p:string):string`；`Composer` 组件（props 见下）；新增 `data-testid`：`approval-toggle`、`workspace-switch`、`attach`（禁用占位）。保留既有 `input`/`interrupt`。
 
 - [ ] **Step 1: 写失败的 E2E（审批开关 + 重选目录）**
 
@@ -964,7 +965,20 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
 Run: `cd /Users/aa00945/Desktop/wraith/desktop && npm run build && npx playwright test -g "approval toggle"`
 Expected: FAIL —— `[data-testid="approval-toggle"]` 不存在（Composer 未建）。
 
-- [ ] **Step 3: 建 Composer 组件**
+- [ ] **Step 3a: 建共享 `lib/paths.ts`**
+
+Create `desktop/src/renderer/lib/paths.ts`（Composer 与 Sidebar 共用，避免重复）：
+
+```ts
+/** 取路径末段做显示名；空则返回「默认工作目录」。 */
+export function baseName(p: string): string {
+  if (!p) return '默认工作目录'
+  const parts = p.replace(/\/+$/, '').split('/')
+  return parts[parts.length - 1] || p
+}
+```
+
+- [ ] **Step 3b: 建 Composer 组件**
 
 Create `desktop/src/renderer/components/Composer.tsx`：
 
@@ -977,6 +991,7 @@ import {
   TooltipContent,
   TooltipProvider,
 } from './ui/tooltip'
+import { baseName } from '../lib/paths'
 
 interface ComposerProps {
   value: string
@@ -991,12 +1006,6 @@ interface ComposerProps {
   onSwitchWorkspace: () => void
   /** 欢迎态用居中窄版，对话态用贴底宽版。 */
   centered?: boolean
-}
-
-function baseName(p: string): string {
-  if (!p) return '默认工作目录'
-  const parts = p.replace(/\/+$/, '').split('/')
-  return parts[parts.length - 1] || p
 }
 
 export default function Composer({
@@ -1411,7 +1420,7 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 - Test: `desktop/test/e2e/shell.e2e.ts`
 
 **Interfaces:**
-- Consumes: Task 4 的 `Tooltip*`、`.sidebar-gradient` 类。
+- Consumes: Task 4 的 `Tooltip*`、`.sidebar-gradient` 类；Task 5 建的 `lib/paths.ts` 的 `baseName`。
 - Produces: `Sidebar`（静态骨架：品牌区 + 禁用导航 + 静态会话条目 + 设置 + 工作目录页脚）；App 外层变 `flex row`（Sidebar + MainPane）。新增 `data-testid="sidebar"`、`data-testid="nav-plugins"`（禁用占位样例）。
 
 - [ ] **Step 1: 写失败的侧栏 E2E**
@@ -1447,6 +1456,7 @@ import {
   TooltipContent,
   TooltipProvider,
 } from './ui/tooltip'
+import { baseName } from '../lib/paths'
 
 interface SidebarProps {
   workspace: string
@@ -1458,12 +1468,6 @@ const NAV: { key: string; label: string; hint: string }[] = [
   { key: 'automation', label: '自动化', hint: '自动化在 Phase D' },
   { key: 'projects', label: '项目', hint: '多项目在 Phase C' },
 ]
-
-function baseName(p: string): string {
-  if (!p) return '默认工作目录'
-  const parts = p.replace(/\/+$/, '').split('/')
-  return parts[parts.length - 1] || p
-}
 
 export default function Sidebar({ workspace }: SidebarProps): JSX.Element {
   return (
