@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage } from '../shared/types'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -20,6 +20,8 @@ export interface WraithApi {
   pickWorkspace(): Promise<string | null>
   restartBackend(): Promise<void>
   setApprovalMode(auto: boolean): Promise<{ ok: boolean }>
+  listSessions(): Promise<{ sessions: SessionMeta[] }>
+  resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[] }>
   onEvent(cb: (evt: BackendEvent) => void): () => void
 }
 
@@ -58,6 +60,17 @@ const wraith: WraithApi = {
 
   setApprovalMode(auto) {
     return ipcRenderer.invoke('wraith:setApprovalMode', auto) as Promise<{ ok: boolean }>
+  },
+
+  listSessions() {
+    return ipcRenderer.invoke('wraith:listSessions') as Promise<{ sessions: SessionMeta[] }>
+  },
+
+  resumeSession(sessionId) {
+    return ipcRenderer.invoke('wraith:resumeSession', sessionId) as Promise<{
+      sessionId: string
+      messages: ResumedMessage[]
+    }>
   },
 
   onEvent(cb) {

@@ -200,6 +200,28 @@ async function handleRequest(req) {
       break
     }
 
+    case 'session.list': {
+      reply(id, {
+        sessions: [
+          { id: 'sess_a', cwd: '/p', createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'mock', model: 'mock-model', title: '第一段对话', turns: 2 },
+          { id: 'sess_b', cwd: '/p', createdAt: '2026-06-30T00:00:00Z', updatedAt: '2026-06-30T01:00:00Z', provider: 'mock', model: 'mock-model', title: '早先的对话', turns: 5 }
+        ]
+      })
+      break
+    }
+
+    case 'session.resume': {
+      const rid = (params && params.sessionId) || 'sess_a'
+      reply(id, {
+        sessionId: rid,
+        messages: [
+          { role: 'user', content: '之前问的问题' },
+          { role: 'assistant', content: '之前的**回答**', reasoningContent: '之前的思考' }
+        ]
+      })
+      break
+    }
+
     case 'session.setApprovalMode': {
       reply(id, { ok: true })
       break

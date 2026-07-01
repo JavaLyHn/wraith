@@ -221,6 +221,16 @@ ipcMain.handle('wraith:setApprovalMode', async (_e, auto: boolean) => {
   })
 })
 
+ipcMain.handle('wraith:listSessions', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.list', {})
+})
+
+ipcMain.handle('wraith:resumeSession', async (_e, sessionId: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.resume', { sessionId })
+})
+
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
