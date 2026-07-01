@@ -222,6 +222,10 @@ public class Main {
             startRuntimeApiAndBlock(args);
             return;
         }
+        if (isAppServerCommand(args)) {
+            startAppServer();
+            return;
+        }
 
         configureLogging();
 
@@ -1090,6 +1094,58 @@ public class Main {
         } catch (Exception e) {
             System.err.println("❌ Runtime API 启动失败: " + e.getMessage());
             System.exit(1);
+        }
+    }
+
+    static boolean isAppServerCommand(String[] args) {
+        return args != null && args.length >= 1 && "app-server".equalsIgnoreCase(args[0]);
+    }
+
+    private static void startAppServer() {
+        // stdout 纯净：真 stdout 留给 JSON-RPC，其它一切打到 stderr
+        java.io.PrintStream realOut = System.out;
+        System.setOut(System.err);
+        configureLogging(); // logback 写文件，不污染 stdout
+
+        com.lyhn.wraith.config.WraithConfig config = com.lyhn.wraith.config.WraithConfig.load();
+        com.lyhn.wraith.llm.LlmClient client = com.lyhn.wraith.llm.LlmClientFactory.createFromConfig(config);
+        if (client == null) {
+            System.err.println("app-server: 未找到可用 API Key");
+            System.exit(1);
+        }
+
+        com.lyhn.wraith.runtime.appserver.AppServer server =
+            new com.lyhn.wraith.runtime.appserver.AppServer(System.in, realOut, (writer, sessionId) -> {
+                com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer =
+                        new com.lyhn.wraith.runtime.appserver.EventStreamRenderer(writer, sessionId);
+
+                com.lyhn.wraith.hitl.TerminalHitlHandler terminal =
+                        new com.lyhn.wraith.hitl.TerminalHitlHandler(false);
+                com.lyhn.wraith.hitl.SwitchableHitlHandler hitl =
+                        new com.lyhn.wraith.hitl.SwitchableHitlHandler(terminal);
+                hitl.setEnabled(true); // 开 HITL，审批走 EventStreamRenderer
+                com.lyhn.wraith.hitl.HitlToolRegistry registry =
+                        new com.lyhn.wraith.hitl.HitlToolRegistry(hitl);
+                registry.setProjectPath(java.nio.file.Path.of(".").toAbsolutePath().normalize().toString());
+                registry.setWriteFileObserver((path, ba) -> renderer.appendDiff(path, ba[0], ba[1]));
+
+                com.lyhn.wraith.agent.Agent agent = new com.lyhn.wraith.agent.Agent(client, registry);
+                agent.setRenderer(renderer);
+
+                com.lyhn.wraith.hitl.RendererHitlHandler rendererHitl =
+                        new com.lyhn.wraith.hitl.RendererHitlHandler(renderer, hitl.isEnabled());
+                hitl.setDelegate(rendererHitl);
+
+                return new com.lyhn.wraith.runtime.appserver.AppServer.SessionRunner() {
+                    public com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer() { return renderer; }
+                    public String runTurn(String input) { return agent.run(input); }
+                };
+            });
+
+        try {
+            server.serve();
+        } catch (Exception e) {
+            System.err.println("app-server error: " + e.getMessage());
         }
     }
 
