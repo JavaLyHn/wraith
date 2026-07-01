@@ -1,7 +1,7 @@
 # Wraith 桌面端 Phase A：前门 + 视觉身份 设计 spec
 
 - 日期：2026-07-01
-- 状态：设计已论证，三点已定（UI 库=shadcn/ui · 欢迎文案=Wraith 自己的 · setApprovalMode 后端改动=接受）；待用户复核 spec
+- 状态：设计已论证并锁定（UI 库=shadcn/ui · 欢迎文案=Wraith 自己的 · setApprovalMode 后端改动=接受 · "进入项目"=**功能性重选目录**，用户已定）；进 writing-plans
 - 关联：`desktop/`（P3b 已落地的 Electron 壳）、`src/main/java/com/lyhn/wraith/runtime/appserver/AppServer.java`、`Main.java:1104-1160`（app-server 启动 + SessionRunner 工厂）
 - 前置：P1 协议 / P2 沙箱 / P3a 协议补全+流式 / P3b Electron 壳 均已合并 main
 
@@ -38,7 +38,7 @@
 - 多会话 / 会话侧边栏的**真实逻辑** / 会话持久化 → **Phase B**（Phase A 只放静态骨架）。
 - 重启重连 / `session.resume` / `sandbox.unavailable` 事件 → **Phase B**。
 - Monaco per-hunk diff / 富审批（改参·放行网络）/ token 状态栏 → **Phase B.5**。
-- 项目工作区（切项目 / 多项目）→ **Phase C**（Phase A 只只读展示当前工作目录）。
+- **多项目并存 / 项目列表 / 项目侧栏** → **Phase C**。Phase A **做**单一工作目录的**重选**（换目录=重建当前会话），但不做多项目管理。
 - 插件 / 自动化 → **Phase D**。
 - **真实**模型切换 / 强度调节（后端启动时固定 model，per-turn 切换需后端改动）→ 后续 Phase（A 只只读显示）。
 - 附件上传（协议已预留 `attachments`，未实现）→ 后续 Phase（A 只放禁用占位）。
@@ -150,9 +150,20 @@
 | **替我审批开关** | **功能（新）** | Switch；开=auto(不弹审批)、关=ask(逐个弹)；切换调 `window.wraith.setApprovalMode(auto)`；`data-testid="approval-toggle"` |
 | 附件 (+) | **占位禁用** | 禁用图标按钮 + tooltip「附件在后续阶段」 |
 | 模型/强度 | **只读展示** | chip 显示 `state.model`（来自 initialize）；强度为禁用下拉占位 + tooltip「模型/强度切换在后续阶段」 |
-| 项目上下文 | **只读展示** | chip 显示当前工作目录名（不可切换；切项目在 Phase C）；`data-testid="workspace-chip"` |
+| **项目/工作目录** | **功能（重选目录）** | 按钮显示当前工作目录名；点击 → 重选目录并重建会话（见 §6.1）；`data-testid="workspace-switch"` |
 
-- **决策提请复核**：截图里 Codex 有"进入项目工作"按钮。Phase A 采**只读工作目录 chip**（不做重新选目录/切项目——那是 Phase C），避免假按钮。若你希望 A 就能重选目录（复用现有 `pickWorkspace`+重启会话），是个小增量，spec 复核时说一声即可加。
+### 6.1 重选目录（功能性，用户已定）
+
+`handleSessionStart`（`AppServer.java:84-100`）**无二次调用守卫、可重复调用**：每次生成新 `sessionId`、用新 `workspaceDir` 重建 `SessionRunner`（**留在同一 JVM 进程，无冷启**），返回新 sessionId。因此重选走"重建会话"，**不重启进程**：
+
+流程（全部复用现有 IPC，无新后端方法）：
+1. 点"项目/工作目录"按钮 → `window.wraith.pickWorkspace()`（原生目录对话框）。
+2. 返回 `null`（取消）或与当前目录相同 → **no-op**。
+3. 返回新目录 → `window.wraith.startSession(newWs)`（现有 IPC，发 `session.start {workspaceDir:newWs}`，main 更新其追踪的 `sessionId`）。
+4. 前端 **dispatch `resetSession(newWs)`**：清空 transcript、`hasStarted=false`（回到欢迎态）、`workspace=newWs`、`approvalMode='ask'`、`pendingApproval=null`（新会话后端 hitl 默认开审批，UI 开关同步回 ask）。
+5. 不重调 `initialize`（model/capabilities 不随目录变，后端启动即固定）。
+
+约束：仅 `turn!=='running'` 时可重选（按钮在运行中禁用，与发送同门）；`main` 的 `startSession` handler 必须**每次调用都更新**追踪的 `sessionId`（不是一次性），否则重选后 turn/审批路由错。
 
 ## 7. 组件重皮（保留功能与 testid）
 
@@ -195,12 +206,15 @@
 
 ### 9.1 reducer 新增（`shared/transcriptReducer.ts`，纯 TS，vitest 覆盖）
 
-- `TranscriptState` 加两个字段：
+- `TranscriptState` 加三个字段：
   - `hasStarted: boolean`（initial `false`）——控制欢迎态/对话态。
   - `approvalMode: 'ask' | 'auto'`（initial `'ask'`）——驱动开关 UI。
-- 新增 LocalAction（沿用现有 `clearApproval`/`setModel` 的 helper 风格）：
+  - `workspace: string`（initial `''`）——驱动"项目/工作目录"按钮显示。
+- 新增 LocalAction helper（沿用现有 `clearApproval`/`setModel` 的纯函数风格）：
   - `markStarted(state)` → `{...state, hasStarted:true}`。
   - `setApprovalMode(state, mode)` → `{...state, approvalMode:mode}`。
+  - `setWorkspace(state, ws)` → `{...state, workspace:ws}`（启动时设当前目录）。
+  - `resetSession(state, ws)` → `{...state, items:[], _messageOpen:false, hasStarted:false, approvalMode:'ask', pendingApproval:null, workspace:ws}`（重选目录后重置；**保留** `connection`/`model`）。
 - **`hasStarted` 翻转时机**：在 `App.handleSubmit` 里发消息的同步时刻 dispatch `markStarted`（不是等 `turn.started`），保证发出即切走欢迎态、无闪烁。
 - 不改任何既有 BackendEvent 分支；纯加法。
 
@@ -210,20 +224,24 @@
 - `main/index.ts`：新增 IPC handler，转成 JSON-RPC `session.setApprovalMode {sessionId, auto}` 发后端（`sessionId` 由 main 已追踪）。
 - `renderer/global.d.ts`：补 `setApprovalMode` 类型。
 - App：开关 `onChange` → `dispatch(setApprovalMode)` + `window.wraith.setApprovalMode(auto)`（失败则回滚 UI 态并 `console.error`，不崩）。
+- **重选目录无新 IPC**：复用 `pickWorkspace` + `startSession`。两处 main 侧要点：
+  - `main/index.ts` 的 `startSession` handler **每次调用都更新**追踪的 `sessionId`（若原实现一次性赋值需改为每次覆盖）。
+  - `main/index.ts` 的 `pickWorkspace` 在 `WRAITH_E2E==='1'` 下当前返回 `null`（跳原生对话框）；**为可测重选**改成返回 `process.env.WRAITH_E2E_WORKSPACE ?? null`——E2E 设该环境变量即可注入一个确定目录，驱动重选往返。
 
 ## 10. 测试策略
 
 沿用 P3b 测试金字塔（纯模块 vitest → Playwright-electron GUI E2E 打 mock 后端 → 真 java 手动眼验），**测契约/行为不测像素**：
 
 - **vitest（纯模块）**：
-  - reducer 新增：`markStarted` 幂等且不可变；`setApprovalMode` 切换；初始 `hasStarted=false`/`approvalMode='ask'`；既有分支回归不变。
+  - reducer 新增：`markStarted` 幂等且不可变；`setApprovalMode` 切换；`setWorkspace` 设值；`resetSession` 清空 items/翻回 hasStarted=false/approvalMode 归 ask/保留 model+connection（不可变断言）；初始 `hasStarted=false`/`approvalMode='ask'`/`workspace=''`；既有分支回归不变。
 - **Playwright-electron E2E**（打确定性 mock 后端 `test/fixtures/mock-appserver.mjs`）：
   - 首屏出现欢迎大标题（`今天做点什么？`）+ composer；transcript 不在。
   - 提交一条 → 欢迎态消失、transcript 出现（`hasStarted` 过渡）。
   - **切"替我审批"开关** → 断言 `session.setApprovalMode` 请求发出且 `auto` 值正确（mock 记录收到的请求）；再切回断言 `auto=false`。
+  - **重选目录**（设 `WRAITH_E2E_WORKSPACE=<临时目录>`）：先提交一条进对话态 → 点 `workspace-switch` → 断言发出第二次 `session.start` 且 `workspaceDir` 为该临时目录、transcript 清空回欢迎态、`workspace-switch` 显示新目录名。
   - 断连横幅重皮后仍可见、`restart` testid 仍在（回归）。
   - 全程 auto-waiting，无 sleep，无像素断言。
-- **mock 后端**：加 `session.setApprovalMode` 处理（回 `{ok:true}`、记录 auto 值供断言）。
+- **mock 后端**：加 `session.setApprovalMode` 处理（回 `{ok:true}`、记录 auto 值供断言）；`session.start` 记录每次收到的 `workspaceDir`（供重选断言），二次调用返回新 sessionId。
 - **控制器真后端眼验**（Phase A 收尾，非 CI）：真 `java -jar ~/.wraith/wraith.jar app-server`，`WRAITH_E2E=1` 跳目录对话框，眼看：浅色前门渲染、欢迎→对话过渡、切"替我审批"后一个本会触发审批的命令**不再弹窗**（验证 `hitl.setEnabled(false)` 真生效）。临时脚本用后删除、不提交。
 - 注意既有 JDK26+Mockito 环境性基线（项目记忆 `testing_quirks`），新增 Java 测试避开 Mockito；`session.setApprovalMode` 的后端测试走 headless JSON-RPC harness 风格（喂请求、断言 `{ok}` + 审批行为），不引 Mockito。
 
@@ -237,5 +255,6 @@ Phase A 只做"前门 + 视觉身份 + 替我审批开关"。**不做**多会话
 - **Radix 内联 style vs 未来 CSP**：见 §3.1，Phase E 处理，记为前向风险。
 - **替我审批的可见性/线程**：见 §8.3，字段 `volatile` 化。
 - **欢迎文案**：已定 `今天做点什么？`，属易调 copy。
-- **"进入项目"按钮**：Phase A 采只读 chip（§6 决策提请复核），若要功能性重选目录需小增量。
+- **重选目录的边界**（已定为功能性）：重选=**重建会话**（新 sessionId、清空 transcript），不做多项目并存（Phase C）；仅 `turn!=='running'` 可点；`main.startSession` 必须每次更新 sessionId（否则路由错，§6.1）；重选后 `approvalMode` 归 `ask`（与新会话后端默认一致），不跨会话保留用户上次的 auto 选择——若日后要保留，是后续小增量。
+- **控制器真后端眼验补重选**：除 §10 的 mock E2E 外，收尾眼验里真选一个不同目录，确认新会话在新目录下工作（如让它读新目录的文件），验证 `session.start` 重建真生效、无 JVM 冷启。
 - **浅色 UI 与深色偏好**：Phase A 只交付浅色；token 化已为暗色留门，暗色主题非本阶段目标。
