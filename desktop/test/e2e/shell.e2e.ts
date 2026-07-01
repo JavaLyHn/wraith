@@ -178,11 +178,36 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
     }, { timeout: 10000 })
     .toBe(true)
 
-  // TODO(Task 6): uncomment after WelcomeEmptyState exists
-  // await expect(win.locator('text=今天做点什么？')).toBeVisible({ timeout: 10000 })
+  // Task 6: WelcomeEmptyState exists, welcome heading should return after re-pick
+  await expect(win.locator('text=今天做点什么？')).toBeVisible({ timeout: 10000 })
 
   await app.close()
   fs.rmSync(recordFile, { force: true })
   fs.rmSync(startupDir, { recursive: true, force: true })
   fs.rmSync(repickDir, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
+// Test 5: welcome empty state → submit → transcript transition
+// ---------------------------------------------------------------------------
+
+test('welcome empty state shows, then transitions to transcript on submit', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
+  })
+  const win = await app.firstWindow()
+
+  // welcome heading visible, transcript absent
+  await expect(win.locator('text=今天做点什么？')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('[data-testid="transcript"]')).toHaveCount(0)
+
+  // submit → welcome gone, transcript present
+  const input = win.locator('[data-testid="input"]')
+  await input.fill('hi')
+  await input.press('Enter')
+  await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('text=今天做点什么？')).toHaveCount(0)
+
+  await app.close()
 })

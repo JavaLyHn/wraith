@@ -15,6 +15,7 @@ import Transcript from './components/Transcript'
 import Composer from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
 import DisconnectedBanner from './components/DisconnectedBanner'
+import WelcomeEmptyState from './components/WelcomeEmptyState'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -249,25 +250,33 @@ export default function App(): JSX.Element {
         </div>
       </div>
 
-      {/* Transcript */}
-      <Transcript items={state.items} />
-      <div ref={transcriptEndRef} />
-
-      {/* Composer */}
-      <div style={{ padding: '12px 16px', flexShrink: 0 }}>
-        <Composer
-          value={inputValue}
-          onChange={setInputValue}
-          onSubmit={handleSubmit}
-          onInterrupt={handleInterrupt}
-          running={state.turn === 'running'}
-          approvalAuto={state.approvalMode === 'auto'}
-          onToggleApproval={handleToggleApproval}
-          model={state.model}
-          workspace={state.workspace}
-          onSwitchWorkspace={handleSwitchWorkspace}
-        />
-      </div>
+      {(() => {
+        const composer = (
+          <Composer
+            value={inputValue}
+            onChange={setInputValue}
+            onSubmit={handleSubmit}
+            onInterrupt={handleInterrupt}
+            running={state.turn === 'running'}
+            approvalAuto={state.approvalMode === 'auto'}
+            onToggleApproval={handleToggleApproval}
+            model={state.model}
+            workspace={state.workspace}
+            onSwitchWorkspace={handleSwitchWorkspace}
+          />
+        )
+        return state.hasStarted ? (
+          <>
+            <Transcript items={state.items} />
+            <div ref={transcriptEndRef} />
+            <div style={{ padding: '12px 16px', flexShrink: 0 }}>{composer}</div>
+          </>
+        ) : (
+          <div style={{ flexGrow: 1, minHeight: 0 }}>
+            <WelcomeEmptyState>{composer}</WelcomeEmptyState>
+          </div>
+        )
+      })()}
 
       {/* Approval modal */}
       {state.pendingApproval && (
