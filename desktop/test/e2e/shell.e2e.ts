@@ -154,7 +154,8 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
       WRAITH_APPSERVER_CMD: 'node ' + mockPath,
       WRAITH_E2E: '1',
       WRAITH_E2E_RECORD: recordFile,
-      WRAITH_E2E_WORKSPACE: startupDir + path.delimiter + repickDir
+      WRAITH_E2E_WORKSPACE: startupDir, // startup workspace (getInitialWorkspace)
+      WRAITH_E2E_PICK: repickDir // what the re-pick button resolves to (pickWorkspace)
     }
   })
   const win = await app.firstWindow()
@@ -169,7 +170,7 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
   // re-pick (resolves to repickDir — distinct from startupDir, guard lets it through)
   await win.locator('[data-testid="workspace-switch"]').click()
 
-  // second session.start carrying repickDir (the second entry in the list)
+  // second session.start carrying repickDir (from WRAITH_E2E_PICK)
   await expect
     .poll(() => {
       const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))

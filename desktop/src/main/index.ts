@@ -6,6 +6,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import readline from 'readline'
 import { JsonRpcClient } from '../shared/jsonRpcClient'
 import { resolveBackendCommand, defaultJarPath } from './backend'
+import { resolvePersistedWorkspace, persistWorkspace } from './settings'
 import type { BackendEvent } from '../shared/types'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -23,8 +24,6 @@ let client: JsonRpcClient | null = null
 let currentSessionId: string | null = null
 /** Last turnId returned by turn.submit. */
 let currentTurnId: string | null = null
-/** Counter for E2E sequential pickWorkspace calls. */
-let e2ePickCount = 0
 
 const defaultJar = defaultJarPath(os.homedir())
 
@@ -175,25 +174,36 @@ ipcMain.handle('wraith:interrupt', async () => {
   })
 })
 
-ipcMain.handle('wraith:pickWorkspace', async () => {
-  // E2E test guard: skip native dialog. WRAITH_E2E_WORKSPACE may be a
-  // path.delimiter-separated list; successive calls return successive entries
-  // (last one sticks), so startup vs re-pick can resolve to different dirs.
+/**
+ * Startup workspace — NO dialog. Returns the persisted workspace (if it still
+ * exists and is a directory), else the home directory. The user changes it via
+ * the composer's "重选目录" button (wraith:pickWorkspace), which is the only
+ * place a native dialog appears.
+ */
+ipcMain.handle('wraith:getInitialWorkspace', async () => {
+  // E2E: startup workspace is injected directly (unset → null → backend default).
   if (process.env['WRAITH_E2E'] === '1') {
-    const raw = process.env['WRAITH_E2E_WORKSPACE']
-    if (!raw) return null
-    const list = raw.split(path.delimiter).filter(Boolean)
-    if (list.length === 0) return null
-    const idx = Math.min(e2ePickCount, list.length - 1)
-    e2ePickCount++
-    return list[idx]!
+    return process.env['WRAITH_E2E_WORKSPACE'] ?? null
   }
+  return resolvePersistedWorkspace(app.getPath('userData')) ?? os.homedir()
+})
+
+ipcMain.handle('wraith:pickWorkspace', async () => {
+  // E2E: what a button-driven pick resolves to (unset → null → cancel/no-op).
+  if (process.env['WRAITH_E2E'] === '1') {
+    return process.env['WRAITH_E2E_PICK'] ?? null
+  }
+  // Open the native picker at the current workspace (or home), not wherever the
+  // OS last remembered.
+  const current = resolvePersistedWorkspace(app.getPath('userData')) ?? os.homedir()
   const result = await dialog.showOpenDialog({
-    properties: ['openDirectory']
+    properties: ['openDirectory'],
+    defaultPath: current
   })
-  return result.canceled || result.filePaths.length === 0
-    ? null
-    : result.filePaths[0]!
+  if (result.canceled || result.filePaths.length === 0) return null
+  const picked = result.filePaths[0]!
+  persistWorkspace(app.getPath('userData'), picked) // remember for next launch
+  return picked
 })
 
 ipcMain.handle('wraith:restartBackend', async () => {

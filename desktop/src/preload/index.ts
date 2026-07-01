@@ -16,6 +16,7 @@ export interface WraithApi {
     decision: 'APPROVED' | 'REJECTED'
   ): Promise<void>
   interrupt(): Promise<void>
+  getInitialWorkspace(): Promise<string | null>
   pickWorkspace(): Promise<string | null>
   restartBackend(): Promise<void>
   setApprovalMode(auto: boolean): Promise<{ ok: boolean }>
@@ -41,6 +42,10 @@ const wraith: WraithApi = {
 
   interrupt() {
     return ipcRenderer.invoke('wraith:interrupt')
+  },
+
+  getInitialWorkspace() {
+    return ipcRenderer.invoke('wraith:getInitialWorkspace')
   },
 
   pickWorkspace() {
