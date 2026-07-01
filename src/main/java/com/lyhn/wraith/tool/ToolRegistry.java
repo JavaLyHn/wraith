@@ -21,6 +21,9 @@ import com.lyhn.wraith.policy.AuditLog;
 import com.lyhn.wraith.policy.CommandGuard;
 import com.lyhn.wraith.policy.PathGuard;
 import com.lyhn.wraith.policy.PolicyException;
+import com.lyhn.wraith.policy.sandbox.CommandSandbox;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.lyhn.wraith.runtime.CancellationContext;
 import com.lyhn.wraith.snapshot.RestoreResult;
 import com.lyhn.wraith.snapshot.SnapshotService;
@@ -81,6 +84,10 @@ public class ToolRegistry {
     private static final int MAX_WRITE_FILE_BYTES = 5 * 1024 * 1024;
     // 需要审计的内置工具（与 ApprovalPolicy 的 DANGEROUS_TOOLS 保持一致）；MCP 工具按前缀动态纳入审计。
     private static final Set<String> AUDIT_TOOLS = Set.of("write_file", "execute_command", "create_project", "revert_turn");
+    private static final Logger log = LoggerFactory.getLogger(ToolRegistry.class);
+    // null = 不沙箱(交互式 CLI 默认行为,与历史一致);仅 app-server 注入
+    private CommandSandbox commandSandbox;
+    private volatile boolean sandboxWarningLogged = false;
     private final Map<String, Tool> tools = new ConcurrentHashMap<>();
     private final Map<String, McpRegisteredTool> mcpTools = new ConcurrentHashMap<>();
     private final long commandTimeoutSeconds;
@@ -1339,6 +1346,24 @@ public class ToolRegistry {
         return base + " (MCP server: " + descriptor.serverName() + ", tool: " + descriptor.name() + ")";
     }
 
+    public void setCommandSandbox(CommandSandbox commandSandbox) {
+        this.commandSandbox = commandSandbox;
+    }
+
+    /** 决定 execute_command 子进程命令行:注入了 sandbox 则包裹,否则裸 bash -c。 */
+    List<String> resolveProcessCommand(String normalized) {
+        CommandSandbox sandbox = this.commandSandbox;
+        if (sandbox == null) {
+            return List.of("bash", "-c", normalized);
+        }
+        CommandSandbox.Wrapped wrapped = sandbox.wrap(projectPath, normalized);
+        if (!wrapped.sandboxed() && !sandboxWarningLogged) {
+            log.warn("[sandbox] {}", wrapped.warning());
+            sandboxWarningLogged = true;
+        }
+        return wrapped.command();
+    }
+
     private String executeCommand(String command) {
         String normalized = command == null ? "" : command.trim();
         if (normalized.isEmpty()) {
@@ -1359,7 +1384,7 @@ public class ToolRegistry {
 
         Process process = null;
         try {
-            ProcessBuilder pb = new ProcessBuilder("bash", "-c", normalized);
+            ProcessBuilder pb = new ProcessBuilder(resolveProcessCommand(normalized));
             pb.directory(new File(projectPath));
             pb.redirectErrorStream(true);
             process = pb.start();
