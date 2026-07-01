@@ -43,7 +43,12 @@ public final class AppServer {
         while ((line = in.readLine()) != null) {
             JsonRpc.Incoming msg = JsonRpc.parse(line);
             if (msg == null) continue;          // 畸形行跳过
-            if (!dispatch(msg)) break;           // shutdown
+            try {
+                if (!dispatch(msg)) break;       // shutdown
+            } catch (Exception e) {
+                System.err.println("app-server: dispatch error on method "
+                        + msg.method() + ": " + e);
+            }
         }
     }
 
@@ -62,10 +67,7 @@ public final class AppServer {
                 if (t != null) t.interrupt();
                 writer.result(msg.id(), Map.of("ok", true));
             }
-            case "approval.respond" -> {
-                handleApprovalRespond(msg);
-                writer.result(msg.id(), Map.of("ok", true));
-            }
+            case "approval.respond" -> handleApprovalRespond(msg);
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
                 return false;
@@ -91,7 +93,7 @@ public final class AppServer {
                 writer.notify("turn.completed", Map.of("sessionId", sessionId, "turnId", turnId, "status", "completed"));
             } catch (Exception e) {
                 writer.notify("turn.failed", Map.of("sessionId", sessionId, "turnId", turnId,
-                        "error", String.valueOf(e.getMessage())));
+                        "error", e.toString()));
             }
         }, "wraith-appserver-turn");
         t.setDaemon(true);
@@ -100,14 +102,22 @@ public final class AppServer {
     }
 
     private void handleApprovalRespond(JsonRpc.Incoming msg) {
-        if (session == null || msg.params() == null) return;
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        if (msg.params() == null) { writer.error(msg.id(), -32602, "missing params"); return; }
         JsonNode p = msg.params();
         String approvalId = p.path("approvalId").asText("");
         String decision = p.path("decision").asText("REJECTED");
         String modifiedArgs = p.hasNonNull("modifiedArgs") ? p.get("modifiedArgs").asText() : null;
         String reason = p.hasNonNull("reason") ? p.get("reason").asText() : null;
-        ApprovalResult result = new ApprovalResult(
-                ApprovalResult.Decision.valueOf(decision), modifiedArgs, reason);
+        ApprovalResult.Decision d;
+        try {
+            d = ApprovalResult.Decision.valueOf(decision);
+        } catch (IllegalArgumentException e) {
+            writer.error(msg.id(), -32602, "invalid decision: " + decision);
+            return;
+        }
+        ApprovalResult result = new ApprovalResult(d, modifiedArgs, reason);
         session.renderer().resolveApproval(approvalId, result);
+        writer.result(msg.id(), java.util.Map.of("ok", true));
     }
 }

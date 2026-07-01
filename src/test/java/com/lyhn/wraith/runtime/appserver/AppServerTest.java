@@ -67,4 +67,21 @@ class AppServerTest {
         for (int i = 0; i < msgs.size(); i++) if (msgs.get(i).path("id").asInt(-1) == id && msgs.get(i).has("result")) return i;
         return -1;
     }
+
+    @Test
+    void invalidApprovalDecisionDoesNotKillLoop() throws Exception {
+        String input = String.join("\n",
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.start\",\"params\":{}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"approval.respond\",\"params\":{\"approvalId\":\"x\",\"decision\":\"BOGUS\"}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayInputStream in = new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(in, out, fakeFactory()).serve();
+        List<JsonNode> msgs = parseAll(out.toString(StandardCharsets.UTF_8));
+        boolean sawError = msgs.stream().anyMatch(n -> n.path("id").asInt(-1) == 3 && n.has("error"));
+        boolean sawShutdown = msgs.stream().anyMatch(n -> n.path("id").asInt(-1) == 4 && n.has("result"));
+        assertTrue(sawError, "bogus decision should get an error response");
+        assertTrue(sawShutdown, "loop must survive the bad message and still handle shutdown");
+    }
 }
