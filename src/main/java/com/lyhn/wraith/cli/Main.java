@@ -1132,6 +1132,14 @@ public class Main {
                 registry.setProjectPath(root);
                 registry.setWriteFileObserver((path, ba) -> renderer.appendDiff(path, ba[0], ba[1]));
                 registry.setCommandSandbox(buildAppServerSandbox()); // ← 新增:命令走 Seatbelt 沙箱
+                registry.setCommandOutputObserver(new com.lyhn.wraith.tool.ToolRegistry.CommandOutputObserver() {
+                    public void onChunk(String callId, String stream, String chunk) {
+                        renderer.appendToolOutputDelta(callId, stream, chunk);
+                    }
+                    public void onResult(String callId, boolean ok, int exitCode) {
+                        renderer.appendToolResult(callId, ok, exitCode);
+                    }
+                });
 
                 com.lyhn.wraith.agent.Agent agent = new com.lyhn.wraith.agent.Agent(client, registry);
                 agent.setRenderer(renderer);
