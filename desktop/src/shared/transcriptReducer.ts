@@ -44,6 +44,12 @@ export interface TranscriptState {
   turn: 'idle' | 'running'
   connection: 'connected' | 'disconnected'
   model: string
+  /** 前门：首条消息发出后翻 true，控制欢迎态/对话态。 */
+  hasStarted: boolean
+  /** 审批模式：ask=逐个弹窗，auto=替我审批（自动放行）。 */
+  approvalMode: 'ask' | 'auto'
+  /** 当前工作目录（驱动 composer 的项目按钮显示）。 */
+  workspace: string
   /** Internal flag: true when the last message item is still open for appending. */
   _messageOpen: boolean
 }
@@ -58,6 +64,9 @@ export const initialState: TranscriptState = {
   turn: 'idle',
   connection: 'disconnected',
   model: '',
+  hasStarted: false,
+  approvalMode: 'ask',
+  workspace: '',
   _messageOpen: false,
 }
 
@@ -222,4 +231,32 @@ export function clearApproval(state: TranscriptState): TranscriptState {
 /** Update the active model name (e.g. from initialize response). */
 export function setModel(state: TranscriptState, model: string): TranscriptState {
   return { ...state, model }
+}
+
+/** 前门：标记会话已开始（首条消息发出时同步调用）。 */
+export function markStarted(state: TranscriptState): TranscriptState {
+  return { ...state, hasStarted: true }
+}
+
+/** 设置审批模式（UI 开关驱动）。 */
+export function setApprovalMode(state: TranscriptState, mode: 'ask' | 'auto'): TranscriptState {
+  return { ...state, approvalMode: mode }
+}
+
+/** 设置当前工作目录。 */
+export function setWorkspace(state: TranscriptState, ws: string): TranscriptState {
+  return { ...state, workspace: ws }
+}
+
+/** 重选目录后重置为新会话（清空 transcript，回欢迎态，审批归 ask；保留 model/connection）。 */
+export function resetSession(state: TranscriptState, ws: string): TranscriptState {
+  return {
+    ...state,
+    items: [],
+    _messageOpen: false,
+    hasStarted: false,
+    approvalMode: 'ask',
+    pendingApproval: null,
+    workspace: ws,
+  }
 }
