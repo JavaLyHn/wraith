@@ -11,6 +11,7 @@ import {
   resetSession,
   loadHistory,
   setSessionId,
+  setSandbox,
   addUserItem,
   type TranscriptState,
   type Item,
@@ -37,6 +38,7 @@ type LocalAction =
   | { type: 'addUserItem'; text: string }
   | { type: 'loadHistory'; items: Item[] }
   | { type: 'setSessionId'; sessionId: string }
+  | { type: 'setSandbox'; sandbox: 'macos-seatbelt' | 'none' | 'unknown' }
 
 type Action = BackendEvent | LocalAction
 
@@ -72,8 +74,19 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   if ('type' in action && action.type === 'setSessionId') {
     return setSessionId(state, action.sessionId)
   }
+  if ('type' in action && action.type === 'setSandbox') {
+    return setSandbox(state, action.sandbox)
+  }
   // BackendEvent has 'kind' field
   return reduce(state, action as BackendEvent)
+}
+
+// ---------------------------------------------------------------------------
+// Sandbox value normalizer
+// ---------------------------------------------------------------------------
+
+function normalizeSandbox(sb: string | undefined): 'macos-seatbelt' | 'none' | 'unknown' {
+  return sb === 'none' ? 'none' : sb === 'macos-seatbelt' ? 'macos-seatbelt' : 'unknown'
 }
 
 // Override initial state: treat initial connection as 'connected' to avoid
@@ -145,10 +158,11 @@ export default function App(): JSX.Element {
         const ws = await window.wraith.getInitialWorkspace()
         dispatch({ type: 'setWorkspace', ws: ws ?? '' })
         const init = await window.wraith.initialize(ws)
-        const initObj = init as { model?: string }
+        const initObj = init as { model?: string; capabilities?: { sandbox?: string } }
         if (initObj.model) {
           dispatch({ type: 'setModel', model: initObj.model })
         }
+        dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(initObj.capabilities?.sandbox) })
         await window.wraith.startSession(ws)
         void fetchSessions()
       } catch (err) {
@@ -156,6 +170,35 @@ export default function App(): JSX.Element {
       }
     })()
   }, [fetchSessions])
+
+  // ── reconnect effect (fires on disconnected→connected, skips first connect) ──
+  const reconnectRef = useRef(false)
+  useEffect(() => {
+    if (state.connection === 'disconnected') {
+      reconnectRef.current = true
+      return
+    }
+    // connected
+    if (!reconnectRef.current) return // first connect is handled by startup effect
+    reconnectRef.current = false
+    const activeId = state.sessionId
+    void (async () => {
+      try {
+        const ws = state.workspace || null
+        const init = await window.wraith.initialize(ws)
+        const sb = (init as { capabilities?: { sandbox?: string } }).capabilities?.sandbox
+        dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(sb) })
+        await window.wraith.startSession(ws)
+        if (activeId) {
+          const { messages } = await window.wraith.resumeSession(activeId)
+          dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
+        }
+        void fetchSessions()
+      } catch (err) {
+        console.error('[wraith] reconnect error:', err)
+      }
+    })()
+  }, [state.connection, state.sessionId, state.workspace, fetchSessions])
 
   // ── auto-scroll to bottom as items arrive ─────────────────────────────────
   useEffect(() => {
@@ -258,6 +301,7 @@ export default function App(): JSX.Element {
         activeSessionId={state.sessionId}
         onNewConversation={handleNewConversation}
         onSelectSession={handleSelectSession}
+        sandbox={state.sandbox}
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col">

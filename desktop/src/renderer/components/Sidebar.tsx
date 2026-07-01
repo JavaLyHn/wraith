@@ -13,6 +13,7 @@ interface SidebarProps {
   activeSessionId: string
   onNewConversation: () => void
   onSelectSession: (id: string) => void
+  sandbox: 'macos-seatbelt' | 'none' | 'unknown'
 }
 
 const NAV: { key: string; label: string; hint: string }[] = [
@@ -28,6 +29,7 @@ export default function Sidebar({
   activeSessionId,
   onNewConversation,
   onSelectSession,
+  sandbox,
 }: SidebarProps): JSX.Element {
   return (
     <TooltipProvider delayDuration={200}>
@@ -92,10 +94,20 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* footer: workspace */}
+        {/* footer: workspace + sandbox badge */}
         <div className="border-t border-border px-3 py-3">
           <div className="truncate text-[11px] text-fg-subtle" title={workspace || '默认工作目录'}>
             📁 {baseName(workspace)}
+          </div>
+          <div
+            data-testid="sandbox-badge"
+            className={
+              'mt-2 truncate text-[11px] ' +
+              (sandbox === 'none' ? 'text-danger' : 'text-fg-subtle')
+            }
+            title={sandbox === 'none' ? '命令未在沙箱内执行' : '命令在 Seatbelt 沙箱内执行'}
+          >
+            {sandbox === 'none' ? '⚠ 沙箱未启用' : sandbox === 'macos-seatbelt' ? '🛡 沙箱: Seatbelt' : '沙箱: —'}
           </div>
         </div>
       </aside>

@@ -161,7 +161,7 @@ async function handleRequest(req) {
         serverInfo: 'mock',
         protocol: '1',
         model: 'mock-model',
-        capabilities: { toolOutputStreaming: true }
+        capabilities: { toolOutputStreaming: true, sandbox: process.env['MOCK_SANDBOX'] || 'macos-seatbelt' }
       })
 
       // Simulate crash if env flag set
