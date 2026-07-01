@@ -970,6 +970,7 @@ git commit -m "test(sandbox): execute_command 端到端沙箱限定"
 - 本计划完成 = spec §4「沙箱」的 v1 落地:§4.1 命令 Seatbelt(Task 2-7)、§4.2 in-process 路径限定(Task 1 锁定既有 `PathGuard`)、§4.4 仅 macOS(fail-open)。
 - **推迟到 P4**:§4.3 逐命令「本次放行网络」的审批 UI 交互(本阶段仅全局开关)。P4 有 UI 后,`approval.respond` 带 network 标志 → 换 `CommandSandbox(networkAllowed=true)` 的 profile 重跑;后端接缝已就位(`CommandSandbox` 已支持 network 分支、profile 已参数化)。
 - 下一阶段 **P3(Electron 壳)** 不依赖 P2 的沙箱内部;P2 对 P3 透明(命令照常执行,只是被限定)。
+- **P3/P4 跟进(最终评审 I1 记录)**:fail-open(非 macOS / 无 `sandbox-exec`)目前只记一条 logback WARN,客户端/UI 无带内途径得知"沙箱已禁用"这一安全相关状态。因 v1 目标平台即 macOS、fail-open 分支在发布目标上不触发,本阶段接受推迟;P3/P4 有 UI/事件通道后,应在 `wrap()` 判定 fail-open 时额外发一条 `notify("sandbox.unavailable", …)` JSON-RPC 事件,让前端显式提示。此为**已跟踪决策**,非隐性缺口。
 
 ## Self-Review(计划自查)
 
