@@ -19,7 +19,7 @@
 
 ## 进行中 🟡
 
-（无——Phase A、B 已合并 main。下一阶段 **Phase B.5**（富对话视图:Monaco per-hunk diff / 富审批 / token 状态)待启动。）
+（无——Phase A、B 已合并 main。下一阶段 **Phase C**（富对话视图:Monaco per-hunk diff / 富审批 / token 状态)待启动。）
 
 ## 遗留 Minor（后续阶段顺手清)
 
@@ -27,18 +27,18 @@
 - **Phase B**:`session.list`/`session.resume` 无 session 负路径测试;`SessionStore.currentId()` 直测;reducer `turn.failed` 回归 + `loadHistory` 保留字段断言;`handleSelectSession` 补 `void fetchSessions()`(一致性,功能 no-op)。
 - **待眼验(非自动覆盖)**:重连 auto-resume 真·断连往返;真 `java` 落盘/list/resume 端到端(需重建 `~/.wraith/wraith.jar`)。建议 `npm run dev` 实机跑一遍。
 
-## 未实现 ⬜(Codex 对齐 A–E,取代旧 P4/P5)
+## 未实现 ⬜(Codex 对齐 A–F,取代旧 P4/P5)
 
 | 阶段 | 内容 | 需后端? | 吸收的旧条目 |
 |---|---|---|---|
-| **Phase B.5** 富对话视图 | Monaco per-hunk diff、富审批(改参 / 本次放行网络)、token 状态展示 | 部分(放行网络需沙箱联动) | 旧-P4 Monaco diff / 富审批 / 状态栏 |
-| **Phase C** 项目工作区 | 多项目并存、项目列表、项目侧栏 | 可能 | (新) |
-| **Phase D** 插件 / 自动化 | MCP 插件管理 UI、自动化流程 | 是 | (新) |
-| **Phase E** 打包 | jpackage 裁剪 JRE + electron-builder + macOS 签名/notarize;CSP 加固 | 构建链 | 旧-P4 CSP / 旧-P5 打包 |
+| **Phase C** 富对话视图 | Monaco per-hunk diff、富审批(改参 / 本次放行网络)、token 状态展示 | 部分(放行网络需沙箱联动) | 旧-P4 Monaco diff / 富审批 / 状态栏 |
+| **Phase D** 项目工作区 | 多项目并存、项目列表、项目侧栏 | 可能 | (新) |
+| **Phase E** 插件 / 自动化 | MCP 插件管理 UI、自动化流程 | 是 | (新) |
+| **Phase F** 打包 | jpackage 裁剪 JRE + electron-builder + macOS 签名/notarize;CSP 加固 | 构建链 | 旧-P4 CSP / 旧-P5 打包 |
 
 ## 旧路线 → 新路线对账
 
-旧 spec §9(`docs/specs/2026-06-30-desktop-shell-v1.md`)是 **P1→P2→P3→P4(富 UI)→P5(打包)**。看过 Codex 桌面截图后重定为 **A–E 的 Codex 对齐超集**:P1–P3 已落地不变;**旧「P4」名字退休**,其条目拆进 B / B.5;旧 P5 = Phase E。已完成的工作全部保留复用。
+旧 spec §9(`docs/specs/2026-06-30-desktop-shell-v1.md`)是 **P1→P2→P3→P4(富 UI)→P5(打包)**。看过 Codex 桌面截图后重定为 **A–F 的 Codex 对齐超集**:P1–P3 已落地不变;**旧「P4」名字退休**,其条目拆进 B / C(富对话视图);旧 P5 = Phase F。已完成的工作全部保留复用。（注:早期把富对话视图记作 "Phase B.5",现更名 Phase C、项目/插件/打包顺延为 D/E/F,去掉小数命名。）
 
 ## 固定约束(跨阶段)
 
