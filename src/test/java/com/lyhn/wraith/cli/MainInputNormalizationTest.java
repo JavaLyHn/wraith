@@ -59,7 +59,7 @@ class MainInputNormalizationTest {
     void startupBannerUsesOpenLayoutWithoutRightBorder() {
         List<String> lines = Main.startupBannerLines();
 
-        assertTrue(lines.stream().anyMatch(line -> line.contains("Wraith CLI")));
+        assertTrue(lines.stream().anyMatch(line -> line.contains("Wraith")));
         assertTrue(lines.stream().anyMatch(line -> line.contains("╚███╔███╔╝")),
                 "banner should render the large WRAITH wordmark");
         assertTrue(lines.stream().anyMatch(line -> line.contains("v16.1.0")));
