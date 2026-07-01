@@ -26,8 +26,9 @@ class ToolRegistryFileConfinementTest {
         ToolRegistry reg = new ToolRegistry();
         reg.setProjectPath(ws.toString());
 
+        String escapeName = "escape-" + System.nanoTime() + ".txt";
         ObjectNode a = M.createObjectNode();
-        a.put("path", "../escape-" + System.nanoTime() + ".txt");
+        a.put("path", "../" + escapeName);
         a.put("content", "should not be written");
         String out = reg.executeToolOutput("write_file", a.toString()).text();
 
@@ -35,7 +36,8 @@ class ToolRegistryFileConfinementTest {
         assertTrue(out.contains("拒绝") || out.toLowerCase().contains("policy")
                         || out.contains("越界") || out.contains("失败"),
                 "越界写入应被拒绝,实际输出: " + out);
-        assertFalse(Files.exists(ws.getParent().resolve("escape-" + a.get("path"))),
+        // 越界写若发生会落在 workspace 的父目录下,精确检查该真实路径
+        assertFalse(Files.exists(ws.getParent().resolve(escapeName)),
                 "越界文件不应被创建");
     }
 
