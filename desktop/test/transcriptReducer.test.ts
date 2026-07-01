@@ -222,6 +222,23 @@ describe('immutability', () => {
     expect(after.items).not.toBe(before.items)
     expect(before.items).toHaveLength(0)
   })
+
+  it('tool.output.delta does not mutate the existing card in the prior state', () => {
+    let s1 = reduce(initialState, notif('tool.call', { callId: 'x', name: 'bash', argsJson: '{}' }))
+    const toolItem1 = s1.items.find(i => i.type === 'tool') as Extract<typeof s1.items[0], { type: 'tool' }>
+    const cardBefore = toolItem1.card
+    const s2 = reduce(s1, notif('tool.output.delta', { callId: 'x', stream: 'stdout', chunk: 'hi' }))
+
+    // prior state's card object is untouched (same ref, empty output)
+    const toolItemStillInS1 = s1.items.find(i => i.type === 'tool') as Extract<typeof s1.items[0], { type: 'tool' }>
+    expect(toolItemStillInS1.card).toBe(cardBefore)
+    expect(cardBefore.output).toBe('')
+
+    // new state got a NEW card object with the appended output
+    const toolItem2 = s2.items.find(i => i.type === 'tool') as Extract<typeof s2.items[0], { type: 'tool' }>
+    expect(toolItem2.card).not.toBe(cardBefore)
+    expect(toolItem2.card.output).toBe('hi\n')
+  })
 })
 
 // ---------------------------------------------------------------------------
