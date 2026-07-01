@@ -1144,6 +1144,12 @@ public class Main {
                 com.lyhn.wraith.agent.Agent agent = new com.lyhn.wraith.agent.Agent(client, registry);
                 agent.setRenderer(renderer);
 
+                com.lyhn.wraith.session.SessionStore sessionStore =
+                        com.lyhn.wraith.session.SessionStore.open(
+                                java.nio.file.Path.of(System.getProperty("user.home")),
+                                root, client.getProviderName(), client.getModelName());
+                sessionStore.startNew();
+
                 com.lyhn.wraith.hitl.RendererHitlHandler rendererHitl =
                         new com.lyhn.wraith.hitl.RendererHitlHandler(renderer, hitl.isEnabled());
                 hitl.setDelegate(rendererHitl);
@@ -1152,8 +1158,20 @@ public class Main {
                     public com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer() { return renderer; }
                     public String runTurn(String input) { return agent.run(input); }
                     public void setApprovalMode(boolean auto) { hitl.setEnabled(!auto); }
+                    public java.util.List<com.lyhn.wraith.session.SessionMeta> listSessions() {
+                        return sessionStore.list(50);
+                    }
+                    public java.util.List<com.lyhn.wraith.llm.LlmClient.Message> resume(String id) {
+                        java.util.List<com.lyhn.wraith.llm.LlmClient.Message> msgs = sessionStore.resume(id);
+                        agent.restoreHistory(msgs);
+                        return msgs;
+                    }
+                    public String persistTurn() {
+                        sessionStore.persist(agent.getConversationHistory());
+                        return sessionStore.currentId();
+                    }
                 };
-            }, buildInitializeResult(client.getModelName()));
+            }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
 
         try {
             server.serve();
@@ -1170,13 +1188,13 @@ public class Main {
     }
 
     /** app-server initialize 响应:serverInfo/protocol/model/capabilities(spec §5.1)。 */
-    static java.util.Map<String, Object> buildInitializeResult(String model) {
+    static java.util.Map<String, Object> buildInitializeResult(String model, boolean sandboxAvailable) {
         java.util.Map<String, Object> caps = new java.util.LinkedHashMap<>();
         caps.put("streaming", true);
         caps.put("approvals", true);
         caps.put("toolOutputStreaming", true);
         caps.put("diff", true);
-        caps.put("sandbox", "macos-seatbelt");
+        caps.put("sandbox", sandboxAvailable ? "macos-seatbelt" : "none");
         java.util.Map<String, Object> res = new java.util.LinkedHashMap<>();
         res.put("serverInfo", "wraith-app-server");
         res.put("protocol", "1");
