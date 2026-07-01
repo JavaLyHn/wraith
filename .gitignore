@@ -25,3 +25,10 @@ target/
 Thumbs.db
 /reports
 temp_articles.json
+
+# desktop shell
+desktop/node_modules/
+desktop/out/
+desktop/dist/
+desktop/playwright-report/
+desktop/test-results/
