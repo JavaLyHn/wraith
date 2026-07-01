@@ -129,6 +129,15 @@ public interface Renderer extends AutoCloseable {
      */
     void appendToolCalls(List<LlmClient.ToolCall> toolCalls);
 
+    /** 实时工具输出增量（如 bash 命令的实时 stdout/stderr）。默认 no-op；事件流渲染器覆盖。
+     * @param stream "stdout" 或 "stderr" */
+    default void appendToolOutputDelta(String callId, String stream, String chunk) {
+    }
+
+    /** 工具执行收尾（成功/失败/退出码）。默认 no-op；事件流渲染器覆盖。 */
+    default void appendToolResult(String callId, boolean ok, int exitCode) {
+    }
+
     /**
      * 渲染一个文件 diff 块。
      *
