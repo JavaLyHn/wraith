@@ -85,11 +85,32 @@ export interface ToolResultEvent {
   output: unknown
 }
 
-/** Union of all backend push events. */
-export type BackendEvent =
+/** Union of all backend push events (legacy event catalog). */
+export type LegacyBackendEvent =
   | MessageDeltaEvent
   | MessageDoneEvent
   | BackendErrorEvent
   | AgentStateEvent
   | ToolCallEvent
   | ToolResultEvent
+
+// ---------------------------------------------------------------------------
+// Reducer-layer BackendEvent (JSON-RPC 2.0 notification + connection events)
+// Used by transcriptReducer and JsonRpcClient event bus.
+// ---------------------------------------------------------------------------
+
+/** A JSON-RPC 2.0 server-push notification dispatched from app-server. */
+export interface BackendNotificationEvent {
+  kind: 'notification'
+  method: string
+  params: unknown
+}
+
+/** Connection-state change (child process connected / disconnected). */
+export interface BackendConnectionEvent {
+  kind: 'connection'
+  state: 'connected' | 'disconnected'
+}
+
+/** Union of all events the transcriptReducer handles. */
+export type BackendEvent = BackendNotificationEvent | BackendConnectionEvent
