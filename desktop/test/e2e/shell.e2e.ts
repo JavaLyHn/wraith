@@ -229,7 +229,35 @@ test('static sidebar shell present with disabled placeholder nav', async () => {
 })
 
 // ---------------------------------------------------------------------------
-// Test 7: submitting echoes the user message as a bubble
+// Test 7: sidebar lists sessions; new clears; selecting resumes history
+// ---------------------------------------------------------------------------
+
+test('sidebar lists sessions; new clears; selecting resumes history', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 15000 })
+
+  // list rendered from session.list
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(2, { timeout: 10000 })
+  await expect(win.locator('[data-testid="conversation-item"]').first()).toContainText('第一段对话')
+
+  // selecting resumes → static history (user bubble + assistant answer) shows
+  await win.locator('[data-testid="conversation-item"]').first().click()
+  await expect(win.locator('[data-testid="user-msg"]')).toContainText('之前问的问题', { timeout: 10000 })
+  await expect(win.locator('[data-testid="transcript"] strong')).toHaveText('回答', { timeout: 10000 })
+
+  // new conversation clears transcript back to welcome
+  await win.locator('[data-testid="new-conversation"]').click()
+  await expect(win.locator('text=今天做点什么？')).toBeVisible({ timeout: 10000 })
+
+  await app.close()
+})
+
+// ---------------------------------------------------------------------------
+// Test 8: submitting echoes the user message as a bubble
 // ---------------------------------------------------------------------------
 
 test('submitting echoes the user message as a bubble', async () => {
