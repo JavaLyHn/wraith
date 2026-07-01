@@ -91,7 +91,7 @@ export default function App(): JSX.Element {
 
     void (async () => {
       try {
-        const ws = await window.wraith.pickWorkspace()
+        const ws = await window.wraith.getInitialWorkspace()
         dispatch({ type: 'setWorkspace', ws: ws ?? '' })
         const init = await window.wraith.initialize(ws)
         const initObj = init as { model?: string }
