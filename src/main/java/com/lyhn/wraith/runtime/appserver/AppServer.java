@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public final class AppServer {
 
     public interface SessionRunnerFactory {
-        SessionRunner create(JsonRpcWriter writer, String sessionId);
+        SessionRunner create(JsonRpcWriter writer, String sessionId, String workspaceDir);
     }
 
     public interface SessionRunner {
@@ -26,6 +26,7 @@ public final class AppServer {
     private final BufferedReader in;
     private final JsonRpcWriter writer;
     private final SessionRunnerFactory factory;
+    private final Map<String, Object> initializeResult;
     private final AtomicLong turnSeq = new AtomicLong();
 
     private SessionRunner session;
@@ -33,9 +34,15 @@ public final class AppServer {
     private volatile Thread turnThread;
 
     public AppServer(InputStream in, OutputStream out, SessionRunnerFactory factory) {
+        this(in, out, factory, Map.of("serverInfo", "wraith-app-server", "protocol", "1"));
+    }
+
+    public AppServer(InputStream in, OutputStream out, SessionRunnerFactory factory,
+                     Map<String, Object> initializeResult) {
         this.in = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
         this.writer = new JsonRpcWriter(out);
         this.factory = factory;
+        this.initializeResult = initializeResult;
     }
 
     public void serve() throws Exception {
@@ -54,13 +61,8 @@ public final class AppServer {
 
     private boolean dispatch(JsonRpc.Incoming msg) {
         switch (msg.method()) {
-            case "initialize" ->
-                    writer.result(msg.id(), Map.of("serverInfo", "wraith-app-server", "protocol", "1"));
-            case "session.start" -> {
-                sessionId = "sess_" + Long.toHexString(System.nanoTime());
-                session = factory.create(writer, sessionId);
-                writer.result(msg.id(), Map.of("sessionId", sessionId));
-            }
+            case "initialize" -> writer.result(msg.id(), initializeResult);
+            case "session.start" -> handleSessionStart(msg);
             case "turn.submit" -> handleTurn(msg);
             case "turn.interrupt" -> {
                 Thread t = turnThread;
@@ -79,8 +81,31 @@ public final class AppServer {
         return true;
     }
 
+    private void handleSessionStart(JsonRpc.Incoming msg) {
+        String workspaceDir = null;
+        JsonNode p = msg.params();
+        if (p != null && p.hasNonNull("workspaceDir")) {
+            String wd = p.get("workspaceDir").asText();
+            if (wd != null && !wd.isBlank()) {
+                if (!java.nio.file.Files.isDirectory(java.nio.file.Path.of(wd))) {
+                    writer.error(msg.id(), -32602, "workspaceDir 不是有效目录: " + wd);
+                    return;
+                }
+                workspaceDir = wd;
+            }
+        }
+        sessionId = "sess_" + Long.toHexString(System.nanoTime());
+        session = factory.create(writer, sessionId, workspaceDir);
+        writer.result(msg.id(), Map.of("sessionId", sessionId));
+    }
+
     private void handleTurn(JsonRpc.Incoming msg) {
         if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        Thread running = turnThread;
+        if (running != null && running.isAlive()) {
+            writer.error(msg.id(), -32000, "turn in progress");
+            return;
+        }
         JsonNode params = msg.params();
         String input = (params != null && params.hasNonNull("input")) ? params.get("input").asText() : "";
         String turnId = "turn_" + turnSeq.incrementAndGet();

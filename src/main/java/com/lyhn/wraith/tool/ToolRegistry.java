@@ -224,6 +224,23 @@ public class ToolRegistry {
         this.writeFileObserver = observer == null ? (p, ba) -> {} : observer;
     }
 
+    /** 命令实时输出观察者:逐行 chunk + 收尾 result。app-server 接到 EventStreamRenderer。 */
+    public interface CommandOutputObserver {
+        void onChunk(String callId, String stream, String chunk);
+        void onResult(String callId, boolean ok, int exitCode);
+    }
+    private static final CommandOutputObserver NOOP_OUTPUT_OBSERVER = new CommandOutputObserver() {
+        public void onChunk(String callId, String stream, String chunk) {}
+        public void onResult(String callId, boolean ok, int exitCode) {}
+    };
+    private volatile CommandOutputObserver commandOutputObserver = NOOP_OUTPUT_OBSERVER;
+    // 命令流出用的 callId(在 executeTools 设置,对 HitlToolRegistry override 透明、并行安全)
+    private final ThreadLocal<String> currentCallId = new ThreadLocal<>();
+
+    public void setCommandOutputObserver(CommandOutputObserver observer) {
+        this.commandOutputObserver = observer == null ? NOOP_OUTPUT_OBSERVER : observer;
+    }
+
     public void setLspManager(LspManager lspManager) {
         this.lspManager = lspManager == null ? new LspManager(projectPath) : lspManager;
         this.lspManager.setProjectPath(projectPath);
@@ -1268,7 +1285,13 @@ public class ToolRegistry {
         if (invocations.size() == 1) {
             ToolInvocation invocation = invocations.get(0);
             long startedAt = System.nanoTime();
-            ToolOutput output = executeToolOutput(invocation.name(), invocation.argumentsJson());
+            currentCallId.set(invocation.id());
+            ToolOutput output;
+            try {
+                output = executeToolOutput(invocation.name(), invocation.argumentsJson());
+            } finally {
+                currentCallId.remove();
+            }
             return List.of(ToolExecutionResult.completed(invocation, output, elapsedMillis(startedAt)));
         }
 
@@ -1286,7 +1309,13 @@ public class ToolRegistry {
                             return ToolExecutionResult.failed(invocation, "用户取消了此次工具调用");
                         }
                         long startedAt = System.nanoTime();
-                        ToolOutput output = executeToolOutput(invocation.name(), invocation.argumentsJson());
+                        currentCallId.set(invocation.id());
+                        ToolOutput output;
+                        try {
+                            output = executeToolOutput(invocation.name(), invocation.argumentsJson());
+                        } finally {
+                            currentCallId.remove();
+                        }
                         return ToolExecutionResult.completed(invocation, output, elapsedMillis(startedAt));
                     })
                     .toList();
@@ -1376,6 +1405,8 @@ public class ToolRegistry {
             throw new PolicyException(denyReason);
         }
 
+        String callId = currentCallId.get();
+
         ExecutorService outputReaderExecutor = Executors.newSingleThreadExecutor(r -> {
             Thread thread = new Thread(r, "wraith-command-output");
             thread.setDaemon(true);
@@ -1390,40 +1421,47 @@ public class ToolRegistry {
             process = pb.start();
 
             Process runningProcess = process;
-            Future<String> outputFuture = outputReaderExecutor.submit(() -> readProcessOutput(runningProcess));
+            Future<String> outputFuture = outputReaderExecutor.submit(() -> readProcessOutput(runningProcess, callId));
 
             boolean finished = process.waitFor(commandTimeoutSeconds, TimeUnit.SECONDS);
             if (!finished) {
                 process.destroyForcibly();
                 process.waitFor(2, TimeUnit.SECONDS);
                 outputFuture.cancel(true);
+                safeOnResult(callId, false, -1);
                 return "命令执行超时（" + commandTimeoutSeconds + "秒），已强制终止";
             }
 
             String output = getCommandOutput(outputFuture);
             int exitCode = process.exitValue();
+            safeOnResult(callId, exitCode == 0, exitCode);
             return String.format("命令执行完成 (exit code: %d)\n%s", exitCode, output);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             if (process != null) {
                 process.destroyForcibly();
             }
+            safeOnResult(callId, false, -1);
             return "用户取消了此次工具调用";
         } catch (Exception e) {
             if (process != null) {
                 process.destroyForcibly();
             }
+            safeOnResult(callId, false, -1);
             return "执行命令失败: " + e.getMessage();
         } finally {
             outputReaderExecutor.shutdownNow();
         }
     }
 
-    private String readProcessOutput(Process process) throws Exception {
+    private String readProcessOutput(Process process, String callId) throws Exception {
         StringBuilder output = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
+                if (callId != null) {
+                    safeOnChunk(callId, "stdout", line);   // 逐行流给 UI(不受 8000 字符缓冲上限约束)
+                }
                 if (output.length() < MAX_COMMAND_OUTPUT_CHARS) {
                     int remaining = MAX_COMMAND_OUTPUT_CHARS - output.length();
                     if (line.length() > remaining) {
@@ -1439,6 +1477,15 @@ public class ToolRegistry {
             return output.substring(0, MAX_COMMAND_OUTPUT_CHARS) + "\n...(输出已截断)";
         }
         return output.toString();
+    }
+
+    private void safeOnChunk(String callId, String stream, String chunk) {
+        try { commandOutputObserver.onChunk(callId, stream, chunk); } catch (Exception ignored) {}
+    }
+
+    private void safeOnResult(String callId, boolean ok, int exitCode) {
+        if (callId == null) return;
+        try { commandOutputObserver.onResult(callId, ok, exitCode); } catch (Exception ignored) {}
     }
 
     private String getCommandOutput(Future<String> outputFuture) throws Exception {

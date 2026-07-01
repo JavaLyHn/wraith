@@ -1115,7 +1115,7 @@ public class Main {
         }
 
         com.lyhn.wraith.runtime.appserver.AppServer server =
-            new com.lyhn.wraith.runtime.appserver.AppServer(System.in, realOut, (writer, sessionId) -> {
+            new com.lyhn.wraith.runtime.appserver.AppServer(System.in, realOut, (writer, sessionId, workspaceDir) -> {
                 com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer =
                         new com.lyhn.wraith.runtime.appserver.EventStreamRenderer(writer, sessionId);
 
@@ -1126,9 +1126,20 @@ public class Main {
                 hitl.setEnabled(true); // 开 HITL，审批走 EventStreamRenderer
                 com.lyhn.wraith.hitl.HitlToolRegistry registry =
                         new com.lyhn.wraith.hitl.HitlToolRegistry(hitl);
-                registry.setProjectPath(java.nio.file.Path.of(".").toAbsolutePath().normalize().toString());
+                String root = (workspaceDir != null && !workspaceDir.isBlank())
+                        ? workspaceDir
+                        : java.nio.file.Path.of(".").toAbsolutePath().normalize().toString();
+                registry.setProjectPath(root);
                 registry.setWriteFileObserver((path, ba) -> renderer.appendDiff(path, ba[0], ba[1]));
                 registry.setCommandSandbox(buildAppServerSandbox()); // ← 新增:命令走 Seatbelt 沙箱
+                registry.setCommandOutputObserver(new com.lyhn.wraith.tool.ToolRegistry.CommandOutputObserver() {
+                    public void onChunk(String callId, String stream, String chunk) {
+                        renderer.appendToolOutputDelta(callId, stream, chunk);
+                    }
+                    public void onResult(String callId, boolean ok, int exitCode) {
+                        renderer.appendToolResult(callId, ok, exitCode);
+                    }
+                });
 
                 com.lyhn.wraith.agent.Agent agent = new com.lyhn.wraith.agent.Agent(client, registry);
                 agent.setRenderer(renderer);
@@ -1141,7 +1152,7 @@ public class Main {
                     public com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer() { return renderer; }
                     public String runTurn(String input) { return agent.run(input); }
                 };
-            });
+            }, buildInitializeResult(client.getModelName()));
 
         try {
             server.serve();
@@ -1155,6 +1166,22 @@ public class Main {
         boolean networkAllowed =
                 "on".equalsIgnoreCase(System.getProperty("wraith.sandbox.network", "off"));
         return new com.lyhn.wraith.policy.sandbox.CommandSandbox(networkAllowed);
+    }
+
+    /** app-server initialize 响应:serverInfo/protocol/model/capabilities(spec §5.1)。 */
+    static java.util.Map<String, Object> buildInitializeResult(String model) {
+        java.util.Map<String, Object> caps = new java.util.LinkedHashMap<>();
+        caps.put("streaming", true);
+        caps.put("approvals", true);
+        caps.put("toolOutputStreaming", true);
+        caps.put("diff", true);
+        caps.put("sandbox", "macos-seatbelt");
+        java.util.Map<String, Object> res = new java.util.LinkedHashMap<>();
+        res.put("serverInfo", "wraith-app-server");
+        res.put("protocol", "1");
+        res.put("model", model == null ? "" : model);
+        res.put("capabilities", caps);
+        return res;
     }
 
     private static int parseServePort(String[] args, int defaultPort) {
