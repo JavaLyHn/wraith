@@ -9,6 +9,7 @@ import {
   setApprovalMode,
   setWorkspace,
   resetSession,
+  addUserItem,
   type TranscriptState,
 } from '../shared/transcriptReducer'
 import Transcript from './components/Transcript'
@@ -29,6 +30,7 @@ type LocalAction =
   | { type: 'setApprovalMode'; mode: 'ask' | 'auto' }
   | { type: 'setWorkspace'; ws: string }
   | { type: 'resetSession'; ws: string }
+  | { type: 'addUserItem'; text: string }
 
 type Action = BackendEvent | LocalAction
 
@@ -54,6 +56,9 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   }
   if ('type' in action && action.type === 'resetSession') {
     return resetSession(state, action.ws)
+  }
+  if ('type' in action && action.type === 'addUserItem') {
+    return addUserItem(state, action.text)
   }
   // BackendEvent has 'kind' field
   return reduce(state, action as BackendEvent)
@@ -116,6 +121,7 @@ export default function App(): JSX.Element {
     if (!text || state.turn === 'running') return
     setInputValue('')
     dispatch({ type: 'markStarted' })
+    dispatch({ type: 'addUserItem', text })
     try {
       await window.wraith.submitTurn(text)
     } catch (err) {

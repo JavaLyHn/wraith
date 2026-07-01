@@ -227,3 +227,21 @@ test('static sidebar shell present with disabled placeholder nav', async () => {
   await expect(win.locator('[data-testid="nav-plugins"]')).toBeDisabled()
   await app.close()
 })
+
+// ---------------------------------------------------------------------------
+// Test 7: submitting echoes the user message as a bubble
+// ---------------------------------------------------------------------------
+
+test('submitting echoes the user message as a bubble', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+  await input.fill('我的问题')
+  await input.press('Enter')
+  await expect(win.locator('[data-testid="user-msg"]')).toHaveText('我的问题', { timeout: 10000 })
+  await app.close()
+})
