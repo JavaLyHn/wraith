@@ -81,6 +81,7 @@ class AppServerInitializeAndGuardTest {
         assertEquals("deepseek-chat", r.path("result").path("model").asText());
         assertTrue(r.path("result").path("capabilities").path("toolOutputStreaming").asBoolean());
         assertEquals("wraith-app-server", r.path("result").path("serverInfo").asText());
+        assertEquals("1", r.path("result").path("protocol").asText());
     }
 
     @Test
