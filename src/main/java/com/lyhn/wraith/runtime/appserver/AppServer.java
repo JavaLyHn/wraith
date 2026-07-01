@@ -1,0 +1,113 @@
+package com.lyhn.wraith.runtime.appserver;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.lyhn.wraith.hitl.ApprovalResult;
+
+import java.io.BufferedReader;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
+
+/** stdio JSON-RPC app-server 主循环。v1 单会话。 */
+public final class AppServer {
+
+    public interface SessionRunnerFactory {
+        SessionRunner create(JsonRpcWriter writer, String sessionId);
+    }
+
+    public interface SessionRunner {
+        EventStreamRenderer renderer();
+        String runTurn(String input) throws Exception;
+    }
+
+    private final BufferedReader in;
+    private final JsonRpcWriter writer;
+    private final SessionRunnerFactory factory;
+    private final AtomicLong turnSeq = new AtomicLong();
+
+    private SessionRunner session;
+    private String sessionId;
+    private volatile Thread turnThread;
+
+    public AppServer(InputStream in, OutputStream out, SessionRunnerFactory factory) {
+        this.in = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+        this.writer = new JsonRpcWriter(out);
+        this.factory = factory;
+    }
+
+    public void serve() throws Exception {
+        String line;
+        while ((line = in.readLine()) != null) {
+            JsonRpc.Incoming msg = JsonRpc.parse(line);
+            if (msg == null) continue;          // 畸形行跳过
+            if (!dispatch(msg)) break;           // shutdown
+        }
+    }
+
+    private boolean dispatch(JsonRpc.Incoming msg) {
+        switch (msg.method()) {
+            case "initialize" ->
+                    writer.result(msg.id(), Map.of("serverInfo", "wraith-app-server", "protocol", "1"));
+            case "session.start" -> {
+                sessionId = "sess_" + Long.toHexString(System.nanoTime());
+                session = factory.create(writer, sessionId);
+                writer.result(msg.id(), Map.of("sessionId", sessionId));
+            }
+            case "turn.submit" -> handleTurn(msg);
+            case "turn.interrupt" -> {
+                Thread t = turnThread;
+                if (t != null) t.interrupt();
+                writer.result(msg.id(), Map.of("ok", true));
+            }
+            case "approval.respond" -> {
+                handleApprovalRespond(msg);
+                writer.result(msg.id(), Map.of("ok", true));
+            }
+            case "shutdown" -> {
+                writer.result(msg.id(), Map.of("ok", true));
+                return false;
+            }
+            default -> {
+                if (!msg.isNotification()) writer.error(msg.id(), -32601, "method not found: " + msg.method());
+            }
+        }
+        return true;
+    }
+
+    private void handleTurn(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode params = msg.params();
+        String input = (params != null && params.hasNonNull("input")) ? params.get("input").asText() : "";
+        String turnId = "turn_" + turnSeq.incrementAndGet();
+        session.renderer().setCurrentTurnId(turnId);
+        writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
+        writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
+        Thread t = new Thread(() -> {
+            try {
+                session.runTurn(input);
+                writer.notify("turn.completed", Map.of("sessionId", sessionId, "turnId", turnId, "status", "completed"));
+            } catch (Exception e) {
+                writer.notify("turn.failed", Map.of("sessionId", sessionId, "turnId", turnId,
+                        "error", String.valueOf(e.getMessage())));
+            }
+        }, "wraith-appserver-turn");
+        t.setDaemon(true);
+        turnThread = t;
+        t.start();
+    }
+
+    private void handleApprovalRespond(JsonRpc.Incoming msg) {
+        if (session == null || msg.params() == null) return;
+        JsonNode p = msg.params();
+        String approvalId = p.path("approvalId").asText("");
+        String decision = p.path("decision").asText("REJECTED");
+        String modifiedArgs = p.hasNonNull("modifiedArgs") ? p.get("modifiedArgs").asText() : null;
+        String reason = p.hasNonNull("reason") ? p.get("reason").asText() : null;
+        ApprovalResult result = new ApprovalResult(
+                ApprovalResult.Decision.valueOf(decision), modifiedArgs, reason);
+        session.renderer().resolveApproval(approvalId, result);
+    }
+}
