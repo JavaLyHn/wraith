@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 function createWindow(): void {
-  const preloadPath = path.join(__dirname, '../preload/index.js')
+  const preloadPath = path.join(__dirname, '../preload/index.mjs')
 
   const win = new BrowserWindow({
     width: 1200,
