@@ -1,0 +1,92 @@
+package com.lyhn.wraith.runtime.appserver;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.lyhn.wraith.llm.LlmClient;
+import com.lyhn.wraith.session.SessionMeta;
+import org.junit.jupiter.api.Test;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import static org.junit.jupiter.api.Assertions.*;
+
+class AppServerSessionTest {
+
+    private List<JsonNode> parseAll(String s) throws Exception {
+        List<JsonNode> out = new ArrayList<>();
+        for (String ln : s.split("\n")) if (!ln.isBlank()) out.add(JsonRpc.MAPPER.readTree(ln));
+        return out;
+    }
+
+    /** Fake runner: canned list/resume, records persistTurn, returns a fixed persisted id. */
+    private AppServer.SessionRunnerFactory factory(AtomicInteger persistCount) {
+        return (writer, sessionId, workspaceDir) -> {
+            EventStreamRenderer r = new EventStreamRenderer(writer, sessionId);
+            return new AppServer.SessionRunner() {
+                public EventStreamRenderer renderer() { return r; }
+                public String runTurn(String input) { r.appendAssistantContentDelta("ok"); r.finishAssistantContent(); return "ok"; }
+                public List<SessionMeta> listSessions() {
+                    return List.of(new SessionMeta("s1", "/p", "c", "u", "prov", "mod", "hello world", 3));
+                }
+                public List<LlmClient.Message> resume(String id) {
+                    return List.of(
+                        new LlmClient.Message("user", "hi", null, null, null),
+                        new LlmClient.Message("assistant", "yo", null, null, null));
+                }
+                public String persistTurn() { persistCount.incrementAndGet(); return "persisted-9"; }
+            };
+        };
+    }
+
+    @Test
+    void sessionListSerializesMetas() throws Exception {
+        String in = String.join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.list\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(new ByteArrayInputStream(in.getBytes(StandardCharsets.UTF_8)), out, factory(new AtomicInteger())).serve();
+        JsonNode listResult = parseAll(out.toString(StandardCharsets.UTF_8)).stream()
+            .filter(n -> n.path("id").asInt(-1) == 2 && n.has("result")).findFirst().orElseThrow();
+        JsonNode sessions = listResult.get("result").get("sessions");
+        assertTrue(sessions.isArray() && sessions.size() == 1);
+        assertEquals("s1", sessions.get(0).get("id").asText());
+        assertEquals("hello world", sessions.get(0).get("title").asText());
+        assertEquals(3, sessions.get(0).get("turns").asInt());
+    }
+
+    @Test
+    void sessionResumeSerializesMessages() throws Exception {
+        String in = String.join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.resume\",\"params\":{\"sessionId\":\"s1\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(new ByteArrayInputStream(in.getBytes(StandardCharsets.UTF_8)), out, factory(new AtomicInteger())).serve();
+        JsonNode res = parseAll(out.toString(StandardCharsets.UTF_8)).stream()
+            .filter(n -> n.path("id").asInt(-1) == 2 && n.has("result")).findFirst().orElseThrow().get("result");
+        assertEquals("s1", res.get("sessionId").asText());
+        JsonNode msgs = res.get("messages");
+        assertEquals(2, msgs.size());
+        assertEquals("user", msgs.get(0).get("role").asText());
+        assertEquals("hi", msgs.get(0).get("content").asText());
+    }
+
+    @Test
+    void turnPersistsAndReportsRealSessionId() throws Exception {
+        AtomicInteger persist = new AtomicInteger();
+        String in = String.join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"turn.submit\",\"params\":{\"input\":\"hi\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(new ByteArrayInputStream(in.getBytes(StandardCharsets.UTF_8)), out, factory(persist)).serve();
+        long deadline = System.currentTimeMillis() + 2000;
+        while (System.currentTimeMillis() < deadline && !out.toString(StandardCharsets.UTF_8).contains("turn.completed")) Thread.sleep(20);
+        assertEquals(1, persist.get(), "persistTurn should be called once after the turn");
+        JsonNode completed = parseAll(out.toString(StandardCharsets.UTF_8)).stream()
+            .filter(n -> "turn.completed".equals(n.path("method").asText(null))).findFirst().orElseThrow();
+        assertEquals("persisted-9", completed.get("params").get("sessionId").asText(),
+            "turn.completed should carry the real persisted sessionId");
+    }
+}

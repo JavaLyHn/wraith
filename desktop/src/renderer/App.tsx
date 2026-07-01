@@ -1,5 +1,5 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
-import type { BackendEvent } from '../shared/types'
+import type { BackendEvent, SessionMeta } from '../shared/types'
 import {
   initialState,
   reduce,
@@ -9,8 +9,14 @@ import {
   setApprovalMode,
   setWorkspace,
   resetSession,
+  loadHistory,
+  setSessionId,
+  setSandbox,
+  addUserItem,
   type TranscriptState,
+  type Item,
 } from '../shared/transcriptReducer'
+import { messagesToItems } from '../shared/messagesToItems'
 import Transcript from './components/Transcript'
 import Composer from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -29,6 +35,10 @@ type LocalAction =
   | { type: 'setApprovalMode'; mode: 'ask' | 'auto' }
   | { type: 'setWorkspace'; ws: string }
   | { type: 'resetSession'; ws: string }
+  | { type: 'addUserItem'; text: string }
+  | { type: 'loadHistory'; items: Item[] }
+  | { type: 'setSessionId'; sessionId: string }
+  | { type: 'setSandbox'; sandbox: 'macos-seatbelt' | 'none' | 'unknown' }
 
 type Action = BackendEvent | LocalAction
 
@@ -55,8 +65,28 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   if ('type' in action && action.type === 'resetSession') {
     return resetSession(state, action.ws)
   }
+  if ('type' in action && action.type === 'addUserItem') {
+    return addUserItem(state, action.text)
+  }
+  if ('type' in action && action.type === 'loadHistory') {
+    return loadHistory(state, action.items)
+  }
+  if ('type' in action && action.type === 'setSessionId') {
+    return setSessionId(state, action.sessionId)
+  }
+  if ('type' in action && action.type === 'setSandbox') {
+    return setSandbox(state, action.sandbox)
+  }
   // BackendEvent has 'kind' field
   return reduce(state, action as BackendEvent)
+}
+
+// ---------------------------------------------------------------------------
+// Sandbox value normalizer
+// ---------------------------------------------------------------------------
+
+function normalizeSandbox(sb: string | undefined): 'macos-seatbelt' | 'none' | 'unknown' {
+  return sb === 'none' ? 'none' : sb === 'macos-seatbelt' ? 'macos-seatbelt' : 'unknown'
 }
 
 // Override initial state: treat initial connection as 'connected' to avoid
@@ -73,6 +103,7 @@ const connectedInitialState: TranscriptState = {
 export default function App(): JSX.Element {
   const [state, dispatch] = useReducer(reduceAdapter, connectedInitialState)
   const [inputValue, setInputValue] = useState('')
+  const [sessions, setSessions] = useState<SessionMeta[]>([])
   const startedRef = useRef(false)
   const transcriptEndRef = useRef<HTMLDivElement>(null)
 
@@ -84,6 +115,39 @@ export default function App(): JSX.Element {
     return unsubscribe
   }, [])
 
+  // ── session list helpers ───────────────────────────────────────────────────
+  const fetchSessions = useCallback(async () => {
+    try {
+      const { sessions } = await window.wraith.listSessions()
+      setSessions(sessions)
+    } catch (err) {
+      console.error('[wraith] listSessions error:', err)
+    }
+  }, [])
+
+  const handleNewConversation = useCallback(async () => {
+    if (state.turn === 'running') return
+    try {
+      await window.wraith.startSession(state.workspace || null)
+      dispatch({ type: 'resetSession', ws: state.workspace })
+      void fetchSessions()
+    } catch (err) {
+      console.error('[wraith] newConversation error:', err)
+    }
+  }, [state.turn, state.workspace, fetchSessions])
+
+  const handleSelectSession = useCallback(async (id: string) => {
+    if (state.turn === 'running') return
+    try {
+      const { sessionId, messages } = await window.wraith.resumeSession(id)
+      dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
+      dispatch({ type: 'setSessionId', sessionId })
+      dispatch({ type: 'markStarted' })
+    } catch (err) {
+      console.error('[wraith] resumeSession error:', err)
+    }
+  }, [state.turn])
+
   // ── startup flow (runs once) ───────────────────────────────────────────────
   useEffect(() => {
     if (startedRef.current) return
@@ -94,21 +158,61 @@ export default function App(): JSX.Element {
         const ws = await window.wraith.getInitialWorkspace()
         dispatch({ type: 'setWorkspace', ws: ws ?? '' })
         const init = await window.wraith.initialize(ws)
-        const initObj = init as { model?: string }
+        const initObj = init as { model?: string; capabilities?: { sandbox?: string } }
         if (initObj.model) {
           dispatch({ type: 'setModel', model: initObj.model })
         }
+        dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(initObj.capabilities?.sandbox) })
         await window.wraith.startSession(ws)
+        void fetchSessions()
       } catch (err) {
         console.error('[wraith] startup error:', err)
       }
     })()
-  }, [])
+  }, [fetchSessions])
+
+  // ── reconnect effect (fires on disconnected→connected, skips first connect) ──
+  const reconnectRef = useRef(false)
+  useEffect(() => {
+    if (state.connection === 'disconnected') {
+      reconnectRef.current = true
+      return
+    }
+    // connected
+    if (!reconnectRef.current) return // first connect is handled by startup effect
+    reconnectRef.current = false
+    const activeId = state.sessionId
+    void (async () => {
+      try {
+        const ws = state.workspace || null
+        const init = await window.wraith.initialize(ws)
+        const sb = (init as { capabilities?: { sandbox?: string } }).capabilities?.sandbox
+        dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(sb) })
+        await window.wraith.startSession(ws)
+        if (activeId) {
+          const { messages } = await window.wraith.resumeSession(activeId)
+          dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
+        }
+        void fetchSessions()
+      } catch (err) {
+        console.error('[wraith] reconnect error:', err)
+      }
+    })()
+  }, [state.connection, state.workspace, fetchSessions])
 
   // ── auto-scroll to bottom as items arrive ─────────────────────────────────
   useEffect(() => {
     transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [state.items])
+
+  // ── refresh session list when a turn completes ────────────────────────────
+  const prevTurnRef = useRef(state.turn)
+  useEffect(() => {
+    if (prevTurnRef.current === 'running' && state.turn === 'idle') {
+      void fetchSessions()
+    }
+    prevTurnRef.current = state.turn
+  }, [state.turn, fetchSessions])
 
   // ── input submit ──────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
@@ -116,6 +220,7 @@ export default function App(): JSX.Element {
     if (!text || state.turn === 'running') return
     setInputValue('')
     dispatch({ type: 'markStarted' })
+    dispatch({ type: 'addUserItem', text })
     try {
       await window.wraith.submitTurn(text)
     } catch (err) {
@@ -190,7 +295,14 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-fg">
-      <Sidebar workspace={state.workspace} />
+      <Sidebar
+        workspace={state.workspace}
+        sessions={sessions}
+        activeSessionId={state.sessionId}
+        onNewConversation={handleNewConversation}
+        onSelectSession={handleSelectSession}
+        sandbox={state.sandbox}
+      />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
         {state.connection === 'disconnected' && (

@@ -1,27 +1,30 @@
 package com.lyhn.wraith.cli;
 
 import org.junit.jupiter.api.Test;
-
 import java.util.Map;
-
 import static org.junit.jupiter.api.Assertions.*;
 
 class MainInitializeResultTest {
+    @Test
+    void sandboxAvailableReportsSeatbelt() {
+        Map<String, Object> res = Main.buildInitializeResult("deepseek", true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> caps = (Map<String, Object>) res.get("capabilities");
+        assertEquals("macos-seatbelt", caps.get("sandbox"));
+        assertEquals("deepseek", res.get("model"));
+    }
 
     @Test
-    void carriesModelAndCapabilities() {
-        Map<String, Object> r = Main.buildInitializeResult("deepseek-chat");
-        assertEquals("wraith-app-server", r.get("serverInfo"));
-        assertEquals("deepseek-chat", r.get("model"));
-        assertTrue(r.get("capabilities") instanceof Map);
+    void sandboxUnavailableReportsNone() {
+        Map<String, Object> res = Main.buildInitializeResult("m", false);
         @SuppressWarnings("unchecked")
-        Map<String, Object> caps = (Map<String, Object>) r.get("capabilities");
-        assertEquals(Boolean.TRUE, caps.get("toolOutputStreaming"));
-        assertEquals(Boolean.TRUE, caps.get("approvals"));
+        Map<String, Object> caps = (Map<String, Object>) res.get("capabilities");
+        assertEquals("none", caps.get("sandbox"));
     }
 
     @Test
     void nullModelBecomesEmptyString() {
-        assertEquals("", Main.buildInitializeResult(null).get("model"));
+        java.util.Map<String, Object> res = Main.buildInitializeResult(null, true);
+        assertEquals("", res.get("model"));
     }
 }

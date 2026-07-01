@@ -23,6 +23,16 @@ public final class AppServer {
         String runTurn(String input) throws Exception;
         /** 切换审批模式。auto=true → 关闭 HITL（自动放行）。默认 no-op，旧实现无需改动。 */
         default void setApprovalMode(boolean auto) { }
+        /** 本项目历史会话(最近在前)。默认空。 */
+        default java.util.List<com.lyhn.wraith.session.SessionMeta> listSessions() {
+            return java.util.List.of();
+        }
+        /** 续接会话:恢复历史进 Agent,返回该会话消息(供 UI 回放)。默认空。 */
+        default java.util.List<com.lyhn.wraith.llm.LlmClient.Message> resume(String sessionId) {
+            return java.util.List.of();
+        }
+        /** 落盘当前对话,返回持久化后的真实 sessionId(空对话可能为 null)。默认 no-op。 */
+        default String persistTurn() { return null; }
     }
 
     private final BufferedReader in;
@@ -32,7 +42,7 @@ public final class AppServer {
     private final AtomicLong turnSeq = new AtomicLong();
 
     private SessionRunner session;
-    private String sessionId;
+    private volatile String sessionId;
     private volatile Thread turnThread;
 
     public AppServer(InputStream in, OutputStream out, SessionRunnerFactory factory) {
@@ -73,6 +83,8 @@ public final class AppServer {
             }
             case "approval.respond" -> handleApprovalRespond(msg);
             case "session.setApprovalMode" -> handleSetApprovalMode(msg);
+            case "session.list" -> handleSessionList(msg);
+            case "session.resume" -> handleSessionResume(msg);
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
                 return false;
@@ -118,10 +130,12 @@ public final class AppServer {
         Thread t = new Thread(() -> {
             try {
                 session.runTurn(input);
-                writer.notify("turn.completed", Map.of("sessionId", sessionId, "turnId", turnId, "status", "completed"));
+                String persisted = session.persistTurn();
+                String reported = (persisted != null) ? persisted : sessionId;
+                if (persisted != null) sessionId = persisted;
+                writer.notify("turn.completed", Map.of("sessionId", reported, "turnId", turnId, "status", "completed"));
             } catch (Exception e) {
-                writer.notify("turn.failed", Map.of("sessionId", sessionId, "turnId", turnId,
-                        "error", e.toString()));
+                writer.notify("turn.failed", Map.of("sessionId", sessionId, "turnId", turnId, "error", e.toString()));
             }
         }, "wraith-appserver-turn");
         t.setDaemon(true);
@@ -155,5 +169,24 @@ public final class AppServer {
         boolean auto = p != null && p.path("auto").asBoolean(false);
         session.setApprovalMode(auto);
         writer.result(msg.id(), Map.of("ok", true));
+    }
+
+    private void handleSessionList(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        writer.result(msg.id(), Map.of("sessions", session.listSessions()));
+    }
+
+    private void handleSessionResume(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        String id = (p != null && p.hasNonNull("sessionId")) ? p.get("sessionId").asText() : "";
+        if (id.isBlank()) { writer.error(msg.id(), -32602, "missing sessionId"); return; }
+        java.util.List<com.lyhn.wraith.llm.LlmClient.Message> msgs = session.resume(id);
+        java.util.List<com.fasterxml.jackson.databind.node.ObjectNode> wire = new java.util.ArrayList<>();
+        for (com.lyhn.wraith.llm.LlmClient.Message m : msgs) {
+            wire.add(com.lyhn.wraith.session.SessionMessageCodec.toJson(JsonRpc.MAPPER, m));
+        }
+        sessionId = id; // 活跃会话切到 resume 的
+        writer.result(msg.id(), Map.of("sessionId", id, "messages", wire));
     }
 }
