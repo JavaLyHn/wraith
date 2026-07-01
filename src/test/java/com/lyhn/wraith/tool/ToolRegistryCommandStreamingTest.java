@@ -40,6 +40,7 @@ class ToolRegistryCommandStreamingTest {
         assertTrue(chunks.stream().anyMatch(c -> c.text().contains("line1")), "应流出 line1: " + chunks);
         assertTrue(chunks.stream().anyMatch(c -> c.text().contains("line2")), "应流出 line2: " + chunks);
         assertTrue(chunks.stream().allMatch(c -> "call-42".equals(c.callId())), "所有 chunk 打 callId=call-42");
+        assertTrue(chunks.stream().allMatch(c -> "stdout".equals(c.stream())), "chunk stream 字段应为 stdout");
 
         // 收尾:tool.result
         assertEquals("call-42", resultCallId.get());
