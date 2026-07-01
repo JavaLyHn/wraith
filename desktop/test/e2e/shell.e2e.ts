@@ -145,7 +145,8 @@ test('approval toggle sends session.setApprovalMode with correct auto flag', asy
 
 test('workspace switch re-picks dir → second session.start + transcript reset', async () => {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-ws.jsonl`)
-  const injectedDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-'))
+  const startupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-startup-'))
+  const repickDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-repick-'))
   const app = await electron.launch({
     args: [mainPath],
     env: {
@@ -153,7 +154,7 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
       WRAITH_APPSERVER_CMD: 'node ' + mockPath,
       WRAITH_E2E: '1',
       WRAITH_E2E_RECORD: recordFile,
-      WRAITH_E2E_WORKSPACE: injectedDir
+      WRAITH_E2E_WORKSPACE: startupDir + path.delimiter + repickDir
     }
   })
   const win = await app.firstWindow()
@@ -165,15 +166,15 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
   await input.press('Enter')
   await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 15000 })
 
-  // re-pick
+  // re-pick (resolves to repickDir — distinct from startupDir, guard lets it through)
   await win.locator('[data-testid="workspace-switch"]').click()
 
-  // second session.start carrying the injected workspaceDir
+  // second session.start carrying repickDir (the second entry in the list)
   await expect
     .poll(() => {
       const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
       const starts = lines.filter(l => l.method === 'session.start')
-      return starts.length >= 2 && starts[starts.length - 1].params?.workspaceDir === injectedDir
+      return starts.length >= 2 && starts[starts.length - 1].params?.workspaceDir === repickDir
     }, { timeout: 10000 })
     .toBe(true)
 
@@ -182,5 +183,6 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
 
   await app.close()
   fs.rmSync(recordFile, { force: true })
-  fs.rmSync(injectedDir, { recursive: true, force: true })
+  fs.rmSync(startupDir, { recursive: true, force: true })
+  fs.rmSync(repickDir, { recursive: true, force: true })
 })

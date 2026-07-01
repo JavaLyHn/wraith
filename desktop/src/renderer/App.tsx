@@ -178,13 +178,13 @@ export default function App(): JSX.Element {
     if (state.turn === 'running') return
     try {
       const ws = await window.wraith.pickWorkspace()
-      if (!ws) return
+      if (!ws || ws === state.workspace) return
       await window.wraith.startSession(ws)
       dispatch({ type: 'resetSession', ws })
     } catch (err) {
       console.error('[wraith] switchWorkspace error:', err)
     }
-  }, [state.turn])
+  }, [state.turn, state.workspace])
 
   return (
     <div

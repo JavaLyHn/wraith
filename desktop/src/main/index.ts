@@ -23,6 +23,8 @@ let client: JsonRpcClient | null = null
 let currentSessionId: string | null = null
 /** Last turnId returned by turn.submit. */
 let currentTurnId: string | null = null
+/** Counter for E2E sequential pickWorkspace calls. */
+let e2ePickCount = 0
 
 const defaultJar = defaultJarPath(os.homedir())
 
@@ -174,10 +176,17 @@ ipcMain.handle('wraith:interrupt', async () => {
 })
 
 ipcMain.handle('wraith:pickWorkspace', async () => {
-  // E2E test guard: skip native dialog. Return an injected dir if provided
-  // (drives the re-pick flow deterministically), else null (backend default).
+  // E2E test guard: skip native dialog. WRAITH_E2E_WORKSPACE may be a
+  // path.delimiter-separated list; successive calls return successive entries
+  // (last one sticks), so startup vs re-pick can resolve to different dirs.
   if (process.env['WRAITH_E2E'] === '1') {
-    return process.env['WRAITH_E2E_WORKSPACE'] ?? null
+    const raw = process.env['WRAITH_E2E_WORKSPACE']
+    if (!raw) return null
+    const list = raw.split(path.delimiter).filter(Boolean)
+    if (list.length === 0) return null
+    const idx = Math.min(e2ePickCount, list.length - 1)
+    e2ePickCount++
+    return list[idx]!
   }
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory']
