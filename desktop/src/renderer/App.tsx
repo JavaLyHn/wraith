@@ -198,7 +198,7 @@ export default function App(): JSX.Element {
         console.error('[wraith] reconnect error:', err)
       }
     })()
-  }, [state.connection, state.sessionId, state.workspace, fetchSessions])
+  }, [state.connection, state.workspace, fetchSessions])
 
   // ── auto-scroll to bottom as items arrive ─────────────────────────────────
   useEffect(() => {
