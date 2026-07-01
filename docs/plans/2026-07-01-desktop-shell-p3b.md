@@ -365,6 +365,8 @@ import { test, expect, _electron as electron } from '@playwright/test'
 ## 分期收尾说明
 - P3b 完成 = spec §6 的 v1 壳落地(较全流式 UI + 最小审批 + 守护)。
 - 归 **P4**:Monaco per-hunk diff、富审批(改参/放行网络)、状态栏富化、diff 查看器、P2 的 I1(`sandbox.unavailable`,需后端加事件)、`session.resume`(需后端)。归 **P5**:打包分发(electron-builder + jpackage 裁剪 JRE + 签名)。
+- P4 跟进(终审记录):**重启重连** —— 点断连横幅的重启后,renderer 的 startedRef 一次性守卫使其不自动重跑 initialize/startSession,新后端无会话 → 重启目前只 respawn 后端未恢复可用会话;需在 restartBackend 解决后(或 connection 由 disconnected→connected 跃迁时)重跑 init 流程。banner + 整体重启仍可用,非阻塞。
+- P4/P5 加固(终审记录):renderer 无 **CSP**(index.html 无 meta、无 onHeadersReceived)。contextIsolation 开 + markdown HTML 转义下是纵深防御非活跃漏洞;打包阶段加 `default-src 'self'`(配 'unsafe-inline' 样式)。
 
 ## Self-Review(计划自查)
 - **spec 覆盖**:§6.1 Main spawn/守护/JSON-RPC client → Task 4;§6.2 transcript/思考块/工具卡片/审批 → Task 5(+markdown 决策);§6.3 UI 栈 → Task 1;§8 Electron 冒烟 → 升级为 Playwright GUI E2E(Task 6,用户选)。

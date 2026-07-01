@@ -17,11 +17,9 @@ export default function ApprovalModal({
   onReject,
 }: ApprovalModalProps): JSX.Element {
   const dangerColor =
-    dangerLevel === 'HIGH' || dangerLevel === 'CRITICAL'
-      ? '#c0392b'
-      : dangerLevel === 'MEDIUM'
-      ? '#e67e22'
-      : '#3d8eff'
+    dangerLevel.includes('高危') ? '#c0392b'
+    : dangerLevel.includes('中危') ? '#e67e22'
+    : '#3d8eff'
 
   return (
     <div

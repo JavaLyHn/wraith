@@ -43,7 +43,7 @@ Runs all vitest unit tests (pure module tests — no Electron, no live backend):
 - `transcriptReducer.test.ts` — UI state reducer for all event kinds
 - `smoke.test.ts` — basic sanity
 
-Expected: all 30 tests pass in < 1 s.
+Expected: all tests pass in < 1 s.
 
 ## E2E tests (Playwright)
 
@@ -51,7 +51,7 @@ Expected: all 30 tests pass in < 1 s.
 npm run e2e
 ```
 
-Builds the app (`electron-vite build`) then runs Playwright against a deterministic mock backend (`test/fixtures/mock-backend.mjs`). The mock is wired in via `WRAITH_APPSERVER_CMD`; native dialogs are bypassed via `WRAITH_E2E=1`.
+Builds the app (`electron-vite build`) then runs Playwright against a deterministic mock backend (`test/fixtures/mock-appserver.mjs`). The mock is wired in via `WRAITH_APPSERVER_CMD`; native dialogs are bypassed via `WRAITH_E2E=1`.
 
 Expected: 2 tests pass (connection banner + transcript flow).
 
