@@ -42,7 +42,7 @@ public final class AppServer {
     private final AtomicLong turnSeq = new AtomicLong();
 
     private SessionRunner session;
-    private String sessionId;
+    private volatile String sessionId;
     private volatile Thread turnThread;
 
     public AppServer(InputStream in, OutputStream out, SessionRunnerFactory factory) {
