@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveBackendCommand } from '../src/main/backend'
+import { resolveBackendCommand, defaultJarPath } from '../src/main/backend'
 
 describe('resolveBackendCommand', () => {
   it('returns java -jar <defaultJar> app-server when env var is absent', () => {
@@ -46,5 +46,18 @@ describe('resolveBackendCommand', () => {
       '/ignored/wraith.jar'
     )
     expect(result).toEqual({ cmd: 'node', args: ['/abs/mock.mjs'] })
+  })
+})
+
+describe('defaultJarPath', () => {
+  it('returns <homedir>/.wraith/wraith.jar', () => {
+    const result = defaultJarPath('/Users/x')
+    expect(result).toContain('/Users/x')
+    expect(result).toMatch(/\.wraith[/\\]wraith\.jar$/)
+  })
+
+  it('works with any homedir', () => {
+    const result = defaultJarPath('/home/alice')
+    expect(result).toBe('/home/alice/.wraith/wraith.jar')
   })
 })

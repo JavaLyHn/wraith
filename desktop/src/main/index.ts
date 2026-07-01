@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import readline from 'readline'
 import { JsonRpcClient } from '../shared/jsonRpcClient'
-import { resolveBackendCommand } from './backend'
+import { resolveBackendCommand, defaultJarPath } from './backend'
 import type { BackendEvent } from '../shared/types'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -24,7 +24,7 @@ let currentSessionId: string | null = null
 /** Last turnId returned by turn.submit. */
 let currentTurnId: string | null = null
 
-const defaultJar = path.join(os.homedir(), '.wraith', 'wraith.jar')
+const defaultJar = defaultJarPath(os.homedir())
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -209,5 +209,16 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
+  }
+})
+
+// Kill the backend child on actual quit so it doesn't linger.
+// 'will-quit' fires on all platforms (unlike 'window-all-closed' which is
+// skipped on macOS); this guarantees cleanup regardless of how the app exits.
+app.on('will-quit', () => {
+  try {
+    child?.kill()
+  } catch {
+    // ignore — child may already be gone
   }
 })

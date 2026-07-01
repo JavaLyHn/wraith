@@ -1,3 +1,13 @@
+import path from 'path'
+
+/**
+ * defaultJarPath — pure helper, returns ~/.wraith/wraith.jar for any homedir.
+ * Takes homedir as a parameter so it's fully testable without os.homedir().
+ */
+export function defaultJarPath(homedir: string): string {
+  return path.join(homedir, '.wraith', 'wraith.jar')
+}
+
 /**
  * resolveBackendCommand — pure helper, no side effects.
  *
