@@ -33,15 +33,22 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
+import java.util.function.Function;
 
 public class McpServerManager implements AutoCloseable {
     private static final Duration STARTUP_PROGRESS_INTERVAL = Duration.ofSeconds(5);
 
-    private final ToolRegistry toolRegistry;
+    // close 后置位:弃用 manager 的在途 startAll worker 不得再注册工具(与 AppServerMcp 切工作区竞态的兜底)
+    private volatile boolean closed;
+    private volatile ToolRegistry toolRegistry;
     private final Path projectDir;
     private final McpConfigLoader configLoader;
     private final Map<String, McpServer> servers = new ConcurrentHashMap<>();
     private final McpResourceCache resourceCache = new McpResourceCache();
+
+    /** 状态迁移监听(app-server 推 mcp.status 用;TUI 不设,保持 null 零行为变化)。 */
+    private volatile Consumer<McpServer> statusListener;
 
     public McpServerManager(ToolRegistry toolRegistry, Path projectDir) {
         this(toolRegistry, projectDir, new McpConfigLoader(projectDir));
@@ -53,10 +60,28 @@ public class McpServerManager implements AutoCloseable {
         this.configLoader = configLoader;
     }
 
+    public void setStatusListener(Consumer<McpServer> listener) {
+        this.statusListener = listener;
+    }
+
+    private void setStatus(McpServer server, McpServerStatus status) {
+        server.status(status);
+        // close 后不再对外发状态:弃用 manager 的在途迁移不得闪进新会话
+        if (closed) return;
+        Consumer<McpServer> l = statusListener;
+        if (l != null) {
+            try { l.accept(server); } catch (Exception e) { /* 监听器异常不影响启动流程 */ }
+        }
+    }
+
     public void loadConfiguredServers() throws IOException {
         Map<String, McpServerConfig> configs = configLoader.load();
         servers.clear();
-        configs.forEach((name, config) -> servers.put(name, new McpServer(name, config)));
+        configs.forEach((name, config) -> servers.put(name, newServer(name, config)));
+    }
+
+    private McpServer newServer(String name, McpServerConfig config) {
+        return new McpServer(name, config);
     }
 
     public void startAll() {
@@ -210,7 +235,7 @@ public class McpServerManager implements AutoCloseable {
         unregisterTools(server);
         server.close();
         server.config().setDisabled(true);
-        server.status(McpServerStatus.DISABLED);
+        setStatus(server, McpServerStatus.DISABLED);
         server.errorMessage(null);
         return "⏸️ MCP server 已禁用: " + name;
     }
@@ -399,13 +424,14 @@ public class McpServerManager implements AutoCloseable {
     }
 
     private void start(McpServer server) {
+        if (closed) return;
         unregisterTools(server);
         server.close();
         if (server.config().isDisabled()) {
-            server.status(McpServerStatus.DISABLED);
+            setStatus(server, McpServerStatus.DISABLED);
             return;
         }
-        server.status(McpServerStatus.STARTING);
+        setStatus(server, McpServerStatus.STARTING);
         server.errorMessage(null);
         try {
             // 在单 server 启动路径里展开 ${VAR} 与校验 transport，
@@ -416,15 +442,16 @@ public class McpServerManager implements AutoCloseable {
             client.initialize();
             registerNotificationHandlers(server, client);
             List<McpToolDescriptor> tools = buildToolList(server, client);
+            if (closed) return;
             replaceTools(server, client, tools);
             server.client(client);
             server.tools(tools);
             server.markStarted();
-            server.status(McpServerStatus.READY);
+            setStatus(server, McpServerStatus.READY);
         } catch (Exception e) {
             server.close();
             server.errorMessage(e.getMessage());
-            server.status(McpServerStatus.ERROR);
+            setStatus(server, McpServerStatus.ERROR);
         }
     }
 
@@ -440,10 +467,13 @@ public class McpServerManager implements AutoCloseable {
     }
 
     private void replaceTools(McpServer server, McpClient client, List<McpToolDescriptor> tools) {
-        toolRegistry.replaceMcpToolOutputsForServer(server.name(), tools,
-                descriptor -> isResourceVirtualTool(descriptor)
-                        ? args -> ToolOutput.text(McpResourceTool.invoker(client, descriptor).apply(args))
-                        : args -> invokeMcpToolOutput(client, descriptor, args));
+        toolRegistry.replaceMcpToolOutputsForServer(server.name(), tools, invokerFactory(server, client));
+    }
+
+    private Function<McpToolDescriptor, Function<String, ToolOutput>> invokerFactory(McpServer server, McpClient client) {
+        return descriptor -> isResourceVirtualTool(descriptor)
+                ? args -> ToolOutput.text(McpResourceTool.invoker(client, descriptor).apply(args))
+                : args -> invokeMcpToolOutput(client, descriptor, args);
     }
 
     private boolean isResourceVirtualTool(McpToolDescriptor descriptor) {
@@ -522,6 +552,51 @@ public class McpServerManager implements AutoCloseable {
         server.tools(List.of());
     }
 
+    /**
+     * 把已就绪 server 的工具重注册进新会话的 registry(工作区未变时复用 MCP 进程)。
+     * 红线:只搬工具注册;审批放行(APPROVED_ALL 等)属于旧 registry,随旧会话废弃,绝不复制。
+     */
+    public synchronized void reattach(ToolRegistry newRegistry) {
+        if (closed) return;
+        this.toolRegistry = newRegistry;
+        for (McpServer server : servers.values()) {
+            if (server.status() == McpServerStatus.READY && !server.tools().isEmpty()) {
+                newRegistry.replaceMcpToolOutputsForServer(server.name(), server.tools(),
+                        invokerFactory(server, server.client()));
+            }
+        }
+    }
+
+    /** 单 server 按当前配置重载:配置无此名→移除;有→关旧建新并启动;全新→建并启动。返回人话结果。 */
+    public synchronized String reloadFromConfig(String name) {
+        if (closed) return "已关闭";
+        Map<String, McpServerConfig> configs;
+        try {
+            configs = configLoader.load();
+        } catch (IOException e) {
+            return "配置读取失败: " + e.getMessage();
+        }
+        McpServer existing = servers.get(name);
+        McpServerConfig cfg = configs.get(name);
+        if (cfg == null) {
+            if (existing != null) {
+                unregisterTools(existing);
+                existing.close();
+                servers.remove(name);
+            }
+            return "已移除: " + name;
+        }
+        if (existing != null) {
+            unregisterTools(existing);
+            existing.close();
+        }
+        McpServer fresh = newServer(name, cfg);
+        servers.put(name, fresh);
+        start(fresh);
+        return fresh.status() == McpServerStatus.READY ? "已就绪: " + name
+                : name + " 状态: " + fresh.status() + (fresh.errorMessage() == null ? "" : " — " + fresh.errorMessage());
+    }
+
     private static long elapsedMillis(long startedAtNanos) {
         return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAtNanos);
     }
@@ -560,6 +635,7 @@ public class McpServerManager implements AutoCloseable {
 
     @Override
     public void close() {
+        closed = true;
         for (McpServer server : servers.values()) {
             unregisterTools(server);
             server.close();

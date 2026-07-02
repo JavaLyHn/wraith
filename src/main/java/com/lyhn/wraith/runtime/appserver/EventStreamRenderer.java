@@ -107,6 +107,15 @@ public final class EventStreamRenderer implements Renderer {
         Map<String, Object> p = base(); p.put("status", status); writer.notify("status", p);
     }
 
+    /** MCP server 状态通知(Phase E-1):starting/ready/disabled/error;error 空白则省略字段。 */
+    public void emitMcpStatus(String name, String state, String error) {
+        Map<String, Object> p = base();
+        p.put("name", name);
+        p.put("state", state);
+        if (error != null && !error.isBlank()) p.put("error", error);
+        writer.notify("mcp.status", p);
+    }
+
     @Override public int openPalette(String title, List<String> items) { return -1; } // v1 不暴露
 
     @Override public ApprovalResult promptApproval(ApprovalRequest request) {

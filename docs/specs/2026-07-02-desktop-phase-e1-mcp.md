@@ -105,7 +105,7 @@ UI 以徽标提示「被本项目覆盖」)。
 
 | RPC | params | result / 错误 |
 |---|---|---|
-| `mcp.list` | `{}` | `{servers:[{name, state, scope:"user"\|"project"\|"builtin", enabled, shadowed:boolean, transport:"stdio"\|"http", tools:[{name, description}], envKeys:string[], error?}], configError?:string}`;无会话 -32000 |
+| `mcp.list` | `{}` | `{servers:[{name, state, scope:"user"\|"project"\|"builtin", enabled, shadowed:boolean, transport:"stdio"\|"http", tools:[{name, description}], envKeys:string[], command?, args?(仅 stdio 回传,非密钥,编辑表单回填), error?}], configError?:string}`;无会话 -32000 |
 | `mcp.enable` / `mcp.disable` / `mcp.restart` | `{name}` | `{ok:true}`;未知 name -32000;缺 name -32602 |
 | `mcp.logs` | `{name}` | `{lines:string}`(manager.logs 原文);同上错误 |
 | `mcp.resources` | `{name?}` | `{resources:[{server, uri, name, description?}]}`(缺 name = 全部 server 汇总,供 @ 补全;引擎 `resourceCandidates()` 本就结构化) |
@@ -169,8 +169,7 @@ mcpResources/mcpPrompts/mcpConfigUpsert/mcpConfigRemove`;通知走既有 onEvent
 - startAll 全程 fail-open:单 server ERROR 不影响他者与会话;MCP 整体初始化异常只记 stderr +
   全部 error 态,session.start 照常返回。
 - mcp.* 在无会话时 -32000 `no session`(与 session.* 一致);未知 server -32000;缺参 -32602。
-- config.upsert 写文件失败(权限/磁盘)→ -32000 带原因;mcp.json 坏 JSON → 该层级按空处理
-  (McpConfigLoader 现行为),UI 顶部横幅提示「配置文件解析失败」(list 返回附 `configError?` 字段)。
+- config.upsert 写文件失败(权限/磁盘)→ -32000 带原因;mcp.json 坏 JSON → 配置加载失败但 manager 照常挂载(空载降级),UI 顶部横幅提示「配置文件解析失败」(list 返回附 configError 字段);写侧 McpConfigWriter 遇坏 JSON 拒写。
 - 前端所有 mcp IPC 失败:console.error + 面板内联错误行,不弹全局窗。
 - 日志拉取对已删除 server:-32000,前端把日志 tab 置灰。
 

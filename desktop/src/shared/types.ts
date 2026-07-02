@@ -174,3 +174,47 @@ export interface ProjectView {
   lastUsedAt: number
   exists: boolean
 }
+
+// ---------------------------------------------------------------------------
+// Phase E-1: MCP Server management
+// ---------------------------------------------------------------------------
+
+export interface McpToolView {
+  name: string
+  description: string
+}
+
+export interface McpServerView {
+  name: string
+  state: 'starting' | 'ready' | 'disabled' | 'error'
+  scope: 'user' | 'project' | 'builtin'
+  enabled: boolean
+  shadowed: boolean
+  transport: 'stdio' | 'http' | string
+  tools: McpToolView[]
+  envKeys: string[]
+  /** stdio 型回传(非密钥),编辑表单回填用;http 型缺省 */
+  command?: string
+  args?: string[]
+  error?: string
+}
+
+export interface McpListResult {
+  servers: McpServerView[]
+  configError?: string
+}
+
+export interface McpResourceView {
+  server: string
+  uri: string
+  name: string
+  description?: string
+}
+
+export interface McpUpsertPayload {
+  scope: 'user' | 'project'
+  name: string
+  command: string
+  args: string[]
+  env: Record<string, string>
+}

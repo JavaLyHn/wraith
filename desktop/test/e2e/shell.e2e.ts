@@ -221,14 +221,14 @@ test('welcome empty state shows, then transitions to transcript on submit', asyn
 // Test 6: static sidebar shell present with disabled placeholder nav
 // ---------------------------------------------------------------------------
 
-test('static sidebar shell present with disabled placeholder nav', async () => {
+test('static sidebar shell present with enabled plugins nav', async () => {
   const app = await electron.launch({
     args: [mainPath],
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
   })
   const win = await app.firstWindow()
   await expect(win.locator('[data-testid="sidebar"]')).toBeVisible({ timeout: 15000 })
-  await expect(win.locator('[data-testid="nav-plugins"]')).toBeDisabled()
+  await expect(win.locator('[data-testid="nav-plugins"]')).toBeEnabled()
   await app.close()
 })
 
@@ -966,4 +966,145 @@ test('T25 运行中项目切换被禁', async () => {
 
   await app.close()
   for (const p of [dirA, dirB, userData]) fs.rmSync(p, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
+// Phase E-1: MCP 插件面板 + @-mention(T26–T32)
+// ---------------------------------------------------------------------------
+
+const MCP_FIXTURE = JSON.stringify({
+  servers: [
+    { name: 'github', state: 'starting', scope: 'user', enabled: true, shadowed: false, transport: 'stdio',
+      tools: [{ name: 'get_issue', description: '读 issue' }], envKeys: ['GITHUB_TOKEN'] },
+    { name: 'fs', state: 'ready', scope: 'project', enabled: true, shadowed: true, transport: 'stdio', tools: [], envKeys: [] },
+  ],
+  resources: [
+    { server: 'github', uri: 'issue://1', name: 'Issue 1' },
+    { server: 'fs', uri: 'file:///a.txt', name: 'a.txt' },
+  ],
+  statusScript: [{ afterMs: 500, name: 'github', state: 'ready' }],
+})
+
+async function launchMcpApp(extraEnv: Record<string, string> = {}): Promise<{ app: Awaited<ReturnType<typeof electron.launch>>; win: Awaited<ReturnType<Awaited<ReturnType<typeof electron.launch>>['firstWindow']>>; recordFile: string; cleanup: () => void }> {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-mcp.jsonl`)
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-mcp-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_USERDATA: userData,
+      MOCK_MCP: MCP_FIXTURE,
+      ...extraEnv,
+    },
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 15000 })
+  return { app, win, recordFile, cleanup: () => { fs.rmSync(recordFile, { force: true }); fs.rmSync(userData, { recursive: true, force: true }) } }
+}
+
+function recordedMethods(recordFile: string): string[] {
+  if (!fs.existsSync(recordFile)) return []
+  return fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l).method as string)
+}
+
+test('T26 插件面板:列表/状态点变迁(starting→ready 通知驱动)', async () => {
+  const { app, win, cleanup } = await launchMcpApp()
+  await win.locator('[data-testid="nav-plugins"]').click()
+  const items = win.locator('[data-testid="mcp-server-item"]')
+  await expect(items).toHaveCount(2)
+  await expect(items.filter({ hasText: 'github' })).toBeVisible()
+  // statusScript 500ms 后 github → ready:详情区状态文本变化
+  await items.filter({ hasText: 'github' }).click()
+  await expect(win.locator('[data-testid="mcp-detail"]')).toContainText('就绪', { timeout: 5000 })
+  // 工具 tab 默认可见 get_issue
+  await expect(win.locator('[data-testid="mcp-detail"]')).toContainText('get_issue')
+  await app.close(); cleanup()
+})
+
+test('T27 添加表单 → mcp.config.upsert 请求', async () => {
+  const { app, win, recordFile, cleanup } = await launchMcpApp()
+  await win.locator('[data-testid="nav-plugins"]').click()
+  await win.locator('[data-testid="mcp-add"]').click()
+  await win.locator('[data-testid="mcp-form-name"]').fill('sqlite')
+  await win.locator('[data-testid="mcp-form-command"]').fill('npx')
+  await win.locator('[data-testid="mcp-form-args"]').fill('-y\nmcp-sqlite')
+  await win.locator('[data-testid="mcp-form-scope-project"]').check()
+  await win.locator('[data-testid="mcp-form-submit"]').click()
+  await expect.poll(() => recordedMethods(recordFile).includes('mcp.config.upsert'), { timeout: 5000 }).toBe(true)
+  await expect(win.locator('[data-testid="mcp-server-item"]')).toHaveCount(3, { timeout: 5000 })
+  await app.close(); cleanup()
+})
+
+test('T28 启停与重启请求', async () => {
+  const { app, win, recordFile, cleanup } = await launchMcpApp()
+  await win.locator('[data-testid="nav-plugins"]').click()
+  await win.locator('[data-testid="mcp-server-item"]').filter({ hasText: 'fs' }).click()
+  await win.locator('[data-testid="mcp-toggle"]').click() // fs enabled → 停用
+  await expect.poll(() => recordedMethods(recordFile).includes('mcp.disable'), { timeout: 5000 }).toBe(true)
+  await expect(win.locator('[data-testid="mcp-toggle"]')).toHaveText('启用', { timeout: 5000 })
+  await win.locator('[data-testid="mcp-toggle"]').click()
+  await expect.poll(() => recordedMethods(recordFile).includes('mcp.enable'), { timeout: 5000 }).toBe(true)
+  await win.locator('[data-testid="mcp-restart"]').click()
+  await expect.poll(() => recordedMethods(recordFile).includes('mcp.restart'), { timeout: 5000 }).toBe(true)
+  await app.close(); cleanup()
+})
+
+test('T29 删除二次确认', async () => {
+  const { app, win, recordFile, cleanup } = await launchMcpApp()
+  await win.locator('[data-testid="nav-plugins"]').click()
+  await win.locator('[data-testid="mcp-server-item"]').filter({ hasText: 'github' }).click()
+  await win.locator('[data-testid="mcp-remove"]').click() // 第一次:确认态
+  expect(recordedMethods(recordFile).includes('mcp.config.remove')).toBe(false)
+  await expect(win.locator('[data-testid="mcp-remove"]')).toHaveText('确认删除?')
+  await win.locator('[data-testid="mcp-remove"]').click() // 第二次:生效
+  await expect.poll(() => recordedMethods(recordFile).includes('mcp.config.remove'), { timeout: 5000 }).toBe(true)
+  await expect(win.locator('[data-testid="mcp-server-item"]')).toHaveCount(1, { timeout: 5000 })
+  await app.close(); cleanup()
+})
+
+test('T30 日志 tab 内容', async () => {
+  const { app, win, cleanup } = await launchMcpApp()
+  await win.locator('[data-testid="nav-plugins"]').click()
+  await win.locator('[data-testid="mcp-server-item"]').filter({ hasText: 'github' }).click()
+  await win.locator('[data-testid="mcp-tab-logs"]').click()
+  await expect(win.locator('[data-testid="mcp-detail"]')).toContainText('[mock] line1', { timeout: 5000 })
+  await app.close(); cleanup()
+})
+
+test('T31 @-mention 两级补全,原文提交', async () => {
+  const { app, win, recordFile, cleanup } = await launchMcpApp()
+  const input = win.locator('[data-testid="input"]')
+  await input.click()
+  await input.type('看下 @')
+  await expect(win.locator('[data-testid="mention-popover"]')).toBeVisible({ timeout: 5000 })
+  await win.locator('[data-testid="mention-item"]').filter({ hasText: 'github' }).click() // 一级:server
+  await expect(win.locator('[data-testid="mention-item"]').filter({ hasText: 'issue://1' })).toBeVisible()
+  await win.locator('[data-testid="mention-item"]').filter({ hasText: 'issue://1' }).click() // 二级:资源
+  await expect(input).toHaveValue(/@github:issue:\/\/1 /)
+  await input.press('Enter')
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return false
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      return lines.some(l => l.method === 'turn.submit' && typeof l.params?.input === 'string' && l.params.input.includes('@github:issue://1'))
+    }, { timeout: 10000 })
+    .toBe(true)
+  await app.close(); cleanup()
+})
+
+test('T32 运行中工具集变更操作禁用', async () => {
+  const { app, win, cleanup } = await launchMcpApp({ MOCK_SLOW_TURN: '1' })
+  const input = win.locator('[data-testid="input"]')
+  await input.fill('慢轮次')
+  await input.press('Enter')
+  await expect(win.locator('[data-testid="interrupt"]')).toBeVisible({ timeout: 10000 })
+  await win.locator('[data-testid="nav-plugins"]').click()
+  await win.locator('[data-testid="mcp-server-item"]').filter({ hasText: 'github' }).click()
+  await expect(win.locator('[data-testid="mcp-toggle"]')).toBeDisabled()
+  await expect(win.locator('[data-testid="mcp-remove"]')).toBeDisabled()
+  await expect(win.locator('[data-testid="mcp-add"]')).toBeDisabled()
+  await app.close(); cleanup()
 })

@@ -1,4 +1,4 @@
-import { useCallback } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Switch } from './ui/switch'
 import {
   Tooltip,
@@ -9,7 +9,9 @@ import {
 import { baseName } from '../lib/paths'
 import { shouldSendOnEnter } from '../../shared/composerKeys'
 import StatusChip from './StatusChip'
-import type { StatusData } from '../../shared/types'
+import type { StatusData, McpResourceView } from '../../shared/types'
+import { detectMention, filterMentionItems, insertMention } from '../../shared/mentionTrigger'
+import type { MentionState } from '../../shared/mentionTrigger'
 
 interface ComposerProps {
   value: string
@@ -25,6 +27,7 @@ interface ComposerProps {
   /** 欢迎态用居中窄版，对话态用贴底宽版。 */
   centered?: boolean
   status?: StatusData | null
+  resources?: McpResourceView[]
 }
 
 export default function Composer({
@@ -40,9 +43,35 @@ export default function Composer({
   onSwitchWorkspace,
   centered = false,
   status,
+  resources = [],
 }: ComposerProps): JSX.Element {
+  const [mention, setMention] = useState<MentionState>({ active: false, start: 0, query: '' })
+  const [mentionIndex, setMentionIndex] = useState(0)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const items = mention.active ? filterMentionItems(resources, mention.query) : []
+  const popoverOpen = mention.active && items.length > 0
+
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      // @-mention popover interception — before shouldSendOnEnter
+      // IME guard: composing Enter must never select a mention
+      if (popoverOpen && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(i => (i + 1) % items.length); return }
+        if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex(i => (i - 1 + items.length) % items.length); return }
+        if (e.key === 'Escape') { e.preventDefault(); setMention({ active: false, start: 0, query: '' }); return }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault()
+          const it = items[mentionIndex]
+          if (it) {
+            const r = insertMention(value, mention, it.insert)
+            onChange(r.next)
+            setMention(detectMention(r.next, r.caret))
+            // restore caret to insertion point
+            requestAnimationFrame(() => textareaRef.current?.setSelectionRange(r.caret, r.caret))
+          }
+          return
+        }
+      }
       // IME 选词确认的 Enter(isComposing/keyCode 229)绝不发送;running 中也不发送
       if (
         shouldSendOnEnter(
@@ -54,22 +83,48 @@ export default function Composer({
         onSubmit()
       }
     },
-    [onSubmit, running],
+    [onSubmit, running, popoverOpen, items, mentionIndex, mention, value, onChange],
   )
 
   return (
     <TooltipProvider delayDuration={200}>
       <div
         className={
-          'w-full rounded-2xl border border-border bg-surface shadow-sm ' +
+          'relative w-full rounded-2xl border border-border bg-surface shadow-sm ' +
           (centered ? 'max-w-2xl mx-auto' : '')
         }
       >
+        {/* @-mention popover */}
+        {popoverOpen && (
+          <div data-testid="mention-popover"
+            className="absolute bottom-full left-3 z-40 mb-1 max-h-56 w-96 overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-md">
+            {items.map((it, i) => (
+              <button key={it.insert} data-testid="mention-item"
+                onMouseDown={e => {
+                  e.preventDefault() // 不丢 textarea 焦点
+                  const r = insertMention(value, mention, it.insert)
+                  onChange(r.next)
+                  setMention(detectMention(r.next, r.caret))
+                  requestAnimationFrame(() => textareaRef.current?.setSelectionRange(r.caret, r.caret))
+                }}
+                className={'flex w-full flex-col rounded-md px-2 py-1.5 text-left ' + (i === mentionIndex ? 'bg-bg' : 'hover:bg-bg/60')}>
+                <span className="font-mono text-xs text-fg">{it.label}</span>
+                <span className="text-[11px] text-fg-subtle">{it.hint}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {/* text row */}
         <textarea
+          ref={textareaRef}
           data-testid="input"
           value={value}
-          onChange={e => onChange(e.target.value)}
+          onChange={e => {
+            onChange(e.target.value)
+            setMention(detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length))
+            setMentionIndex(0)
+          }}
           onKeyDown={handleKeyDown}
           placeholder="给 Wraith 一个目标… (Enter 发送, Shift+Enter 换行)"
           rows={centered ? 3 : 2}

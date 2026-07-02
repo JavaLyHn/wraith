@@ -4,10 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.lyhn.wraith.hitl.ApprovalResult;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -35,6 +39,8 @@ public final class AppServer {
         default String persistTurn() { return null; }
         /** 真回溯:丢弃从第 userOrdinal 条 user 消息(1-based,含)起的全部历史。false=拒绝(超界等)。 */
         default boolean rewind(int userOrdinal) { return false; }
+        /** MCP 操作面。实现可返回 null(表示 mcp 不可用)。默认 null。 */
+        default McpOps mcp() { return null; }
     }
 
     private final BufferedReader in;
@@ -88,6 +94,39 @@ public final class AppServer {
             case "session.list" -> handleSessionList(msg);
             case "session.resume" -> handleSessionResume(msg);
             case "session.rewind" -> handleSessionRewind(msg);
+            case "mcp.list" -> handleMcp(msg, ops -> writer.result(msg.id(), ops.list()));
+            case "mcp.enable" -> handleMcpNamed(msg, (ops, name) -> { ops.enable(name); ok(msg); });
+            case "mcp.disable" -> handleMcpNamed(msg, (ops, name) -> { ops.disable(name); ok(msg); });
+            case "mcp.restart" -> handleMcpNamed(msg, (ops, name) -> { ops.restart(name); ok(msg); });
+            case "mcp.logs" -> handleMcpNamed(msg, (ops, name) -> writer.result(msg.id(), Map.of("lines", ops.logs(name))));
+            case "mcp.prompts" -> handleMcpNamed(msg, (ops, name) -> writer.result(msg.id(), Map.of("text", ops.prompts(name))));
+            case "mcp.resources" -> handleMcp(msg, ops -> {
+                JsonNode p = msg.params();
+                String name = p != null && p.hasNonNull("name") ? p.get("name").asText() : null;
+                writer.result(msg.id(), Map.of("resources", ops.resources(name)));
+            });
+            case "mcp.config.upsert" -> handleMcp(msg, ops -> {
+                JsonNode p = msg.params();
+                String scope = textParam(p, "scope"); String name = textParam(p, "name"); String command = textParam(p, "command");
+                if (scope == null || name == null || command == null) { writer.error(msg.id(), -32602, "缺 scope/name/command"); return; }
+                List<String> args = new ArrayList<>();
+                if (p.has("args") && p.get("args").isArray()) p.get("args").forEach(a -> args.add(a.asText()));
+                Map<String, String> env = new LinkedHashMap<>();
+                if (p.has("env") && p.get("env").isObject())
+                    p.get("env").fields().forEachRemaining(e -> env.put(e.getKey(), e.getValue().asText()));
+                // IOException 只能在 lambda 内接:Consumer 不声明受检异常;新增会抛 IOException 的 mcp case 需同样内接
+                try { ops.configUpsert(scope, name, command, args, env); ok(msg); }
+                catch (IOException e) { writer.error(msg.id(), -32000, "配置写入失败: " + e.getMessage()); }
+            });
+            case "mcp.config.remove" -> handleMcp(msg, ops -> {
+                JsonNode p = msg.params();
+                String scope = textParam(p, "scope"); String name = textParam(p, "name");
+                if (scope == null || name == null) { writer.error(msg.id(), -32602, "缺 scope/name"); return; }
+                try {
+                    if (!ops.configRemove(scope, name)) { writer.error(msg.id(), -32000, "该层级无此配置: " + name); return; }
+                    ok(msg);
+                } catch (IOException e) { writer.error(msg.id(), -32000, "配置写入失败: " + e.getMessage()); }
+            });
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
                 return false;
@@ -178,6 +217,30 @@ public final class AppServer {
     private void handleSessionList(JsonRpc.Incoming msg) {
         if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
         writer.result(msg.id(), Map.of("sessions", session.listSessions()));
+    }
+
+    private void ok(JsonRpc.Incoming msg) { writer.result(msg.id(), Map.of("ok", true)); }
+
+    private static String textParam(JsonNode p, String field) {
+        return p != null && p.hasNonNull(field) && !p.get(field).asText().isBlank() ? p.get(field).asText() : null;
+    }
+
+    private void handleMcp(JsonRpc.Incoming msg, java.util.function.Consumer<McpOps> action) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        McpOps ops = session.mcp();
+        if (ops == null) { writer.error(msg.id(), -32000, "mcp unavailable"); return; }
+        try { action.accept(ops); }
+        catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
+        catch (java.util.NoSuchElementException | IllegalStateException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+        catch (Exception e) { writer.error(msg.id(), -32000, "mcp 操作失败: " + e.getMessage()); }
+    }
+
+    private void handleMcpNamed(JsonRpc.Incoming msg, java.util.function.BiConsumer<McpOps, String> action) {
+        handleMcp(msg, ops -> {
+            String name = textParam(msg.params(), "name");
+            if (name == null) { writer.error(msg.id(), -32602, "缺 name"); return; }
+            action.accept(ops, name);
+        });
     }
 
     private void handleSessionRewind(JsonRpc.Incoming msg) {

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload } from '../shared/types'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -28,6 +28,15 @@ export interface WraithApi {
   listSessions(): Promise<{ sessions: SessionMeta[] }>
   resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[] }>
   rewindSession(userOrdinal: number): Promise<{ ok: boolean }>
+  mcpList(): Promise<McpListResult>
+  mcpEnable(name: string): Promise<{ ok: boolean }>
+  mcpDisable(name: string): Promise<{ ok: boolean }>
+  mcpRestart(name: string): Promise<{ ok: boolean }>
+  mcpLogs(name: string): Promise<{ lines: string }>
+  mcpResources(name?: string): Promise<{ resources: McpResourceView[] }>
+  mcpPrompts(name: string): Promise<{ text: string }>
+  mcpConfigUpsert(payload: McpUpsertPayload): Promise<{ ok: boolean }>
+  mcpConfigRemove(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   onEvent(cb: (evt: BackendEvent) => void): () => void
 }
 
@@ -97,6 +106,42 @@ const wraith: WraithApi = {
 
   rewindSession(userOrdinal) {
     return ipcRenderer.invoke('wraith:rewindSession', userOrdinal) as Promise<{ ok: boolean }>
+  },
+
+  mcpList() {
+    return ipcRenderer.invoke('wraith:mcpList') as Promise<McpListResult>
+  },
+
+  mcpEnable(name) {
+    return ipcRenderer.invoke('wraith:mcpEnable', name) as Promise<{ ok: boolean }>
+  },
+
+  mcpDisable(name) {
+    return ipcRenderer.invoke('wraith:mcpDisable', name) as Promise<{ ok: boolean }>
+  },
+
+  mcpRestart(name) {
+    return ipcRenderer.invoke('wraith:mcpRestart', name) as Promise<{ ok: boolean }>
+  },
+
+  mcpLogs(name) {
+    return ipcRenderer.invoke('wraith:mcpLogs', name) as Promise<{ lines: string }>
+  },
+
+  mcpResources(name) {
+    return ipcRenderer.invoke('wraith:mcpResources', name) as Promise<{ resources: McpResourceView[] }>
+  },
+
+  mcpPrompts(name) {
+    return ipcRenderer.invoke('wraith:mcpPrompts', name) as Promise<{ text: string }>
+  },
+
+  mcpConfigUpsert(payload) {
+    return ipcRenderer.invoke('wraith:mcpConfigUpsert', payload) as Promise<{ ok: boolean }>
+  },
+
+  mcpConfigRemove(scope, name) {
+    return ipcRenderer.invoke('wraith:mcpConfigRemove', scope, name) as Promise<{ ok: boolean }>
   },
 
   onEvent(cb) {

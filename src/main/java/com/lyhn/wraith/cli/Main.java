@@ -1114,6 +1114,9 @@ public class Main {
             System.exit(1);
         }
 
+        com.lyhn.wraith.runtime.appserver.AppServerMcp appServerMcp =
+                new com.lyhn.wraith.runtime.appserver.AppServerMcp();
+
         com.lyhn.wraith.runtime.appserver.AppServer server =
             new com.lyhn.wraith.runtime.appserver.AppServer(System.in, realOut, (writer, sessionId, workspaceDir) -> {
                 com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer =
@@ -1129,6 +1132,7 @@ public class Main {
                 String root = (workspaceDir != null && !workspaceDir.isBlank())
                         ? workspaceDir
                         : java.nio.file.Path.of(".").toAbsolutePath().normalize().toString();
+                appServerMcp.ensureFor(root, registry, renderer);
                 registry.setProjectPath(root);
                 registry.setWriteFileObserver((path, ba) -> renderer.appendDiff(path, ba[0], ba[1]));
                 registry.setCommandSandbox(buildAppServerSandbox()); // ← 新增:命令走 Seatbelt 沙箱
@@ -1156,7 +1160,16 @@ public class Main {
 
                 return new com.lyhn.wraith.runtime.appserver.AppServer.SessionRunner() {
                     public com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer() { return renderer; }
-                    public String runTurn(String input) { return agent.run(input); }
+                    public String runTurn(String input) throws Exception {
+                        String expanded = input;
+                        com.lyhn.wraith.mcp.McpServerManager m = appServerMcp.manager();
+                        if (m != null) {
+                            // @server:uri 展开(失败注入 <resource_error>,永不失败整轮)
+                            expanded = new com.lyhn.wraith.mcp.mention.AtMentionExpander(m).expand(input);
+                        }
+                        return agent.run(expanded);
+                    }
+                    public com.lyhn.wraith.runtime.appserver.McpOps mcp() { return appServerMcp; }
                     public void setApprovalMode(boolean auto) { hitl.setEnabled(!auto); }
                     public java.util.List<com.lyhn.wraith.session.SessionMeta> listSessions() {
                         return sessionStore.list(50);

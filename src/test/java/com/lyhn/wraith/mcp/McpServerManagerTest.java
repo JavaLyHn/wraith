@@ -2,6 +2,7 @@ package com.lyhn.wraith.mcp;
 
 import com.lyhn.wraith.mcp.config.McpConfigLoader;
 import com.lyhn.wraith.mcp.config.McpServerConfig;
+import com.lyhn.wraith.mcp.protocol.McpToolDescriptor;
 import com.lyhn.wraith.tool.ToolRegistry;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -17,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -34,9 +36,11 @@ class McpServerManagerTest {
     private MockWebServer webServer;
     private ToolRegistry registry;
     private McpServerManager manager;
+    private Path tempDir;
 
     @BeforeEach
     void setUp(@TempDir Path tempDir) throws IOException {
+        this.tempDir = tempDir;
         webServer = new MockWebServer();
         webServer.start();
         registry = new ToolRegistry();
@@ -263,5 +267,97 @@ class McpServerManagerTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    // ---- Phase E-1 Task 1 新增测试 ----
+
+    @Test
+    void reattachRegistersToolsIntoNewRegistryAndLeavesOldUntouched() throws Exception {
+        enqueueInitialize();
+        enqueueToolsList("{\"name\":\"echo\",\"description\":\"回声\",\"inputSchema\":{\"type\":\"object\"}}");
+        loadServersFromMap(Map.of("srv", httpConfig(webServer)));
+        manager.startAll();
+        String namespaced = McpToolDescriptor.namespaced("srv", "echo");
+        assertTrue(registryHasTool(registry, namespaced), "前置:工具注册进原 registry");
+
+        ToolRegistry fresh = newRegistryLikeSetUp();
+        manager.reattach(fresh);
+        assertTrue(registryHasTool(fresh, namespaced), "reattach 后新 registry 有该工具");
+        // 旧 registry 不清理:随旧会话整体废弃(主动注销反而可能干扰在途会话)
+        assertTrue(registryHasTool(registry, namespaced), "reattach 不清理旧 registry,旧工具仍保留");
+    }
+
+    @Test
+    void statusListenerFiresOnEachTransition() throws Exception {
+        List<String> events = new ArrayList<>();
+        manager.setStatusListener(s -> events.add(s.name() + ":" + s.status()));
+        enqueueInitialize();
+        enqueueToolsList("{\"name\":\"echo\",\"description\":\"d\",\"inputSchema\":{\"type\":\"object\"}}");
+        loadServersFromMap(Map.of("srv", httpConfig(webServer)));
+        manager.startAll();
+        assertTrue(events.contains("srv:STARTING"), "应包含 STARTING 事件，实际: " + events);
+        assertTrue(events.contains("srv:READY"), "应包含 READY 事件，实际: " + events);
+        manager.disable("srv");
+        assertTrue(events.contains("srv:DISABLED"), "应包含 DISABLED 事件，实际: " + events);
+    }
+
+    @Test
+    void reloadFromConfigRemovesServerWhenConfigGone() throws Exception {
+        enqueueInitialize();
+        enqueueToolsList("{\"name\":\"echo\",\"description\":\"d\",\"inputSchema\":{\"type\":\"object\"}}");
+        loadServersFromMap(Map.of("srv", httpConfig(webServer)));
+        manager.startAll();
+        // 空配置下 reload:server 应被移除且工具注销
+        String msg = manager.reloadFromConfig("srv");
+        assertTrue(manager.servers().stream().noneMatch(s -> s.name().equals("srv")), msg);
+        assertFalse(registryHasTool(registry, McpToolDescriptor.namespaced("srv", "echo")));
+    }
+
+    @Test
+    void reloadFromConfigStartsBrandNewServer() throws Exception {
+        // 向 configLoader 读取的 project.json 写入一个全新 server "brandnew"
+        String mcpJson = "{\"mcpServers\":{\"brandnew\":{\"url\":\""
+                + webServer.url("/mcp") + "\"}}}";
+        Files.writeString(tempDir.resolve("project.json"), mcpJson);
+
+        enqueueInitialize();
+        enqueueToolsList(toolJson("search", "Search tool"));
+
+        String result = manager.reloadFromConfig("brandnew");
+
+        assertTrue(manager.servers().stream().anyMatch(s -> s.name().equals("brandnew")),
+                "brandnew server 应出现在 manager.servers(): " + result);
+        McpServer brandnew = manager.server("brandnew");
+        assertNotNull(brandnew, "manager.server(\"brandnew\") 不应为 null");
+        assertEquals(McpServerStatus.READY, brandnew.status(),
+                "全新 server 应启动至 READY，实际: " + brandnew.status()
+                        + (brandnew.errorMessage() == null ? "" : " — " + brandnew.errorMessage()));
+        assertTrue(registryHasTool(registry, McpToolDescriptor.namespaced("brandnew", "search")),
+                "registry 应持有 mcp__brandnew__search");
+    }
+
+    // ---- Phase E-1 Task 4 I1 修复测试 ----
+
+    @Test
+    void closedManagerStartAllRegistersNothing() throws Exception {
+        enqueueInitialize();
+        enqueueToolsList("{\"name\":\"echo\",\"description\":\"d\",\"inputSchema\":{\"type\":\"object\"}}");
+        loadServersFromMap(Map.of("srv", httpConfig(webServer)));
+        manager.close();      // 先关
+        manager.startAll();   // 后启:worker 必须被 closed 短路
+        assertFalse(registryHasTool(registry, McpToolDescriptor.namespaced("srv", "echo")),
+                "close 后 startAll 不得注册任何工具");
+    }
+
+    // ---- Phase E-1 Task 1 辅助方法 ----
+
+    /** 与 disableRemovesToolsFromRegistry 中的断言保持同样 API */
+    private static boolean registryHasTool(ToolRegistry reg, String toolName) {
+        return reg.hasTool(toolName);
+    }
+
+    /** 与 setUp 中同参构造第二个 ToolRegistry（只构造空 registry，不含任何 MCP 工具） */
+    private ToolRegistry newRegistryLikeSetUp() {
+        return new ToolRegistry();
     }
 }

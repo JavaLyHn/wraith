@@ -1,5 +1,6 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
-import type { BackendEvent, SessionMeta, ProjectView } from '../shared/types'
+import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView } from '../shared/types'
+import type { McpFormValue } from './components/McpServerForm'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
 import { createThrottleLatest, type ThrottledPush } from '../shared/throttleLatest'
 import {
@@ -26,6 +27,7 @@ import ApprovalModal from './components/ApprovalModal'
 import DisconnectedBanner from './components/DisconnectedBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import Sidebar from './components/Sidebar'
+import PluginsPanel from './components/PluginsPanel'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -112,14 +114,37 @@ export default function App(): JSX.Element {
   const [inputValue, setInputValue] = useState('')
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
+  const [view, setView] = useState<'chat' | 'plugins'>('chat')
+  const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
+  const [mcpConfigError, setMcpConfigError] = useState<string | null>(null)
+  const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
+
+  // Define fetchMcpResources before onEvent effect so it can be referenced in deps
+  const fetchMcpResources = useCallback(async () => {
+    try {
+      const { resources } = await window.wraith.mcpResources()
+      setMcpResources(resources)
+    } catch (err) {
+      console.error('[wraith] mcpResources error:', err)
+    }
+  }, [])
 
   // ── subscribe to backend events on mount (status 高频 → 100ms 窗口合并) ────
   useEffect(() => {
     const throttledStatus = createThrottleLatest<BackendEvent>(100, evt => dispatch(evt))
     statusThrottleRef.current = throttledStatus
     const unsubscribe = window.wraith.onEvent((evt: BackendEvent) => {
+      if (evt.kind === 'notification' && evt.method === 'mcp.status') {
+        const p = evt.params as { name: string; state: McpServerView['state']; error?: string }
+        setMcpServers(prev => prev.map(s => (s.name === p.name ? { ...s, state: p.state, enabled: p.state !== 'disabled', error: p.error } : s)))
+        if (p.state === 'ready') {
+          void fetchMcpResources()
+          void fetchMcp() // ready 后工具清单才可用:真后端 starting 期 list 的 tools 为空
+        }
+        return
+      }
       if (evt.kind === 'notification' && evt.method === 'status') {
         throttledStatus(evt)
         return
@@ -130,7 +155,7 @@ export default function App(): JSX.Element {
       throttledStatus.cancel()
       unsubscribe()
     }
-  }, [])
+  }, [fetchMcpResources])
 
   // ── session list helpers ───────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -148,6 +173,16 @@ export default function App(): JSX.Element {
       setProjects(projects)
     } catch (err) {
       console.error('[wraith] listProjects error:', err)
+    }
+  }, [])
+
+  const fetchMcp = useCallback(async () => {
+    try {
+      const r = await window.wraith.mcpList()
+      setMcpServers(r.servers)
+      setMcpConfigError(r.configError ?? null)
+    } catch (err) {
+      console.error('[wraith] mcpList error:', err)
     }
   }, [])
 
@@ -195,11 +230,13 @@ export default function App(): JSX.Element {
         await window.wraith.startSession(ws)
         void fetchSessions()
         void fetchProjects()
+        void fetchMcp()
+        void fetchMcpResources()
       } catch (err) {
         console.error('[wraith] startup error:', err)
       }
     })()
-  }, [fetchSessions, fetchProjects])
+  }, [fetchSessions, fetchProjects, fetchMcp, fetchMcpResources])
 
   // ── reconnect effect (fires on disconnected→connected, skips first connect) ──
   const reconnectRef = useRef(false)
@@ -376,12 +413,14 @@ export default function App(): JSX.Element {
           dispatch({ type: 'markStarted' })
         }
         void fetchProjects() // lastUsedAt 刷新 → 浮顶
+        void fetchMcp()
+        void fetchMcpResources()
       } catch (err) {
         console.error('[wraith] switchToProject error:', err)
         void fetchProjects()
       }
     },
-    [state.turn, fetchProjects],
+    [state.turn, fetchProjects, fetchMcp, fetchMcpResources],
   )
 
   // 添加项目(=Composer 重选目录汇流入口):选目录 → 入列表 → 切换
@@ -421,6 +460,26 @@ export default function App(): JSX.Element {
     [fetchProjects],
   )
 
+  const handleMcpToggle = useCallback(async (name: string, enable: boolean) => {
+    try { await (enable ? window.wraith.mcpEnable(name) : window.wraith.mcpDisable(name)); void fetchMcp() }
+    catch (err) { console.error('[wraith] mcp toggle error:', err) }
+  }, [fetchMcp])
+
+  const handleMcpRestart = useCallback(async (name: string) => {
+    try { await window.wraith.mcpRestart(name); void fetchMcp() }
+    catch (err) { console.error('[wraith] mcp restart error:', err) }
+  }, [fetchMcp])
+
+  const handleMcpRemove = useCallback(async (scope: 'user' | 'project', name: string) => {
+    try { await window.wraith.mcpConfigRemove(scope, name); void fetchMcp() }
+    catch (err) { console.error('[wraith] mcp remove error:', err) }
+  }, [fetchMcp])
+
+  const handleMcpSubmitForm = useCallback(async (v: McpFormValue): Promise<boolean> => {
+    try { await window.wraith.mcpConfigUpsert(v); void fetchMcp(); return true }
+    catch (err) { console.error('[wraith] mcp upsert error:', err); return false }
+  }, [fetchMcp])
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-fg">
       <Sidebar
@@ -436,6 +495,8 @@ export default function App(): JSX.Element {
         onRemoveProject={handleRemoveProject}
         onRenameProject={handleRenameProject}
         sandbox={state.sandbox}
+        activeNav={view === 'plugins' ? 'plugins' : null}
+        onOpenPlugins={() => setView('plugins')}
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
@@ -443,40 +504,55 @@ export default function App(): JSX.Element {
           <DisconnectedBanner onRestart={handleRestart} />
         )}
 
-        {/* content: welcome ↔ transcript + composer （沿用 Task 6 的条件渲染块） */}
-        {(() => {
-          const composer = (
-            <Composer
-              value={inputValue}
-              onChange={setInputValue}
-              onSubmit={handleSubmit}
-              onInterrupt={handleInterrupt}
-              running={state.turn === 'running'}
-              approvalAuto={state.approvalMode === 'auto'}
-              onToggleApproval={handleToggleApproval}
-              model={state.model}
-              workspace={state.workspace}
-              onSwitchWorkspace={handleAddProject}
-              centered={!state.hasStarted}
-              status={state.status}
-            />
-          )
-          return state.hasStarted ? (
-            <>
-              <Transcript
-                items={state.items}
-                busy={state.turn === 'running'}
-                onEditMessage={handleEditMessage}
-                onDeleteMessage={handleDeleteMessage}
+        {view === 'plugins' ? (
+          <PluginsPanel
+            servers={mcpServers}
+            configError={mcpConfigError}
+            busy={state.turn === 'running'}
+            onBack={() => setView('chat')}
+            onRefresh={fetchMcp}
+            onToggle={handleMcpToggle}
+            onRestart={handleMcpRestart}
+            onRemove={handleMcpRemove}
+            onSubmitForm={handleMcpSubmitForm}
+          />
+        ) : (
+          /* 既有 welcome ↔ transcript+composer 条件块整体原样嵌此 else */
+          (() => {
+            const composer = (
+              <Composer
+                value={inputValue}
+                onChange={setInputValue}
+                onSubmit={handleSubmit}
+                onInterrupt={handleInterrupt}
+                running={state.turn === 'running'}
+                approvalAuto={state.approvalMode === 'auto'}
+                onToggleApproval={handleToggleApproval}
+                model={state.model}
+                workspace={state.workspace}
+                onSwitchWorkspace={handleAddProject}
+                centered={!state.hasStarted}
+                status={state.status}
+                resources={mcpResources}
               />
-              <div className="shrink-0 px-4 py-3">{composer}</div>
-            </>
-          ) : (
-            <div className="min-h-0 flex-1">
-              <WelcomeEmptyState>{composer}</WelcomeEmptyState>
-            </div>
-          )
-        })()}
+            )
+            return state.hasStarted ? (
+              <>
+                <Transcript
+                  items={state.items}
+                  busy={state.turn === 'running'}
+                  onEditMessage={handleEditMessage}
+                  onDeleteMessage={handleDeleteMessage}
+                />
+                <div className="shrink-0 px-4 py-3">{composer}</div>
+              </>
+            ) : (
+              <div className="min-h-0 flex-1">
+                <WelcomeEmptyState>{composer}</WelcomeEmptyState>
+              </div>
+            )
+          })()
+        )}
       </div>
 
       {/* Approval modal（Task 8 换 shadcn Dialog；此处结构不变） */}
