@@ -159,9 +159,19 @@ ipcMain.handle('wraith:submitTurn', async (_e, input: string) => {
 
 ipcMain.handle(
   'wraith:respondApproval',
-  async (_e, approvalId: string, decision: 'APPROVED' | 'REJECTED') => {
+  async (
+    _e,
+    approvalId: string,
+    decision: string,
+    opts: { modifiedArgs?: string; allowNetwork?: boolean } | null
+  ) => {
     if (!client) throw new Error('Backend not connected')
-    await client.request('approval.respond', { approvalId, decision })
+    await client.request('approval.respond', {
+      approvalId,
+      decision,
+      ...(opts?.modifiedArgs ? { modifiedArgs: opts.modifiedArgs } : {}),
+      ...(opts?.allowNetwork ? { allowNetwork: true } : {})
+    })
   }
 )
 

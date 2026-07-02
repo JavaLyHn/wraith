@@ -1,5 +1,6 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import type { BackendEvent, SessionMeta } from '../shared/types'
+import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
 import {
   initialState,
   reduce,
@@ -230,14 +231,20 @@ export default function App(): JSX.Element {
   }, [inputValue, state.turn])
 
   // ── approval handlers ──────────────────────────────────────────────────────
-  const handleApprove = useCallback(async () => {
-    if (!state.pendingApproval) return
-    try {
-      await window.wraith.respondApproval(state.pendingApproval.approvalId, 'APPROVED')
-    } finally {
-      dispatch({ type: 'clearApproval' })
-    }
-  }, [state.pendingApproval])
+  const handleApprovalRespond = useCallback(
+    async (payload: ApprovalResponsePayload) => {
+      if (!state.pendingApproval) return
+      try {
+        await window.wraith.respondApproval(state.pendingApproval.approvalId, payload.decision, {
+          ...(payload.modifiedArgs ? { modifiedArgs: payload.modifiedArgs } : {}),
+          ...(payload.allowNetwork ? { allowNetwork: true } : {}),
+        })
+      } finally {
+        dispatch({ type: 'clearApproval' })
+      }
+    },
+    [state.pendingApproval],
+  )
 
   const handleReject = useCallback(async () => {
     if (!state.pendingApproval) return
@@ -349,7 +356,9 @@ export default function App(): JSX.Element {
           argsJson={state.pendingApproval.argsJson}
           dangerLevel={state.pendingApproval.dangerLevel}
           riskDescription={state.pendingApproval.riskDescription}
-          onApprove={handleApprove}
+          suggestion={state.pendingApproval.suggestion}
+          beforeContent={state.pendingApproval.beforeContent}
+          onRespond={handleApprovalRespond}
           onReject={handleReject}
         />
       )}
