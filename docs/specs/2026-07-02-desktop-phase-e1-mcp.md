@@ -108,8 +108,8 @@ UI 以徽标提示「被本项目覆盖」)。
 | `mcp.list` | `{}` | `{servers:[{name, state, scope:"user"\|"project"\|"builtin", enabled, shadowed:boolean, transport:"stdio"\|"http", tools:[{name, description}], envKeys:string[], error?}], configError?:string}`;无会话 -32000 |
 | `mcp.enable` / `mcp.disable` / `mcp.restart` | `{name}` | `{ok:true}`;未知 name -32000;缺 name -32602 |
 | `mcp.logs` | `{name}` | `{lines:string}`(manager.logs 原文);同上错误 |
-| `mcp.resources` | `{name?}` | `{resources:[{server, uri, name, description?}]}`(缺 name = 全部 server 汇总,供 @ 补全) |
-| `mcp.prompts` | `{name}` | `{prompts:[{name, description?}]}` |
+| `mcp.resources` | `{name?}` | `{resources:[{server, uri, name, description?}]}`(缺 name = 全部 server 汇总,供 @ 补全;引擎 `resourceCandidates()` 本就结构化) |
+| `mcp.prompts` | `{name}` | `{text:string}`(引擎 `prompts(name)` 现产格式化文本,v1 提示词 tab 只读展示,不为此扩引擎) |
 | `mcp.config.upsert` | `{scope, name, command, args:string[], env:{k:v}}` | `{ok:true}` + 触发该 server 重载;scope 非法/缺字段 -32602;**env 值为空串 = 保留该 key 现值**(仅当原已存在,否则忽略该 key);`scope:"project"` 而当前无有效 workspaceDir → -32602 |
 | `mcp.config.remove` | `{scope, name}` | `{ok:true}`;对应层级无此名 -32000 |
 | 通知 `mcp.status` | — | `{name, state:"starting"\|"ready"\|"disabled"\|"error", error?}` |
