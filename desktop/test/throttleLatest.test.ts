@@ -37,4 +37,20 @@ describe('createThrottleLatest', () => {
     push(2)
     expect(got).toEqual([1, 2])
   })
+  it('cancel 清掉挂起值与定时器,不再 emit', () => {
+    const got: number[] = []
+    const push = createThrottleLatest<number>(100, v => got.push(v))
+    push(1); push(2)
+    push.cancel()
+    vi.advanceTimersByTime(300)
+    expect(got).toEqual([1])
+  })
+  it('cancel 后下一次 push 回到立即 emit 路径', () => {
+    const got: number[] = []
+    const push = createThrottleLatest<number>(100, v => got.push(v))
+    push(1); push(2)
+    push.cancel()
+    push(3)
+    expect(got).toEqual([1, 3])
+  })
 })
