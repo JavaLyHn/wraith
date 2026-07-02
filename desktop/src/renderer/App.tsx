@@ -28,6 +28,7 @@ import DisconnectedBanner from './components/DisconnectedBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import Sidebar from './components/Sidebar'
 import PluginsPanel from './components/PluginsPanel'
+import AutomationsPanel from './components/AutomationsPanel'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -561,7 +562,7 @@ export default function App(): JSX.Element {
             onSubmitForm={handleMcpSubmitForm}
           />
         ) : view === 'automations' ? (
-          <div data-testid="automations-panel-placeholder" />
+          <AutomationsPanel projects={projects} onBack={() => setView('chat')} />
         ) : (
           /* 既有 welcome ↔ transcript+composer 条件块整体原样嵌此 else */
           (() => {
