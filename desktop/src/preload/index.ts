@@ -23,6 +23,7 @@ export interface WraithApi {
   setApprovalMode(auto: boolean): Promise<{ ok: boolean }>
   listSessions(): Promise<{ sessions: SessionMeta[] }>
   resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[] }>
+  rewindSession(userOrdinal: number): Promise<{ ok: boolean }>
   onEvent(cb: (evt: BackendEvent) => void): () => void
 }
 
@@ -72,6 +73,10 @@ const wraith: WraithApi = {
       sessionId: string
       messages: ResumedMessage[]
     }>
+  },
+
+  rewindSession(userOrdinal) {
+    return ipcRenderer.invoke('wraith:rewindSession', userOrdinal) as Promise<{ ok: boolean }>
   },
 
   onEvent(cb) {

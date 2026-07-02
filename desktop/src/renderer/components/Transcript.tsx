@@ -3,12 +3,18 @@ import type { Item } from '../../shared/transcriptReducer'
 import ThinkingBlock from './ThinkingBlock'
 import ToolCard from './ToolCard'
 import DiffCard from './DiffCard'
+import UserMessage from './UserMessage'
 
 interface TranscriptProps {
   items: Item[]
+  /** turn 运行中:禁用消息编辑/删除。 */
+  busy: boolean
+  onEditMessage: (ordinal: number, newText: string) => void
+  onDeleteMessage: (ordinal: number) => void
 }
 
-export default function Transcript({ items }: TranscriptProps): JSX.Element {
+export default function Transcript({ items, busy, onEditMessage, onDeleteMessage }: TranscriptProps): JSX.Element {
+  let userOrdinal = 0 // 渲染期为 user 气泡计数(1-based),rewind 用
   // [&>*]:shrink-0 必不可少:卡片类子项(tool/thinking/diff)带 overflow-hidden,
   // 其 flex 自动最小高度为 0——内容一旦溢出容器,flex 会把它们压成 2px 边框线
   return (
@@ -18,14 +24,16 @@ export default function Transcript({ items }: TranscriptProps): JSX.Element {
     >
       {items.map((item, idx) => {
         if (item.type === 'user') {
+          userOrdinal++
           return (
-            <div
+            <UserMessage
               key={idx}
-              data-testid="user-msg"
-              className="self-end max-w-[85%] rounded-2xl bg-accent/10 px-3 py-2 text-sm text-fg"
-            >
-              {item.text}
-            </div>
+              text={item.text}
+              ordinal={userOrdinal}
+              busy={busy}
+              onEdit={onEditMessage}
+              onDelete={onDeleteMessage}
+            />
           )
         }
         if (item.type === 'message') {

@@ -1,0 +1,85 @@
+import { useState } from 'react'
+
+interface UserMessageProps {
+  text: string
+  /** 该气泡是第几条用户消息(1-based),rewind 用。 */
+  ordinal: number
+  /** turn 运行中禁用编辑/删除。 */
+  busy: boolean
+  onEdit: (ordinal: number, newText: string) => void
+  onDelete: (ordinal: number) => void
+}
+
+/** 用户气泡:hover 浮现编辑/删除;编辑就地展开;删除二次点击确认(真回溯,裁掉之后全部)。 */
+export default function UserMessage({ text, ordinal, busy, onEdit, onDelete }: UserMessageProps): JSX.Element {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(text)
+  const [confirming, setConfirming] = useState(false)
+
+  if (editing) {
+    return (
+      <div className="self-end w-[85%] rounded-2xl border border-accent/40 bg-accent/5 p-2">
+        <textarea
+          data-testid="msg-edit-input"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          rows={3}
+          autoFocus
+          className="w-full resize-none bg-transparent px-1 text-sm text-fg outline-none"
+        />
+        <div className="mt-1 flex justify-end gap-2">
+          <button
+            data-testid="msg-edit-cancel"
+            onClick={() => { setEditing(false); setDraft(text) }}
+            className="rounded-lg border border-border px-3 py-1 text-xs text-fg-muted hover:bg-black/[0.03]"
+          >
+            取消
+          </button>
+          <button
+            data-testid="msg-edit-save"
+            onClick={() => { if (draft.trim()) onEdit(ordinal, draft.trim()) }}
+            disabled={!draft.trim()}
+            title="丢弃此消息及之后的全部内容,以修改后的文本重新发送"
+            className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-accent-fg disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            保存并重发
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="group flex items-center justify-end gap-1.5 self-end max-w-[85%]">
+      {!busy && (
+        <span className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+          <button
+            data-testid="msg-edit"
+            onClick={() => { setDraft(text); setEditing(true); setConfirming(false) }}
+            title="编辑并从此处重发(丢弃之后的内容)"
+            className="rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent"
+          >
+            ✏️ 编辑
+          </button>
+          <button
+            data-testid="msg-delete"
+            onClick={() => (confirming ? onDelete(ordinal) : setConfirming(true))}
+            onBlur={() => setConfirming(false)}
+            title="删除此消息及之后的全部内容"
+            className={
+              'rounded-lg border px-2 py-1 text-[11px] ' +
+              (confirming
+                ? 'border-danger bg-danger/10 font-semibold text-danger'
+                : 'border-border text-fg-muted hover:border-danger hover:text-danger')
+            }
+          >
+            {confirming ? '确认删除?' : '🗑 删除'}
+          </button>
+        </span>
+      )}
+      <div data-testid="user-msg" className="rounded-2xl bg-accent/10 px-3 py-2 text-sm text-fg">
+        {text}
+      </div>
+    </div>
+  )
+}
