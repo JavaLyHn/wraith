@@ -37,7 +37,12 @@ export default function UserMessage({ text, ordinal, busy, onEdit, onDelete }: U
           </button>
           <button
             data-testid="msg-edit-save"
-            onClick={() => { if (draft.trim()) onEdit(ordinal, draft.trim()) }}
+            onClick={() => {
+              if (!draft.trim()) return
+              // 先复位再回调:裁剪+重发后新 user 项落在同一 key,React 复用实例,editing 残留会把新气泡渲染成编辑框
+              setEditing(false)
+              onEdit(ordinal, draft.trim())
+            }}
             disabled={!draft.trim()}
             title="丢弃此消息及之后的全部内容,以修改后的文本重新发送"
             className="rounded-lg bg-accent px-3 py-1 text-xs font-semibold text-accent-fg disabled:cursor-not-allowed disabled:opacity-40"
