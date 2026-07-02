@@ -1,6 +1,8 @@
 package com.lyhn.wraith.runtime.appserver;
 
+import com.lyhn.wraith.mcp.McpServer;
 import com.lyhn.wraith.mcp.McpServerManager;
+import com.lyhn.wraith.mcp.config.McpServerConfig;
 import com.lyhn.wraith.tool.ToolRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -8,6 +10,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -75,6 +78,33 @@ class AppServerMcpTest {
         assertThrows(java.util.NoSuchElementException.class, () -> mcp.enable("ghost"));
         assertThrows(IllegalArgumentException.class,
                 () -> mcp.configUpsert("bogus-scope", "s", "c", List.of(), java.util.Map.of()));
+    }
+
+    @Test
+    void listReturnsCommandAndArgsForStdioServerButNotEnvValue(@TempDir Path ws) throws Exception {
+        McpServerConfig cfg = new McpServerConfig();
+        cfg.setCommand("npx");
+        cfg.setArgs(List.of("-y", "pkg"));
+        cfg.setEnv(Map.of("TOKEN", "v"));
+        McpServer srv = new McpServer("test-stdio", cfg);
+
+        AppServerMcp mcp = new AppServerMcp((reg, dir) -> new FakeManager(reg, dir) {
+            @Override public java.util.Collection<McpServer> servers() { return List.of(srv); }
+        });
+        mcp.ensureFor(ws.toString(), registry(ws), null);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> servers = (List<Map<String, Object>>) mcp.list().get("servers");
+        assertEquals(1, servers.size());
+        Map<String, Object> entry = servers.get(0);
+
+        assertEquals("npx", entry.get("command"), "command 必须回传");
+        assertEquals(List.of("-y", "pkg"), entry.get("args"), "args 必须回传");
+        assertEquals(List.of("TOKEN"), entry.get("envKeys"), "envKeys 只含 key 名");
+        // env 值不得出现在条目中
+        assertNull(entry.get("env"), "env map 不得出现");
+        assertFalse(String.valueOf(entry).contains("\"v\"") || String.valueOf(entry).contains("=v"),
+                "env 值 'v' 不得出现在序列化条目中");
     }
 
     @Test

@@ -105,7 +105,7 @@ UI 以徽标提示「被本项目覆盖」)。
 
 | RPC | params | result / 错误 |
 |---|---|---|
-| `mcp.list` | `{}` | `{servers:[{name, state, scope:"user"\|"project"\|"builtin", enabled, shadowed:boolean, transport:"stdio"\|"http", tools:[{name, description}], envKeys:string[], error?}], configError?:string}`;无会话 -32000 |
+| `mcp.list` | `{}` | `{servers:[{name, state, scope:"user"\|"project"\|"builtin", enabled, shadowed:boolean, transport:"stdio"\|"http", tools:[{name, description}], envKeys:string[], command?, args?(仅 stdio 回传,非密钥,编辑表单回填), error?}], configError?:string}`;无会话 -32000 |
 | `mcp.enable` / `mcp.disable` / `mcp.restart` | `{name}` | `{ok:true}`;未知 name -32000;缺 name -32602 |
 | `mcp.logs` | `{name}` | `{lines:string}`(manager.logs 原文);同上错误 |
 | `mcp.resources` | `{name?}` | `{resources:[{server, uri, name, description?}]}`(缺 name = 全部 server 汇总,供 @ 补全;引擎 `resourceCandidates()` 本就结构化) |

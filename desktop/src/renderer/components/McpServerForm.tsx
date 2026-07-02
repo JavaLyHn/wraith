@@ -14,8 +14,8 @@ interface McpServerFormProps {
 
 export default function McpServerForm({ mode, initial, busy, onCancel, onSubmit }: McpServerFormProps): JSX.Element {
   const [name, setName] = useState(initial?.name ?? '')
-  const [command, setCommand] = useState('')
-  const [argsText, setArgsText] = useState('')
+  const [command, setCommand] = useState(initial?.command ?? '')
+  const [argsText, setArgsText] = useState(initial?.args?.join('\n') ?? '')
   const [scope, setScope] = useState<'user' | 'project'>(initial && initial.scope !== 'builtin' ? initial.scope : 'user')
   const [envRows, setEnvRows] = useState<EnvRow[]>(initial ? envRowsFromKeys(initial.envKeys) : [])
   const [submitting, setSubmitting] = useState(false)
@@ -63,6 +63,7 @@ export default function McpServerForm({ mode, initial, busy, onCancel, onSubmit 
               onChange={e => setRow(i, { key: e.target.value })}
               className="w-40 rounded-lg border border-border bg-bg px-2 py-1.5 font-mono text-xs text-fg outline-none focus:border-accent" />
             <input data-testid="mcp-form-env-value" type="password" value={r.value} placeholder="••••(留空保留)"
+              autoComplete="new-password"
               onChange={e => setRow(i, { value: e.target.value })}
               className="flex-1 rounded-lg border border-border bg-bg px-2 py-1.5 font-mono text-xs text-fg outline-none focus:border-accent" />
           </div>

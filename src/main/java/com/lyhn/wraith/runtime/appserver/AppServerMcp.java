@@ -110,6 +110,10 @@ public final class AppServerMcp implements McpOps {
                     ? new ArrayList<>(s.config().getEnv().keySet()) : new ArrayList<>();
             Collections.sort(envKeys);
             e.put("envKeys", envKeys);
+            if (s.config() != null && s.config().getCommand() != null && !s.config().getCommand().isBlank()) {
+                e.put("command", s.config().getCommand());
+                e.put("args", s.config().getArgs() == null ? List.of() : s.config().getArgs());
+            }
             if (s.status() == McpServerStatus.ERROR && s.errorMessage() != null) e.put("error", s.errorMessage());
             out.add(e);
         }

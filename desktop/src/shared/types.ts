@@ -193,6 +193,9 @@ export interface McpServerView {
   transport: 'stdio' | 'http' | string
   tools: McpToolView[]
   envKeys: string[]
+  /** stdio 型回传(非密钥),编辑表单回填用;http 型缺省 */
+  command?: string
+  args?: string[]
   error?: string
 }
 
