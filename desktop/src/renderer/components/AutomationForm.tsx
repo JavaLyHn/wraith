@@ -32,8 +32,10 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
       if (!Number.isFinite(m) || m < 5) { setError('间隔最少 5 分钟'); return null }
       schedule = { kind: 'interval', everyMinutes: Math.floor(m) }
     } else if (kind === 'daily') {
+      if (!/^\d{2}:\d{2}$/.test(time)) { setError('时间格式错误'); return null }
       schedule = { kind: 'daily', time }
     } else {
+      if (!/^\d{2}:\d{2}$/.test(time)) { setError('时间格式错误'); return null }
       schedule = { kind: 'weekly', weekday, time }
     }
     const now = Date.now()
@@ -47,14 +49,37 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
     }
   }
 
-  const save = async (): Promise<AutomationTask | null> => {
+  // saveOnly: saves and clears saving when done (pure save button path)
+  const saveOnly = async (): Promise<void> => {
+    const t = buildTask()
+    if (!t) return
+    setSaving(true); setError(null)
+    try {
+      const ok = await onSave(t)
+      if (!ok) setError('保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // saveForRun: saves but does NOT clear saving; returns task or null (run-now path)
+  const saveForRun = async (): Promise<AutomationTask | null> => {
     const t = buildTask()
     if (!t) return null
     setSaving(true); setError(null)
     const ok = await onSave(t)
-    setSaving(false)
-    if (!ok) { setError('保存失败'); return null }
+    if (!ok) { setError('保存失败'); setSaving(false); return null }
     return t
+  }
+
+  const handleRunNow = async (): Promise<void> => {
+    const t = await saveForRun()
+    if (!t) return
+    try {
+      await onRunNow(t)
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -106,10 +131,10 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
       </div>
       {error && <div className="text-xs text-danger">{error}</div>}
       <div className="flex gap-2">
-        <button data-testid="automation-save" disabled={saving} onClick={() => void save()}
+        <button data-testid="automation-save" disabled={saving} onClick={() => void saveOnly()}
           className="rounded-lg bg-accent px-4 py-2 text-xs text-white disabled:opacity-60">保存</button>
         <button data-testid="automation-run-now" disabled={saving}
-          onClick={() => void save().then(t => { if (t) void onRunNow(t) })}
+          onClick={() => void handleRunNow()}
           className="rounded-lg border border-border px-4 py-2 text-xs text-fg hover:border-accent disabled:opacity-60">
           立即运行
         </button>
