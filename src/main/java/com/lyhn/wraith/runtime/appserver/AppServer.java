@@ -151,6 +151,7 @@ public final class AppServer {
         String decision = p.path("decision").asText("REJECTED");
         String modifiedArgs = p.hasNonNull("modifiedArgs") ? p.get("modifiedArgs").asText() : null;
         String reason = p.hasNonNull("reason") ? p.get("reason").asText() : null;
+        boolean allowNetwork = p.path("allowNetwork").asBoolean(false);
         ApprovalResult.Decision d;
         try {
             d = ApprovalResult.Decision.valueOf(decision);
@@ -158,7 +159,7 @@ public final class AppServer {
             writer.error(msg.id(), -32602, "invalid decision: " + decision);
             return;
         }
-        ApprovalResult result = new ApprovalResult(d, modifiedArgs, reason);
+        ApprovalResult result = new ApprovalResult(d, modifiedArgs, reason, allowNetwork);
         session.renderer().resolveApproval(approvalId, result);
         writer.result(msg.id(), java.util.Map.of("ok", true));
     }
