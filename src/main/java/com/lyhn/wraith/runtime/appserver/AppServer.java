@@ -4,10 +4,14 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.lyhn.wraith.hitl.ApprovalResult;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -105,13 +109,14 @@ public final class AppServer {
                 JsonNode p = msg.params();
                 String scope = textParam(p, "scope"); String name = textParam(p, "name"); String command = textParam(p, "command");
                 if (scope == null || name == null || command == null) { writer.error(msg.id(), -32602, "缺 scope/name/command"); return; }
-                java.util.List<String> args = new java.util.ArrayList<>();
+                List<String> args = new ArrayList<>();
                 if (p.has("args") && p.get("args").isArray()) p.get("args").forEach(a -> args.add(a.asText()));
-                java.util.Map<String, String> env = new java.util.LinkedHashMap<>();
+                Map<String, String> env = new LinkedHashMap<>();
                 if (p.has("env") && p.get("env").isObject())
                     p.get("env").fields().forEachRemaining(e -> env.put(e.getKey(), e.getValue().asText()));
+                // IOException 只能在 lambda 内接:Consumer 不声明受检异常;新增会抛 IOException 的 mcp case 需同样内接
                 try { ops.configUpsert(scope, name, command, args, env); ok(msg); }
-                catch (java.io.IOException e) { writer.error(msg.id(), -32000, "配置写入失败: " + e.getMessage()); }
+                catch (IOException e) { writer.error(msg.id(), -32000, "配置写入失败: " + e.getMessage()); }
             });
             case "mcp.config.remove" -> handleMcp(msg, ops -> {
                 JsonNode p = msg.params();
@@ -120,7 +125,7 @@ public final class AppServer {
                 try {
                     if (!ops.configRemove(scope, name)) { writer.error(msg.id(), -32000, "该层级无此配置: " + name); return; }
                     ok(msg);
-                } catch (java.io.IOException e) { writer.error(msg.id(), -32000, "配置写入失败: " + e.getMessage()); }
+                } catch (IOException e) { writer.error(msg.id(), -32000, "配置写入失败: " + e.getMessage()); }
             });
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
@@ -233,7 +238,7 @@ public final class AppServer {
     private void handleMcpNamed(JsonRpc.Incoming msg, java.util.function.BiConsumer<McpOps, String> action) {
         handleMcp(msg, ops -> {
             String name = textParam(msg.params(), "name");
-            if (name == null) { writer.error(msg.id(), -32602, "missing name"); return; }
+            if (name == null) { writer.error(msg.id(), -32602, "缺 name"); return; }
             action.accept(ops, name);
         });
     }
