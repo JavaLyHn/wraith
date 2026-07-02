@@ -68,7 +68,12 @@ function notifyOS(title: string, body: string): void {
   try {
     if (Notification.isSupported()) {
       const n = new Notification({ title, body })
-      n.on('click', () => { mainWindow?.show(); pushAutomation({ kind: 'open-panel' }) })
+      n.on('click', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show()
+          pushAutomation({ kind: 'open-panel' })
+        }
+      })
       n.show()
     }
   } catch { /* 降级 */ }
@@ -422,6 +427,8 @@ app.whenReady().then(() => {
       } catch { /* 降级 */ }
     },
     onTerminal: run => {
+      // runs-changed 与 badge 已由 finishRun 先行调用的 onRunsChanged 推送,
+      // 此处只负责系统通知——依赖调度器 finishRun 内 onRunsChanged→onTerminal 的调用顺序
       try {
         const label = run.status === 'success' ? '完成' : run.status === 'failed' ? '失败' : '中断'
         notifyOS('Wraith 自动化任务' + label, run.summary ?? '')
@@ -456,5 +463,9 @@ app.on('will-quit', () => {
     // ignore — child may already be gone
   }
   // stopAll: interrupted 落盘同步完成;子进程信号回收 best-effort(异步,不 await)
-  automationScheduler?.stopAll()
+  try {
+    automationScheduler?.stopAll()
+  } catch {
+    // best-effort
+  }
 })
