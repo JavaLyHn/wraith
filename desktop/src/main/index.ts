@@ -258,6 +258,51 @@ ipcMain.handle('wraith:renameProject', async (_e, projectPath: string, name: str
   renameProject(app.getPath('userData'), projectPath, name)
 })
 
+ipcMain.handle('wraith:mcpList', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('mcp.list', {})
+})
+
+ipcMain.handle('wraith:mcpEnable', async (_e, name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('mcp.enable', { name })
+})
+
+ipcMain.handle('wraith:mcpDisable', async (_e, name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('mcp.disable', { name })
+})
+
+ipcMain.handle('wraith:mcpRestart', async (_e, name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('mcp.restart', { name })
+})
+
+ipcMain.handle('wraith:mcpLogs', async (_e, name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('mcp.logs', { name })
+})
+
+ipcMain.handle('wraith:mcpResources', async (_e, name: string | undefined) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('mcp.resources', name ? { name } : {})
+})
+
+ipcMain.handle('wraith:mcpPrompts', async (_e, name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('mcp.prompts', { name })
+})
+
+ipcMain.handle('wraith:mcpConfigUpsert', async (_e, payload: unknown) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('mcp.config.upsert', payload as Record<string, unknown>)
+})
+
+ipcMain.handle('wraith:mcpConfigRemove', async (_e, scope: string, name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('mcp.config.remove', { scope, name })
+})
+
 ipcMain.handle('wraith:restartBackend', async () => {
   currentSessionId = null
   currentTurnId = null
