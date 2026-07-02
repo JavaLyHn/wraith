@@ -107,7 +107,7 @@ export class AutomationScheduler {
     if (d.miss.length || d.enqueue.length || d.fire.length) this.deps.onRunsChanged()
   }
 
-  private fire(task: AutomationTask, updateLastFired: boolean): void {
+  private fire(task: AutomationTask, updateLastFired: boolean): boolean {
     const dir = this.deps.userDataDir
     if (updateLastFired) upsertTask(dir, { ...task, lastFiredAt: Date.now() })
     const runId = randomUUID()
@@ -118,7 +118,7 @@ export class AutomationScheduler {
     } catch {
       putRun(dir, { runId, taskId: task.id, startedAt, endedAt: startedAt, status: 'failed', summary: '项目目录不存在' })
       this.deps.onRunsChanged()
-      return
+      return false
     }
     putRun(dir, { runId, taskId: task.id, startedAt, status: 'running' })
     this.deps.onRunsChanged()
@@ -142,13 +142,18 @@ export class AutomationScheduler {
       this.finishRun(runId, task.id, { phase: 'failed', error: String(err) } as RunState, startedAt)
     }).finally(() => {
       this.current = null
-      const next = this.queue.shift()
-      if (next) {
+      // I-3: while drain:跳过被禁用/已删除项及 statSync 失败项,直到成功 spawn 一个或队列耗尽
+      let next: string | undefined
+      while ((next = this.queue.shift()) !== undefined) {
         const t = readTasks(dir).find(x => x.id === next)
-        // I-2: 出队时重校验 enabled,任务排队期间若被禁用则跳过,继续推进队列
-        if (t && t.enabled) { upsertTask(dir, { ...t, lastFiredAt: Date.now() }); this.fire({ ...t, lastFiredAt: Date.now() }, false) }
+        // I-2: 出队时重校验 enabled,任务排队期间若被禁用则跳过,继续下一项
+        if (!t || !t.enabled) continue
+        // 保持现有出队-启动语义完全不变(包括 lastFiredAt 处理方式)
+        upsertTask(dir, { ...t, lastFiredAt: Date.now() })
+        if (this.fire({ ...t, lastFiredAt: Date.now() }, false)) break   // spawn 成功才停;失败继续 drain
       }
     })
+    return true
   }
 
   private finishRun(runId: string, taskId: string, finalState: RunState, startedAt?: number): void {
