@@ -30,7 +30,8 @@ export function decideTick(
 
 export class AutomationScheduler {
   private timer: NodeJS.Timeout | null = null
-  private queue: string[] = []
+  // I-2: queue 存 manual 出身,drain 出队时据此决定是否更新 lastFiredAt(立即运行不更新,spec §4)
+  private queue: { taskId: string; manual: boolean }[] = []
   private current: { runId: string; taskId: string; runner: AutomationRunner } | null = null
 
   constructor(private readonly deps: {
@@ -60,8 +61,8 @@ export class AutomationScheduler {
   runNow(taskId: string): { ok: boolean } {
     const task = readTasks(this.deps.userDataDir).find(t => t.id === taskId)
     if (!task) return { ok: false }
-    if (this.activeTaskIds().has(taskId) || this.queue.includes(taskId)) return { ok: false }
-    if (this.current) { this.queue.push(taskId); return { ok: true } }
+    if (this.activeTaskIds().has(taskId) || this.queue.some(q => q.taskId === taskId)) return { ok: false }
+    if (this.current) { this.queue.push({ taskId, manual: true }); return { ok: true } }
     this.fire(task, /* updateLastFired */ false)   // 立即运行不更新 lastFiredAt(spec §4)
     return { ok: true }
   }
@@ -92,19 +93,40 @@ export class AutomationScheduler {
   private tick(now: number): void {
     const dir = this.deps.userDataDir
     const tasks = readTasks(dir)
-    const d = decideTick(tasks, now, this.current?.taskId ?? null, this.queue, this.activeTaskIds())
+    const d = decideTick(tasks, now, this.current?.taskId ?? null, this.queue.map(q => q.taskId), this.activeTaskIds())
     for (const id of d.miss) {
       const task = tasks.find(t => t.id === id)!
       upsertTask(dir, { ...task, lastFiredAt: now })
       putRun(dir, { runId: randomUUID(), taskId: id, startedAt: now, endedAt: now, status: 'interrupted', miss: true })
     }
-    this.queue.push(...d.enqueue)
+    // 调度入队来源均非 manual(立即运行才 manual)→ 出队时更新 lastFiredAt
+    this.queue.push(...d.enqueue.map(taskId => ({ taskId, manual: false })))
     for (const id of d.fire) {
       const task = tasks.find(t => t.id === id)!
       upsertTask(dir, { ...task, lastFiredAt: now })
       this.fire({ ...task, lastFiredAt: now }, false /* 已更 */)
     }
     if (d.miss.length || d.enqueue.length || d.fire.length) this.deps.onRunsChanged()
+    // I-3: tick 侧兜底——fire 分支 statSync 失败(返回 false)后 current 仍为 null,
+    // 或空闲调度器上还有排队项时,唯一出队点(runner .finally)不会触发 → 此处主动 drain,防饿死。
+    if (!this.current && this.queue.length > 0) this.drainQueue()
+  }
+
+  // I-3: 出队并 spawn 下一项;抽自原 runner .finally 逻辑,tick 兜底与 run 结束共用。
+  // 跳过被禁用/已删除项及 statSync 失败项,直到成功 spawn 一个或队列耗尽。
+  private drainQueue(): void {
+    const dir = this.deps.userDataDir
+    let next: { taskId: string; manual: boolean } | undefined
+    while ((next = this.queue.shift()) !== undefined) {
+      const t = readTasks(dir).find(x => x.id === next!.taskId)
+      // I-2: 出队时重校验 enabled,任务排队期间若被禁用则跳过,继续下一项
+      if (!t || !t.enabled) continue
+      const now = Date.now()
+      // I-2: manual(立即运行)出身不更新 lastFiredAt;调度入队才更新
+      const task = next.manual ? t : { ...t, lastFiredAt: now }
+      if (!next.manual) upsertTask(dir, task)
+      if (this.fire(task, false)) break   // spawn 成功才停;失败继续 drain
+    }
   }
 
   private fire(task: AutomationTask, updateLastFired: boolean): boolean {
@@ -142,16 +164,7 @@ export class AutomationScheduler {
       this.finishRun(runId, task.id, { phase: 'failed', error: String(err) } as RunState, startedAt)
     }).finally(() => {
       this.current = null
-      // I-3: while drain:跳过被禁用/已删除项及 statSync 失败项,直到成功 spawn 一个或队列耗尽
-      let next: string | undefined
-      while ((next = this.queue.shift()) !== undefined) {
-        const t = readTasks(dir).find(x => x.id === next)
-        // I-2: 出队时重校验 enabled,任务排队期间若被禁用则跳过,继续下一项
-        if (!t || !t.enabled) continue
-        // 保持现有出队-启动语义完全不变(包括 lastFiredAt 处理方式)
-        upsertTask(dir, { ...t, lastFiredAt: Date.now() })
-        if (this.fire({ ...t, lastFiredAt: Date.now() }, false)) break   // spawn 成功才停;失败继续 drain
-      }
+      this.drainQueue()   // I-3: 统一出队点,逻辑抽为 drainQueue(tick 兜底共用)
     })
     return true
   }

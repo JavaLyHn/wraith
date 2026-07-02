@@ -107,6 +107,10 @@ interface AutomationRun {
   - interval:`(lastFiredAt ?? enabled 时刻) + everyMinutes*60_000`;
   - daily:今天 HH:mm,已过则明天;边界:今天该时刻 `>= now` 判「未过」(恰等即触发);
   - weekly:本周 weekday 的 HH:mm,已过则下周(同上边界语义)。
+  - **daily/weekly 到点判定含 90s 宽限窗(3 个 tick)**:时刻过后 90s 内仍视为「未过」、返回本时刻,
+    使 30s tick 相位下调度器 `now >= nextRun` 得以命中触发;超出宽限视为错过,跳至下一周期
+    (app 关闭期间的时刻不补跑——关机数分钟即超宽限)。无此宽限则时刻一过(毫秒级)即跳下一周期,
+    tick 相位与 HH:mm 无交集 → daily/weekly 永不触发。
   - 本地时区;**DST 不做特殊处理**(声明:夏令时切换日可能偏移一小时,接受)。
 - tick(30s):对每个 enabled 任务,`now >= nextRun` 即到点:
   - 该任务已有 running/waiting_approval 的 run → 记一条 `miss:true` 的 run,不触发;
