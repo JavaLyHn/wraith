@@ -42,7 +42,11 @@ export class AutomationRunner {
       this.client = client
       readline.createInterface({ input: proc.stdout }).on('line', l => client.handleLine(l))
       proc.stderr.on('data', (c: Buffer) => process.stderr.write(`[automation] ${c}`))
-      proc.on('exit', () => this.dispatch({ type: this.stopping ? 'stopped' : 'child-exit' }))
+      proc.on('exit', () => {
+        // exit 时真实清理升级 timer(进程已终止,SIGKILL 不再需要)
+        if (this.sigkillTimer !== null) { clearTimeout(this.sigkillTimer); this.sigkillTimer = null }
+        this.dispatch({ type: this.stopping ? 'stopped' : 'child-exit' })
+      })
       proc.on('error', () => this.dispatch({ type: 'child-exit' }))
 
       client.onNotification((method, params) => {
@@ -129,20 +133,23 @@ export class AutomationRunner {
     // I-1: 统一清理 initTimer
     if (this.initTimer !== null) { clearTimeout(this.initTimer); this.initTimer = null }
 
-    // I-2: 清理已存在的升级 timer(防止重入时重复 SIGKILL)
-    if (this.sigkillTimer !== null) { clearTimeout(this.sigkillTimer); this.sigkillTimer = null }
-
     const child = this.child
-    if (child !== null && child.exitCode === null && !child.killed) {
-      // I-2: 先 SIGTERM,2s 后若仍存活则 SIGKILL
+    // Bug A fix: 用 signalCode 判活(killed 在 kill() 发信号后即为 true,与进程是否退出无关)
+    const alive = child !== null && child.exitCode === null && child.signalCode === null
+    if (child !== null && alive) {
+      // Bug B fix: sigkillTimer 已存在则保留(不清不重排),避免重入时消除升级 timer
       try { child.kill('SIGTERM') } catch { /* 已死 */ }
-      this.sigkillTimer = setTimeout(() => {
-        this.sigkillTimer = null
-        if (child.exitCode === null && !child.killed) {
-          try { child.kill('SIGKILL') } catch { /* 已死 */ }
-        }
-      }, SIGKILL_UPGRADE_MS)
-      this.sigkillTimer.unref() // I-1/I-2: 不 pin 事件循环
+      if (!this.sigkillTimer) {
+        // I-2: 先 SIGTERM,2s 后若仍存活则 SIGKILL
+        this.sigkillTimer = setTimeout(() => {
+          this.sigkillTimer = null
+          // Bug A fix: SIGKILL 升级守卫同样用 signalCode 判活
+          if (child.exitCode === null && child.signalCode === null) {
+            try { child.kill('SIGKILL') } catch { /* 已死 */ }
+          }
+        }, SIGKILL_UPGRADE_MS)
+        this.sigkillTimer.unref() // I-1/I-2: 不 pin 事件循环
+      }
     }
 
     this.client?.rejectAll('automation run ended')
