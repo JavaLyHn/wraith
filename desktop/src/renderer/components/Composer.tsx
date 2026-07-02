@@ -7,6 +7,8 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import { baseName } from '../lib/paths'
+import StatusChip from './StatusChip'
+import type { StatusData } from '../../shared/types'
 
 interface ComposerProps {
   value: string
@@ -21,6 +23,7 @@ interface ComposerProps {
   onSwitchWorkspace: () => void
   /** 欢迎态用居中窄版，对话态用贴底宽版。 */
   centered?: boolean
+  status?: StatusData | null
 }
 
 export default function Composer({
@@ -35,6 +38,7 @@ export default function Composer({
   workspace,
   onSwitchWorkspace,
   centered = false,
+  status,
 }: ComposerProps): JSX.Element {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -92,6 +96,9 @@ export default function Composer({
             </TooltipTrigger>
             <TooltipContent>模型/强度切换在后续阶段</TooltipContent>
           </Tooltip>
+
+          {/* token 状态 — status 事件驱动 */}
+          <StatusChip status={status} />
 
           {/* workspace switch — functional */}
           <button

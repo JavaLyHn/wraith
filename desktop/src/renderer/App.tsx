@@ -1,6 +1,7 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import type { BackendEvent, SessionMeta } from '../shared/types'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
+import { createThrottleLatest } from '../shared/throttleLatest'
 import {
   initialState,
   reduce,
@@ -108,9 +109,14 @@ export default function App(): JSX.Element {
   const startedRef = useRef(false)
   const transcriptEndRef = useRef<HTMLDivElement>(null)
 
-  // ── subscribe to backend events on mount ──────────────────────────────────
+  // ── subscribe to backend events on mount (status 高频 → 100ms 窗口合并) ────
   useEffect(() => {
+    const throttledStatus = createThrottleLatest<BackendEvent>(100, evt => dispatch(evt))
     const unsubscribe = window.wraith.onEvent((evt: BackendEvent) => {
+      if (evt.kind === 'notification' && evt.method === 'status') {
+        throttledStatus(evt)
+        return
+      }
       dispatch(evt)
     })
     return unsubscribe
@@ -332,6 +338,7 @@ export default function App(): JSX.Element {
               workspace={state.workspace}
               onSwitchWorkspace={handleSwitchWorkspace}
               centered={!state.hasStarted}
+              status={state.status}
             />
           )
           return state.hasStarted ? (
