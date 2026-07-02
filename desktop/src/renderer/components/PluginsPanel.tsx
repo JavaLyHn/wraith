@@ -29,7 +29,7 @@ const SCOPE_LABEL: Record<string, string> = { user: '用户', project: '本项�
 type Tab = 'tools' | 'resources' | 'prompts' | 'logs'
 
 export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
-  const { servers, configError, busy, onBack } = props
+  const { servers, configError, busy, onBack, onRefresh } = props
   const [selected, setSelected] = useState<string | null>(null)
   const [tab, setTab] = useState<Tab>('tools')
   const [formMode, setFormMode] = useState<'hidden' | 'add' | 'edit'>('hidden')
@@ -37,6 +37,9 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
   const [tabContent, setTabContent] = useState<{ resources: McpResourceView[]; prompts: string; logs: string }>({
     resources: [], prompts: '', logs: '',
   })
+
+  // 进入面板拉全量(spec §5.2)
+  useEffect(() => { onRefresh() }, [onRefresh])
 
   const current = servers.find(s => s.name === selected) ?? servers[0] ?? null
 
@@ -144,11 +147,13 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                 </button>
                 {current.scope !== 'builtin' && (
                   <>
-                    <button data-testid="mcp-edit" disabled={busy}
-                      onClick={() => { setFormMode('edit'); setConfirmingRemove(false) }}
-                      className="rounded-lg border border-border px-3 py-1.5 text-xs text-fg hover:border-accent disabled:opacity-60">
-                      编辑
-                    </button>
+                    {current.transport === 'stdio' && (
+                      <button data-testid="mcp-edit" disabled={busy}
+                        onClick={() => { setFormMode('edit'); setConfirmingRemove(false) }}
+                        className="rounded-lg border border-border px-3 py-1.5 text-xs text-fg hover:border-accent disabled:opacity-60">
+                        编辑
+                      </button>
+                    )}
                     <button data-testid="mcp-remove" disabled={busy}
                       onClick={() => {
                         if (!confirmingRemove) { setConfirmingRemove(true); return }

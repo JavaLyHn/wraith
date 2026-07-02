@@ -169,8 +169,7 @@ mcpResources/mcpPrompts/mcpConfigUpsert/mcpConfigRemove`;通知走既有 onEvent
 - startAll 全程 fail-open:单 server ERROR 不影响他者与会话;MCP 整体初始化异常只记 stderr +
   全部 error 态,session.start 照常返回。
 - mcp.* 在无会话时 -32000 `no session`(与 session.* 一致);未知 server -32000;缺参 -32602。
-- config.upsert 写文件失败(权限/磁盘)→ -32000 带原因;mcp.json 坏 JSON → 该层级按空处理
-  (McpConfigLoader 现行为),UI 顶部横幅提示「配置文件解析失败」(list 返回附 `configError?` 字段)。
+- config.upsert 写文件失败(权限/磁盘)→ -32000 带原因;mcp.json 坏 JSON → 配置加载失败但 manager 照常挂载(空载降级),UI 顶部横幅提示「配置文件解析失败」(list 返回附 configError 字段);写侧 McpConfigWriter 遇坏 JSON 拒写。
 - 前端所有 mcp IPC 失败:console.error + 面板内联错误行,不弹全局窗。
 - 日志拉取对已删除 server:-32000,前端把日志 tab 置灰。
 

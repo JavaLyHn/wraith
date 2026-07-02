@@ -25,6 +25,7 @@ interface SidebarProps {
 }
 
 const NAV_DISABLED: { key: string; label: string; hint: string }[] = [
+  { key: 'search', label: '搜索', hint: '搜索在后续阶段' },
   { key: 'automation', label: '自动化', hint: '自动化在 Phase E-2' },
 ]
 
@@ -78,6 +79,22 @@ export default function Sidebar({
 
         {/* nav */}
         <nav className="mt-3 flex flex-col gap-0.5 px-3">
+          {/* search — disabled placeholder */}
+          {NAV_DISABLED.filter(n => n.key === 'search').map(n => (
+            <Tooltip key={n.key}>
+              <TooltipTrigger asChild>
+                <button
+                  data-testid={`nav-${n.key}`}
+                  disabled
+                  className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted opacity-60"
+                >
+                  {n.label}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>{n.hint}</TooltipContent>
+            </Tooltip>
+          ))}
+
           {/* plugins — enabled */}
           <button
             data-testid="nav-plugins"

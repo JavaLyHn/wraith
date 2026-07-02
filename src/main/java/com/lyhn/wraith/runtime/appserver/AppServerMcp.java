@@ -48,7 +48,12 @@ public final class AppServerMcp implements McpOps {
             currentWorkspace = normalized;
             McpServerManager fresh = factory.create(registry, Path.of(normalized));
             fresh.setStatusListener(this::pushStatus);
-            fresh.loadConfiguredServers();
+            try {
+                fresh.loadConfiguredServers();
+            } catch (IOException configEx) {
+                // 坏 JSON 等配置加载失败:降级空载,manager 照常挂载,list() 通过 namesIn 的 configError 路径上报横幅
+                System.err.println("[app-server] MCP 配置加载失败(降级空载): " + configEx.getMessage());
+            }
             manager = fresh;
             Thread starter = new Thread(() -> {
                 try { fresh.startAll(); } catch (Exception e) {

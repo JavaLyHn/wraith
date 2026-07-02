@@ -66,6 +66,8 @@ public class McpServerManager implements AutoCloseable {
 
     private void setStatus(McpServer server, McpServerStatus status) {
         server.status(status);
+        // close 后不再对外发状态:弃用 manager 的在途迁移不得闪进新会话
+        if (closed) return;
         Consumer<McpServer> l = statusListener;
         if (l != null) {
             try { l.accept(server); } catch (Exception e) { /* 监听器异常不影响启动流程 */ }

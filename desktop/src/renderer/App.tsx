@@ -139,7 +139,10 @@ export default function App(): JSX.Element {
       if (evt.kind === 'notification' && evt.method === 'mcp.status') {
         const p = evt.params as { name: string; state: McpServerView['state']; error?: string }
         setMcpServers(prev => prev.map(s => (s.name === p.name ? { ...s, state: p.state, enabled: p.state !== 'disabled', error: p.error } : s)))
-        if (p.state === 'ready') void fetchMcpResources()
+        if (p.state === 'ready') {
+          void fetchMcpResources()
+          void fetchMcp() // ready 后工具清单才可用:真后端 starting 期 list 的 tools 为空
+        }
         return
       }
       if (evt.kind === 'notification' && evt.method === 'status') {

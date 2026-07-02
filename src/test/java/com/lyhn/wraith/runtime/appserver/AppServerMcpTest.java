@@ -7,6 +7,8 @@ import com.lyhn.wraith.tool.ToolRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -21,7 +23,7 @@ class AppServerMcpTest {
     static class FakeManager extends McpServerManager {
         final List<String> calls = new ArrayList<>();
         FakeManager(ToolRegistry r, Path p) { super(r, p); }
-        @Override public void loadConfiguredServers() { calls.add("load"); }
+        @Override public void loadConfiguredServers() throws IOException { calls.add("load"); }
         @Override public void startAll() { calls.add("startAll"); }
         @Override public synchronized void reattach(ToolRegistry newRegistry) { calls.add("reattach:" + System.identityHashCode(newRegistry)); }
         @Override public void close() { calls.add("close"); }
@@ -117,5 +119,40 @@ class AppServerMcpTest {
         mcp.configUpsert("project", "srv", "cmd", List.of("a"), java.util.Map.of("K", "v"));
         assertTrue(java.nio.file.Files.exists(ws.resolve(".wraith").resolve("mcp.json")));
         assertEquals(1, reloads.get(), "upsert 后重载该 server");
+    }
+
+    /** FIX 1: loadConfiguredServers 抛 IOException → ensureFor 不抛,manager 非 null,list() 不抛 ISE */
+    @Test
+    void loadConfiguredServersThrowsIoExceptionIsFailOpen(@TempDir Path ws) {
+        // FakeManager whose loadConfiguredServers() throws IOException
+        AppServerMcp mcp = new AppServerMcp((reg, dir) -> new FakeManager(reg, dir) {
+            @Override public void loadConfiguredServers() throws IOException {
+                throw new IOException("坏 JSON 模拟");
+            }
+        });
+        assertDoesNotThrow(() -> mcp.ensureFor(ws.toString(), registry(ws), null),
+                "loadConfiguredServers 抛 IOException,ensureFor 不应向上传播");
+        assertNotNull(mcp.manager(), "配置加载失败后 manager 仍须挂载(空载降级)");
+        // list() 应返回 map 而不是 IllegalStateException
+        assertDoesNotThrow(() -> mcp.list(), "配置加载失败后 list() 不应抛 IllegalStateException");
+        @SuppressWarnings("unchecked")
+        List<?> servers = (List<?>) mcp.list().get("servers");
+        assertNotNull(servers, "list() 结果含 servers 字段");
+    }
+
+    /** FIX 1: 坏 JSON 项目级 mcp.json → list() 返回含 configError 字段 */
+    @Test
+    void corruptProjectMcpJsonSurfacesConfigErrorInList(@TempDir Path ws) throws Exception {
+        // 写入坏 JSON 的项目级 mcp.json
+        Path mcpDir = ws.resolve(".wraith");
+        Files.createDirectories(mcpDir);
+        Files.writeString(mcpDir.resolve("mcp.json"), "not json{{");
+
+        AppServerMcp mcp = new AppServerMcp((reg, dir) -> new FakeManager(reg, dir));
+        mcp.ensureFor(ws.toString(), registry(ws), null);
+
+        Map<String, Object> result = mcp.list();
+        assertNotNull(result.get("configError"),
+                "坏 JSON 项目级 mcp.json 应令 list() 返回附 configError 字段,实际: " + result);
     }
 }
