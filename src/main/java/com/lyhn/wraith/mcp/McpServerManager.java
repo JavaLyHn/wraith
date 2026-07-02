@@ -39,6 +39,8 @@ import java.util.function.Function;
 public class McpServerManager implements AutoCloseable {
     private static final Duration STARTUP_PROGRESS_INTERVAL = Duration.ofSeconds(5);
 
+    // close 后置位:弃用 manager 的在途 startAll worker 不得再注册工具(与 AppServerMcp 切工作区竞态的兜底)
+    private volatile boolean closed;
     private volatile ToolRegistry toolRegistry;
     private final Path projectDir;
     private final McpConfigLoader configLoader;
@@ -420,6 +422,7 @@ public class McpServerManager implements AutoCloseable {
     }
 
     private void start(McpServer server) {
+        if (closed) return;
         unregisterTools(server);
         server.close();
         if (server.config().isDisabled()) {
@@ -437,6 +440,7 @@ public class McpServerManager implements AutoCloseable {
             client.initialize();
             registerNotificationHandlers(server, client);
             List<McpToolDescriptor> tools = buildToolList(server, client);
+            if (closed) return;
             replaceTools(server, client, tools);
             server.client(client);
             server.tools(tools);
@@ -551,6 +555,7 @@ public class McpServerManager implements AutoCloseable {
      * 红线:只搬工具注册;审批放行(APPROVED_ALL 等)属于旧 registry,随旧会话废弃,绝不复制。
      */
     public synchronized void reattach(ToolRegistry newRegistry) {
+        if (closed) return;
         this.toolRegistry = newRegistry;
         for (McpServer server : servers.values()) {
             if (server.status() == McpServerStatus.READY && !server.tools().isEmpty()) {
@@ -562,6 +567,7 @@ public class McpServerManager implements AutoCloseable {
 
     /** 单 server 按当前配置重载:配置无此名→移除;有→关旧建新并启动;全新→建并启动。返回人话结果。 */
     public synchronized String reloadFromConfig(String name) {
+        if (closed) return "已关闭";
         Map<String, McpServerConfig> configs;
         try {
             configs = configLoader.load();
@@ -627,6 +633,7 @@ public class McpServerManager implements AutoCloseable {
 
     @Override
     public void close() {
+        closed = true;
         for (McpServer server : servers.values()) {
             unregisterTools(server);
             server.close();

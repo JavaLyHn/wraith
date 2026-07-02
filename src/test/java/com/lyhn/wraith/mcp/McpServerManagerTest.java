@@ -336,6 +336,19 @@ class McpServerManagerTest {
                 "registry 应持有 mcp__brandnew__search");
     }
 
+    // ---- Phase E-1 Task 4 I1 修复测试 ----
+
+    @Test
+    void closedManagerStartAllRegistersNothing() throws Exception {
+        enqueueInitialize();
+        enqueueToolsList("{\"name\":\"echo\",\"description\":\"d\",\"inputSchema\":{\"type\":\"object\"}}");
+        loadServersFromMap(Map.of("srv", httpConfig(webServer)));
+        manager.close();      // 先关
+        manager.startAll();   // 后启:worker 必须被 closed 短路
+        assertFalse(registryHasTool(registry, McpToolDescriptor.namespaced("srv", "echo")),
+                "close 后 startAll 不得注册任何工具");
+    }
+
     // ---- Phase E-1 Task 1 辅助方法 ----
 
     /** 与 disableRemovesToolsFromRegistry 中的断言保持同样 API */
