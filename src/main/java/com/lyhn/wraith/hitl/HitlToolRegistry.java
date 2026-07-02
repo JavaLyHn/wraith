@@ -78,6 +78,9 @@ public class HitlToolRegistry extends ToolRegistry {
 
         // 批准（含修改参数）- 使用 effectiveArguments 获取最终参数；父类执行路径会负责 allow audit
         String effectiveArgs = result.effectiveArguments(argumentsJson);
+        if (result.allowNetworkOnce() && "execute_command".equals(name)) {
+            grantNetworkOnce(); // 「本次放行网络」:仅对即将执行的这条命令生效
+        }
         return super.doExecuteTool(name, effectiveArgs);
     }
 

@@ -49,7 +49,7 @@ public final class CommandSandbox {
     }
 
     /** 纯函数,便于两分支单测;不读环境、不探测平台。 */
-    static Wrapped buildCommand(boolean sandboxAvailable, boolean networkAllowed,
+    public static Wrapped buildCommand(boolean sandboxAvailable, boolean networkAllowed,
                                 String root, String tmpDir, String gitDir, String command) {
         if (!sandboxAvailable) {
             return new Wrapped(

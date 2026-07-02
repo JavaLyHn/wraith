@@ -90,6 +90,8 @@ public class ToolRegistry {
     // null = 不沙箱(交互式 CLI 默认行为,与历史一致);仅 app-server 注入
     private CommandSandbox commandSandbox;
     private volatile boolean sandboxWarningLogged = false;
+    /** 「本次放行网络」一次性标记:HITL 批准后置位,下一条命令的沙箱 wrap 消费即清。 */
+    private volatile boolean networkOnceGrant = false;
     private final Map<String, Tool> tools = new ConcurrentHashMap<>();
     private final Map<String, McpRegisteredTool> mcpTools = new ConcurrentHashMap<>();
     private final long commandTimeoutSeconds;
@@ -1381,6 +1383,16 @@ public class ToolRegistry {
         this.commandSandbox = commandSandbox;
     }
 
+    /** HITL 批准「本次放行网络」后调用(仅影响下一条 execute_command)。 */
+    public void grantNetworkOnce() { this.networkOnceGrant = true; }
+
+    /** 取出并复位一次性网络放行标记。 */
+    public boolean consumeNetworkOnce() {
+        boolean g = networkOnceGrant;
+        networkOnceGrant = false;
+        return g;
+    }
+
     /**
      * 审批前 diff 预览:读取 write_file 目标的当前内容。
      * 新文件 / 路径越界 / 不可读 / 超 512KB → null,绝不抛异常(不阻断审批)。
@@ -1402,8 +1414,12 @@ public class ToolRegistry {
     /** 决定 execute_command 子进程命令行:注入了 sandbox 则包裹,否则裸 bash -c。 */
     List<String> resolveProcessCommand(String normalized) {
         CommandSandbox sandbox = this.commandSandbox;
+        boolean networkOnce = consumeNetworkOnce(); // 无沙箱也消费,避免标记泄漏到后续命令
         if (sandbox == null) {
             return List.of("bash", "-c", normalized);
+        }
+        if (networkOnce) {
+            sandbox = new CommandSandbox(true); // 仅本条命令放行网络,读/写限制不变
         }
         CommandSandbox.Wrapped wrapped = sandbox.wrap(projectPath, normalized);
         if (!wrapped.sandboxed() && !sandboxWarningLogged) {
