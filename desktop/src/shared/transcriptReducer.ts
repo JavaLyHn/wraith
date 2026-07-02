@@ -338,3 +338,18 @@ export function setSandbox(state: TranscriptState, sandbox: 'macos-seatbelt' | '
 export function addUserItem(state: TranscriptState, text: string): TranscriptState {
   return { ...state, items: [...state.items, { type: 'user', text }], _messageOpen: false }
 }
+
+/** 真回溯的本地裁剪:裁掉第 ordinal 个 user 项(1-based,含)及之后全部;超界/无效原样返回。 */
+export function truncateAtUserOrdinal(state: TranscriptState, ordinal: number): TranscriptState {
+  if (ordinal < 1) return state
+  let seen = 0
+  for (let i = 0; i < state.items.length; i++) {
+    if (state.items[i].type === 'user') {
+      seen++
+      if (seen === ordinal) {
+        return { ...state, items: state.items.slice(0, i), _messageOpen: false }
+      }
+    }
+  }
+  return state
+}

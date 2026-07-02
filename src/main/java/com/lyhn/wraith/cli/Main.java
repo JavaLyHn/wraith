@@ -1170,6 +1170,20 @@ public class Main {
                         sessionStore.persist(agent.getConversationHistory());
                         return sessionStore.currentId();
                     }
+                    public boolean rewind(int userOrdinal) {
+                        java.util.List<com.lyhn.wraith.llm.LlmClient.Message> kept =
+                                truncateAtUserOrdinal(agent.getConversationHistory(), userOrdinal);
+                        if (kept == null) return false;
+                        agent.restoreHistory(kept);
+                        boolean hasUser = kept.stream().anyMatch(m -> "user".equals(m.role()));
+                        if (hasUser) {
+                            sessionStore.persist(kept);
+                        } else {
+                            // 裁到只剩 system = 会话清空:persist 对空对话不写盘,直接删文件防旧内容残留
+                            sessionStore.deleteCurrent();
+                        }
+                        return true;
+                    }
                 };
             }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
 
@@ -1178,6 +1192,24 @@ public class Main {
         } catch (Exception e) {
             System.err.println("app-server error: " + e.getMessage());
         }
+    }
+
+    /** session.rewind 的历史截断:丢弃从第 userOrdinal 条 user 消息(1-based,含)起的全部消息;无效/超界 → null。 */
+    static java.util.List<com.lyhn.wraith.llm.LlmClient.Message> truncateAtUserOrdinal(
+            java.util.List<com.lyhn.wraith.llm.LlmClient.Message> history, int userOrdinal) {
+        if (history == null || userOrdinal < 1) {
+            return null;
+        }
+        int seen = 0;
+        for (int i = 0; i < history.size(); i++) {
+            if ("user".equals(history.get(i).role())) {
+                seen++;
+                if (seen == userOrdinal) {
+                    return new java.util.ArrayList<>(history.subList(0, i));
+                }
+            }
+        }
+        return null;
     }
 
     /** app-server 沙箱工厂:默认断网,-Dwraith.sandbox.network=on 全局放行网络。 */

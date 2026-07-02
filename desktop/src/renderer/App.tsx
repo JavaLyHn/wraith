@@ -15,6 +15,7 @@ import {
   setSessionId,
   setSandbox,
   addUserItem,
+  truncateAtUserOrdinal,
   type TranscriptState,
   type Item,
 } from '../shared/transcriptReducer'
@@ -41,6 +42,7 @@ type LocalAction =
   | { type: 'loadHistory'; items: Item[] }
   | { type: 'setSessionId'; sessionId: string }
   | { type: 'setSandbox'; sandbox: 'macos-seatbelt' | 'none' | 'unknown' }
+  | { type: 'truncateAtUser'; ordinal: number }
 
 type Action = BackendEvent | LocalAction
 
@@ -78,6 +80,9 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   }
   if ('type' in action && action.type === 'setSandbox') {
     return setSandbox(state, action.sandbox)
+  }
+  if ('type' in action && action.type === 'truncateAtUser') {
+    return truncateAtUserOrdinal(state, action.ordinal)
   }
   // BackendEvent has 'kind' field
   return reduce(state, action as BackendEvent)
@@ -286,6 +291,48 @@ export default function App(): JSX.Element {
     }
   }, [])
 
+  // ── Esc = 停止(running 且无审批弹窗时;弹窗打开时 Esc 归弹窗语义) ────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return
+      if (state.turn !== 'running' || state.pendingApproval) return
+      void window.wraith.interrupt().catch(err => console.error('[wraith] interrupt error:', err))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [state.turn, state.pendingApproval])
+
+  // ── 消息编辑/删除(真回溯:后端裁剪 → 本地裁剪 → 编辑则重发) ─────────────────
+  const handleEditMessage = useCallback(
+    async (ordinal: number, newText: string) => {
+      if (state.turn === 'running') return
+      try {
+        await window.wraith.rewindSession(ordinal)
+        dispatch({ type: 'truncateAtUser', ordinal })
+        dispatch({ type: 'addUserItem', text: newText })
+        void fetchSessions()
+        await window.wraith.submitTurn(newText)
+      } catch (err) {
+        console.error('[wraith] editMessage error:', err)
+      }
+    },
+    [state.turn, fetchSessions],
+  )
+
+  const handleDeleteMessage = useCallback(
+    async (ordinal: number) => {
+      if (state.turn === 'running') return
+      try {
+        await window.wraith.rewindSession(ordinal)
+        dispatch({ type: 'truncateAtUser', ordinal })
+        void fetchSessions()
+      } catch (err) {
+        console.error('[wraith] deleteMessage error:', err)
+      }
+    },
+    [state.turn, fetchSessions],
+  )
+
   // ── approval mode toggle ──────────────────────────────────────────────────
   const handleToggleApproval = useCallback(
     async (auto: boolean) => {
@@ -351,7 +398,12 @@ export default function App(): JSX.Element {
           )
           return state.hasStarted ? (
             <>
-              <Transcript items={state.items} />
+              <Transcript
+                items={state.items}
+                busy={state.turn === 'running'}
+                onEditMessage={handleEditMessage}
+                onDeleteMessage={handleDeleteMessage}
+              />
               <div ref={transcriptEndRef} />
               <div className="shrink-0 px-4 py-3">{composer}</div>
             </>

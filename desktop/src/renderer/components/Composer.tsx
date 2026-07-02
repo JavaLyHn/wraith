@@ -7,6 +7,7 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import { baseName } from '../lib/paths'
+import { shouldSendOnEnter } from '../../shared/composerKeys'
 import StatusChip from './StatusChip'
 import type { StatusData } from '../../shared/types'
 
@@ -42,12 +43,18 @@ export default function Composer({
 }: ComposerProps): JSX.Element {
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // IME 选词确认的 Enter(isComposing/keyCode 229)绝不发送;running 中也不发送
+      if (
+        shouldSendOnEnter(
+          { key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing, keyCode: e.keyCode },
+          running,
+        )
+      ) {
         e.preventDefault()
         onSubmit()
       }
     },
-    [onSubmit],
+    [onSubmit, running],
   )
 
   return (
@@ -64,7 +71,6 @@ export default function Composer({
           value={value}
           onChange={e => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={running}
           placeholder="给 Wraith 一个目标… (Enter 发送, Shift+Enter 换行)"
           rows={centered ? 3 : 2}
           className="w-full resize-none bg-transparent px-4 pt-3 text-sm text-fg outline-none placeholder:text-fg-subtle disabled:opacity-50"

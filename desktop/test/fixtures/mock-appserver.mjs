@@ -68,6 +68,10 @@ async function emitTurnSequence() {
   notify('turn.started', { sessionId, turnId })
   await delay(20)
 
+  if (process.env['MOCK_SLOW_TURN'] === '1') {
+    await delay(3000) // 留出 running 且无弹窗的窗口(Esc 中断测试)
+  }
+
   notify('thinking.begin', { sessionId, turnId, label: 'thinking' })
   await delay(20)
 
@@ -255,6 +259,11 @@ async function handleRequest(req) {
     }
 
     case 'session.setApprovalMode': {
+      reply(id, { ok: true })
+      break
+    }
+
+    case 'session.rewind': {
       reply(id, { ok: true })
       break
     }

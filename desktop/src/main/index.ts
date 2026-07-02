@@ -241,6 +241,11 @@ ipcMain.handle('wraith:resumeSession', async (_e, sessionId: string) => {
   return client.request('session.resume', { sessionId })
 })
 
+ipcMain.handle('wraith:rewindSession', async (_e, userOrdinal: number) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.rewind', { sessionId: currentSessionId, userOrdinal })
+})
+
 // ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------

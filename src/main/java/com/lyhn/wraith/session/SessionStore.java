@@ -111,6 +111,18 @@ public final class SessionStore {
         return currentId;
     }
 
+    /** 删除当前会话文件并重置(rewind 清空到无用户消息时用):无当前会话则为 no-op。 */
+    public synchronized void deleteCurrent() {
+        if (currentId != null) {
+            try {
+                Files.deleteIfExists(dir.resolve(currentId + ".jsonl"));
+            } catch (IOException ignored) {
+                // 删除失败不致命:文件残留,但内存状态照常重置
+            }
+        }
+        startNew();
+    }
+
     /** 续接指定会话:载入历史消息,并把后续 persist 指向该文件。找不到返回空列表。 */
     public synchronized List<LlmClient.Message> resume(String id) {
         SessionRecord rec = read(id);

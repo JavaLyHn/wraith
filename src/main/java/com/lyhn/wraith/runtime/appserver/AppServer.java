@@ -33,6 +33,8 @@ public final class AppServer {
         }
         /** 落盘当前对话,返回持久化后的真实 sessionId(空对话可能为 null)。默认 no-op。 */
         default String persistTurn() { return null; }
+        /** 真回溯:丢弃从第 userOrdinal 条 user 消息(1-based,含)起的全部历史。false=拒绝(超界等)。 */
+        default boolean rewind(int userOrdinal) { return false; }
     }
 
     private final BufferedReader in;
@@ -85,6 +87,7 @@ public final class AppServer {
             case "session.setApprovalMode" -> handleSetApprovalMode(msg);
             case "session.list" -> handleSessionList(msg);
             case "session.resume" -> handleSessionResume(msg);
+            case "session.rewind" -> handleSessionRewind(msg);
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
                 return false;
@@ -175,6 +178,17 @@ public final class AppServer {
     private void handleSessionList(JsonRpc.Incoming msg) {
         if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
         writer.result(msg.id(), Map.of("sessions", session.listSessions()));
+    }
+
+    private void handleSessionRewind(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        Thread t = turnThread;
+        if (t != null && t.isAlive()) { writer.error(msg.id(), -32000, "turn running"); return; }
+        JsonNode p = msg.params();
+        int ordinal = p == null ? 0 : p.path("userOrdinal").asInt(0);
+        if (ordinal < 1) { writer.error(msg.id(), -32602, "missing userOrdinal"); return; }
+        if (!session.rewind(ordinal)) { writer.error(msg.id(), -32000, "rewind failed"); return; }
+        writer.result(msg.id(), Map.of("ok", true));
     }
 
     private void handleSessionResume(JsonRpc.Incoming msg) {

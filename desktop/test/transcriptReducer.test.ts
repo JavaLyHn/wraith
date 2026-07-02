@@ -14,6 +14,7 @@ import {
   setWorkspace,
   resetSession,
   loadHistory,
+  truncateAtUserOrdinal,
   setSessionId,
   setSandbox,
   addUserItem,
@@ -424,5 +425,42 @@ describe('phase-C: diff / status / approval 扩展', () => {
     const s2 = reduce(initialState, notif('approval.requested', { approvalId: 'a2', toolName: 't', argsJson: '{}' }))
     expect(s2.pendingApproval?.suggestion).toBe('')
     expect(s2.pendingApproval?.beforeContent).toBeNull()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 发送交互:truncateAtUserOrdinal(编辑/删除的本地裁剪)
+// ---------------------------------------------------------------------------
+describe('truncateAtUserOrdinal', () => {
+  const filled = (): TranscriptState => ({
+    ...initialState,
+    _messageOpen: true,
+    items: [
+      { type: 'user', text: '一问' },
+      { type: 'message', text: '一答' },
+      { type: 'user', text: '二问' },
+      { type: 'message', text: '二答' },
+      { type: 'user', text: '三问' },
+    ],
+  })
+  it('中间 ordinal:裁掉该 user 项及之后,封口 _messageOpen', () => {
+    const s = truncateAtUserOrdinal(filled(), 2)
+    expect(s.items).toEqual([
+      { type: 'user', text: '一问' },
+      { type: 'message', text: '一答' },
+    ])
+    expect(s._messageOpen).toBe(false)
+  })
+  it('ordinal=1:裁空', () => {
+    expect(truncateAtUserOrdinal(filled(), 1).items).toEqual([])
+  })
+  it('超界/无效 ordinal:原样返回', () => {
+    expect(truncateAtUserOrdinal(filled(), 4)).toEqual(filled())
+    expect(truncateAtUserOrdinal(filled(), 0)).toEqual(filled())
+  })
+  it('不可变:原 state 不被修改', () => {
+    const before = filled()
+    truncateAtUserOrdinal(before, 1)
+    expect(before.items).toHaveLength(5)
   })
 })
