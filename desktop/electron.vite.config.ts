@@ -24,6 +24,10 @@ export default defineConfig({
   },
   renderer: {
     root: 'src/renderer',
+    server: {
+      // 不占 Vite 默认的 5173(用户其他项目在用);再冲突时 vite 自动 +1,不阻塞
+      port: 5873
+    },
     css: {
       postcss: {
         plugins: [tailwindcss(), autoprefixer()]
