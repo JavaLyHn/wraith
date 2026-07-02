@@ -34,6 +34,11 @@ let sessionId = 'sess_mock_0'
 let turnId = 'turn_1'
 let pendingApproval = false
 
+const mockMcp = (() => {
+  try { return process.env['MOCK_MCP'] ? JSON.parse(process.env['MOCK_MCP']) : null } catch { return null }
+})()
+let mcpServers = mockMcp && Array.isArray(mockMcp.servers) ? JSON.parse(JSON.stringify(mockMcp.servers)) : []
+
 // ---------------------------------------------------------------------------
 // I/O helpers
 // ---------------------------------------------------------------------------
@@ -213,6 +218,15 @@ async function handleRequest(req) {
       sessionId = `sess_mock_${++sessionCounter}`
       lastWorkspaceDir = (params && params.workspaceDir) || null
       reply(id, { sessionId })
+      if (mockMcp && Array.isArray(mockMcp.statusScript)) {
+        for (const step of mockMcp.statusScript) {
+          setTimeout(() => {
+            const s = mcpServers.find(x => x.name === step.name)
+            if (s) { s.state = step.state; s.enabled = step.state !== 'disabled'; if (step.error) s.error = step.error }
+            notify('mcp.status', { sessionId, name: step.name, state: step.state, ...(step.error ? { error: step.error } : {}) })
+          }, step.afterMs)
+        }
+      }
       break
     }
 
@@ -273,6 +287,47 @@ async function handleRequest(req) {
     }
 
     case 'session.rewind': {
+      reply(id, { ok: true })
+      break
+    }
+
+    case 'mcp.list': {
+      reply(id, { servers: mcpServers })
+      break
+    }
+    case 'mcp.enable':
+    case 'mcp.disable': {
+      const s = mcpServers.find(x => x.name === (params && params.name))
+      if (s) { s.enabled = method === 'mcp.enable'; s.state = s.enabled ? 'ready' : 'disabled' }
+      reply(id, { ok: true })
+      break
+    }
+    case 'mcp.restart': {
+      reply(id, { ok: true })
+      break
+    }
+    case 'mcp.logs': {
+      reply(id, { lines: '[mock] line1\n[mock] line2' })
+      break
+    }
+    case 'mcp.resources': {
+      const all = (mockMcp && mockMcp.resources) || []
+      reply(id, { resources: params && params.name ? all.filter(r => r.server === params.name) : all })
+      break
+    }
+    case 'mcp.prompts': {
+      reply(id, { text: '[mock] prompt 列表文本' })
+      break
+    }
+    case 'mcp.config.upsert': {
+      const p = params || {}
+      const existing = mcpServers.find(x => x.name === p.name)
+      if (!existing) mcpServers.push({ name: p.name, state: 'starting', scope: p.scope, enabled: true, shadowed: false, transport: 'stdio', tools: [], envKeys: Object.keys(p.env || {}) })
+      reply(id, { ok: true })
+      break
+    }
+    case 'mcp.config.remove': {
+      mcpServers = mcpServers.filter(x => x.name !== (params && params.name))
       reply(id, { ok: true })
       break
     }
