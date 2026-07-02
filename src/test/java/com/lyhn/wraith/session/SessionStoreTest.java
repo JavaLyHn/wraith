@@ -10,6 +10,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SessionStoreTest {
@@ -65,6 +66,22 @@ class SessionStoreTest {
         a.persist(sampleHistory());
         assertEquals(1, a.list(10).size());
         assertTrue(b.list(10).isEmpty());
+    }
+
+    @Test
+    void currentIdTracksLazyCreateStartNewAndResume(@TempDir Path home) {
+        SessionStore store = SessionStore.open(home, "/proj/a", "p", "m");
+        assertNull(store.currentId()); // id 是懒创建的,首次 persist 前为 null
+
+        store.persist(sampleHistory());
+        String first = store.currentId();
+        assertEquals(store.list(10).get(0).id(), first);
+
+        store.startNew();
+        assertNull(store.currentId()); // 新会话尚未落盘
+
+        store.resume(first);
+        assertEquals(first, store.currentId()); // resume 把活跃 id 切回来
     }
 
     @Test

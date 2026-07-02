@@ -143,10 +143,11 @@ export default function App(): JSX.Element {
       dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
       dispatch({ type: 'setSessionId', sessionId })
       dispatch({ type: 'markStarted' })
+      void fetchSessions()
     } catch (err) {
       console.error('[wraith] resumeSession error:', err)
     }
-  }, [state.turn])
+  }, [state.turn, fetchSessions])
 
   // ── startup flow (runs once) ───────────────────────────────────────────────
   useEffect(() => {
@@ -330,7 +331,7 @@ export default function App(): JSX.Element {
             <>
               <Transcript items={state.items} />
               <div ref={transcriptEndRef} />
-              <div style={{ padding: '12px 16px', flexShrink: 0 }}>{composer}</div>
+              <div className="shrink-0 px-4 py-3">{composer}</div>
             </>
           ) : (
             <div className="min-h-0 flex-1">
