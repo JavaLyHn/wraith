@@ -162,3 +162,15 @@ export interface StatusData {
   elapsedMillis: number
   phase: string
 }
+
+// ---------------------------------------------------------------------------
+// Phase D: project workspace management
+// ---------------------------------------------------------------------------
+
+/** 项目条目视图(main → renderer):settings.ProjectEntry + 目录存在性。 */
+export interface ProjectView {
+  path: string
+  name?: string
+  lastUsedAt: number
+  exists: boolean
+}

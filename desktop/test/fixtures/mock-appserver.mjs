@@ -29,6 +29,7 @@ function record(method, params) {
 // ---------------------------------------------------------------------------
 
 let sessionCounter = 0
+let lastWorkspaceDir = null
 let sessionId = 'sess_mock_0'
 let turnId = 'turn_1'
 let pendingApproval = false
@@ -210,6 +211,7 @@ async function handleRequest(req) {
 
     case 'session.start': {
       sessionId = `sess_mock_${++sessionCounter}`
+      lastWorkspaceDir = (params && params.workspaceDir) || null
       reply(id, { sessionId })
       break
     }
@@ -237,6 +239,13 @@ async function handleRequest(req) {
     }
 
     case 'session.list': {
+      const byWs = process.env['MOCK_SESSIONS_BY_WS']
+      if (byWs) {
+        let map = {}
+        try { map = JSON.parse(byWs) } catch { /* 坏 JSON → 空 map */ }
+        reply(id, { sessions: (lastWorkspaceDir && map[lastWorkspaceDir]) || [] })
+        break
+      }
       reply(id, {
         sessions: [
           { id: 'sess_a', cwd: '/p', createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'mock', model: 'mock-model', title: '第一段对话', turns: 2 },

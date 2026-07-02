@@ -1,5 +1,5 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
-import type { BackendEvent, SessionMeta } from '../shared/types'
+import type { BackendEvent, SessionMeta, ProjectView } from '../shared/types'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
 import { createThrottleLatest, type ThrottledPush } from '../shared/throttleLatest'
 import {
@@ -111,6 +111,7 @@ export default function App(): JSX.Element {
   const [state, dispatch] = useReducer(reduceAdapter, connectedInitialState)
   const [inputValue, setInputValue] = useState('')
   const [sessions, setSessions] = useState<SessionMeta[]>([])
+  const [projects, setProjects] = useState<ProjectView[]>([])
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
 
@@ -138,6 +139,15 @@ export default function App(): JSX.Element {
       setSessions(sessions)
     } catch (err) {
       console.error('[wraith] listSessions error:', err)
+    }
+  }, [])
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const { projects } = await window.wraith.listProjects()
+      setProjects(projects)
+    } catch (err) {
+      console.error('[wraith] listProjects error:', err)
     }
   }, [])
 
@@ -184,11 +194,12 @@ export default function App(): JSX.Element {
         dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(initObj.capabilities?.sandbox) })
         await window.wraith.startSession(ws)
         void fetchSessions()
+        void fetchProjects()
       } catch (err) {
         console.error('[wraith] startup error:', err)
       }
     })()
-  }, [fetchSessions])
+  }, [fetchSessions, fetchProjects])
 
   // ── reconnect effect (fires on disconnected→connected, skips first connect) ──
   const reconnectRef = useRef(false)
@@ -342,28 +353,88 @@ export default function App(): JSX.Element {
     [],
   )
 
-  // ── workspace switch ───────────────────────────────────────────────────────
-  const handleSwitchWorkspace = useCallback(async () => {
+  // ── project switch(激活 + 自动恢复最近会话)─────────────────────────────
+  const switchToProject = useCallback(
+    async (projectPath: string) => {
+      if (state.turn === 'running') return
+      try {
+        const { ok } = await window.wraith.activateProject(projectPath)
+        if (!ok) {
+          void fetchProjects() // 目录失踪 → 条目置灰,状态不变
+          return
+        }
+        statusThrottleRef.current?.cancel()
+        await window.wraith.startSession(projectPath)
+        dispatch({ type: 'resetSession', ws: projectPath })
+        const { sessions } = await window.wraith.listSessions()
+        setSessions(sessions)
+        if (sessions.length > 0) {
+          // session.list 按 updatedAt 倒序:第一条即最近会话
+          const { sessionId, messages } = await window.wraith.resumeSession(sessions[0]!.id)
+          dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
+          dispatch({ type: 'setSessionId', sessionId })
+          dispatch({ type: 'markStarted' })
+        }
+        void fetchProjects() // lastUsedAt 刷新 → 浮顶
+      } catch (err) {
+        console.error('[wraith] switchToProject error:', err)
+        void fetchProjects()
+      }
+    },
+    [state.turn, fetchProjects],
+  )
+
+  // 添加项目(=Composer 重选目录汇流入口):选目录 → 入列表 → 切换
+  const handleAddProject = useCallback(async () => {
     if (state.turn === 'running') return
     try {
-      const ws = await window.wraith.pickWorkspace()
-      if (!ws || ws === state.workspace) return
-      statusThrottleRef.current?.cancel()
-      await window.wraith.startSession(ws)
-      dispatch({ type: 'resetSession', ws })
+      const picked = await window.wraith.addProject()
+      if (!picked) return
+      void fetchProjects() // addProject 已 upsert;先刷列表
+      if (picked !== state.workspace) await switchToProject(picked)
     } catch (err) {
-      console.error('[wraith] switchWorkspace error:', err)
+      console.error('[wraith] addProject error:', err)
     }
-  }, [state.turn, state.workspace])
+  }, [state.turn, state.workspace, fetchProjects, switchToProject])
+
+  const handleRemoveProject = useCallback(
+    async (projectPath: string) => {
+      try {
+        await window.wraith.removeProject(projectPath)
+        void fetchProjects()
+      } catch (err) {
+        console.error('[wraith] removeProject error:', err)
+      }
+    },
+    [fetchProjects],
+  )
+
+  const handleRenameProject = useCallback(
+    async (projectPath: string, name: string) => {
+      try {
+        await window.wraith.renameProject(projectPath, name)
+        void fetchProjects()
+      } catch (err) {
+        console.error('[wraith] renameProject error:', err)
+      }
+    },
+    [fetchProjects],
+  )
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-fg">
       <Sidebar
         workspace={state.workspace}
+        projects={projects}
+        busy={state.turn === 'running'}
         sessions={sessions}
         activeSessionId={state.sessionId}
         onNewConversation={handleNewConversation}
         onSelectSession={handleSelectSession}
+        onActivateProject={switchToProject}
+        onAddProject={handleAddProject}
+        onRemoveProject={handleRemoveProject}
+        onRenameProject={handleRenameProject}
         sandbox={state.sandbox}
       />
 
@@ -385,7 +456,7 @@ export default function App(): JSX.Element {
               onToggleApproval={handleToggleApproval}
               model={state.model}
               workspace={state.workspace}
-              onSwitchWorkspace={handleSwitchWorkspace}
+              onSwitchWorkspace={handleAddProject}
               centered={!state.hasStarted}
               status={state.status}
             />
