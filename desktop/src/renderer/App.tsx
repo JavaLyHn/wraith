@@ -114,7 +114,9 @@ export default function App(): JSX.Element {
   const [inputValue, setInputValue] = useState('')
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
-  const [view, setView] = useState<'chat' | 'plugins'>('chat')
+  const [view, setView] = useState<'chat' | 'plugins' | 'automations'>('chat')
+  const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
+  const [automationBadge, setAutomationBadge] = useState(false)
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
   const [mcpConfigError, setMcpConfigError] = useState<string | null>(null)
   const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
@@ -156,6 +158,17 @@ export default function App(): JSX.Element {
       unsubscribe()
     }
   }, [fetchMcpResources])
+
+  // ── subscribe to automation events on mount ───────────────────────────────
+  useEffect(() => {
+    const unsub = window.wraith.onAutomationEvent(evt => {
+      if (evt.kind === 'badge') setAutomationBadge(evt.show)
+      if (evt.kind === 'approval') setAutomationApproval({ runId: evt.runId, payload: evt.payload })
+      if (evt.kind === 'open-panel') setView('automations')
+      // 'runs-changed' 由面板自身拉取(Task 9),App 层不持 runs 态
+    })
+    return unsub
+  }, [])
 
   // ── session list helpers ───────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -314,6 +327,33 @@ export default function App(): JSX.Element {
       dispatch({ type: 'clearApproval' })
     }
   }, [state.pendingApproval])
+
+  // ── automation approval handler ────────────────────────────────────────────
+  const handleAutomationApprovalRespond = useCallback(async (payload: ApprovalResponsePayload) => {
+    const cur = automationApproval
+    if (!cur) return
+    setAutomationApproval(null)
+    try {
+      await window.wraith.automationRespondApproval(
+        cur.runId,
+        String(cur.payload['approvalId']),
+        payload.decision,
+        {
+          ...(payload.modifiedArgs ? { modifiedArgs: payload.modifiedArgs } : {}),
+          ...(payload.allowNetwork ? { allowNetwork: true } : {}),
+        },
+      )
+    } catch (err) { console.error('[wraith] automation respond error:', err) }
+  }, [automationApproval])
+
+  const handleAutomationApprovalReject = useCallback(async () => {
+    const cur = automationApproval
+    if (!cur) return
+    setAutomationApproval(null)
+    try {
+      await window.wraith.automationRespondApproval(cur.runId, String(cur.payload['approvalId']), 'REJECTED')
+    } catch (err) { console.error('[wraith] automation reject error:', err) }
+  }, [automationApproval])
 
   // ── restart backend ────────────────────────────────────────────────────────
   const handleRestart = useCallback(async () => {
@@ -495,8 +535,10 @@ export default function App(): JSX.Element {
         onRemoveProject={handleRemoveProject}
         onRenameProject={handleRenameProject}
         sandbox={state.sandbox}
-        activeNav={view === 'plugins' ? 'plugins' : null}
+        activeNav={view === 'chat' ? null : view}
         onOpenPlugins={() => setView('plugins')}
+        onOpenAutomations={() => setView('automations')}
+        automationBadge={automationBadge}
       />
 
       <div className="relative flex min-w-0 flex-1 flex-col">
@@ -516,6 +558,8 @@ export default function App(): JSX.Element {
             onRemove={handleMcpRemove}
             onSubmitForm={handleMcpSubmitForm}
           />
+        ) : view === 'automations' ? (
+          <div data-testid="automations-panel-placeholder" />
         ) : (
           /* 既有 welcome ↔ transcript+composer 条件块整体原样嵌此 else */
           (() => {
@@ -568,6 +612,22 @@ export default function App(): JSX.Element {
           beforeContent={state.pendingApproval.beforeContent}
           onRespond={handleApprovalRespond}
           onReject={handleReject}
+        />
+      )}
+
+      {/* Automation ApprovalModal — 独立状态槽,与主会话审批互不干扰 */}
+      {automationApproval && (
+        <ApprovalModal
+          key={'auto-' + String(automationApproval.payload['approvalId'])}
+          approvalId={String(automationApproval.payload['approvalId'])}
+          toolName={String(automationApproval.payload['toolName'] ?? '')}
+          argsJson={String(automationApproval.payload['argsJson'] ?? '')}
+          dangerLevel={String(automationApproval.payload['dangerLevel'] ?? '')}
+          riskDescription={String(automationApproval.payload['riskDescription'] ?? '')}
+          suggestion={(automationApproval.payload['suggestion'] as string | null) ?? ''}
+          beforeContent={(automationApproval.payload['beforeContent'] as string | null) ?? null}
+          onRespond={handleAutomationApprovalRespond}
+          onReject={handleAutomationApprovalReject}
         />
       )}
     </div>
