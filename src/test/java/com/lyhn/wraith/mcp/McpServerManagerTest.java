@@ -272,7 +272,7 @@ class McpServerManagerTest {
     // ---- Phase E-1 Task 1 新增测试 ----
 
     @Test
-    void reattachRegistersToolsIntoNewRegistryOnly() throws Exception {
+    void reattachRegistersToolsIntoNewRegistryAndLeavesOldUntouched() throws Exception {
         enqueueInitialize();
         enqueueToolsList("{\"name\":\"echo\",\"description\":\"回声\",\"inputSchema\":{\"type\":\"object\"}}");
         loadServersFromMap(Map.of("srv", httpConfig(webServer)));
@@ -283,6 +283,8 @@ class McpServerManagerTest {
         ToolRegistry fresh = newRegistryLikeSetUp();
         manager.reattach(fresh);
         assertTrue(registryHasTool(fresh, namespaced), "reattach 后新 registry 有该工具");
+        // 旧 registry 不清理:随旧会话整体废弃(主动注销反而可能干扰在途会话)
+        assertTrue(registryHasTool(registry, namespaced), "reattach 不清理旧 registry,旧工具仍保留");
     }
 
     @Test
@@ -309,6 +311,29 @@ class McpServerManagerTest {
         String msg = manager.reloadFromConfig("srv");
         assertTrue(manager.servers().stream().noneMatch(s -> s.name().equals("srv")), msg);
         assertFalse(registryHasTool(registry, McpToolDescriptor.namespaced("srv", "echo")));
+    }
+
+    @Test
+    void reloadFromConfigStartsBrandNewServer() throws Exception {
+        // 向 configLoader 读取的 project.json 写入一个全新 server "brandnew"
+        String mcpJson = "{\"mcpServers\":{\"brandnew\":{\"url\":\""
+                + webServer.url("/mcp") + "\"}}}";
+        Files.writeString(tempDir.resolve("project.json"), mcpJson);
+
+        enqueueInitialize();
+        enqueueToolsList(toolJson("search", "Search tool"));
+
+        String result = manager.reloadFromConfig("brandnew");
+
+        assertTrue(manager.servers().stream().anyMatch(s -> s.name().equals("brandnew")),
+                "brandnew server 应出现在 manager.servers(): " + result);
+        McpServer brandnew = manager.server("brandnew");
+        assertNotNull(brandnew, "manager.server(\"brandnew\") 不应为 null");
+        assertEquals(McpServerStatus.READY, brandnew.status(),
+                "全新 server 应启动至 READY，实际: " + brandnew.status()
+                        + (brandnew.errorMessage() == null ? "" : " — " + brandnew.errorMessage()));
+        assertTrue(registryHasTool(registry, McpToolDescriptor.namespaced("brandnew", "search")),
+                "registry 应持有 mcp__brandnew__search");
     }
 
     // ---- Phase E-1 Task 1 辅助方法 ----
