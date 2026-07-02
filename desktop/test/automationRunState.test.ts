@@ -44,11 +44,43 @@ describe('applyRunEvent', () => {
   })
 
   it('turn.failed / child-exit / stopped 各归其态;终态幂等', () => {
-    expect(play([{ type: 'turn-submitted' }, n('turn.failed', { error: 'boom' })]).phase).toBe('failed')
-    expect(play([{ type: 'turn-submitted' }, { type: 'child-exit' }]).phase).toBe('failed')
-    expect(play([{ type: 'turn-submitted' }, { type: 'stopped' }]).phase).toBe('interrupted')
+    // 各态转移与 error 字段验证
+    const failedByTurn = play([{ type: 'turn-submitted' }, n('turn.failed', { error: 'boom' })])
+    expect(failedByTurn.phase).toBe('failed')
+    expect(failedByTurn.error).toBe('boom')
+
+    const failedByChildExit = play([{ type: 'turn-submitted' }, { type: 'child-exit' }])
+    expect(failedByChildExit.phase).toBe('failed')
+    expect(failedByChildExit.error).toBe('子进程意外退出')
+
+    const interrupted = play([{ type: 'turn-submitted' }, { type: 'stopped' }])
+    expect(interrupted.phase).toBe('interrupted')
+
+    // 终态幂等:failed 态不再变化
+    const failedAgain = applyRunEvent(failedByTurn, n('message.delta', { text: 'ignored' }))
+    expect(failedAgain).toBe(failedByTurn) // 返回原对象
+    expect(failedAgain.phase).toBe('failed')
+
+    const failedChildExit = applyRunEvent(failedByTurn, { type: 'child-exit' })
+    expect(failedChildExit).toBe(failedByTurn)
+    expect(failedChildExit.phase).toBe('failed')
+
+    // 终态幂等:interrupted 态不再变化
+    const interruptedAgain = applyRunEvent(interrupted, n('message.delta', { text: 'ignored' }))
+    expect(interruptedAgain).toBe(interrupted)
+    expect(interruptedAgain.phase).toBe('interrupted')
+
+    const interruptedChildExit = applyRunEvent(interrupted, { type: 'child-exit' })
+    expect(interruptedChildExit).toBe(interrupted)
+    expect(interruptedChildExit.phase).toBe('interrupted')
+
+    // 终态幂等:success 态不再变化
     const done = play([{ type: 'turn-submitted' }, n('turn.completed', { sessionId: 'x' })])
-    expect(applyRunEvent(done, { type: 'child-exit' }).phase).toBe('success') // 终态不动
+    expect(done.phase).toBe('success')
+
+    const doneAgain = applyRunEvent(done, { type: 'child-exit' })
+    expect(doneAgain).toBe(done)
+    expect(doneAgain.phase).toBe('success')
   })
 
   it('summaryOf:未定稿用 buf;截 120 字并单行化', () => {
