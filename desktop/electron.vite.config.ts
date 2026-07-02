@@ -29,6 +29,9 @@ export default defineConfig({
         plugins: [tailwindcss(), autoprefixer()]
       }
     },
+    worker: {
+      format: 'es'
+    },
     build: {
       rollupOptions: {
         input: 'src/renderer/index.html'
