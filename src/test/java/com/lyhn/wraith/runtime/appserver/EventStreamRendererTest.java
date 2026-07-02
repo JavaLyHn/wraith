@@ -40,6 +40,31 @@ class EventStreamRendererTest {
     }
 
     @Test
+    void emptyThinkingPairEmitsNoNotifications() throws Exception {
+        // 非 reasoning 模型(如 DeepSeek-V4-Flash)整段无思考流:Agent 仍会成对调用
+        // beginThinking/endThinking,wire 上不得出现空 thinking 块(桌面端会渲染成空折叠条)
+        Captured c = make();
+        c.r().beginThinking("Thinking");
+        c.r().endThinking();
+        assertTrue(lines(c.out()).isEmpty(), "无思考流时不得发出任何 thinking.* 事件");
+    }
+
+    @Test
+    void thinkingBeginDeferredUntilFirstDelta() throws Exception {
+        Captured c = make();
+        c.r().beginThinking("Thinking");
+        c.r().appendThinking("步骤一");
+        c.r().endThinking();
+        List<JsonNode> ls = lines(c.out());
+        assertEquals(3, ls.size());
+        assertEquals("thinking.begin", ls.get(0).get("method").asText());
+        assertEquals("Thinking", ls.get(0).get("params").get("label").asText());
+        assertEquals("thinking.delta", ls.get(1).get("method").asText());
+        assertEquals("步骤一", ls.get(1).get("params").get("text").asText());
+        assertEquals("thinking.end", ls.get(2).get("method").asText());
+    }
+
+    @Test
     void toolCallEmitsCallIdNameArgs() throws Exception {
         Captured c = make();
         LlmClient.ToolCall tc = new LlmClient.ToolCall("call_9",
