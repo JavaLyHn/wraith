@@ -20,13 +20,14 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
-  activeNav: 'plugins' | null
+  activeNav: 'plugins' | 'automations' | null
   onOpenPlugins: () => void
+  onOpenAutomations: () => void
+  automationBadge: boolean
 }
 
 const NAV_DISABLED: { key: string; label: string; hint: string }[] = [
   { key: 'search', label: '搜索', hint: '搜索在后续阶段' },
-  { key: 'automation', label: '自动化', hint: '自动化在 Phase E-2' },
 ]
 
 export default function Sidebar({
@@ -44,6 +45,8 @@ export default function Sidebar({
   sandbox,
   activeNav,
   onOpenPlugins,
+  onOpenAutomations,
+  automationBadge,
 }: SidebarProps): JSX.Element {
   return (
     <TooltipProvider delayDuration={200}>
@@ -105,21 +108,21 @@ export default function Sidebar({
             插件
           </button>
 
-          {/* automation — disabled */}
-          {NAV_DISABLED.filter(n => n.key === 'automation').map(n => (
-            <Tooltip key={n.key}>
-              <TooltipTrigger asChild>
-                <button
-                  data-testid={`nav-${n.key}`}
-                  disabled
-                  className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted opacity-60"
-                >
-                  {n.label}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>{n.hint}</TooltipContent>
-            </Tooltip>
-          ))}
+          {/* automations — enabled */}
+          <button
+            data-testid="nav-automations"
+            onClick={onOpenAutomations}
+            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+              (activeNav === 'automations' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+          >
+            <span className="flex items-center">
+              自动化
+              {automationBadge && (
+                <span data-testid="nav-automations-badge"
+                  className="ml-auto h-2 w-2 shrink-0 rounded-full bg-danger" />
+              )}
+            </span>
+          </button>
         </nav>
 
         {/* conversations — from session.list */}

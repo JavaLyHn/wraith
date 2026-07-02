@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Notification } from 'electron'
 import path from 'path'
 import os from 'os'
 import { fileURLToPath } from 'url'
@@ -18,6 +18,13 @@ import {
   seedProjectsFromJson,
 } from './settings'
 import type { BackendEvent } from '../shared/types'
+import {
+  readTasks as autoReadTasks, upsertTask as autoUpsertTask, removeTask as autoRemoveTask,
+  readRuns as autoReadRuns, readLastPanelOpenedAt, writeLastPanelOpenedAt, badgeVisible,
+  sweepNonTerminalRuns,
+} from './automationsStore'
+import { AutomationScheduler } from './automationScheduler'
+import type { AutomationTask, AutomationEvent } from '../shared/types'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -41,6 +48,37 @@ let currentSessionId: string | null = null
 let currentTurnId: string | null = null
 
 const defaultJar = defaultJarPath(os.homedir())
+
+let automationScheduler: AutomationScheduler | null = null
+
+function pushAutomation(evt: AutomationEvent): void {
+  try {
+    mainWindow?.webContents.send('wraith:automation-event', evt)
+  } catch { /* window destroyed — 静默降级 */ }
+}
+
+function pushBadge(): void {
+  try {
+    const ud = app.getPath('userData')
+    pushAutomation({ kind: 'badge', show: badgeVisible(autoReadRuns(ud), readLastPanelOpenedAt(ud)) })
+  } catch { /* 降级 */ }
+}
+
+function notifyOS(title: string, body: string): void {
+  // 通知权限被拒/不支持:静默降级(红点仍然工作,spec §7)
+  try {
+    if (Notification.isSupported()) {
+      const n = new Notification({ title, body })
+      n.on('click', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.show()
+          pushAutomation({ kind: 'open-panel' })
+        }
+      })
+      n.show()
+    }
+  } catch { /* 降级 */ }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -138,6 +176,9 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
+
+  // I-5: 重启后红点恢复——首帧加载完即按当前 runs 推一次 badge(pushBadge 内部已 try/catch)
+  mainWindow.webContents.on('did-finish-load', () => pushBadge())
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -334,6 +375,32 @@ ipcMain.handle('wraith:rewindSession', async (_e, userOrdinal: number) => {
 })
 
 // ---------------------------------------------------------------------------
+// Automation IPC handlers (Phase E-2)
+// ---------------------------------------------------------------------------
+
+ipcMain.handle('wraith:automationList', async () => ({ tasks: autoReadTasks(app.getPath('userData')) }))
+ipcMain.handle('wraith:automationUpsert', async (_e, task: AutomationTask) => {
+  autoUpsertTask(app.getPath('userData'), task)
+  return { ok: true }
+})
+ipcMain.handle('wraith:automationRemove', async (_e, id: string) => {
+  autoRemoveTask(app.getPath('userData'), id)
+  pushBadge()
+  return { ok: true }
+})
+ipcMain.handle('wraith:automationRunNow', async (_e, id: string) => automationScheduler?.runNow(id) ?? { ok: false })
+ipcMain.handle('wraith:automationStop', async (_e, runId: string) => automationScheduler?.stopRun(runId) ?? { ok: false })
+ipcMain.handle('wraith:automationRuns', async () => ({ runs: autoReadRuns(app.getPath('userData')) }))
+ipcMain.handle('wraith:automationRespondApproval', async (_e, runId: string, approvalId: string, decision: string,
+    opts: { modifiedArgs?: string; allowNetwork?: boolean } | null) =>
+  automationScheduler?.respondApproval(runId, approvalId, decision, opts) ?? { ok: false })
+ipcMain.handle('wraith:automationPanelOpened', async () => {
+  writeLastPanelOpenedAt(app.getPath('userData'), Date.now())
+  pushBadge()
+  return { ok: true }
+})
+
+// ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 
@@ -346,6 +413,38 @@ app.whenReady().then(() => {
   } else {
     seedProjectsIfEmpty(ud, Date.now())
   }
+  // I-1: 崩溃/退出残留的非终态 run 启动即清扫为 interrupted(scheduler 实例化之前;best-effort)
+  try {
+    sweepNonTerminalRuns(app.getPath('userData'))
+  } catch { /* best-effort:清扫失败不阻塞启动 */ }
+  automationScheduler = new AutomationScheduler({
+    userDataDir: app.getPath('userData'),
+    env: process.env,
+    homedir: os.homedir(),
+    onRunsChanged: () => {
+      try {
+        pushAutomation({ kind: 'runs-changed' })
+        pushBadge()
+      } catch { /* window destroyed — 静默降级 */ }
+    },
+    onApproval: (runId, payload) => {
+      try {
+        pushAutomation({ kind: 'approval', runId, payload })
+        pushBadge()
+        notifyOS('Wraith 自动化等待审批', '有任务挂起等待你的审批')
+      } catch { /* 降级 */ }
+    },
+    onTerminal: run => {
+      // runs-changed 与 badge 已由 finishRun 先行调用的 onRunsChanged 推送,
+      // 此处只负责系统通知——依赖调度器 finishRun 内 onRunsChanged→onTerminal 的调用顺序
+      try {
+        const label = run.status === 'success' ? '完成' : run.status === 'failed' ? '失败' : '中断'
+        notifyOS('Wraith 自动化任务' + label, run.summary ?? '')
+      } catch { /* 降级 */ }
+    },
+  })
+  automationScheduler.start()
+
   createWindow()
   spawnBackend()
 
@@ -370,5 +469,11 @@ app.on('will-quit', () => {
     child?.kill()
   } catch {
     // ignore — child may already be gone
+  }
+  // stopAll: interrupted 落盘同步完成;子进程信号回收 best-effort(异步,不 await)
+  try {
+    automationScheduler?.stopAll()
+  } catch {
+    // best-effort
   }
 })

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent } from '../shared/types'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -38,6 +38,16 @@ export interface WraithApi {
   mcpConfigUpsert(payload: McpUpsertPayload): Promise<{ ok: boolean }>
   mcpConfigRemove(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   onEvent(cb: (evt: BackendEvent) => void): () => void
+  automationList(): Promise<{ tasks: AutomationTask[] }>
+  automationUpsert(task: AutomationTask): Promise<{ ok: boolean }>
+  automationRemove(id: string): Promise<{ ok: boolean }>
+  automationRunNow(id: string): Promise<{ ok: boolean }>
+  automationStop(runId: string): Promise<{ ok: boolean }>
+  automationRuns(): Promise<{ runs: AutomationRun[] }>
+  automationRespondApproval(runId: string, approvalId: string, decision: string,
+    opts?: { modifiedArgs?: string; allowNetwork?: boolean }): Promise<{ ok: boolean }>
+  automationPanelOpened(): Promise<{ ok: boolean }>
+  onAutomationEvent(cb: (evt: AutomationEvent) => void): () => void
 }
 
 const wraith: WraithApi = {
@@ -151,7 +161,45 @@ const wraith: WraithApi = {
     return () => {
       ipcRenderer.removeListener('wraith:event', listener)
     }
-  }
+  },
+
+  automationList() {
+    return ipcRenderer.invoke('wraith:automationList') as Promise<{ tasks: AutomationTask[] }>
+  },
+
+  automationUpsert(task) {
+    return ipcRenderer.invoke('wraith:automationUpsert', task) as Promise<{ ok: boolean }>
+  },
+
+  automationRemove(id) {
+    return ipcRenderer.invoke('wraith:automationRemove', id) as Promise<{ ok: boolean }>
+  },
+
+  automationRunNow(id) {
+    return ipcRenderer.invoke('wraith:automationRunNow', id) as Promise<{ ok: boolean }>
+  },
+
+  automationStop(runId) {
+    return ipcRenderer.invoke('wraith:automationStop', runId) as Promise<{ ok: boolean }>
+  },
+
+  automationRuns() {
+    return ipcRenderer.invoke('wraith:automationRuns') as Promise<{ runs: AutomationRun[] }>
+  },
+
+  automationRespondApproval(runId, approvalId, decision, opts) {
+    return ipcRenderer.invoke('wraith:automationRespondApproval', runId, approvalId, decision, opts ?? null) as Promise<{ ok: boolean }>
+  },
+
+  automationPanelOpened() {
+    return ipcRenderer.invoke('wraith:automationPanelOpened') as Promise<{ ok: boolean }>
+  },
+
+  onAutomationEvent(cb) {
+    const listener = (_e: Electron.IpcRendererEvent, evt: AutomationEvent) => cb(evt)
+    ipcRenderer.on('wraith:automation-event', listener)
+    return () => { ipcRenderer.removeListener('wraith:automation-event', listener) }
+  },
 }
 
 contextBridge.exposeInMainWorld('wraith', wraith)

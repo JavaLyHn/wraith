@@ -218,3 +218,44 @@ export interface McpUpsertPayload {
   args: string[]
   env: Record<string, string>
 }
+
+// ---------------------------------------------------------------------------
+// Phase E-2: 定时自动化
+// ---------------------------------------------------------------------------
+
+export type AutomationSchedule =
+  | { kind: 'interval'; everyMinutes: number }
+  | { kind: 'daily'; time: string }                     // 'HH:mm' 本地时区
+  | { kind: 'weekly'; weekday: number; time: string }   // 0-6,周日=0
+
+export interface AutomationTask {
+  id: string
+  name: string
+  prompt: string
+  projectPath: string
+  schedule: AutomationSchedule
+  enabled: boolean
+  createdAt: number
+  /** enabled 置 true 的时刻(interval 锚点;创建即启用时=createdAt) */
+  enabledAt: number
+  lastFiredAt: number | null
+}
+
+export type AutomationRunStatus = 'running' | 'waiting_approval' | 'success' | 'failed' | 'interrupted'
+
+export interface AutomationRun {
+  runId: string
+  taskId: string
+  startedAt: number
+  endedAt?: number
+  status: AutomationRunStatus
+  sessionId?: string
+  summary?: string
+  miss?: boolean
+}
+
+export type AutomationEvent =
+  | { kind: 'runs-changed' }
+  | { kind: 'badge'; show: boolean }
+  | { kind: 'approval'; runId: string; payload: Record<string, unknown> }
+  | { kind: 'open-panel' }
