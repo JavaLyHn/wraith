@@ -25,8 +25,8 @@ public final class McpConfigWriter {
     public static synchronized void upsert(Path file, String name, String command,
                                            List<String> args, Map<String, String> env) throws IOException {
         ObjectNode root = readTree(file);
-        ObjectNode servers = objectChild(root, "mcpServers", true);
-        ObjectNode entry = objectChild(servers, name, true);
+        ObjectNode servers = objectChild(root, "mcpServers");
+        ObjectNode entry = objectChild(servers, name);
 
         entry.put("command", command);
         ArrayNode argsNode = entry.putArray("args");
@@ -73,10 +73,12 @@ public final class McpConfigWriter {
         throw new IOException("mcp.json 顶层不是对象,拒绝覆盖: " + file);
     }
 
-    private static ObjectNode objectChild(ObjectNode parent, String field, boolean create) {
+    private static ObjectNode objectChild(ObjectNode parent, String field) throws IOException {
         JsonNode child = parent.get(field);
         if (child instanceof ObjectNode o) return o;
-        if (!create) return null;
+        if (child != null && !child.isNull()) {
+            throw new IOException("mcp.json 中 \"" + field + "\" 不是对象,拒绝覆盖");
+        }
         return parent.putObject(field);
     }
 }

@@ -79,4 +79,14 @@ class McpConfigWriterTest {
         assertThrows(IOException.class, () -> McpConfigWriter.remove(f, "s"));
         assertEquals("not json{{", Files.readString(f), "坏文件原样保留,绝不覆盖");
     }
+
+    @Test
+    void upsertRefusesToClobberNonObjectNodes(@TempDir Path dir) throws Exception {
+        Path f = dir.resolve("mcp.json");
+        Files.writeString(f, "{\"mcpServers\":[1,2,3]}");
+        assertThrows(IOException.class, () -> McpConfigWriter.upsert(f, "s", "c", List.of(), Map.of()));
+        assertEquals("{\"mcpServers\":[1,2,3]}", Files.readString(f), "异形内容原样保留");
+        Files.writeString(f, "{\"mcpServers\":{\"srv\":42}}");
+        assertThrows(IOException.class, () -> McpConfigWriter.upsert(f, "srv", "c", List.of(), Map.of()));
+    }
 }
