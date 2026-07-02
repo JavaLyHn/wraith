@@ -200,11 +200,16 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
               )}
               {tab === 'logs' && (
                 <>
-                  <button onClick={() => setTab('logs')} className="mb-1 self-start rounded px-2 py-1 text-[11px] text-fg-subtle hover:text-accent"
+                  <button
                     data-testid="mcp-logs-refresh"
-                    onMouseDown={async () => {
-                      try { const { lines } = await window.wraith.mcpLogs(current.name); setTabContent(c => ({ ...c, logs: lines })) }
-                      catch (err) { console.error('[wraith] mcp logs refresh error:', err) }
+                    className="mb-1 self-start rounded px-2 py-1 text-[11px] text-fg-subtle hover:text-accent"
+                    onClick={async () => {
+                      try {
+                        const { lines } = await window.wraith.mcpLogs(current.name)
+                        setTabContent(c => ({ ...c, logs: lines }))
+                      } catch (err) {
+                        console.error('[wraith] mcp logs refresh error:', err)
+                      }
                     }}>
                     ⟳ 刷新
                   </button>
