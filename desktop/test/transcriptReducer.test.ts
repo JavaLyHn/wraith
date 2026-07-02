@@ -344,4 +344,31 @@ describe('phase-B state additions', () => {
     expect(s.turn).toBe('idle')
     expect(s.sessionId).toBe('existing')
   })
+  it('turn.failed goes idle and never touches sessionId, even if params carry one', () => {
+    const start: TranscriptState = { ...initialState, turn: 'running', sessionId: 'existing' }
+    const s = reduce(start, { kind: 'notification', method: 'turn.failed', params: { sessionId: 'sneaky' } })
+    expect(s.turn).toBe('idle')
+    expect(s.sessionId).toBe('existing')
+  })
+  it('loadHistory preserves all non-transcript fields', () => {
+    const start: TranscriptState = {
+      ...initialState,
+      model: 'deepseek',
+      workspace: '/proj/a',
+      sessionId: 'sess-1',
+      sandbox: 'macos-seatbelt',
+      hasStarted: true,
+      approvalMode: 'auto',
+      connection: 'connected',
+    }
+    const s = loadHistory(start, [{ type: 'user', text: 'x' }])
+    expect(s.items).toEqual([{ type: 'user', text: 'x' }])
+    expect(s.model).toBe('deepseek')
+    expect(s.workspace).toBe('/proj/a')
+    expect(s.sessionId).toBe('sess-1')
+    expect(s.sandbox).toBe('macos-seatbelt')
+    expect(s.hasStarted).toBe(true)
+    expect(s.approvalMode).toBe('auto')
+    expect(s.connection).toBe('connected')
+  })
 })

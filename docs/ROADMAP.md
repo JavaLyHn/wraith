@@ -23,8 +23,7 @@
 
 ## 遗留 Minor（后续阶段顺手清)
 
-- **Phase A**:`class-variance-authority` 未用依赖可移除;Composer 按钮补 `disabled:cursor-not-allowed`;残留 inline style 收尾。
-- **Phase B**:`session.list`/`session.resume` 无 session 负路径测试;`SessionStore.currentId()` 直测;reducer `turn.failed` 回归 + `loadHistory` 保留字段断言;`handleSelectSession` 补 `void fetchSessions()`(一致性,功能 no-op)。
+- ✅ 已清（2026-07-02):Phase A 三项(移除 `class-variance-authority`、Composer `disabled:cursor-not-allowed`、残留 inline style)+ Phase B 五项(list/resume 负路径测试、`currentId()` 直测、`turn.failed` 回归、`loadHistory` 保留字段断言、`handleSelectSession` 补 `fetchSessions`)+ Sidebar 占位 tooltip 阶段编号对齐 D/E。
 - **待眼验(非自动覆盖)**:重连 auto-resume 真·断连往返;真 `java` 落盘/list/resume 端到端(需重建 `~/.wraith/wraith.jar`)。建议 `npm run dev` 实机跑一遍。
 
 ## 未实现 ⬜(Codex 对齐 A–F,取代旧 P4/P5)

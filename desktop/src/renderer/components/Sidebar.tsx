@@ -18,9 +18,9 @@ interface SidebarProps {
 
 const NAV: { key: string; label: string; hint: string }[] = [
   { key: 'search', label: '搜索', hint: '搜索在后续阶段' },
-  { key: 'plugins', label: '插件', hint: '插件在 Phase D' },
-  { key: 'automation', label: '自动化', hint: '自动化在 Phase D' },
-  { key: 'projects', label: '项目', hint: '多项目在 Phase C' },
+  { key: 'plugins', label: '插件', hint: '插件在 Phase E' },
+  { key: 'automation', label: '自动化', hint: '自动化在 Phase E' },
+  { key: 'projects', label: '项目', hint: '多项目在 Phase D' },
 ]
 
 export default function Sidebar({

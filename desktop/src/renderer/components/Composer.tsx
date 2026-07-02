@@ -75,7 +75,7 @@ export default function Composer({
                 data-testid="attach"
                 disabled
                 aria-label="附件"
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle opacity-50"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle opacity-50 disabled:cursor-not-allowed"
               >
                 +
               </button>
@@ -99,7 +99,7 @@ export default function Composer({
             onClick={onSwitchWorkspace}
             disabled={running}
             title="重选工作目录"
-            className="max-w-[180px] truncate rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:opacity-50"
+            className="max-w-[180px] truncate rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
             📁 {baseName(workspace)}
           </button>
@@ -129,7 +129,7 @@ export default function Composer({
           <button
             onClick={onSubmit}
             disabled={running || !value.trim()}
-            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-accent-fg disabled:opacity-40"
+            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-accent-fg disabled:cursor-not-allowed disabled:opacity-40"
           >
             发送
           </button>

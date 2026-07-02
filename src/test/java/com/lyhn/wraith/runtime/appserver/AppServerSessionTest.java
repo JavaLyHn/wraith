@@ -89,4 +89,41 @@ class AppServerSessionTest {
         assertEquals("persisted-9", completed.get("params").get("sessionId").asText(),
             "turn.completed should carry the real persisted sessionId");
     }
+
+    @Test
+    void listAndResumeWithoutSessionReturnNoSessionError() throws Exception {
+        String in = String.join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.list\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.resume\",\"params\":{\"sessionId\":\"s1\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(new ByteArrayInputStream(in.getBytes(StandardCharsets.UTF_8)), out, factory(new AtomicInteger())).serve();
+        List<JsonNode> replies = parseAll(out.toString(StandardCharsets.UTF_8));
+        for (int id : new int[] {1, 2}) {
+            final int wanted = id;
+            JsonNode err = replies.stream()
+                .filter(n -> n.path("id").asInt(-1) == wanted && n.has("error")).findFirst().orElseThrow();
+            assertEquals(-32000, err.get("error").get("code").asInt());
+            assertEquals("no session", err.get("error").get("message").asText());
+        }
+    }
+
+    @Test
+    void resumeWithMissingSessionIdReturnsInvalidParams() throws Exception {
+        String in = String.join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.resume\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session.resume\",\"params\":{\"sessionId\":\"\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(new ByteArrayInputStream(in.getBytes(StandardCharsets.UTF_8)), out, factory(new AtomicInteger())).serve();
+        List<JsonNode> replies = parseAll(out.toString(StandardCharsets.UTF_8));
+        for (int id : new int[] {2, 3}) {
+            final int wanted = id;
+            JsonNode err = replies.stream()
+                .filter(n -> n.path("id").asInt(-1) == wanted && n.has("error")).findFirst().orElseThrow();
+            assertEquals(-32602, err.get("error").get("code").asInt());
+            assertEquals("missing sessionId", err.get("error").get("message").asText());
+        }
+    }
 }
