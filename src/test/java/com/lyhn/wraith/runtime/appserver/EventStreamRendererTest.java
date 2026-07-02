@@ -94,4 +94,27 @@ class EventStreamRendererTest {
         c.r().stream().println("THIS MUST NOT POLLUTE STDOUT");
         assertEquals(0, c.out().size(), "stream() 输出不得进入 JSON-RPC 通道");
     }
+
+    @Test
+    void emitMcpStatusWithError() throws Exception {
+        Captured c = make();
+        c.r().emitMcpStatus("github", "error", "连接失败");
+        JsonNode n = lines(c.out()).get(0);
+        assertEquals("mcp.status", n.get("method").asText());
+        JsonNode p = n.get("params");
+        assertEquals("github", p.get("name").asText());
+        assertEquals("error", p.get("state").asText());
+        assertEquals("连接失败", p.get("error").asText());
+    }
+
+    @Test
+    void emitMcpStatusOmitsBlankError() throws Exception {
+        Captured c = make();
+        c.r().emitMcpStatus("fs", "ready", null);
+        JsonNode n = lines(c.out()).get(0);
+        assertEquals("mcp.status", n.get("method").asText());
+        JsonNode p = n.get("params");
+        assertEquals("ready", p.get("state").asText());
+        assertFalse(p.has("error"));
+    }
 }
