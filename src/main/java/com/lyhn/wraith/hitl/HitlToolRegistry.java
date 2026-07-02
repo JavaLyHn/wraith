@@ -80,6 +80,11 @@ public class HitlToolRegistry extends ToolRegistry {
         String effectiveArgs = result.effectiveArguments(argumentsJson);
         if (result.allowNetworkOnce() && "execute_command".equals(name)) {
             grantNetworkOnce(); // 「本次放行网络」:仅对即将执行的这条命令生效
+            try {
+                return super.doExecuteTool(name, effectiveArgs);
+            } finally {
+                consumeNetworkOnce(); // 早退/异常路径未消费时兜底清除,防授权漂移到下一条命令
+            }
         }
         return super.doExecuteTool(name, effectiveArgs);
     }
