@@ -217,6 +217,7 @@ public class Agent {
                     for (ToolExecutionResult toolResult : toolResults) {
                         memoryManager.addToolResult(toolResult.name(), toolResult.result());
                         conversationHistory.add(LlmClient.Message.tool(toolResult.id(), toolResult.result()));
+                        emitToolCardResult(renderer(), toolResult);
                     }
                     appendImageToolMessages(toolResults);
                     pushStatus(budget, startNanos, "running");
@@ -307,6 +308,32 @@ public class Agent {
     }
 
     public record CompactionResult(boolean compacted, long beforeTokens, long afterTokens, String error) {
+    }
+
+    /** 非命令工具结果回发卡片的字符上限(超出截断,防事件爆炸)。 */
+    private static final int MAX_TOOL_CARD_RESULT_CHARS = 8000;
+
+    /**
+     * 工具收尾回发:补 tool.output.delta(结果文本)+ tool.result,否则桌面端卡片停留 running。
+     * execute_command 跳过——它已由 CommandOutputObserver 流式输出并收尾,再发就是双份;
+     * Renderer 这两个方法默认 no-op,TUI 等其他渲染器不受影响。
+     */
+    static void emitToolCardResult(com.lyhn.wraith.render.Renderer renderer, ToolExecutionResult result) {
+        if (renderer == null || result == null) {
+            return;
+        }
+        if ("execute_command".equals(result.name())) {
+            return;
+        }
+        String text = result.result() == null ? "" : result.result();
+        boolean ok = !result.timedOut() && !text.startsWith("工具执行失败:");
+        if (text.length() > MAX_TOOL_CARD_RESULT_CHARS) {
+            text = text.substring(0, MAX_TOOL_CARD_RESULT_CHARS) + "\n…(已截断)";
+        }
+        if (!text.isEmpty()) {
+            renderer.appendToolOutputDelta(result.id(), "result", text);
+        }
+        renderer.appendToolResult(result.id(), ok, ok ? 0 : 1);
     }
 
     /** 当前状态栏快照：ctx 表示下一轮请求仍会携带的上下文估算，不含累计 in/out 用量。 */
