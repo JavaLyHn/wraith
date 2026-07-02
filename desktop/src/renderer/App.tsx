@@ -164,6 +164,8 @@ export default function App(): JSX.Element {
     const unsub = window.wraith.onAutomationEvent(evt => {
       if (evt.kind === 'badge') setAutomationBadge(evt.show)
       if (evt.kind === 'approval') setAutomationApproval({ runId: evt.runId, payload: evt.payload })
+      // TODO(Task 9 移交):run 终态后本槽的清理由 Task 9 的 automationApprovalRef + runs-changed 事件处理;
+      //   当前 run 提前终态时弹窗可能悬空——属已知移交,Task 9 补齐后可删此注释。
       if (evt.kind === 'open-panel') setView('automations')
       // 'runs-changed' 由面板自身拉取(Task 9),App 层不持 runs 态
     })
@@ -377,12 +379,12 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
-      if (state.turn !== 'running' || state.pendingApproval) return
+      if (state.turn !== 'running' || state.pendingApproval || automationApproval) return
       void window.wraith.interrupt().catch(err => console.error('[wraith] interrupt error:', err))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [state.turn, state.pendingApproval])
+  }, [state.turn, state.pendingApproval, automationApproval])
 
   // ── 消息编辑/删除(真回溯:后端裁剪 → 本地裁剪 → 编辑则重发) ─────────────────
   const handleEditMessage = useCallback(
@@ -616,6 +618,7 @@ export default function App(): JSX.Element {
       )}
 
       {/* Automation ApprovalModal — 独立状态槽,与主会话审批互不干扰 */}
+      {/* 自动化 Modal 后挂载,Portal 层级在主会话 Modal 之上(计划语义:两弹窗不互斥,自动化在上可先处理) */}
       {automationApproval && (
         <ApprovalModal
           key={'auto-' + String(automationApproval.payload['approvalId'])}
