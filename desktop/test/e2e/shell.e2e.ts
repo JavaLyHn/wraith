@@ -546,3 +546,46 @@ test('write_file 审批弹窗展示 diff 预览', async () => {
 
   await app.close()
 })
+
+// ---------------------------------------------------------------------------
+// Test 17: 长对话溢出时卡片不得被 flex 压扁(回归:overflow-hidden 子项 min-height=0)
+// ---------------------------------------------------------------------------
+
+test('长对话溢出后 tool/thinking/diff 卡片保持完整高度(不被压成 2px 线)', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1'
+    }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  // 连发 4 轮(每轮:提交→审批→放行→等 diff 卡片落地),把 transcript 撑到溢出
+  for (let turn = 1; turn <= 4; turn++) {
+    await input.fill(`第 ${turn} 轮消息`)
+    await input.press('Enter')
+    const approveBtn = win.locator('[data-testid="approve"]')
+    await expect(approveBtn).toBeVisible({ timeout: 10000 })
+    await approveBtn.click()
+    await expect(win.locator('[data-testid="diff-card"]')).toHaveCount(turn, { timeout: 10000 })
+  }
+
+  // 容器确已溢出(滚动高度大于可视高度),压缩条件成立
+  const overflowed = await win
+    .locator('[data-testid="transcript"]')
+    .evaluate(el => el.scrollHeight > el.clientHeight)
+  expect(overflowed).toBe(true)
+
+  // 最早的三类卡片都必须保有实际高度(压扁时只剩 2px 边框线)
+  for (const testid of ['tool-card', 'thinking', 'diff-card']) {
+    const box = await win.locator(`[data-testid="${testid}"]`).first().boundingBox()
+    expect(box, `${testid} 应可见`).not.toBeNull()
+    expect(box!.height, `${testid} 高度不得被压缩`).toBeGreaterThan(20)
+  }
+
+  await app.close()
+})
