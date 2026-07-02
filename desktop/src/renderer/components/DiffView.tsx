@@ -30,6 +30,9 @@ export default function DiffView({ filePath, before, after, onStats }: DiffViewP
     let original: import('monaco-editor').editor.ITextModel | null = null
     let modified: import('monaco-editor').editor.ITextModel | null = null
 
+    // 重跑前复位 failed，确保 hostRef 容器渲染 → setFailed(false) 同步触发重渲染完成在 await 之后
+    setFailed(false)
+
     void (async () => {
       let monaco: MonacoModule
       try {
@@ -44,8 +47,10 @@ export default function DiffView({ filePath, before, after, onStats }: DiffViewP
 
       const uniq = `${++uriSeq}`
       // URI 末段保留文件名 → Monaco 按扩展名自动选择语言 tokenizer
-      original = monaco.editor.createModel(before, undefined, monaco.Uri.parse(`wraith-diff://${uniq}/before/${filePath}`))
-      modified = monaco.editor.createModel(after, undefined, monaco.Uri.parse(`wraith-diff://${uniq}/after/${filePath}`))
+      // 对 filePath 编码防止空格/#/? 生成畸形 URI
+      const encodedPath = encodeURIComponent(filePath)
+      original = monaco.editor.createModel(before, undefined, monaco.Uri.parse(`wraith-diff://${uniq}/before/${encodedPath}`))
+      modified = monaco.editor.createModel(after, undefined, monaco.Uri.parse(`wraith-diff://${uniq}/after/${encodedPath}`))
       editor = monaco.editor.createDiffEditor(hostRef.current, {
         readOnly: true,
         renderSideBySide: false,
@@ -73,6 +78,8 @@ export default function DiffView({ filePath, before, after, onStats }: DiffViewP
 
     return () => {
       disposed = true
+      // guard 之后全部是同步代码，JS 单线程保证 cleanup 不会插入 await 链中
+      // 因此 models/editor 不会泄漏；维护者勿在 guard 之后引入 await
       editor?.dispose()
       original?.dispose()
       modified?.dispose()
