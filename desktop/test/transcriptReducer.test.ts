@@ -148,6 +148,8 @@ describe('approval', () => {
       toolName: 'bash',
       dangerLevel: 'high',
       riskDescription: 'deletes files',
+      suggestion: '',
+      beforeContent: null,
     })
   })
 
@@ -370,5 +372,47 @@ describe('phase-B state additions', () => {
     expect(s.hasStarted).toBe(true)
     expect(s.approvalMode).toBe('auto')
     expect(s.connection).toBe('connected')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Test 12: phase-C: diff / status / approval 扩展
+// ---------------------------------------------------------------------------
+describe('phase-C: diff / status / approval 扩展', () => {
+  it('diff event appends a diff item and seals _messageOpen', () => {
+    const open: TranscriptState = { ...initialState, _messageOpen: true }
+    const s = reduce(open, notif('diff', { filePath: 'src/a.ts', before: 'x', after: 'y' }))
+    expect(s.items[s.items.length - 1]).toEqual({ type: 'diff', filePath: 'src/a.ts', before: 'x', after: 'y' })
+    expect(s._messageOpen).toBe(false)
+  })
+  it('status event maps the payload subset', () => {
+    const s = reduce(initialState, notif('status', { status: {
+      model: 'm', totalTokens: 1200, contextWindow: 64000, inputTokens: 900, outputTokens: 300,
+      cachedInputTokens: 500, estimatedCost: '¥0.01', hitlEnabled: true, elapsedMillis: 800, phase: 'running',
+    } }))
+    expect(s.status).toEqual({
+      model: 'm', totalTokens: 1200, contextWindow: 64000, inputTokens: 900, outputTokens: 300,
+      cachedInputTokens: 500, estimatedCost: '¥0.01', elapsedMillis: 800, phase: 'running',
+    })
+  })
+  it('status event without payload leaves state unchanged', () => {
+    expect(reduce(initialState, notif('status', {}))).toEqual(initialState)
+  })
+  it('resetSession clears status', () => {
+    const withStatus: TranscriptState = { ...initialState, status: {
+      model: 'm', totalTokens: 1, contextWindow: 2, inputTokens: 0, outputTokens: 0,
+      cachedInputTokens: 0, estimatedCost: null, elapsedMillis: 0, phase: 'idle' } }
+    expect(resetSession(withStatus, '/w').status).toBeNull()
+  })
+  it('approval.requested carries suggestion and beforeContent (with defaults)', () => {
+    const s = reduce(initialState, notif('approval.requested', {
+      approvalId: 'a1', toolName: 'write_file', argsJson: '{}',
+      dangerLevel: '🟡 中危', riskDescription: 'r', suggestion: '要写文件', beforeContent: 'old',
+    }))
+    expect(s.pendingApproval?.suggestion).toBe('要写文件')
+    expect(s.pendingApproval?.beforeContent).toBe('old')
+    const s2 = reduce(initialState, notif('approval.requested', { approvalId: 'a2', toolName: 't', argsJson: '{}' }))
+    expect(s2.pendingApproval?.suggestion).toBe('')
+    expect(s2.pendingApproval?.beforeContent).toBeNull()
   })
 })
