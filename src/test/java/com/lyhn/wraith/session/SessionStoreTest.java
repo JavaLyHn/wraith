@@ -9,6 +9,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -82,6 +83,24 @@ class SessionStoreTest {
 
         store.resume(first);
         assertEquals(first, store.currentId()); // resume 把活跃 id 切回来
+    }
+
+    @Test
+    void deleteCurrentRemovesFileAndResets(@TempDir Path home) {
+        SessionStore store = SessionStore.open(home, "/proj/a", "p", "m");
+        store.persist(sampleHistory());
+        assertEquals(1, store.list(10).size());
+
+        store.deleteCurrent();
+        assertTrue(store.list(10).isEmpty(), "当前会话文件应被删除");
+        assertNull(store.currentId(), "状态应重置为无当前会话");
+    }
+
+    @Test
+    void deleteCurrentWithoutSessionIsNoop(@TempDir Path home) {
+        SessionStore store = SessionStore.open(home, "/proj/a", "p", "m");
+        assertDoesNotThrow(store::deleteCurrent);
+        assertNull(store.currentId());
     }
 
     @Test

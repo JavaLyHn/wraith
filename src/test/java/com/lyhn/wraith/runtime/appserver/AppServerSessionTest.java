@@ -91,6 +91,56 @@ class AppServerSessionTest {
     }
 
     @Test
+    void rewindDispatchesToRunnerAndReturnsOk() throws Exception {
+        AtomicInteger gotOrdinal = new AtomicInteger(-1);
+        AppServer.SessionRunnerFactory f = (writer, sessionId, workspaceDir) -> {
+            EventStreamRenderer r = new EventStreamRenderer(writer, sessionId);
+            return new AppServer.SessionRunner() {
+                public EventStreamRenderer renderer() { return r; }
+                public String runTurn(String input) { return "ok"; }
+                public boolean rewind(int userOrdinal) { gotOrdinal.set(userOrdinal); return true; }
+            };
+        };
+        String in = String.join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.rewind\",\"params\":{\"userOrdinal\":2}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(new ByteArrayInputStream(in.getBytes(StandardCharsets.UTF_8)), out, f).serve();
+        assertEquals(2, gotOrdinal.get());
+        JsonNode ok = parseAll(out.toString(StandardCharsets.UTF_8)).stream()
+            .filter(n -> n.path("id").asInt(-1) == 2 && n.has("result")).findFirst().orElseThrow();
+        assertTrue(ok.get("result").get("ok").asBoolean());
+    }
+
+    @Test
+    void rewindInvalidOrdinalAndRunnerFailureReturnErrors() throws Exception {
+        AppServer.SessionRunnerFactory f = (writer, sessionId, workspaceDir) -> {
+            EventStreamRenderer r = new EventStreamRenderer(writer, sessionId);
+            return new AppServer.SessionRunner() {
+                public EventStreamRenderer renderer() { return r; }
+                public String runTurn(String input) { return "ok"; }
+                public boolean rewind(int userOrdinal) { return false; } // runner 拒绝(如超界)
+            };
+        };
+        String in = String.join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.rewind\",\"params\":{\"userOrdinal\":1}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.start\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session.rewind\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"session.rewind\",\"params\":{\"userOrdinal\":9}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(new ByteArrayInputStream(in.getBytes(StandardCharsets.UTF_8)), out, f).serve();
+        List<JsonNode> replies = parseAll(out.toString(StandardCharsets.UTF_8));
+        assertEquals(-32000, replies.stream().filter(n -> n.path("id").asInt(-1) == 1 && n.has("error"))
+            .findFirst().orElseThrow().get("error").get("code").asInt()); // no session
+        assertEquals(-32602, replies.stream().filter(n -> n.path("id").asInt(-1) == 3 && n.has("error"))
+            .findFirst().orElseThrow().get("error").get("code").asInt()); // missing userOrdinal
+        assertEquals(-32000, replies.stream().filter(n -> n.path("id").asInt(-1) == 4 && n.has("error"))
+            .findFirst().orElseThrow().get("error").get("code").asInt()); // runner false
+    }
+
+    @Test
     void listAndResumeWithoutSessionReturnNoSessionError() throws Exception {
         String in = String.join("\n",
             "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.list\",\"params\":{}}",
