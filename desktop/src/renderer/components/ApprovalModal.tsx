@@ -54,6 +54,7 @@ export default function ApprovalModal({
   const [allowNetwork, setAllowNetwork] = useState(false)
   const [jsonOpen, setJsonOpen] = useState(false)
   const [editedJson, setEditedJson] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   const jsonError = editedJson !== null ? validateArgsJson(editedJson) : null
   const modified =
@@ -70,6 +71,8 @@ export default function ApprovalModal({
     : 'bg-accent'
 
   const respond = (sessionAllowTool: boolean): void => {
+    if (submitting) return
+    setSubmitting(true)
     onRespond(
       buildApprovalResponse({
         toolName,
@@ -117,9 +120,11 @@ export default function ApprovalModal({
           </div>
         ) : (
           <div className="mb-3">
-            <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-black/[0.03] px-3 py-2 font-mono text-xs text-fg-muted">
-              {editedJson === null ? argsJson : undefined}
-            </pre>
+            {!jsonOpen && (
+              <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-black/[0.03] px-3 py-2 font-mono text-xs text-fg-muted">
+                {argsJson}
+              </pre>
+            )}
             {jsonOpen ? (
               <>
                 <textarea
@@ -158,15 +163,20 @@ export default function ApprovalModal({
         <div className="flex items-center justify-end gap-2.5">
           <button
             data-testid="reject"
-            onClick={onReject}
-            className="rounded-lg border border-border px-4 py-1.5 text-xs text-fg-muted hover:bg-black/[0.03]"
+            onClick={() => {
+              if (submitting) return
+              setSubmitting(true)
+              onReject()
+            }}
+            disabled={submitting}
+            className="rounded-lg border border-border px-4 py-1.5 text-xs text-fg-muted hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
           >
             拒绝
           </button>
           <button
             data-testid="approve-all"
             onClick={() => respond(true)}
-            disabled={modified || Boolean(jsonError)}
+            disabled={submitting || modified || Boolean(jsonError)}
             title="本会话内不再询问此工具"
             className="rounded-lg border border-border px-4 py-1.5 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
           >
@@ -175,7 +185,7 @@ export default function ApprovalModal({
           <button
             data-testid="approve"
             onClick={() => respond(false)}
-            disabled={Boolean(jsonError)}
+            disabled={submitting || Boolean(jsonError)}
             className="rounded-lg bg-ok px-4 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {modified ? '批准修改' : '允许'}

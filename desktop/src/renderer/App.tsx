@@ -351,6 +351,7 @@ export default function App(): JSX.Element {
       {/* Approval modal（Task 8 换 shadcn Dialog；此处结构不变） */}
       {state.pendingApproval && (
         <ApprovalModal
+          key={state.pendingApproval.approvalId}
           approvalId={state.pendingApproval.approvalId}
           toolName={state.pendingApproval.toolName}
           argsJson={state.pendingApproval.argsJson}
