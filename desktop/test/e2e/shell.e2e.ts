@@ -147,6 +147,7 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-ws.jsonl`)
   const startupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-startup-'))
   const repickDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-repick-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-'))
   const app = await electron.launch({
     args: [mainPath],
     env: {
@@ -155,7 +156,9 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
       WRAITH_E2E: '1',
       WRAITH_E2E_RECORD: recordFile,
       WRAITH_E2E_WORKSPACE: startupDir, // startup workspace (getInitialWorkspace)
-      WRAITH_E2E_PICK: repickDir // what the re-pick button resolves to (pickWorkspace)
+      WRAITH_E2E_PICK: repickDir, // what the re-pick button resolves to (pickWorkspace)
+      WRAITH_E2E_USERDATA: userData,
+      MOCK_SESSIONS_BY_WS: '{}' // repickDir 无历史 → 切换后仍是欢迎态(原断言保持)
     }
   })
   const win = await app.firstWindow()
@@ -186,6 +189,7 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
   fs.rmSync(recordFile, { force: true })
   fs.rmSync(startupDir, { recursive: true, force: true })
   fs.rmSync(repickDir, { recursive: true, force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
 })
 
 // ---------------------------------------------------------------------------
@@ -780,4 +784,186 @@ test('长对话发送后自动滚到底部;上翻后再次发送强制回底', a
   await expect.poll(atBottom, { timeout: 5000 }).toBe(true)
 
   await app.close()
+})
+
+// ---------------------------------------------------------------------------
+// T22: 项目切换器 — 切换项目 → session.start 新目录 + 自动恢复最近会话
+// ---------------------------------------------------------------------------
+
+test('T22 项目切换:session.start 带新目录且自动恢复最近会话', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-t22.jsonl`)
+  const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-a-'))
+  const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-b-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t22-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_WORKSPACE: dirA,
+      WRAITH_E2E_PROJECTS: JSON.stringify([
+        { path: dirA, lastUsedAt: 2000 },
+        { path: dirB, lastUsedAt: 1000 }
+      ]),
+      MOCK_SESSIONS_BY_WS: JSON.stringify({
+        [dirB]: [
+          { id: 'sess_b1', cwd: dirB, createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'mock', model: 'mock-model', title: 'B 项目的对话', turns: 1 }
+        ]
+      })
+    }
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="project-switcher"]')).toBeVisible({ timeout: 15000 })
+
+  await win.locator('[data-testid="project-switcher"]').click()
+  const items = win.locator('[data-testid="project-item"]')
+  await expect(items).toHaveCount(2)
+  await items.nth(1).click() // dirB(lastUsedAt 小,排第二)
+
+  // session.start 带 dirB
+  await expect
+    .poll(() => {
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      return lines.some(l => l.method === 'session.start' && l.params?.workspaceDir === dirB)
+    }, { timeout: 10000 })
+    .toBe(true)
+
+  // 自动恢复:mock session.resume 的回放内容出现在 transcript
+  await expect(win.locator('text=之前问的问题')).toBeVisible({ timeout: 10000 })
+
+  await app.close()
+  for (const p of [recordFile]) fs.rmSync(p, { force: true })
+  for (const p of [dirA, dirB, userData]) fs.rmSync(p, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
+// T23: 项目切换 — 目标项目无历史 → 回欢迎空态(往返)
+// ---------------------------------------------------------------------------
+
+test('T23 切到无历史项目回欢迎态', async () => {
+  const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-a-'))
+  const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-b-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t23-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_WORKSPACE: dirA,
+      WRAITH_E2E_PROJECTS: JSON.stringify([
+        { path: dirA, lastUsedAt: 2000 },
+        { path: dirB, lastUsedAt: 1000 }
+      ]),
+      MOCK_SESSIONS_BY_WS: JSON.stringify({
+        [dirB]: [
+          { id: 'sess_b1', cwd: dirB, createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'mock', model: 'mock-model', title: 'B 项目的对话', turns: 1 }
+        ]
+      })
+    }
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="project-switcher"]')).toBeVisible({ timeout: 15000 })
+
+  // 先切到 B(有历史 → transcript)
+  await win.locator('[data-testid="project-switcher"]').click()
+  await win.locator('[data-testid="project-item"]').nth(1).click()
+  await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 10000 })
+
+  // 再切回 A(无历史 → 欢迎态);B 刚被激活浮顶,A 现在排第二
+  await win.locator('[data-testid="project-switcher"]').click()
+  await win.locator('[data-testid="project-item"]').nth(1).click()
+  await expect(win.locator('text=今天做点什么？')).toBeVisible({ timeout: 10000 })
+
+  await app.close()
+  for (const p of [dirA, dirB, userData]) fs.rmSync(p, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
+// T24: 项目管理 — 重命名别名 + 移出列表
+// ---------------------------------------------------------------------------
+
+test('T24 项目重命名与移出', async () => {
+  const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-a-'))
+  const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-b-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t24-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_WORKSPACE: dirA,
+      WRAITH_E2E_PROJECTS: JSON.stringify([
+        { path: dirA, lastUsedAt: 2000 },
+        { path: dirB, lastUsedAt: 1000 }
+      ]),
+      MOCK_SESSIONS_BY_WS: '{}'
+    }
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="project-switcher"]')).toBeVisible({ timeout: 15000 })
+  await win.locator('[data-testid="project-switcher"]').click()
+
+  // 重命名 B(非活跃,第 2 行):hover 露钮 → 内联输入 → Enter
+  const rowB = win.locator('[data-testid="project-item"]').nth(1)
+  await rowB.hover()
+  await win.locator('[data-testid="project-rename"]').nth(1).click()
+  await win.locator('[data-testid="project-rename-input"]').fill('我的博客')
+  await win.locator('[data-testid="project-rename-input"]').press('Enter')
+  await expect(win.locator('[data-testid="project-item"]').nth(1)).toHaveText(/我的博客/, { timeout: 5000 })
+
+  // 移出 B:hover 露钮 → 单击生效(无二次确认);活跃项 A 的移出钮 disabled
+  await expect(win.locator('[data-testid="project-remove"]').nth(0)).toBeDisabled()
+  await win.locator('[data-testid="project-item"]').nth(1).hover()
+  await win.locator('[data-testid="project-remove"]').nth(1).click()
+  await expect(win.locator('[data-testid="project-item"]')).toHaveCount(1, { timeout: 5000 })
+
+  await app.close()
+  for (const p of [dirA, dirB, userData]) fs.rmSync(p, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
+// T25: 单活跃守卫 — turn 运行中项目激活/添加禁用
+// ---------------------------------------------------------------------------
+
+test('T25 运行中项目切换被禁', async () => {
+  const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-a-'))
+  const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-b-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t25-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_WORKSPACE: dirA,
+      WRAITH_E2E_PROJECTS: JSON.stringify([
+        { path: dirA, lastUsedAt: 2000 },
+        { path: dirB, lastUsedAt: 1000 }
+      ]),
+      MOCK_SESSIONS_BY_WS: '{}',
+      MOCK_SLOW_TURN: '1'
+    }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  await input.fill('慢轮次')
+  await input.press('Enter')
+  await expect(win.locator('[data-testid="interrupt"]')).toBeVisible({ timeout: 10000 }) // running 确立
+
+  await win.locator('[data-testid="project-switcher"]').click()
+  await expect(win.locator('[data-testid="project-item"]').nth(1)).toBeDisabled()
+  await expect(win.locator('[data-testid="project-add"]')).toBeDisabled()
+
+  await app.close()
+  for (const p of [dirA, dirB, userData]) fs.rmSync(p, { recursive: true, force: true })
 })
