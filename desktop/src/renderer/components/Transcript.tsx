@@ -9,10 +9,12 @@ interface TranscriptProps {
 }
 
 export default function Transcript({ items }: TranscriptProps): JSX.Element {
+  // [&>*]:shrink-0 必不可少:卡片类子项(tool/thinking/diff)带 overflow-hidden,
+  // 其 flex 自动最小高度为 0——内容一旦溢出容器,flex 会把它们压成 2px 边框线
   return (
     <div
       data-testid="transcript"
-      className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-4"
+      className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-4 [&>*]:shrink-0"
     >
       {items.map((item, idx) => {
         if (item.type === 'user') {
