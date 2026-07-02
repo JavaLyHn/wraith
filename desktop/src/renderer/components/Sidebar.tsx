@@ -4,15 +4,21 @@ import {
   TooltipContent,
   TooltipProvider,
 } from './ui/tooltip'
-import { baseName } from '../lib/paths'
-import type { SessionMeta } from '../../shared/types'
+import ProjectSwitcher from './ProjectSwitcher'
+import type { SessionMeta, ProjectView } from '../../shared/types'
 
 interface SidebarProps {
   workspace: string
+  projects: ProjectView[]
+  busy: boolean
   sessions: SessionMeta[]
   activeSessionId: string
   onNewConversation: () => void
   onSelectSession: (id: string) => void
+  onActivateProject: (path: string) => void
+  onAddProject: () => void
+  onRemoveProject: (path: string) => void
+  onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
 }
 
@@ -20,15 +26,20 @@ const NAV: { key: string; label: string; hint: string }[] = [
   { key: 'search', label: '搜索', hint: '搜索在后续阶段' },
   { key: 'plugins', label: '插件', hint: '插件在 Phase E' },
   { key: 'automation', label: '自动化', hint: '自动化在 Phase E' },
-  { key: 'projects', label: '项目', hint: '多项目在 Phase D' },
 ]
 
 export default function Sidebar({
   workspace,
+  projects,
+  busy,
   sessions,
   activeSessionId,
   onNewConversation,
   onSelectSession,
+  onActivateProject,
+  onAddProject,
+  onRemoveProject,
+  onRenameProject,
   sandbox,
 }: SidebarProps): JSX.Element {
   return (
@@ -41,6 +52,16 @@ export default function Sidebar({
           <span className="text-accent">✦</span>
           <span className="text-sm font-bold tracking-wide text-fg">WRAITH</span>
         </div>
+
+        <ProjectSwitcher
+          projects={projects}
+          activePath={workspace}
+          busy={busy}
+          onActivate={onActivateProject}
+          onAdd={onAddProject}
+          onRemove={onRemoveProject}
+          onRename={onRenameProject}
+        />
 
         {/* new conversation — functional */}
         <div className="px-3">
@@ -94,11 +115,8 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* footer: workspace + sandbox badge */}
+        {/* footer: sandbox badge */}
         <div className="border-t border-border px-3 py-3">
-          <div className="truncate text-[11px] text-fg-subtle" title={workspace || '默认工作目录'}>
-            📁 {baseName(workspace)}
-          </div>
           <div
             data-testid="sandbox-badge"
             className={
