@@ -1108,3 +1108,95 @@ test('T32 运行中工具集变更操作禁用', async () => {
   await expect(win.locator('[data-testid="mcp-add"]')).toBeDisabled()
   await app.close(); cleanup()
 })
+
+// ---------------------------------------------------------------------------
+// Phase E-2: 自动化(T33–T37)——「立即运行」驱动,调度到点不进 E2E(纯函数已单测)
+// ---------------------------------------------------------------------------
+
+async function launchAutoApp(extraEnv: Record<string, string> = {}) {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-auto-'))
+  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-auto-proj-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_WORKSPACE: proj,
+      WRAITH_E2E_PROJECTS: JSON.stringify([{ path: proj, lastUsedAt: 1000 }]),
+      MOCK_NO_APPROVAL: '1',
+      ...extraEnv,
+    },
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 15000 })
+  return { app, win, cleanup: () => { fs.rmSync(userData, { recursive: true, force: true }); fs.rmSync(proj, { recursive: true, force: true }) } }
+}
+
+async function createAndRunTask(win: Awaited<ReturnType<Awaited<ReturnType<typeof electron.launch>>['firstWindow']>>, name: string): Promise<void> {
+  await win.locator('[data-testid="nav-automations"]').click()
+  await expect(win.locator('[data-testid="automations-back"]')).toBeVisible({ timeout: 10000 })
+  await win.locator('[data-testid="automation-add"]').click()
+  await win.locator('[data-testid="automation-form-name"]').fill(name)
+  await win.locator('[data-testid="automation-form-prompt"]').fill('总结一下今天的进展')
+  await win.locator('[data-testid="automation-run-now"]').click()
+}
+
+test('T33 建任务+立即运行 → 运行历史出现 success 与摘要', async () => {
+  const { app, win, cleanup } = await launchAutoApp()
+  await createAndRunTask(win, '日报')
+  // 立即运行后面板自动切 runs tab;mock turn 秒级完成
+  await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('成功', { timeout: 15000 })
+  await expect(win.locator('[data-testid="automation-run-item"]').first()).not.toContainText('运行中')
+  await app.close(); cleanup()
+})
+
+test('T34 挂起审批链:红点 → 处理审批 → ApprovalModal → 批准 → 完成', async () => {
+  const { app, win, cleanup } = await launchAutoApp({ MOCK_NO_APPROVAL: '', MOCK_APPROVAL_TOOL: 'execute_command' })
+  await createAndRunTask(win, '要审批的任务')
+  await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('等待审批', { timeout: 15000 })
+  // 审批 push 已弹 Modal(App 接线);若被 Esc 关闭场景走「处理审批」钮——此处直接断言 Modal 可见
+  await expect(win.locator('[data-testid="approval-modal"]')).toBeVisible({ timeout: 10000 })
+  // 注:ApprovalModal.tsx 中批准按钮 testid 为 "approve"(非 "approval-approve")
+  await win.locator('[data-testid="approve"]').click()
+  await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('成功', { timeout: 15000 })
+  await app.close(); cleanup()
+})
+
+test('T35 终止 running → interrupted', async () => {
+  const { app, win, cleanup } = await launchAutoApp({ MOCK_SLOW_TURN: '1' })
+  await createAndRunTask(win, '慢任务')
+  await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('运行中', { timeout: 15000 })
+  await win.locator('[data-testid="automation-run-stop"]').click()
+  await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('中断', { timeout: 15000 })
+  await app.close(); cleanup()
+})
+
+test('T36 启停 toggle 与删除二次确认', async () => {
+  const { app, win, cleanup } = await launchAutoApp()
+  await win.locator('[data-testid="nav-automations"]').click()
+  await expect(win.locator('[data-testid="automations-back"]')).toBeVisible({ timeout: 10000 })
+  await win.locator('[data-testid="automation-add"]').click()
+  await win.locator('[data-testid="automation-form-name"]').fill('开关任务')
+  await win.locator('[data-testid="automation-form-prompt"]').fill('p')
+  await win.locator('[data-testid="automation-save"]').click()
+  await expect(win.locator('[data-testid="automation-item"]')).toHaveCount(1, { timeout: 5000 })
+  await win.locator('[data-testid="automation-toggle"]').click()
+  await expect(win.locator('[data-testid="automation-item"]')).toContainText('已停用', { timeout: 5000 })
+  await win.locator('[data-testid="automation-remove"]').click()
+  await expect(win.locator('[data-testid="automation-remove"]')).toHaveText('确认删除?')
+  await win.locator('[data-testid="automation-remove"]').click()
+  await expect(win.locator('[data-testid="automation-item"]')).toHaveCount(0, { timeout: 5000 })
+  await app.close(); cleanup()
+})
+
+test('T37 运行历史跳转会话(回放可见)', async () => {
+  const { app, win, cleanup } = await launchAutoApp()
+  await createAndRunTask(win, '跳转任务')
+  await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('成功', { timeout: 15000 })
+  await win.locator('[data-testid="automation-run-open"]').first().click()
+  await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 10000 })
+  await expect(win.locator('text=之前问的问题')).toBeVisible({ timeout: 10000 }) // mock resume 回放
+  await app.close(); cleanup()
+})

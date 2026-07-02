@@ -107,6 +107,12 @@ async function emitTurnSequence() {
   })
   await delay(20)
 
+  // MOCK_NO_APPROVAL=1: skip tool call/approval, emit turn.completed immediately (for automation E2E)
+  if (process.env['MOCK_NO_APPROVAL'] === '1') {
+    notify('turn.completed', { sessionId, turnId, status: 'completed' })
+    return
+  }
+
   notify('tool.call', {
     sessionId,
     turnId,
