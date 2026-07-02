@@ -14,8 +14,14 @@ package com.lyhn.wraith.hitl;
 public record ApprovalResult(
         Decision decision,
         String modifiedArguments,
-        String reason
+        String reason,
+        boolean allowNetworkOnce   // 「本次放行网络」:仅对本次批准的 execute_command 生效
 ) {
+    /** 兼容 3 参构造(既有工厂/调用全部走这里),allowNetworkOnce=false。 */
+    public ApprovalResult(Decision decision, String modifiedArguments, String reason) {
+        this(decision, modifiedArguments, reason, false);
+    }
+
     public enum Decision {
         APPROVED,
         APPROVED_ALL,

@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import type { Item } from '../../shared/transcriptReducer'
 import ThinkingBlock from './ThinkingBlock'
 import ToolCard from './ToolCard'
+import DiffCard from './DiffCard'
 
 interface TranscriptProps {
   items: Item[]
@@ -37,6 +38,9 @@ export default function Transcript({ items }: TranscriptProps): JSX.Element {
         }
         if (item.type === 'tool') {
           return <ToolCard key={item.card.callId || idx} card={item.card} />
+        }
+        if (item.type === 'diff') {
+          return <DiffCard key={idx} filePath={item.filePath} before={item.before} after={item.after} />
         }
         return null
       })}

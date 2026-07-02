@@ -146,3 +146,19 @@ export interface ResumedMessage {
   toolCallId?: string
   toolCalls?: ResumedToolCall[]
 }
+
+// ---------------------------------------------------------------------------
+// Phase C: status 事件负载(Java StatusInfo 的前端子集)
+// ---------------------------------------------------------------------------
+
+export interface StatusData {
+  model: string
+  totalTokens: number
+  contextWindow: number
+  inputTokens: number
+  outputTokens: number
+  cachedInputTokens: number
+  estimatedCost: string | null
+  elapsedMillis: number
+  phase: string
+}

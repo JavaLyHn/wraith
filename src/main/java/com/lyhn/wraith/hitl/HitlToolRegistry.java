@@ -56,6 +56,9 @@ public class HitlToolRegistry extends ToolRegistry {
     private ToolOutput executeAfterExplicitApproval(String name, String argumentsJson, String sensitiveNotice) {
         long start = System.nanoTime();
         ApprovalRequest request = ApprovalRequest.of(name, argumentsJson, null, null, sensitiveNotice);
+        if ("write_file".equals(name)) {
+            request = request.withBeforeContent(readWriteFileBefore(argumentsJson));
+        }
         ApprovalResult result = hitlHandler.requestApproval(request);
 
         if (result.isRejected()) {
@@ -75,6 +78,14 @@ public class HitlToolRegistry extends ToolRegistry {
 
         // 批准（含修改参数）- 使用 effectiveArguments 获取最终参数；父类执行路径会负责 allow audit
         String effectiveArgs = result.effectiveArguments(argumentsJson);
+        if (result.allowNetworkOnce() && "execute_command".equals(name)) {
+            grantNetworkOnce(); // 「本次放行网络」:仅对即将执行的这条命令生效
+            try {
+                return super.doExecuteTool(name, effectiveArgs);
+            } finally {
+                consumeNetworkOnce(); // 早退/异常路径未消费时兜底清除,防授权漂移到下一条命令
+            }
+        }
         return super.doExecuteTool(name, effectiveArgs);
     }
 

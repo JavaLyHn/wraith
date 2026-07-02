@@ -1,5 +1,7 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import type { BackendEvent, SessionMeta } from '../shared/types'
+import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
+import { createThrottleLatest, type ThrottledPush } from '../shared/throttleLatest'
 import {
   initialState,
   reduce,
@@ -106,13 +108,23 @@ export default function App(): JSX.Element {
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const startedRef = useRef(false)
   const transcriptEndRef = useRef<HTMLDivElement>(null)
+  const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
 
-  // ── subscribe to backend events on mount ──────────────────────────────────
+  // ── subscribe to backend events on mount (status 高频 → 100ms 窗口合并) ────
   useEffect(() => {
+    const throttledStatus = createThrottleLatest<BackendEvent>(100, evt => dispatch(evt))
+    statusThrottleRef.current = throttledStatus
     const unsubscribe = window.wraith.onEvent((evt: BackendEvent) => {
+      if (evt.kind === 'notification' && evt.method === 'status') {
+        throttledStatus(evt)
+        return
+      }
       dispatch(evt)
     })
-    return unsubscribe
+    return () => {
+      throttledStatus.cancel()
+      unsubscribe()
+    }
   }, [])
 
   // ── session list helpers ───────────────────────────────────────────────────
@@ -128,6 +140,7 @@ export default function App(): JSX.Element {
   const handleNewConversation = useCallback(async () => {
     if (state.turn === 'running') return
     try {
+      statusThrottleRef.current?.cancel()
       await window.wraith.startSession(state.workspace || null)
       dispatch({ type: 'resetSession', ws: state.workspace })
       void fetchSessions()
@@ -139,6 +152,7 @@ export default function App(): JSX.Element {
   const handleSelectSession = useCallback(async (id: string) => {
     if (state.turn === 'running') return
     try {
+      statusThrottleRef.current?.cancel()
       const { sessionId, messages } = await window.wraith.resumeSession(id)
       dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
       dispatch({ type: 'setSessionId', sessionId })
@@ -230,14 +244,20 @@ export default function App(): JSX.Element {
   }, [inputValue, state.turn])
 
   // ── approval handlers ──────────────────────────────────────────────────────
-  const handleApprove = useCallback(async () => {
-    if (!state.pendingApproval) return
-    try {
-      await window.wraith.respondApproval(state.pendingApproval.approvalId, 'APPROVED')
-    } finally {
-      dispatch({ type: 'clearApproval' })
-    }
-  }, [state.pendingApproval])
+  const handleApprovalRespond = useCallback(
+    async (payload: ApprovalResponsePayload) => {
+      if (!state.pendingApproval) return
+      try {
+        await window.wraith.respondApproval(state.pendingApproval.approvalId, payload.decision, {
+          ...(payload.modifiedArgs ? { modifiedArgs: payload.modifiedArgs } : {}),
+          ...(payload.allowNetwork ? { allowNetwork: true } : {}),
+        })
+      } finally {
+        dispatch({ type: 'clearApproval' })
+      }
+    },
+    [state.pendingApproval],
+  )
 
   const handleReject = useCallback(async () => {
     if (!state.pendingApproval) return
@@ -287,6 +307,7 @@ export default function App(): JSX.Element {
     try {
       const ws = await window.wraith.pickWorkspace()
       if (!ws || ws === state.workspace) return
+      statusThrottleRef.current?.cancel()
       await window.wraith.startSession(ws)
       dispatch({ type: 'resetSession', ws })
     } catch (err) {
@@ -325,6 +346,7 @@ export default function App(): JSX.Element {
               workspace={state.workspace}
               onSwitchWorkspace={handleSwitchWorkspace}
               centered={!state.hasStarted}
+              status={state.status}
             />
           )
           return state.hasStarted ? (
@@ -344,12 +366,15 @@ export default function App(): JSX.Element {
       {/* Approval modal（Task 8 换 shadcn Dialog；此处结构不变） */}
       {state.pendingApproval && (
         <ApprovalModal
+          key={state.pendingApproval.approvalId}
           approvalId={state.pendingApproval.approvalId}
           toolName={state.pendingApproval.toolName}
           argsJson={state.pendingApproval.argsJson}
           dangerLevel={state.pendingApproval.dangerLevel}
           riskDescription={state.pendingApproval.riskDescription}
-          onApprove={handleApprove}
+          suggestion={state.pendingApproval.suggestion}
+          beforeContent={state.pendingApproval.beforeContent}
+          onRespond={handleApprovalRespond}
           onReject={handleReject}
         />
       )}

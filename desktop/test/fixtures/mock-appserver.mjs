@@ -86,24 +86,49 @@ async function emitTurnSequence() {
   notify('message.end', { sessionId, turnId })
   await delay(20)
 
+  notify('status', {
+    sessionId,
+    turnId,
+    status: {
+      model: 'mock-model', totalTokens: 12000, contextWindow: 64000,
+      inputTokens: 9000, outputTokens: 3000, cachedInputTokens: 4000,
+      estimatedCost: '¥0.012', hitlEnabled: true, elapsedMillis: 800, phase: 'running'
+    }
+  })
+  await delay(20)
+
   notify('tool.call', {
     sessionId,
     turnId,
     callId: 'c1',
-    name: 'execute_command',
-    argsJson: '{"command":"echo hi"}'
+    name: process.env['MOCK_APPROVAL_TOOL'] === 'write_file' ? 'write_file' : 'execute_command',
+    argsJson: process.env['MOCK_APPROVAL_TOOL'] === 'write_file'
+      ? '{"path":"src/hello.txt","content":"new line\\n"}'
+      : '{"command":"echo hi"}'
   })
   await delay(20)
 
-  notify('approval.requested', {
-    sessionId,
-    turnId,
-    approvalId: 'a1',
-    toolName: 'execute_command',
-    argsJson: '{"command":"echo hi"}',
-    dangerLevel: '🔴 高危',
-    riskDescription: 'runs a shell command'
-  })
+  if (process.env['MOCK_APPROVAL_TOOL'] === 'write_file') {
+    notify('approval.requested', {
+      sessionId, turnId, approvalId: 'a1',
+      toolName: 'write_file',
+      argsJson: '{"path":"src/hello.txt","content":"new line\\n"}',
+      dangerLevel: '🟡 中危',
+      riskDescription: 'writes a file',
+      suggestion: '需要更新 hello.txt',
+      beforeContent: 'old line\n'
+    })
+  } else {
+    notify('approval.requested', {
+      sessionId, turnId, approvalId: 'a1',
+      toolName: 'execute_command',
+      argsJson: '{"command":"echo hi"}',
+      dangerLevel: '🔴 高危',
+      riskDescription: 'runs a shell command',
+      suggestion: '测试需要执行该命令',
+      beforeContent: null
+    })
+  }
 
   // Mark that we are now waiting for approval.respond
   pendingApproval = true
@@ -132,6 +157,13 @@ async function emitPostApprovalSequence(approved) {
       callId: 'c1',
       ok: true,
       exitCode: 0
+    })
+    await delay(20)
+    notify('diff', {
+      sessionId, turnId,
+      file: 'src/hello.txt',
+      before: 'old line\n',
+      after: 'new line\nplus\n'
     })
   } else {
     notify('tool.result', {
@@ -188,7 +220,7 @@ async function handleRequest(req) {
 
     case 'approval.respond': {
       const decision = (params && params.decision) || 'APPROVED'
-      const approved = decision === 'APPROVED'
+      const approved = decision !== 'REJECTED'
       reply(id, { ok: true })
       pendingApproval = false
       emitPostApprovalSequence(approved).catch(err => process.stderr.write(String(err) + '\n'))

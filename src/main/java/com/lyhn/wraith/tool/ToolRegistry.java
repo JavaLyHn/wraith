@@ -82,12 +82,16 @@ public class ToolRegistry {
     // write_file 单次写入字节数上限。LLM 想塞超大内容时通常是误生成（重复粘贴 / hallucinate 大段日志），
     // 5MB 对常规代码生成 / 文档撰写完全够用，超过即拒，避免磁盘灌满与误覆盖。
     private static final int MAX_WRITE_FILE_BYTES = 5 * 1024 * 1024;
+    /** 审批前 diff 预览的旧文件上限:超过则不带 beforeContent(防事件爆炸)。 */
+    private static final long MAX_APPROVAL_PREVIEW_BYTES = 512 * 1024;
     // 需要审计的内置工具（与 ApprovalPolicy 的 DANGEROUS_TOOLS 保持一致）；MCP 工具按前缀动态纳入审计。
     private static final Set<String> AUDIT_TOOLS = Set.of("write_file", "execute_command", "create_project", "revert_turn");
     private static final Logger log = LoggerFactory.getLogger(ToolRegistry.class);
     // null = 不沙箱(交互式 CLI 默认行为,与历史一致);仅 app-server 注入
     private CommandSandbox commandSandbox;
     private volatile boolean sandboxWarningLogged = false;
+    /** 「本次放行网络」一次性标记:HITL 批准后置位,下一条命令的沙箱 wrap 消费即清。 */
+    private volatile boolean networkOnceGrant = false;
     private final Map<String, Tool> tools = new ConcurrentHashMap<>();
     private final Map<String, McpRegisteredTool> mcpTools = new ConcurrentHashMap<>();
     private final long commandTimeoutSeconds;
@@ -1379,11 +1383,43 @@ public class ToolRegistry {
         this.commandSandbox = commandSandbox;
     }
 
+    /** HITL 批准「本次放行网络」后调用(仅影响下一条 execute_command)。 */
+    public void grantNetworkOnce() { this.networkOnceGrant = true; }
+
+    /** 取出并复位一次性网络放行标记。 */
+    protected boolean consumeNetworkOnce() {
+        boolean g = networkOnceGrant;
+        networkOnceGrant = false;
+        return g;
+    }
+
+    /**
+     * 审批前 diff 预览:读取 write_file 目标的当前内容。
+     * 新文件 / 路径越界 / 不可读 / 超 512KB → null,绝不抛异常(不阻断审批)。
+     */
+    protected String readWriteFileBefore(String argumentsJson) {
+        try {
+            JsonNode root = mapper.readTree(argumentsJson);
+            String path = root.path("path").asText(null);
+            if (path == null || path.isBlank()) return null;
+            Path safe = pathGuard.resolveSafe(path);
+            if (!Files.exists(safe) || !Files.isRegularFile(safe)) return null;
+            if (Files.size(safe) > MAX_APPROVAL_PREVIEW_BYTES) return null;
+            return Files.readString(safe);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     /** 决定 execute_command 子进程命令行:注入了 sandbox 则包裹,否则裸 bash -c。 */
     List<String> resolveProcessCommand(String normalized) {
         CommandSandbox sandbox = this.commandSandbox;
+        boolean networkOnce = consumeNetworkOnce(); // 无沙箱也消费,避免标记泄漏到后续命令
         if (sandbox == null) {
             return List.of("bash", "-c", normalized);
+        }
+        if (networkOnce) {
+            sandbox = new CommandSandbox(true); // 仅本条命令放行网络,读/写限制不变
         }
         CommandSandbox.Wrapped wrapped = sandbox.wrap(projectPath, normalized);
         if (!wrapped.sandboxed() && !sandboxWarningLogged) {

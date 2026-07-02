@@ -11,7 +11,7 @@
  *   scanning the items array and is O(1).
  */
 
-import type { BackendEvent } from './types'
+import type { BackendEvent, StatusData } from './types'
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -32,6 +32,7 @@ export type Item =
   | { type: 'message'; text: string }
   | { type: 'thinking'; label: string; text: string; done: boolean }
   | { type: 'tool'; card: ToolCard }
+  | { type: 'diff'; filePath: string; before: string; after: string }
 
 export interface TranscriptState {
   items: Item[]
@@ -41,6 +42,8 @@ export interface TranscriptState {
     argsJson: string
     dangerLevel: string
     riskDescription: string
+    suggestion: string
+    beforeContent: string | null
   } | null
   turn: 'idle' | 'running'
   connection: 'connected' | 'disconnected'
@@ -55,6 +58,8 @@ export interface TranscriptState {
   sessionId: string
   /** 沙箱状态(来自 initialize.capabilities.sandbox)。 */
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
+  /** token 状态(status 事件,resetSession 清空)。 */
+  status: StatusData | null
   /** Internal flag: true when the last message item is still open for appending. */
   _messageOpen: boolean
 }
@@ -74,6 +79,7 @@ export const initialState: TranscriptState = {
   workspace: '',
   sessionId: '',
   sandbox: 'unknown',
+  status: null,
   _messageOpen: false,
 }
 
@@ -217,9 +223,44 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
       const argsJson = typeof p['argsJson'] === 'string' ? p['argsJson'] : ''
       const dangerLevel = typeof p['dangerLevel'] === 'string' ? p['dangerLevel'] : ''
       const riskDescription = typeof p['riskDescription'] === 'string' ? p['riskDescription'] : ''
+      const suggestion = typeof p['suggestion'] === 'string' ? p['suggestion'] : ''
+      const beforeContent = typeof p['beforeContent'] === 'string' ? p['beforeContent'] : null
       return {
         ...state,
-        pendingApproval: { approvalId, toolName, argsJson, dangerLevel, riskDescription },
+        pendingApproval: { approvalId, toolName, argsJson, dangerLevel, riskDescription, suggestion, beforeContent },
+      }
+    }
+
+    // ── diff (write_file 执行后的前后全文) ───────────────────────────────────
+    case 'diff': {
+      const filePath = typeof p['file'] === 'string' ? (p['file'] as string) : typeof p['filePath'] === 'string' ? (p['filePath'] as string) : ''
+      const before = typeof p['before'] === 'string' ? p['before'] : ''
+      const after = typeof p['after'] === 'string' ? p['after'] : ''
+      return {
+        ...state,
+        items: [...state.items, { type: 'diff', filePath, before, after }],
+        _messageOpen: false,
+      }
+    }
+
+    // ── status (token/阶段状态,高频;节流在 App 入口) ─────────────────────────
+    case 'status': {
+      const s = p['status'] as Record<string, unknown> | undefined
+      if (!s || typeof s !== 'object') return state
+      const num = (k: string): number => (typeof s[k] === 'number' ? (s[k] as number) : 0)
+      return {
+        ...state,
+        status: {
+          model: typeof s['model'] === 'string' ? (s['model'] as string) : '',
+          totalTokens: num('totalTokens'),
+          contextWindow: num('contextWindow'),
+          inputTokens: num('inputTokens'),
+          outputTokens: num('outputTokens'),
+          cachedInputTokens: num('cachedInputTokens'),
+          estimatedCost: typeof s['estimatedCost'] === 'string' ? (s['estimatedCost'] as string) : null,
+          elapsedMillis: num('elapsedMillis'),
+          phase: typeof s['phase'] === 'string' ? (s['phase'] as string) : '',
+        },
       }
     }
 
@@ -269,6 +310,7 @@ export function resetSession(state: TranscriptState, ws: string): TranscriptStat
     pendingApproval: null,
     workspace: ws,
     sessionId: '',
+    status: null,
   }
 }
 

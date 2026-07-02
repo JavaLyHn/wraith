@@ -41,4 +41,32 @@ class EventStreamApprovalTest {
         assertEquals(ApprovalResult.Decision.APPROVED, result.decision());
         ex.shutdownNow();
     }
+
+    @Test
+    void approvalRequestedCarriesBeforeContent() throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        EventStreamRenderer r = new EventStreamRenderer(new JsonRpcWriter(out), "s1");
+        r.setCurrentTurnId("t1");
+        ApprovalRequest req = ApprovalRequest
+                .of("write_file", "{\"path\":\"a.txt\",\"content\":\"new\"}", null, null, null)
+                .withBeforeContent("old body");
+
+        ExecutorService ex = Executors.newSingleThreadExecutor();
+        Future<ApprovalResult> f = ex.submit(() -> r.promptApproval(req));
+        String beforeContent = null;
+        for (int i = 0; i < 50 && beforeContent == null; i++) {
+            for (String ln : out.toString(StandardCharsets.UTF_8).split("\n")) {
+                if (ln.isBlank()) continue;
+                JsonNode n = JsonRpc.MAPPER.readTree(ln);
+                if ("approval.requested".equals(n.path("method").asText())) {
+                    beforeContent = n.get("params").path("beforeContent").asText(null);
+                    r.resolveApproval(n.get("params").get("approvalId").asText(), ApprovalResult.approve());
+                }
+            }
+            if (beforeContent == null) Thread.sleep(20);
+        }
+        f.get(2, TimeUnit.SECONDS);
+        assertEquals("old body", beforeContent);
+        ex.shutdownNow();
+    }
 }

@@ -311,3 +311,238 @@ test('reconnect after restart re-resumes the active session', async () => {
   // (manual restart path is controller-eyeballed; here we assert reconnect effect exists via no-crash on connected)
   await app.close()
 })
+
+// ---------------------------------------------------------------------------
+// Test 11: approval 后 transcript 出现 diff 卡片(文件名可见)
+// ---------------------------------------------------------------------------
+
+test('approval 后 transcript 出现 diff 卡片(文件名可见)', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  await input.fill('hi')
+  await input.press('Enter')
+
+  const approveBtn = win.locator('[data-testid="approve"]')
+  await expect(approveBtn).toBeVisible({ timeout: 10000 })
+  await approveBtn.click()
+
+  // diff card should appear in transcript after approval
+  await expect(win.locator('[data-testid="diff-card"]')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('[data-testid="diff-card"]')).toContainText('hello.txt', { timeout: 10000 })
+
+  await app.close()
+})
+
+// ---------------------------------------------------------------------------
+// Test 12: status 事件驱动 composer 的 token chip
+// ---------------------------------------------------------------------------
+
+test('status 事件驱动 composer 的 token chip', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  await input.fill('hi')
+  await input.press('Enter')
+
+  // status chip should appear and show ~19% (12000/64000)
+  await expect(win.locator('[data-testid="status-chip"]')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('[data-testid="status-chip"]')).toHaveText(/19%/, { timeout: 10000 })
+
+  await app.close()
+})
+
+// ---------------------------------------------------------------------------
+// Test 13: 审批弹窗改命令 → respond 记录 MODIFIED + 新命令
+// ---------------------------------------------------------------------------
+
+test('审批弹窗改命令 → respond 记录 MODIFIED + 新命令', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-modified.jsonl`)
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile
+    }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  await input.fill('hi')
+  await input.press('Enter')
+
+  // wait for approval modal
+  await expect(win.locator('[data-testid="approve"]')).toBeVisible({ timeout: 10000 })
+
+  // edit the command
+  const commandEdit = win.locator('[data-testid="command-edit"]')
+  await expect(commandEdit).toBeVisible({ timeout: 10000 })
+  await commandEdit.fill('echo bye')
+
+  // button text should change to indicate modification; click approve
+  const approveBtn = win.locator('[data-testid="approve"]')
+  await expect(approveBtn).toBeVisible({ timeout: 5000 })
+  await approveBtn.click()
+
+  // check record: decision === MODIFIED and modifiedArgs.command === 'echo bye'
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return null
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const resp = [...lines].reverse().find(l => l.method === 'approval.respond')
+      if (!resp) return null
+      return {
+        decision: resp.params.decision,
+        command: JSON.parse(resp.params.modifiedArgs || '{}').command
+      }
+    }, { timeout: 10000 })
+    .toEqual({ decision: 'MODIFIED', command: 'echo bye' })
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+})
+
+// ---------------------------------------------------------------------------
+// Test 14: 勾选本次放行网络 → respond 记录 allowNetwork:true
+// ---------------------------------------------------------------------------
+
+test('勾选本次放行网络 → respond 记录 allowNetwork:true', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-network.jsonl`)
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile
+    }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  await input.fill('hi')
+  await input.press('Enter')
+
+  // wait for approval modal
+  await expect(win.locator('[data-testid="approve"]')).toBeVisible({ timeout: 10000 })
+
+  // check allow-network checkbox
+  const allowNetwork = win.locator('[data-testid="allow-network"]')
+  await expect(allowNetwork).toBeVisible({ timeout: 10000 })
+  await allowNetwork.click()
+
+  // click approve
+  await win.locator('[data-testid="approve"]').click()
+
+  // check record: decision === APPROVED and allowNetwork === true
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return null
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const resp = [...lines].reverse().find(l => l.method === 'approval.respond')
+      if (!resp) return null
+      return { decision: resp.params.decision, allowNetwork: resp.params.allowNetwork }
+    }, { timeout: 10000 })
+    .toEqual({ decision: 'APPROVED', allowNetwork: true })
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+})
+
+// ---------------------------------------------------------------------------
+// Test 15: 本会话放行此工具 → respond 记录 APPROVED_ALL
+// ---------------------------------------------------------------------------
+
+test('本会话放行此工具 → respond 记录 APPROVED_ALL', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-all.jsonl`)
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile
+    }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  await input.fill('hi')
+  await input.press('Enter')
+
+  // wait for approval modal
+  await expect(win.locator('[data-testid="approve"]')).toBeVisible({ timeout: 10000 })
+
+  // click approve-all
+  const approveAllBtn = win.locator('[data-testid="approve-all"]')
+  await expect(approveAllBtn).toBeVisible({ timeout: 10000 })
+  await approveAllBtn.click()
+
+  // check record: decision === APPROVED_ALL
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return null
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const resp = [...lines].reverse().find(l => l.method === 'approval.respond')
+      if (!resp) return null
+      return resp.params.decision
+    }, { timeout: 10000 })
+    .toBe('APPROVED_ALL')
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+})
+
+// ---------------------------------------------------------------------------
+// Test 16: write_file 审批弹窗展示 diff 预览
+// ---------------------------------------------------------------------------
+
+test('write_file 审批弹窗展示 diff 预览', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      MOCK_APPROVAL_TOOL: 'write_file'
+    }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  await input.fill('hi')
+  await input.press('Enter')
+
+  // wait for approval modal
+  await expect(win.locator('[data-testid="approve"]')).toBeVisible({ timeout: 10000 })
+
+  // diff-view or diff-fallback should be visible in the modal
+  await expect(
+    win.locator('[data-testid=diff-view], [data-testid=diff-fallback]').first()
+  ).toBeVisible({ timeout: 15000 })
+
+  // modal should contain the file path
+  await expect(win.getByTestId('approval-modal')).toContainText('src/hello.txt', { timeout: 10000 })
+
+  // approve and wait for turn to complete
+  await win.locator('[data-testid="approve"]').click()
+  await expect(win.locator('[data-testid="tool-card"]')).toBeVisible({ timeout: 15000 })
+
+  await app.close()
+})

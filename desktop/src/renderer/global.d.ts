@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import type { BackendEvent } from '../shared/types'
 import type { WraithApi } from '../preload/index'
 

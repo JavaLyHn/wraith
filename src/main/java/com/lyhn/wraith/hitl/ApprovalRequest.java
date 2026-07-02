@@ -20,8 +20,21 @@ public record ApprovalRequest(
         String riskDescription,
         String suggestion,
         String callerContext,
-        String sensitiveNotice
+        String sensitiveNotice,
+        String beforeContent   // 仅 write_file 审批预览:旧文件全文;新文件/不可读/超 512KB → null
 ) {
+    /** 兼容 7 参构造(既有工厂/测试全部走这里),beforeContent=null。 */
+    public ApprovalRequest(String toolName, String arguments, String dangerLevel, String riskDescription,
+                           String suggestion, String callerContext, String sensitiveNotice) {
+        this(toolName, arguments, dangerLevel, riskDescription, suggestion, callerContext, sensitiveNotice, null);
+    }
+
+    /** 附加旧文件内容(write_file 审批预览用)。 */
+    public ApprovalRequest withBeforeContent(String beforeContent) {
+        return new ApprovalRequest(toolName, arguments, dangerLevel, riskDescription,
+                suggestion, callerContext, sensitiveNotice, beforeContent);
+    }
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final int BOX_INNER_WIDTH = 58;
     private static final int FIELD_WIDTH = BOX_INNER_WIDTH - 8;  // 为"│  xxx: "留出

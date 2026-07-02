@@ -13,7 +13,8 @@ export interface WraithApi {
   submitTurn(input: string): Promise<{ turnId: string; status: string }>
   respondApproval(
     approvalId: string,
-    decision: 'APPROVED' | 'REJECTED'
+    decision: 'APPROVED' | 'REJECTED' | 'MODIFIED' | 'APPROVED_ALL',
+    opts?: { modifiedArgs?: string; allowNetwork?: boolean }
   ): Promise<void>
   interrupt(): Promise<void>
   getInitialWorkspace(): Promise<string | null>
@@ -38,8 +39,8 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:submitTurn', input)
   },
 
-  respondApproval(approvalId, decision) {
-    return ipcRenderer.invoke('wraith:respondApproval', approvalId, decision)
+  respondApproval(approvalId, decision, opts) {
+    return ipcRenderer.invoke('wraith:respondApproval', approvalId, decision, opts ?? null)
   },
 
   interrupt() {

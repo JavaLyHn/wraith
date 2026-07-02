@@ -102,6 +102,7 @@ public final class EventStreamRenderer implements Renderer {
         p.put("dangerLevel", request.dangerLevel());
         p.put("riskDescription", request.riskDescription());
         p.put("suggestion", request.suggestion());
+        p.put("beforeContent", request.beforeContent()); // 可空;LinkedHashMap 允许 null → JSON null
         writer.notify("approval.requested", p);
         try {
             return fut.get();
