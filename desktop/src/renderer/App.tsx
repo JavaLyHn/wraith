@@ -112,7 +112,6 @@ export default function App(): JSX.Element {
   const [inputValue, setInputValue] = useState('')
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const startedRef = useRef(false)
-  const transcriptEndRef = useRef<HTMLDivElement>(null)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
 
   // ── subscribe to backend events on mount (status 高频 → 100ms 窗口合并) ────
@@ -219,11 +218,6 @@ export default function App(): JSX.Element {
       }
     })()
   }, [state.connection, state.workspace, fetchSessions])
-
-  // ── auto-scroll to bottom as items arrive ─────────────────────────────────
-  useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [state.items])
 
   // ── refresh session list when a turn completes ────────────────────────────
   const prevTurnRef = useRef(state.turn)
@@ -404,7 +398,6 @@ export default function App(): JSX.Element {
                 onEditMessage={handleEditMessage}
                 onDeleteMessage={handleDeleteMessage}
               />
-              <div ref={transcriptEndRef} />
               <div className="shrink-0 px-4 py-3">{composer}</div>
             </>
           ) : (
