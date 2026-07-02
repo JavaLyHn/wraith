@@ -88,6 +88,7 @@ export class AutomationScheduler {
     return s
   }
 
+  // I-1: tick 全程同步无 await;readTasks→upsertTask 读-改-写依赖此不变量,未来插入 await 会引入丢写
   private tick(now: number): void {
     const dir = this.deps.userDataDir
     const tasks = readTasks(dir)
@@ -136,11 +137,16 @@ export class AutomationScheduler {
     this.current = { runId, taskId: task.id, runner }
     void runner.run(task.projectPath, task.prompt).then(finalState => {
       this.finishRun(runId, task.id, finalState, startedAt)
+    }).catch(err => {
+      console.error('[AutomationScheduler] runner.run() threw unexpectedly:', err)
+      this.finishRun(runId, task.id, { phase: 'failed', error: String(err) } as RunState, startedAt)
+    }).finally(() => {
       this.current = null
       const next = this.queue.shift()
       if (next) {
         const t = readTasks(dir).find(x => x.id === next)
-        if (t) { upsertTask(dir, { ...t, lastFiredAt: Date.now() }); this.fire({ ...t, lastFiredAt: Date.now() }, false) }
+        // I-2: 出队时重校验 enabled,任务排队期间若被禁用则跳过,继续推进队列
+        if (t && t.enabled) { upsertTask(dir, { ...t, lastFiredAt: Date.now() }); this.fire({ ...t, lastFiredAt: Date.now() }, false) }
       }
     })
   }
