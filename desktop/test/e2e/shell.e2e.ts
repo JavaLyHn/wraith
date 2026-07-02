@@ -1087,6 +1087,7 @@ test('T31 @-mention 两级补全,原文提交', async () => {
   await input.press('Enter')
   await expect
     .poll(() => {
+      if (!fs.existsSync(recordFile)) return false
       const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
       return lines.some(l => l.method === 'turn.submit' && typeof l.params?.input === 'string' && l.params.input.includes('@github:issue://1'))
     }, { timeout: 10000 })
