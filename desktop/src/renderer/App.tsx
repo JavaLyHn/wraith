@@ -1,5 +1,5 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
-import type { BackendEvent, SessionMeta, ProjectView, McpServerView } from '../shared/types'
+import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView } from '../shared/types'
 import type { McpFormValue } from './components/McpServerForm'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
 import { createThrottleLatest, type ThrottledPush } from '../shared/throttleLatest'
@@ -117,8 +117,19 @@ export default function App(): JSX.Element {
   const [view, setView] = useState<'chat' | 'plugins'>('chat')
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
   const [mcpConfigError, setMcpConfigError] = useState<string | null>(null)
+  const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
+
+  // Define fetchMcpResources before onEvent effect so it can be referenced in deps
+  const fetchMcpResources = useCallback(async () => {
+    try {
+      const { resources } = await window.wraith.mcpResources()
+      setMcpResources(resources)
+    } catch (err) {
+      console.error('[wraith] mcpResources error:', err)
+    }
+  }, [])
 
   // ── subscribe to backend events on mount (status 高频 → 100ms 窗口合并) ────
   useEffect(() => {
@@ -128,6 +139,7 @@ export default function App(): JSX.Element {
       if (evt.kind === 'notification' && evt.method === 'mcp.status') {
         const p = evt.params as { name: string; state: McpServerView['state']; error?: string }
         setMcpServers(prev => prev.map(s => (s.name === p.name ? { ...s, state: p.state, enabled: p.state !== 'disabled', error: p.error } : s)))
+        if (p.state === 'ready') void fetchMcpResources()
         return
       }
       if (evt.kind === 'notification' && evt.method === 'status') {
@@ -140,7 +152,7 @@ export default function App(): JSX.Element {
       throttledStatus.cancel()
       unsubscribe()
     }
-  }, [])
+  }, [fetchMcpResources])
 
   // ── session list helpers ───────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -216,11 +228,12 @@ export default function App(): JSX.Element {
         void fetchSessions()
         void fetchProjects()
         void fetchMcp()
+        void fetchMcpResources()
       } catch (err) {
         console.error('[wraith] startup error:', err)
       }
     })()
-  }, [fetchSessions, fetchProjects, fetchMcp])
+  }, [fetchSessions, fetchProjects, fetchMcp, fetchMcpResources])
 
   // ── reconnect effect (fires on disconnected→connected, skips first connect) ──
   const reconnectRef = useRef(false)
@@ -398,12 +411,13 @@ export default function App(): JSX.Element {
         }
         void fetchProjects() // lastUsedAt 刷新 → 浮顶
         void fetchMcp()
+        void fetchMcpResources()
       } catch (err) {
         console.error('[wraith] switchToProject error:', err)
         void fetchProjects()
       }
     },
-    [state.turn, fetchProjects, fetchMcp],
+    [state.turn, fetchProjects, fetchMcp, fetchMcpResources],
   )
 
   // 添加项目(=Composer 重选目录汇流入口):选目录 → 入列表 → 切换
@@ -516,6 +530,7 @@ export default function App(): JSX.Element {
                 onSwitchWorkspace={handleAddProject}
                 centered={!state.hasStarted}
                 status={state.status}
+                resources={mcpResources}
               />
             )
             return state.hasStarted ? (
