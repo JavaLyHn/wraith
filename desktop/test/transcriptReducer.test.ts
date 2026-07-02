@@ -379,11 +379,16 @@ describe('phase-B state additions', () => {
 // Test 12: phase-C: diff / status / approval 扩展
 // ---------------------------------------------------------------------------
 describe('phase-C: diff / status / approval 扩展', () => {
-  it('diff event appends a diff item and seals _messageOpen', () => {
+  it('diff event appends a diff item and seals _messageOpen (file key)', () => {
     const open: TranscriptState = { ...initialState, _messageOpen: true }
-    const s = reduce(open, notif('diff', { filePath: 'src/a.ts', before: 'x', after: 'y' }))
+    const s = reduce(open, notif('diff', { file: 'src/a.ts', before: 'x', after: 'y' }))
     expect(s.items[s.items.length - 1]).toEqual({ type: 'diff', filePath: 'src/a.ts', before: 'x', after: 'y' })
     expect(s._messageOpen).toBe(false)
+  })
+  it('diff event backward-compat: filePath key also works', () => {
+    const s = reduce(initialState, notif('diff', { filePath: 'src/b.ts', before: 'a', after: 'b' }))
+    const item = s.items[s.items.length - 1]
+    expect(item).toMatchObject({ type: 'diff', filePath: 'src/b.ts' })
   })
   it('status event maps the payload subset', () => {
     const s = reduce(initialState, notif('status', { status: {

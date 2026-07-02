@@ -233,7 +233,7 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
 
     // ── diff (write_file 执行后的前后全文) ───────────────────────────────────
     case 'diff': {
-      const filePath = typeof p['filePath'] === 'string' ? p['filePath'] : ''
+      const filePath = typeof p['file'] === 'string' ? (p['file'] as string) : typeof p['filePath'] === 'string' ? (p['filePath'] as string) : ''
       const before = typeof p['before'] === 'string' ? p['before'] : ''
       const after = typeof p['after'] === 'string' ? p['after'] : ''
       return {

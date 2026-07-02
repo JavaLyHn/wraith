@@ -538,7 +538,7 @@ test('write_file 审批弹窗展示 diff 预览', async () => {
   ).toBeVisible({ timeout: 15000 })
 
   // modal should contain the file path
-  await expect(win.locator('[data-testid="approve"]').locator('..').locator('..')).toContainText('src/hello.txt', { timeout: 10000 })
+  await expect(win.getByTestId('approval-modal')).toContainText('src/hello.txt', { timeout: 10000 })
 
   // approve and wait for turn to complete
   await win.locator('[data-testid="approve"]').click()

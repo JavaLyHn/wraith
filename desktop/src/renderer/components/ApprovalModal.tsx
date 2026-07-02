@@ -87,7 +87,7 @@ export default function ApprovalModal({
 
   return (
     <Dialog open onOpenChange={() => {}}>
-      <DialogContent>
+      <DialogContent data-testid="approval-modal">
         <div className="mb-3">
           <DialogTitle className={dangerText}>⚠ 审批请求</DialogTitle>
           <div className="mt-1 text-sm font-semibold text-fg">{toolName}</div>

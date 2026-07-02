@@ -30,7 +30,7 @@ export default function DiffView({ filePath, before, after, onStats }: DiffViewP
     let original: import('monaco-editor').editor.ITextModel | null = null
     let modified: import('monaco-editor').editor.ITextModel | null = null
 
-    // 重跑前复位 failed，确保 hostRef 容器渲染 → setFailed(false) 同步触发重渲染完成在 await 之后
+    // props 变化重跑时先复位 failed 回正常渲染路径;时序依赖"失败过的 import 重试走真实异步 I/O,慢于 React 调度的重渲染提交",并非同步重渲染保证——勿基于此注释做进一步时序优化
     setFailed(false)
 
     void (async () => {

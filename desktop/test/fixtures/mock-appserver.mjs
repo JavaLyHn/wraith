@@ -161,7 +161,7 @@ async function emitPostApprovalSequence(approved) {
     await delay(20)
     notify('diff', {
       sessionId, turnId,
-      filePath: 'src/hello.txt',
+      file: 'src/hello.txt',
       before: 'old line\n',
       after: 'new line\nplus\n'
     })
