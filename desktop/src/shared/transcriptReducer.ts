@@ -175,6 +175,11 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
     }
 
     case 'thinking.end': {
+      // 空思考块(begin 后无任何 delta)直接丢弃——旧版后端对非 reasoning 模型会发空对
+      const last = state.items[state.items.length - 1]
+      if (last && last.type === 'thinking' && last.text === '') {
+        return { ...state, items: state.items.slice(0, -1) }
+      }
       const items = state.items.map((item, idx) => {
         if (idx === state.items.length - 1 && item.type === 'thinking') {
           return { ...item, done: true }

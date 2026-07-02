@@ -43,13 +43,31 @@ public final class EventStreamRenderer implements Renderer {
 
     @Override public boolean supportsThinkingPanel() { return true; } // 让 reasoning 走 appendThinking
 
+    // 惰性 thinking 块:Agent 在每次 LLM 调用前无条件 beginThinking,但非 reasoning
+    // 模型(如 DeepSeek-V4-Flash)整段不产生思考流——空 begin/end 对不得上 wire,
+    // 否则桌面端每步渲染一根空折叠条。首个 delta 到达才真正发 begin。
+    private String pendingThinkingLabel = null;
+    private boolean thinkingOpen = false;
+
     @Override public void beginThinking(String label) {
-        Map<String, Object> p = base(); p.put("label", label); writer.notify("thinking.begin", p);
+        pendingThinkingLabel = (label == null) ? "" : label;
     }
     @Override public void appendThinking(String delta) {
+        if (pendingThinkingLabel != null) {
+            Map<String, Object> b = base(); b.put("label", pendingThinkingLabel);
+            writer.notify("thinking.begin", b);
+            pendingThinkingLabel = null;
+        }
+        thinkingOpen = true; // 裸 delta(无 begin)也视为开块,保持 endThinking 语义
         Map<String, Object> p = base(); p.put("text", delta); writer.notify("thinking.delta", p);
     }
-    @Override public void endThinking() { writer.notify("thinking.end", base()); }
+    @Override public void endThinking() {
+        pendingThinkingLabel = null;
+        if (thinkingOpen) {
+            thinkingOpen = false;
+            writer.notify("thinking.end", base());
+        }
+    }
 
     @Override public void appendAssistantContentDelta(String delta) {
         Map<String, Object> p = base(); p.put("text", delta); writer.notify("message.delta", p);

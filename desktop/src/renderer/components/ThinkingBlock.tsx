@@ -7,7 +7,10 @@ interface ThinkingBlockProps {
 }
 
 export default function ThinkingBlock({ label, text, done }: ThinkingBlockProps): JSX.Element {
-  const [open, setOpen] = useState(false)
+  // 手动开合优先;未手动时流式中展开(实时看思考)、完成后自动折叠
+  const [manual, setManual] = useState<boolean | null>(null)
+  const open = manual ?? !done
+  const toggle = (): void => setManual(!open)
 
   return (
     <div
@@ -16,11 +19,12 @@ export default function ThinkingBlock({ label, text, done }: ThinkingBlockProps)
     >
       <div
         className="flex cursor-pointer select-none items-center gap-2 px-3 py-1.5 text-fg-muted"
-        onClick={() => setOpen(o => !o)}
+        onClick={toggle}
+        title={label || undefined}
       >
         <button
           data-testid="thinking-toggle"
-          onClick={e => { e.stopPropagation(); setOpen(o => !o) }}
+          onClick={e => { e.stopPropagation(); toggle() }}
           aria-expanded={open}
           aria-label="Toggle thinking block"
           className="p-0 text-[10px] leading-none text-fg-subtle"
@@ -28,9 +32,8 @@ export default function ThinkingBlock({ label, text, done }: ThinkingBlockProps)
           {open ? '▼' : '▶'}
         </button>
         <span className="text-[11px] tracking-wide text-accent">
-          {done ? '✓' : '⟳'} {label || '思考中'}
+          {done ? '✓ 思考过程' : '⟳ 思考中…'}
         </span>
-        {!done && <span className="text-[11px] italic text-fg-subtle">思考中…</span>}
       </div>
       {open && (
         <pre className="m-0 whitespace-pre-wrap break-words border-t border-border px-3 py-2 text-xs leading-relaxed text-fg-muted">

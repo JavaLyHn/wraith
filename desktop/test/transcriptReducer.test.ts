@@ -64,6 +64,11 @@ describe('message items', () => {
 // Test 2: thinking lifecycle
 // ---------------------------------------------------------------------------
 describe('thinking items', () => {
+  it('thinking.end with empty text drops the item (老 jar 会发空 begin/end 对)', () => {
+    let s = reduce(initialState, notif('thinking.begin', { label: 'Thinking' }))
+    s = reduce(s, notif('thinking.end'))
+    expect(s.items).toEqual([])
+  })
   it('thinking.begin/delta/delta/end → one item, text accumulated, done=true', () => {
     let s = initialState
     s = reduce(s, notif('thinking.begin', { label: 'Reasoning' }))
