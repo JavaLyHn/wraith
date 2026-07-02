@@ -51,6 +51,15 @@ export class AutomationRunner {
 
       client.onNotification((method, params) => {
         const p = (params ?? {}) as Record<string, unknown>
+        // I-6: 停止期间的终态通知不 dispatch,直接回收子进程,统一由 exit → stopped → interrupted 落地。
+        // 真 Java 后端 thread interrupt 会产生 turn.failed(甚至审批 REJECTED 后跑完 turn.completed),
+        // 先于 SIGTERM 到达;若照常 dispatch 会把「终止」错落成 failed/success。mock 的 interrupt 是 no-op,
+        // 靠 SIGTERM→exit→stopped 达成,掩蔽了此路径。故 stopping 期只拦这两类终态通知(其余 delta/end/
+        // approval.requested 在 stopping 期 dispatch 也幂等无害,为最小改动不拦)。
+        if (this.stopping && (method === 'turn.completed' || method === 'turn.failed')) {
+          this.killChild()
+          return
+        }
         const prevState = this.state
         this.dispatch({ type: 'notification', method, params: p })
         // Minor-1: 仅当 dispatch 真正推进到 waiting_approval 时才调 onApproval

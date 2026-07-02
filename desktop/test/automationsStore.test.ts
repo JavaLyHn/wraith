@@ -6,6 +6,7 @@ import {
   readTasks, upsertTask, removeTask,
   readRuns, putRun,
   readLastPanelOpenedAt, writeLastPanelOpenedAt, badgeVisible,
+  sweepNonTerminalRuns,
 } from '../src/main/automationsStore'
 import type { AutomationTask, AutomationRun } from '../src/shared/types'
 
@@ -76,5 +77,37 @@ describe('automationsStore', () => {
     fs.writeFileSync(path.join(dir, 'runs.json'), '[broken', 'utf8')
     expect(readTasks(dir)).toEqual([])
     expect(readRuns(dir)).toEqual([])
+  })
+
+  it('sweepNonTerminalRuns:仅非终态被改为 interrupted,终态原样', () => {
+    putRun(dir, run('r1', 'a', { status: 'running', endedAt: undefined }))
+    putRun(dir, run('r2', 'a', { status: 'waiting_approval', endedAt: undefined }))
+    putRun(dir, run('r3', 'b', { status: 'success', endedAt: 2000, summary: '完成' }))
+    putRun(dir, run('r4', 'b', { status: 'failed', endedAt: 3000 }))
+    putRun(dir, run('r5', 'b', { status: 'interrupted', endedAt: 4000 }))
+
+    sweepNonTerminalRuns(dir)
+    const byId = new Map(readRuns(dir).map(r => [r.runId, r]))
+
+    // 非终态 → interrupted,补 endedAt 与默认 summary
+    expect(byId.get('r1')!.status).toBe('interrupted')
+    expect(byId.get('r1')!.endedAt).toBeGreaterThan(0)
+    expect(byId.get('r1')!.summary).toBe('上次运行随应用退出中断')
+    expect(byId.get('r2')!.status).toBe('interrupted')
+
+    // 终态原样
+    expect(byId.get('r3')!.status).toBe('success')
+    expect(byId.get('r3')!.summary).toBe('完成')
+    expect(byId.get('r3')!.endedAt).toBe(2000)
+    expect(byId.get('r4')!.status).toBe('failed')
+    expect(byId.get('r5')!.status).toBe('interrupted')
+    expect(byId.get('r5')!.endedAt).toBe(4000)
+  })
+
+  it('sweepNonTerminalRuns:无非终态则不改动(全终态原样)', () => {
+    putRun(dir, run('r1', 'a', { status: 'success', endedAt: 2000 }))
+    sweepNonTerminalRuns(dir)
+    expect(readRuns(dir)[0]!.status).toBe('success')
+    expect(readRuns(dir)[0]!.endedAt).toBe(2000)
   })
 })

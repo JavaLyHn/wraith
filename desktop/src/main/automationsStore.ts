@@ -15,7 +15,11 @@ function readJson<T>(file: string): T | null {
   try {
     const obj = JSON.parse(fs.readFileSync(file, 'utf8')) as unknown
     return obj && typeof obj === 'object' ? (obj as T) : null
-  } catch {
+  } catch (err) {
+    // 缺失文件是常态(首次运行)→ 静默;坏 JSON 才警告(spec §7 要求)
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.warn('[automations] 配置文件损坏,按空处理:', file)
+    }
     return null // 缺失/坏 JSON → 按空(settings.ts 同款容错)
   }
 }
@@ -62,6 +66,25 @@ export function putRun(dir: string, run: AutomationRun): void {
     trimmed.push(...list.slice(0, RUNS_PER_TASK))
   }
   writeJson(runsPath(dir), { ...f, runs: trimmed })
+}
+
+/**
+ * I-1:启动清扫。上次运行的非终态 run(running/waiting_approval,以及防御性覆盖内部相 starting)随 app
+ * 退出即失去其 runner 子进程,却仍以「运行中/等待审批」滞留 runs → 任务砖死(activeTaskIds 永占)、
+ * 红点永亮、终止钮点了无效(current 为 null)。whenReady 里 scheduler 实例化前调用,改为 interrupted。
+ * 无非终态则不写(避免无谓 I/O)。AutomationRun 无 error 字段,原因落 summary(不覆盖已有 summary)。
+ */
+export function sweepNonTerminalRuns(dir: string): void {
+  const f = readJson<RunsFile>(runsPath(dir))
+  const runs = f?.runs ?? []
+  const NON_TERMINAL = new Set<string>(['running', 'waiting_approval', 'starting'])
+  let changed = false
+  const swept = runs.map(r => {
+    if (!NON_TERMINAL.has(r.status)) return r
+    changed = true
+    return { ...r, status: 'interrupted' as const, endedAt: Date.now(), summary: r.summary ?? '上次运行随应用退出中断' }
+  })
+  if (changed) writeJson(runsPath(dir), { ...(f ?? {}), runs: swept })
 }
 
 export function readLastPanelOpenedAt(dir: string): number {

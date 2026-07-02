@@ -21,6 +21,7 @@ import type { BackendEvent } from '../shared/types'
 import {
   readTasks as autoReadTasks, upsertTask as autoUpsertTask, removeTask as autoRemoveTask,
   readRuns as autoReadRuns, readLastPanelOpenedAt, writeLastPanelOpenedAt, badgeVisible,
+  sweepNonTerminalRuns,
 } from './automationsStore'
 import { AutomationScheduler } from './automationScheduler'
 import type { AutomationTask, AutomationEvent } from '../shared/types'
@@ -175,6 +176,9 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
+
+  // I-5: 重启后红点恢复——首帧加载完即按当前 runs 推一次 badge(pushBadge 内部已 try/catch)
+  mainWindow.webContents.on('did-finish-load', () => pushBadge())
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -409,6 +413,10 @@ app.whenReady().then(() => {
   } else {
     seedProjectsIfEmpty(ud, Date.now())
   }
+  // I-1: 崩溃/退出残留的非终态 run 启动即清扫为 interrupted(scheduler 实例化之前;best-effort)
+  try {
+    sweepNonTerminalRuns(app.getPath('userData'))
+  } catch { /* best-effort:清扫失败不阻塞启动 */ }
   automationScheduler = new AutomationScheduler({
     userDataDir: app.getPath('userData'),
     env: process.env,
