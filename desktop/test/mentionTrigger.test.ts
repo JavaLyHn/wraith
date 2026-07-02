@@ -11,7 +11,13 @@ const RES: McpResourceView[] = [
 describe('detectMention', () => {
   it('行首/空白后的 @ 激活,取 @ 到光标为 query', () => {
     expect(detectMention('@gi', 3)).toEqual({ active: true, start: 0, query: 'gi' })
-    expect(detectMention('查 @github:is 的', 13)).toEqual({ active: true, start: 2, query: 'github:is' })
+    expect(detectMention('查 @github:is', 12)).toEqual({ active: true, start: 2, query: 'github:is' })
+  })
+  it('尾随空格终止 mention(选中插入后浮层必须关)', () => {
+    expect(detectMention('查 @github:is 的', 13)).toEqual({ active: false, start: 0, query: '' })
+  })
+  it('插入资源后(尾随空格,caret 紧随)必须失活', () => {
+    expect(detectMention('@github:issue://1 ', 18).active).toBe(false)
   })
   it('非空白前缀的 @ 不激活(邮箱等)', () => {
     expect(detectMention('a@b', 3).active).toBe(false)

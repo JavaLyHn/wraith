@@ -3,11 +3,10 @@ import type { McpResourceView } from './types'
 export interface MentionState { active: boolean; start: number; query: string }
 export interface MentionItem { label: string; insert: string; hint: string }
 
-/** 光标前最近 @:其前一字符须为行首/空白,@ 后到光标或空白前为 query(cursor 可在 query 段后的空白上)。 */
+/** 光标前最近 @:其前一字符须为行首/空白;query = @+1 到光标;query 含任意空白 → 失活。 */
 export function detectMention(value: string, caret: number): MentionState {
   const upto = value.slice(0, caret)
   // Walk backwards from caret to find the last @ that is preceded by start-of-string or whitespace
-  // The query is the non-space text immediately following @
   let searchFrom = caret
   while (searchFrom > 0) {
     const at = upto.lastIndexOf('@', searchFrom - 1)
@@ -18,27 +17,14 @@ export function detectMention(value: string, caret: number): MentionState {
       searchFrom = at
       continue
     }
-    // Query is text from @+1 to next whitespace (or end of upto)
-    const rest = upto.slice(at + 1)
-    const spaceIdx = rest.search(/\s/)
-    // If there's a space in rest: query is text before the space, but cursor must be in this segment
-    // (i.e. the space and everything after it in `upto` must all be spaces — meaning cursor is just past the mention)
-    // Actually: if there's a space in rest, the mention segment ended. Cursor has moved past it. Not active.
-    // EXCEPTION per test: '查 @github:is 的' caret=13 → upto='查 @github:is ', rest='github:is ', space at idx 9
-    // The test expects active=true, query='github:is'. So we allow a single trailing space after query.
-    if (spaceIdx >= 0) {
-      const afterSpace = rest.slice(spaceIdx + 1)
-      // Only allow if cursor is right after the space (afterSpace is empty in upto slice)
-      // i.e. caret = at + 1 + spaceIdx + 1, meaning no more non-space content after first space
-      if (afterSpace.length === 0) {
-        // cursor is right after the space — still considered active with query before space
-        return { active: true, start: at, query: rest.slice(0, spaceIdx) }
-      }
-      // There's more content after the space — mention has ended
+    // Query is text from @+1 to caret
+    const query = upto.slice(at + 1)
+    // Any whitespace in query terminates the mention (strict semantics — trailing space = inactive)
+    if (/\s/.test(query)) {
       searchFrom = at
       continue
     }
-    return { active: true, start: at, query: rest }
+    return { active: true, start: at, query }
   }
   return { active: false, start: 0, query: '' }
 }
