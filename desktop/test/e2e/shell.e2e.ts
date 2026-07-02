@@ -1154,14 +1154,18 @@ test('T33 建任务+立即运行 → 运行历史出现 success 与摘要', asyn
   await app.close(); cleanup()
 })
 
-test('T34 挂起审批链:红点 → 处理审批 → ApprovalModal → 批准 → 完成', async () => {
+test('T34 挂起审批链:红点 → 切 runs → 处理审批 → ApprovalModal → 批准 → 完成', async () => {
   const { app, win, cleanup } = await launchAutoApp({ MOCK_NO_APPROVAL: '', MOCK_APPROVAL_TOOL: 'execute_command' })
   await createAndRunTask(win, '要审批的任务')
+  // I-4: 审批 push 不再强弹 Modal;唯一入口 = 运行历史「处理审批」钮。
+  // 先断言红点(badge 由 approval.requested 推送驱动)
+  await expect(win.locator('[data-testid="nav-automations-badge"]')).toBeVisible({ timeout: 15000 })
+  // 切到运行历史 tab,等 waiting 项出现(createAndRunTask 已切 runs;此处显式保证)
+  await win.locator('[data-testid="automation-tab-runs"]').click()
   await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('等待审批', { timeout: 15000 })
-  // 审批 push 已弹 Modal(App 接线);若被 Esc 关闭场景走「处理审批」钮——此处直接断言 Modal 可见
+  // 点「处理审批」→ ApprovalModal 出现(handleReopenApproval 先验证 run 仍 waiting 再重弹)
+  await win.locator('[data-testid="automation-run-approve"]').first().click()
   await expect(win.locator('[data-testid="approval-modal"]')).toBeVisible({ timeout: 10000 })
-  // I-1: 审批弹窗出现时,侧栏红点应可见(badge 由 approval.requested 推送驱动)
-  await expect(win.locator('[data-testid="nav-automations-badge"]')).toBeVisible()
   // 注:ApprovalModal.tsx 中批准按钮 testid 为 "approve"(非 "approval-approve")
   await win.locator('[data-testid="approve"]').click()
   await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('成功', { timeout: 15000 })

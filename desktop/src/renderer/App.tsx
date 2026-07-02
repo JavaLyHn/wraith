@@ -160,7 +160,7 @@ export default function App(): JSX.Element {
     }
   }, [fetchMcpResources])
 
-  // ── automationApprovalRef:缓存最近一次 approval push(state 槽被 Esc 清掉后仍可从运行历史重弹) ──
+  // ── automationApprovalRef:缓存最近一次 approval push(唯一弹窗入口是运行历史「处理审批」钮) ──
   const automationApprovalRef = useRef<{ runId: string; payload: Record<string, unknown> } | null>(null)
 
   // ── subscribe to automation events on mount ───────────────────────────────
@@ -168,9 +168,9 @@ export default function App(): JSX.Element {
     const unsub = window.wraith.onAutomationEvent(evt => {
       if (evt.kind === 'badge') setAutomationBadge(evt.show)
       if (evt.kind === 'approval') {
-        const entry = { runId: evt.runId, payload: evt.payload }
-        automationApprovalRef.current = entry
-        setAutomationApproval(entry)
+        // I-4: 审批 push 只缓存 payload,不强弹(spec §1.1-4/§6.2:通知+红点+运行历史「处理审批」,
+        // 用户在面板主动点开 ApprovalModal)。badge 与 OS 通知已由 main 侧推送,renderer 无需动作。
+        automationApprovalRef.current = { runId: evt.runId, payload: evt.payload }
       }
       if (evt.kind === 'open-panel') setView('automations')
       // 'runs-changed' 由面板自身拉取(Task 9),App 层不持 runs 态
