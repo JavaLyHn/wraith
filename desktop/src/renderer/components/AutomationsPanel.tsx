@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AutomationTask, ProjectView } from '../../shared/types'
 import AutomationForm from './AutomationForm'
+import AutomationRuns from './AutomationRuns'
 import { computeNextRunLabel } from '../lib/automationLabels'
 
 interface AutomationsPanelProps {
   projects: ProjectView[]
   onBack: () => void
+  onOpenSession(projectPath: string, sessionId: string): void
+  onApprove(runId: string): void
 }
 
-export default function AutomationsPanel({ projects, onBack }: AutomationsPanelProps): JSX.Element {
+export default function AutomationsPanel({ projects, onBack, onOpenSession, onApprove }: AutomationsPanelProps): JSX.Element {
   const [tasks, setTasks] = useState<AutomationTask[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -23,6 +26,9 @@ export default function AutomationsPanel({ projects, onBack }: AutomationsPanelP
   useEffect(() => {
     void fetchTasks()
     void window.wraith.automationPanelOpened() // 清红点(spec §3)
+    // runs-changed 后 lastFiredAt 可能更新 → 刷左侧任务列表使 computeNextRunLabel 更新
+    const unsub = window.wraith.onAutomationEvent(evt => { if (evt.kind === 'runs-changed') void fetchTasks() })
+    return unsub
   }, [fetchTasks])
 
   useEffect(() => { setRemoveConfirming(false); setTab('def') }, [selectedId, creating])
@@ -104,7 +110,7 @@ export default function AutomationsPanel({ projects, onBack }: AutomationsPanelP
                   onSave={handleSave} onRunNow={handleRunNow}
                   onRemove={handleRemove} removeConfirming={removeConfirming} />
               ) : (
-                <div data-testid="automation-runs" className="text-xs text-fg-subtle">运行历史(Task 9 实装)</div>
+                <AutomationRuns taskId={current!.id} projectPath={current!.projectPath} onOpenSession={onOpenSession} onApprove={onApprove} />
               )}
             </>
           )}

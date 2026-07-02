@@ -67,9 +67,11 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
     const t = buildTask()
     if (!t) return null
     setSaving(true); setError(null)
-    const ok = await onSave(t)
-    if (!ok) { setError('保存失败'); setSaving(false); return null }
-    return t
+    try {
+      const ok = await onSave(t)
+      if (!ok) { setError('保存失败'); setSaving(false); return null }
+      return t
+    } catch (err) { console.error('[wraith] saveForRun error:', err); setError('保存失败'); setSaving(false); return null }
   }
 
   const handleRunNow = async (): Promise<void> => {

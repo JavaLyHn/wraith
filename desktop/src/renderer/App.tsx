@@ -160,13 +160,18 @@ export default function App(): JSX.Element {
     }
   }, [fetchMcpResources])
 
+  // ── automationApprovalRef:缓存最近一次 approval push(state 槽被 Esc 清掉后仍可从运行历史重弹) ──
+  const automationApprovalRef = useRef<{ runId: string; payload: Record<string, unknown> } | null>(null)
+
   // ── subscribe to automation events on mount ───────────────────────────────
   useEffect(() => {
     const unsub = window.wraith.onAutomationEvent(evt => {
       if (evt.kind === 'badge') setAutomationBadge(evt.show)
-      if (evt.kind === 'approval') setAutomationApproval({ runId: evt.runId, payload: evt.payload })
-      // TODO(Task 9 移交):run 终态后本槽的清理由 Task 9 的 automationApprovalRef + runs-changed 事件处理;
-      //   当前 run 提前终态时弹窗可能悬空——属已知移交,Task 9 补齐后可删此注释。
+      if (evt.kind === 'approval') {
+        const entry = { runId: evt.runId, payload: evt.payload }
+        automationApprovalRef.current = entry
+        setAutomationApproval(entry)
+      }
       if (evt.kind === 'open-panel') setView('automations')
       // 'runs-changed' 由面板自身拉取(Task 9),App 层不持 runs 态
     })
@@ -503,6 +508,19 @@ export default function App(): JSX.Element {
     [fetchProjects],
   )
 
+  // ── 运行历史:跳转到对应会话 ─────────────────────────────────────────────────
+  const handleOpenAutomationSession = useCallback(async (projectPath: string, sessionId: string) => {
+    setView('chat')
+    if (projectPath !== state.workspace) await switchToProject(projectPath)
+    await handleSelectSession(sessionId)
+  }, [state.workspace, switchToProject, handleSelectSession])
+
+  // ── 运行历史:重弹已缓存的审批弹窗(state 槽被 Esc 清掉后兜底) ───────────────
+  const handleReopenApproval = useCallback((runId: string) => {
+    const cached = automationApprovalRef.current
+    if (cached && cached.runId === runId) setAutomationApproval(cached)
+  }, [])
+
   const handleMcpToggle = useCallback(async (name: string, enable: boolean) => {
     try { await (enable ? window.wraith.mcpEnable(name) : window.wraith.mcpDisable(name)); void fetchMcp() }
     catch (err) { console.error('[wraith] mcp toggle error:', err) }
@@ -562,7 +580,8 @@ export default function App(): JSX.Element {
             onSubmitForm={handleMcpSubmitForm}
           />
         ) : view === 'automations' ? (
-          <AutomationsPanel projects={projects} onBack={() => setView('chat')} />
+          <AutomationsPanel projects={projects} onBack={() => setView('chat')}
+            onOpenSession={handleOpenAutomationSession} onApprove={handleReopenApproval} />
         ) : (
           /* 既有 welcome ↔ transcript+composer 条件块整体原样嵌此 else */
           (() => {
