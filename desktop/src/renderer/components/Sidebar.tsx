@@ -20,12 +20,13 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
+  activeNav: 'plugins' | null
+  onOpenPlugins: () => void
 }
 
-const NAV: { key: string; label: string; hint: string }[] = [
+const NAV_DISABLED: { key: string; label: string; hint: string }[] = [
   { key: 'search', label: '搜索', hint: '搜索在后续阶段' },
-  { key: 'plugins', label: '插件', hint: '插件在 Phase E' },
-  { key: 'automation', label: '自动化', hint: '自动化在 Phase E' },
+  { key: 'automation', label: '自动化', hint: '自动化在 Phase E-2' },
 ]
 
 export default function Sidebar({
@@ -41,6 +42,8 @@ export default function Sidebar({
   onRemoveProject,
   onRenameProject,
   sandbox,
+  activeNav,
+  onOpenPlugins,
 }: SidebarProps): JSX.Element {
   return (
     <TooltipProvider delayDuration={200}>
@@ -74,9 +77,34 @@ export default function Sidebar({
           </button>
         </div>
 
-        {/* nav — disabled placeholders */}
+        {/* nav */}
         <nav className="mt-3 flex flex-col gap-0.5 px-3">
-          {NAV.map(n => (
+          {/* search — disabled */}
+          <Tooltip key="search">
+            <TooltipTrigger asChild>
+              <button
+                data-testid="nav-search"
+                disabled
+                className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted opacity-60"
+              >
+                搜索
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>搜索在后续阶段</TooltipContent>
+          </Tooltip>
+
+          {/* plugins — enabled */}
+          <button
+            data-testid="nav-plugins"
+            onClick={onOpenPlugins}
+            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+              (activeNav === 'plugins' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+          >
+            插件
+          </button>
+
+          {/* automation — disabled */}
+          {NAV_DISABLED.filter(n => n.key === 'automation').map(n => (
             <Tooltip key={n.key}>
               <TooltipTrigger asChild>
                 <button
