@@ -1,7 +1,6 @@
 package com.lyhn.wraith.tool;
 
 import com.lyhn.wraith.hitl.*;
-import com.lyhn.wraith.policy.sandbox.CommandSandbox;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
@@ -26,19 +25,6 @@ class ToolRegistryNetworkOnceTest {
         List<String> cmd = reg.resolveProcessCommand("echo hi");
         assertEquals(List.of("bash", "-c", "echo hi"), cmd);
         assertFalse(reg.consumeNetworkOnce(), "无沙箱也要消费,防泄漏到后续命令");
-    }
-
-    @Test
-    void networkOverrideOmitsDenyNetworkInProfile() {
-        // 走 CommandSandbox 静态构建验证 profile 语义(不依赖本机 sandbox-exec)
-        CommandSandbox.Wrapped withNet = CommandSandbox.buildCommand(
-                true, true, "/proj", "/tmp", null, "curl example.com");
-        CommandSandbox.Wrapped noNet = CommandSandbox.buildCommand(
-                true, false, "/proj", "/tmp", null, "curl example.com");
-        String withNetJoined = String.join("\n", withNet.command());
-        String noNetJoined = String.join("\n", noNet.command());
-        assertFalse(withNetJoined.contains("(deny network*)"));
-        assertTrue(noNetJoined.contains("(deny network*)"));
     }
 
     @Test

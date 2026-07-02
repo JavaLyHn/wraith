@@ -62,4 +62,17 @@ class CommandSandboxTest {
             else System.setProperty("os.name", prev);
         }
     }
+
+    @Test
+    void networkOverrideOmitsDenyNetworkInProfile() {
+        // 走 CommandSandbox 静态构建验证 profile 语义(不依赖本机 sandbox-exec)
+        CommandSandbox.Wrapped withNet = CommandSandbox.buildCommand(
+                true, true, "/proj", "/tmp", null, "curl example.com");
+        CommandSandbox.Wrapped noNet = CommandSandbox.buildCommand(
+                true, false, "/proj", "/tmp", null, "curl example.com");
+        String withNetJoined = String.join("\n", withNet.command());
+        String noNetJoined = String.join("\n", noNet.command());
+        assertFalse(withNetJoined.contains("(deny network*)"));
+        assertTrue(noNetJoined.contains("(deny network*)"));
+    }
 }

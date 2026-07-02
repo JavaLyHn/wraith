@@ -1387,7 +1387,7 @@ public class ToolRegistry {
     public void grantNetworkOnce() { this.networkOnceGrant = true; }
 
     /** 取出并复位一次性网络放行标记。 */
-    public boolean consumeNetworkOnce() {
+    protected boolean consumeNetworkOnce() {
         boolean g = networkOnceGrant;
         networkOnceGrant = false;
         return g;
