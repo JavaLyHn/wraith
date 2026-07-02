@@ -1,4 +1,5 @@
 import type { ToolCard as ToolCardType } from '../../shared/transcriptReducer'
+import { toolBadgeLabel } from '../../shared/toolBadge'
 
 interface ToolCardProps {
   card: ToolCardType
@@ -19,13 +20,11 @@ export default function ToolCard({ card }: ToolCardProps): JSX.Element {
       <div className="flex items-center gap-2.5 border-b border-border px-3 py-1.5">
         <span className="font-semibold text-accent">{card.name}</span>
         <span className="flex-1 truncate text-fg-muted">{card.argsJson}</span>
-        {card.done ? (
-          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold ${badgeClass}`}>
-            {card.ok === false ? `exit ${card.exitCode ?? 1}` : `exit ${card.exitCode ?? 0}`}
-          </span>
-        ) : (
-          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] ${badgeClass}`}>running…</span>
-        )}
+        <span
+          className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] ${card.done ? 'font-semibold' : ''} ${badgeClass}`}
+        >
+          {toolBadgeLabel(card)}
+        </span>
       </div>
       <pre
         data-testid="tool-output"
