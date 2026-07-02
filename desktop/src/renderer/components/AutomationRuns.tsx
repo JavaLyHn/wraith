@@ -28,7 +28,13 @@ export default function AutomationRuns({ taskId, projectPath, onOpenSession, onA
 
   useEffect(() => {
     void fetchRuns()
-    return window.wraith.onAutomationEvent(evt => { if (evt.kind === 'runs-changed') void fetchRuns() })
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    const unsub = window.wraith.onAutomationEvent(evt => {
+      if (evt.kind !== 'runs-changed') return
+      if (debounceTimer !== null) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => { debounceTimer = null; void fetchRuns() }, 80)
+    })
+    return () => { unsub(); if (debounceTimer !== null) clearTimeout(debounceTimer) }
   }, [fetchRuns])
 
   const fmt = (ts: number): string => {
@@ -53,7 +59,7 @@ export default function AutomationRuns({ taskId, projectPath, onOpenSession, onA
               )}
               {(r.status === 'running' || r.status === 'waiting_approval') && (
                 <button data-testid="automation-run-stop"
-                  onClick={() => void window.wraith.automationStop(r.runId).then(() => void fetchRuns())}
+                  onClick={() => void window.wraith.automationStop(r.runId).then(() => void fetchRuns()).catch(err => console.error('[wraith] automationStop error:', err))}
                   className="rounded border border-border px-2 py-0.5 text-[11px] text-fg-muted hover:text-danger">终止</button>
               )}
               {r.sessionId && r.endedAt !== undefined && (

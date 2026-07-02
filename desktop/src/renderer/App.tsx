@@ -341,6 +341,7 @@ export default function App(): JSX.Element {
     const cur = automationApproval
     if (!cur) return
     setAutomationApproval(null)
+    automationApprovalRef.current = null
     try {
       await window.wraith.automationRespondApproval(
         cur.runId,
@@ -358,6 +359,7 @@ export default function App(): JSX.Element {
     const cur = automationApproval
     if (!cur) return
     setAutomationApproval(null)
+    automationApprovalRef.current = null
     try {
       await window.wraith.automationRespondApproval(cur.runId, String(cur.payload['approvalId']), 'REJECTED')
     } catch (err) { console.error('[wraith] automation reject error:', err) }
@@ -440,13 +442,13 @@ export default function App(): JSX.Element {
 
   // ── project switch(激活 + 自动恢复最近会话)─────────────────────────────
   const switchToProject = useCallback(
-    async (projectPath: string) => {
-      if (state.turn === 'running') return
+    async (projectPath: string): Promise<boolean> => {
+      if (state.turn === 'running') return false
       try {
         const { ok } = await window.wraith.activateProject(projectPath)
         if (!ok) {
           void fetchProjects() // 目录失踪 → 条目置灰,状态不变
-          return
+          return false
         }
         statusThrottleRef.current?.cancel()
         await window.wraith.startSession(projectPath)
@@ -463,9 +465,11 @@ export default function App(): JSX.Element {
         void fetchProjects() // lastUsedAt 刷新 → 浮顶
         void fetchMcp()
         void fetchMcpResources()
+        return true
       } catch (err) {
         console.error('[wraith] switchToProject error:', err)
         void fetchProjects()
+        return false
       }
     },
     [state.turn, fetchProjects, fetchMcp, fetchMcpResources],
@@ -510,15 +514,30 @@ export default function App(): JSX.Element {
 
   // ── 运行历史:跳转到对应会话 ─────────────────────────────────────────────────
   const handleOpenAutomationSession = useCallback(async (projectPath: string, sessionId: string) => {
+    if (state.turn === 'running') return
     setView('chat')
-    if (projectPath !== state.workspace) await switchToProject(projectPath)
+    if (projectPath !== state.workspace) {
+      const ok = await switchToProject(projectPath)
+      if (!ok) return
+    }
     await handleSelectSession(sessionId)
-  }, [state.workspace, switchToProject, handleSelectSession])
+  }, [state.turn, state.workspace, switchToProject, handleSelectSession])
 
-  // ── 运行历史:重弹已缓存的审批弹窗(state 槽被 Esc 清掉后兜底) ───────────────
-  const handleReopenApproval = useCallback((runId: string) => {
+  // ── 运行历史:重弹已缓存的审批弹窗(先验证 run 仍在 waiting_approval,再重弹) ──
+  const handleReopenApproval = useCallback(async (runId: string) => {
     const cached = automationApprovalRef.current
-    if (cached && cached.runId === runId) setAutomationApproval(cached)
+    if (!cached || cached.runId !== runId) return
+    try {
+      const { runs } = await window.wraith.automationRuns()
+      const run = runs.find(r => r.runId === runId)
+      if (run?.status === 'waiting_approval') {
+        setAutomationApproval(cached)
+      } else {
+        automationApprovalRef.current = null
+      }
+    } catch (err) {
+      console.error('[wraith] handleReopenApproval error:', err)
+    }
   }, [])
 
   const handleMcpToggle = useCallback(async (name: string, enable: boolean) => {

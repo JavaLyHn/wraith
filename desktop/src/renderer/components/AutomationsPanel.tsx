@@ -27,8 +27,13 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
     void fetchTasks()
     void window.wraith.automationPanelOpened() // 清红点(spec §3)
     // runs-changed 后 lastFiredAt 可能更新 → 刷左侧任务列表使 computeNextRunLabel 更新
-    const unsub = window.wraith.onAutomationEvent(evt => { if (evt.kind === 'runs-changed') void fetchTasks() })
-    return unsub
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+    const unsub = window.wraith.onAutomationEvent(evt => {
+      if (evt.kind !== 'runs-changed') return
+      if (debounceTimer !== null) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => { debounceTimer = null; void fetchTasks() }, 80)
+    })
+    return () => { unsub(); if (debounceTimer !== null) clearTimeout(debounceTimer) }
   }, [fetchTasks])
 
   useEffect(() => { setRemoveConfirming(false); setTab('def') }, [selectedId, creating])
