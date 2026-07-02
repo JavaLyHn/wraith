@@ -6,11 +6,26 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import readline from 'readline'
 import { JsonRpcClient } from '../shared/jsonRpcClient'
 import { resolveBackendCommand, defaultJarPath } from './backend'
-import { resolvePersistedWorkspace, persistWorkspace } from './settings'
+import fs from 'fs'
+import {
+  resolvePersistedWorkspace,
+  persistWorkspace,
+  upsertProject,
+  removeProject,
+  renameProject,
+  projectViews,
+  seedProjectsIfEmpty,
+  seedProjectsFromJson,
+} from './settings'
 import type { BackendEvent } from '../shared/types'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+// E2E:userData 重定向到临时目录,settings 读写不污染真实应用数据
+if (process.env['WRAITH_E2E_USERDATA']) {
+  app.setPath('userData', process.env['WRAITH_E2E_USERDATA'])
+}
 
 // ---------------------------------------------------------------------------
 // State — kept in module scope (single main process, single window)
@@ -198,22 +213,49 @@ ipcMain.handle('wraith:getInitialWorkspace', async () => {
   return resolvePersistedWorkspace(app.getPath('userData')) ?? os.homedir()
 })
 
-ipcMain.handle('wraith:pickWorkspace', async () => {
-  // E2E: what a button-driven pick resolves to (unset → null → cancel/no-op).
-  if (process.env['WRAITH_E2E'] === '1') {
-    return process.env['WRAITH_E2E_PICK'] ?? null
+ipcMain.handle('wraith:listProjects', async () => {
+  return { projects: projectViews(app.getPath('userData')) }
+})
+
+/** 激活项目:目录校验 → upsert 刷 lastUsedAt → 持久化为当前 workspace。 */
+ipcMain.handle('wraith:activateProject', async (_e, projectPath: string) => {
+  try {
+    if (!fs.statSync(projectPath).isDirectory()) return { ok: false }
+  } catch {
+    return { ok: false } // 不存在/不可达 → 前端刷新列表置灰
   }
-  // Open the native picker at the current workspace (or home), not wherever the
-  // OS last remembered.
-  const current = resolvePersistedWorkspace(app.getPath('userData')) ?? os.homedir()
-  const result = await dialog.showOpenDialog({
-    properties: ['openDirectory'],
-    defaultPath: current
-  })
-  if (result.canceled || result.filePaths.length === 0) return null
-  const picked = result.filePaths[0]!
-  persistWorkspace(app.getPath('userData'), picked) // remember for next launch
+  const ud = app.getPath('userData')
+  upsertProject(ud, projectPath, Date.now())
+  persistWorkspace(ud, projectPath)
+  return { ok: true }
+})
+
+/** 添加项目:弹目录选择框,选中即入列表并激活(取消返回 null)。 */
+ipcMain.handle('wraith:addProject', async () => {
+  const ud = app.getPath('userData')
+  let picked: string | null
+  if (process.env['WRAITH_E2E'] === '1') {
+    picked = process.env['WRAITH_E2E_PICK'] ?? null // unset → null → 取消/no-op
+  } else {
+    const current = resolvePersistedWorkspace(ud) ?? os.homedir()
+    const result = await dialog.showOpenDialog({
+      properties: ['openDirectory'],
+      defaultPath: current
+    })
+    picked = result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]!
+  }
+  if (!picked) return null
+  upsertProject(ud, picked, Date.now())
+  persistWorkspace(ud, picked)
   return picked
+})
+
+ipcMain.handle('wraith:removeProject', async (_e, projectPath: string) => {
+  removeProject(app.getPath('userData'), projectPath)
+})
+
+ipcMain.handle('wraith:renameProject', async (_e, projectPath: string, name: string) => {
+  renameProject(app.getPath('userData'), projectPath, name)
 })
 
 ipcMain.handle('wraith:restartBackend', async () => {
@@ -251,6 +293,14 @@ ipcMain.handle('wraith:rewindSession', async (_e, userOrdinal: number) => {
 // ---------------------------------------------------------------------------
 
 app.whenReady().then(() => {
+  const ud = app.getPath('userData')
+  const injected = process.env['WRAITH_E2E_PROJECTS']
+  if (process.env['WRAITH_E2E'] === '1') {
+    // E2E 只认注入,不跑迁移(未注入 USERDATA 的旧用例不该写真实 userData)
+    if (injected) seedProjectsFromJson(ud, injected, Date.now())
+  } else {
+    seedProjectsIfEmpty(ud, Date.now())
+  }
   createWindow()
   spawnBackend()
 

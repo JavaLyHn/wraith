@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView } from '../shared/types'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -18,7 +18,11 @@ export interface WraithApi {
   ): Promise<void>
   interrupt(): Promise<void>
   getInitialWorkspace(): Promise<string | null>
-  pickWorkspace(): Promise<string | null>
+  listProjects(): Promise<{ projects: ProjectView[] }>
+  activateProject(path: string): Promise<{ ok: boolean }>
+  addProject(): Promise<string | null>
+  removeProject(path: string): Promise<void>
+  renameProject(path: string, name: string): Promise<void>
   restartBackend(): Promise<void>
   setApprovalMode(auto: boolean): Promise<{ ok: boolean }>
   listSessions(): Promise<{ sessions: SessionMeta[] }>
@@ -52,8 +56,24 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:getInitialWorkspace')
   },
 
-  pickWorkspace() {
-    return ipcRenderer.invoke('wraith:pickWorkspace')
+  listProjects() {
+    return ipcRenderer.invoke('wraith:listProjects') as Promise<{ projects: ProjectView[] }>
+  },
+
+  activateProject(path) {
+    return ipcRenderer.invoke('wraith:activateProject', path) as Promise<{ ok: boolean }>
+  },
+
+  addProject() {
+    return ipcRenderer.invoke('wraith:addProject') as Promise<string | null>
+  },
+
+  removeProject(path) {
+    return ipcRenderer.invoke('wraith:removeProject', path) as Promise<void>
+  },
+
+  renameProject(path, name) {
+    return ipcRenderer.invoke('wraith:renameProject', path, name) as Promise<void>
   },
 
   restartBackend() {
