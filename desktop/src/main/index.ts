@@ -202,8 +202,8 @@ ipcMain.handle('wraith:interrupt', async () => {
 /**
  * Startup workspace — NO dialog. Returns the persisted workspace (if it still
  * exists and is a directory), else the home directory. The user changes it via
- * the composer's "重选目录" button (wraith:pickWorkspace), which is the only
- * place a native dialog appears.
+ * the project switcher "添加项目" button or the composer's "重选目录" button
+ * (both route to wraith:addProject), which is the only place a native dialog appears.
  */
 ipcMain.handle('wraith:getInitialWorkspace', async () => {
   // E2E: startup workspace is injected directly (unset → null → backend default).
@@ -238,10 +238,10 @@ ipcMain.handle('wraith:addProject', async () => {
     picked = process.env['WRAITH_E2E_PICK'] ?? null // unset → null → 取消/no-op
   } else {
     const current = resolvePersistedWorkspace(ud) ?? os.homedir()
-    const result = await dialog.showOpenDialog({
-      properties: ['openDirectory'],
-      defaultPath: current
-    })
+    // 模态:弹窗期间冻结渲染进程输入,防止 turn 运行中触发 session.start 换会话
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'], defaultPath: current })
+      : await dialog.showOpenDialog({ properties: ['openDirectory'], defaultPath: current })
     picked = result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]!
   }
   if (!picked) return null
