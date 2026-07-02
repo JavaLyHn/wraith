@@ -78,6 +78,8 @@ interface AutomationTask {
   schedule: Schedule
   enabled: boolean
   createdAt: number          // epoch ms
+  enabledAt: number          // enabled 置 true 的时刻(interval 锚点;创建即启用时=createdAt)
+  lastFiredAt: number | null // 上次触发时刻(miss 也更新;立即运行不更新)
 }
 type Schedule =
   | { kind: 'interval'; everyMinutes: number }          // ≥5 分钟,表单下限校验
