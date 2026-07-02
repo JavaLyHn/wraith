@@ -730,3 +730,54 @@ test('running 中按 Esc → 发送 turn.interrupt', async () => {
   await app.close()
   fs.rmSync(recordFile, { force: true })
 })
+
+// ---------------------------------------------------------------------------
+// Test 21: 自动贴底——发送后滚到最下;上翻后再发送强制回底
+// ---------------------------------------------------------------------------
+
+test('长对话发送后自动滚到底部;上翻后再次发送强制回底', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1'
+    }
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  const atBottom = () =>
+    win.locator('[data-testid="transcript"]').evaluate(el =>
+      el.scrollHeight - el.scrollTop - el.clientHeight < 5)
+
+  // 4 轮撑满溢出
+  for (let turn = 1; turn <= 4; turn++) {
+    await input.fill(`第 ${turn} 轮消息`)
+    await input.press('Enter')
+    const approveBtn = win.locator('[data-testid="approve"]')
+    await expect(approveBtn).toBeVisible({ timeout: 10000 })
+    await approveBtn.click()
+    await expect(win.locator('[data-testid="diff-card"]')).toHaveCount(turn, { timeout: 10000 })
+  }
+  const overflowed = await win
+    .locator('[data-testid="transcript"]')
+    .evaluate(el => el.scrollHeight > el.clientHeight)
+  expect(overflowed).toBe(true)
+  await expect.poll(atBottom, { timeout: 5000 }).toBe(true)
+
+  // 上翻到顶,发送新消息 → 必须强制回底
+  await win.locator('[data-testid="transcript"]').evaluate(el => { el.scrollTop = 0 })
+  await input.fill('第 5 轮消息')
+  await input.press('Enter')
+  await expect.poll(atBottom, { timeout: 5000 }).toBe(true)
+
+  // 收尾:放行第 5 轮审批,防挂起
+  await expect(win.locator('[data-testid="approve"]')).toBeVisible({ timeout: 10000 })
+  await win.locator('[data-testid="approve"]').click()
+  await expect(win.locator('[data-testid="diff-card"]')).toHaveCount(5, { timeout: 10000 })
+  await expect.poll(atBottom, { timeout: 5000 }).toBe(true)
+
+  await app.close()
+})
