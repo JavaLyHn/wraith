@@ -10,7 +10,7 @@ public final class QqApiClient {
     private static final MediaType JSON = MediaType.get("application/json");
     private final String appId, clientSecret, apiBase, tokenUrl;
     private final OkHttpClient http;
-    private final ObjectMapper M = new ObjectMapper();
+    private static final ObjectMapper M = new ObjectMapper();
     private final AtomicInteger seqCtr = new AtomicInteger(0);
     private volatile String token;
     private volatile long expiresAtMs;
@@ -24,11 +24,13 @@ public final class QqApiClient {
         String body = M.writeValueAsString(java.util.Map.of("appId", appId, "clientSecret", clientSecret));
         try (Response r = http.newCall(new Request.Builder().url(tokenUrl)
                 .post(RequestBody.create(body, JSON)).header("Accept", "application/json").build()).execute()) {
-            var node = M.readTree(r.body().string());
+            okhttp3.ResponseBody rb = r.body();
+            if (rb == null) throw new IOException("empty token response");
+            var node = M.readTree(rb.string());
             token = node.path("access_token").asText();
             long ttl = node.path("expires_in").asLong(7200);
             expiresAtMs = System.currentTimeMillis() + ttl * 1000;
-            if (token == null || token.isEmpty()) throw new IOException("no access_token");
+            if (token.isEmpty()) throw new IOException("no access_token");
             return token;
         }
     }

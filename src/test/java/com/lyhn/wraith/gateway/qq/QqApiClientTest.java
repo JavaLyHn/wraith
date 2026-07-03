@@ -22,6 +22,22 @@ class QqApiClientTest {
         assertEquals(1, server.getRequestCount());          // 未二次请求 token
     }
 
+    @Test void multiChunkPutsMsgIdOnFirstChunkOnly() throws Exception {
+        server.enqueue(new MockResponse().setBody("{\"access_token\":\"TOK\",\"expires_in\":7200}"));
+        server.enqueue(new MockResponse().setBody("{\"id\":\"a\"}"));
+        server.enqueue(new MockResponse().setBody("{\"id\":\"b\"}"));
+        client().sendC2C("OPENID_A", "a".repeat(4500), "MSG1");  // 4500 chars, no newline → exactly 2 chunks
+        server.takeRequest();                                      // token request
+        RecordedRequest send1 = server.takeRequest();              // chunk 1
+        RecordedRequest send2 = server.takeRequest();              // chunk 2
+        String body1 = send1.getBody().readUtf8();
+        String body2 = send2.getBody().readUtf8();
+        assertTrue(body1.contains("\"msg_id\":\"MSG1\""),   "first chunk must carry msg_id");
+        assertFalse(body2.contains("msg_id"),               "second chunk must NOT carry msg_id");
+        assertTrue(body1.contains("\"msg_seq\""),           "first chunk must carry msg_seq");
+        assertTrue(body2.contains("\"msg_seq\""),           "second chunk must carry msg_seq");
+    }
+
     @Test void sendC2cPostsPassiveReply() throws Exception {
         server.enqueue(new MockResponse().setBody("{\"access_token\":\"TOK\",\"expires_in\":7200}"));
         server.enqueue(new MockResponse().setBody("{\"id\":\"x\"}"));
