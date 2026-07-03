@@ -220,6 +220,22 @@ export interface McpUpsertPayload {
 }
 
 // ---------------------------------------------------------------------------
+// Task 5: model/provider management
+// ---------------------------------------------------------------------------
+
+export interface ProviderView {
+  name: string
+  model: string
+  hasKey: boolean
+}
+
+export interface ModelListResult {
+  current: { provider: string; model: string }
+  default: string
+  providers: ProviderView[]
+}
+
+// ---------------------------------------------------------------------------
 // Phase E-2: 定时自动化
 // ---------------------------------------------------------------------------
 

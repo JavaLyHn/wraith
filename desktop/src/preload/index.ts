@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult } from '../shared/types'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -49,6 +49,9 @@ export interface WraithApi {
     opts?: { modifiedArgs?: string; allowNetwork?: boolean }): Promise<{ ok: boolean }>
   automationPanelOpened(): Promise<{ ok: boolean }>
   onAutomationEvent(cb: (evt: AutomationEvent) => void): () => void
+  modelList(): Promise<ModelListResult>
+  setModel(provider: string): Promise<{ provider: string; model: string }>
+  setDefaultProvider(provider: string): Promise<{ ok: boolean }>
 }
 
 const wraith: WraithApi = {
@@ -204,6 +207,18 @@ const wraith: WraithApi = {
     const listener = (_e: Electron.IpcRendererEvent, evt: AutomationEvent) => cb(evt)
     ipcRenderer.on('wraith:automation-event', listener)
     return () => { ipcRenderer.removeListener('wraith:automation-event', listener) }
+  },
+
+  modelList() {
+    return ipcRenderer.invoke('wraith:modelList') as Promise<ModelListResult>
+  },
+
+  setModel(provider) {
+    return ipcRenderer.invoke('wraith:setModel', provider) as Promise<{ provider: string; model: string }>
+  },
+
+  setDefaultProvider(provider) {
+    return ipcRenderer.invoke('wraith:setDefaultProvider', provider) as Promise<{ ok: boolean }>
   },
 }
 

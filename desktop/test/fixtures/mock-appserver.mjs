@@ -49,6 +49,21 @@ let turnSeq = 0
 let turnId = ''
 let pendingApproval = false
 
+// ---------------------------------------------------------------------------
+// Model / provider state (Task 5: model.list / session.setModel / config.setDefaultProvider)
+// ---------------------------------------------------------------------------
+
+const providers = [
+  { name: 'deepseek', model: 'deepseek-chat', hasKey: true },
+  { name: 'openai', model: 'gpt-4o', hasKey: false },
+]
+
+let modelState = {
+  current: { provider: 'deepseek', model: 'deepseek-chat' },
+  // openai has no key but is set as default so deepseek shows the "set default" button in T45
+  default: 'openai',
+}
+
 const mockMcp = (() => {
   try { return process.env['MOCK_MCP'] ? JSON.parse(process.env['MOCK_MCP']) : null } catch { return null }
 })()
@@ -353,6 +368,43 @@ async function handleRequest(req) {
     }
     case 'mcp.config.remove': {
       mcpServers = mcpServers.filter(x => x.name !== (params && params.name))
+      reply(id, { ok: true })
+      break
+    }
+
+    case 'model.list': {
+      reply(id, {
+        current: { ...modelState.current },
+        default: modelState.default,
+        providers: providers.map(p => ({ name: p.name, model: p.model, hasKey: p.hasKey })),
+      })
+      break
+    }
+
+    case 'session.setModel': {
+      const providerName = params && params.provider
+      const target = providers.find(p => p.name === providerName)
+      if (!target) {
+        send({ jsonrpc: '2.0', id, error: { code: -32602, message: `Unknown provider: ${providerName}` } })
+        break
+      }
+      if (!target.hasKey) {
+        send({ jsonrpc: '2.0', id, error: { code: -32602, message: `Provider ${providerName} has no API key configured` } })
+        break
+      }
+      modelState.current = { provider: target.name, model: target.model }
+      reply(id, { provider: target.name, model: target.model })
+      break
+    }
+
+    case 'config.setDefaultProvider': {
+      const providerName = params && params.provider
+      const target = providers.find(p => p.name === providerName)
+      if (!target) {
+        send({ jsonrpc: '2.0', id, error: { code: -32602, message: `Unknown provider: ${providerName}` } })
+        break
+      }
+      modelState.default = target.name
       reply(id, { ok: true })
       break
     }

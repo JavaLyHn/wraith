@@ -405,6 +405,21 @@ ipcMain.handle('wraith:restartBackend', async () => {
   // Renderer is responsible for re-running initialize/startSession after restart.
 })
 
+ipcMain.handle('wraith:modelList', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('model.list', {})
+})
+
+ipcMain.handle('wraith:setModel', async (_e, provider: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.setModel', { sessionId: currentSessionId, provider })
+})
+
+ipcMain.handle('wraith:setDefaultProvider', async (_e, provider: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.setDefaultProvider', { provider })
+})
+
 ipcMain.handle('wraith:setApprovalMode', async (_e, auto: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.setApprovalMode', {

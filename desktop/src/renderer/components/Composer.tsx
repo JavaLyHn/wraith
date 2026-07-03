@@ -1,14 +1,12 @@
 import { useCallback, useRef, useState } from 'react'
 import { Switch } from './ui/switch'
 import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
   TooltipProvider,
 } from './ui/tooltip'
 import { baseName } from '../lib/paths'
 import { shouldSendOnEnter } from '../../shared/composerKeys'
 import StatusChip from './StatusChip'
+import ModelSwitcher from './ModelSwitcher'
 import type { StatusData, McpResourceView } from '../../shared/types'
 import { detectMention, filterMentionItems, insertMention } from '../../shared/mentionTrigger'
 import type { MentionState } from '../../shared/mentionTrigger'
@@ -179,15 +177,8 @@ export default function Composer({
             +
           </button>
 
-          {/* model chip — read only */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="cursor-default rounded-lg border border-border px-2 py-1 text-xs text-fg-muted">
-                {model || '—'}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>模型/强度切换在后续阶段</TooltipContent>
-          </Tooltip>
+          {/* model chip — interactive switcher */}
+          <ModelSwitcher initialModel={model} running={running} />
 
           {/* token 状态 — status 事件驱动 */}
           <StatusChip status={status} />
