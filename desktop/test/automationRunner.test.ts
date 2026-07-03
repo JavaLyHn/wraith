@@ -110,3 +110,62 @@ describe('AutomationRunner stderr 前缀(A6)', () => {
     }
   }, 10_000)
 })
+
+describe('B5: 严格并发1——exited 在子进程真正退净后才 resolve', () => {
+  /**
+   * 验证 AutomationRunner.exited promise 的核心语义:
+   * 用 complete-then-hang + ignore-sigterm 组合:子进程发 turn.completed(run() 快速 settle 为 success),
+   * 然后挂起并忽略 SIGTERM(强制 2s SIGKILL)。此时 run() settle 与子进程真正退出之间有 ~2s 窗口。
+   *
+   * 先红后绿语义:
+   *   - 改动前(无 exited 字段):tsc --noEmit 报错 Property 'exited' does not exist → 测试无法通过。
+   *   - 改动后(exited 仅在 proc.on('exit') 首行 resolve):
+   *       run() settle(success)后 exited 仍 pending(SIGKILL 尚未到达);
+   *       await runner.exited 阻塞约 2s 后 resolve(SIGKILL reaps child)。
+   *
+   * 验证策略:
+   *   1. run() settle 后立即对 exited 做 race(50ms timeout)→ 应超时(仍 pending)。
+   *   2. await runner.exited 阻塞直到 SIGKILL 后进程真正退出。
+   *   3. 再次 race(50ms) → 应立即 resolve(幂等)。
+   */
+  it('complete-then-hang+ignore-sigterm: run()→success settle 后 exited 仍 pending,SIGKILL 后才 resolve', async () => {
+    // fake-child: 发 turn.completed(run settle),然后挂起,忽略 SIGTERM(强制 2s SIGKILL)
+    const cmd = ['node', fakeChild, 'complete-then-hang', 'ignore-sigterm'].join(' ')
+    const env = { ...process.env, WRAITH_APPSERVER_CMD: cmd } as NodeJS.ProcessEnv
+
+    const states: RunState[] = []
+    const runner = new AutomationRunner(env, '/nonexistent-home', {
+      onUpdate: s => states.push(s),
+      onApproval: () => { /* 不触发 */ },
+    }, 'b5-task1')
+
+    // run() 快速 settle 为 success(turn.completed 到达后 runner 内部 killChild → SIGTERM)
+    const final = await runner.run('/tmp', 'hi')
+    expect(final.phase).toBe('success')
+    const settleAt = Date.now()
+
+    // 【先红后绿核心断言】run() 刚 settle,子进程仍存活(SIGKILL 还未到,约 2s 后)
+    // race exited vs 100ms timeout → exited 应仍 pending → SENTINEL 胜出
+    const SENTINEL = 'timeout-sentinel'
+    const raceResult = await Promise.race([
+      runner.exited.then(() => 'exited'),
+      new Promise<string>(r => setTimeout(() => r(SENTINEL), 100)),
+    ])
+    // 若 exited 在 settle 时就同步 resolve → raceResult === 'exited' → 断言失败(揭示旧语义缺陷)
+    expect(raceResult).toBe(SENTINEL)
+
+    // 等 exited 真正 resolve(SIGKILL 后子进程退出)
+    await runner.exited
+    const exitedAt = Date.now()
+
+    // exited resolve 必须晚于 run() settle(证明不是 settle 时即 resolve,保证子进程退净)
+    expect(exitedAt).toBeGreaterThan(settleAt)
+
+    // 再次 race:exited 已 resolved → 应立即 resolve(幂等)
+    const raceResult2 = await Promise.race([
+      runner.exited.then(() => 'exited'),
+      new Promise<string>(r => setTimeout(() => r(SENTINEL), 50)),
+    ])
+    expect(raceResult2).toBe('exited')
+  }, 15_000)
+})

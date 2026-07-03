@@ -165,8 +165,11 @@ export class AutomationScheduler {
       console.error('[AutomationScheduler] runner.run() threw unexpectedly:', err)
       this.finishRun(runId, task.id, { phase: 'failed', error: String(err) } as RunState, startedAt)
     }).finally(() => {
-      this.current = null
-      this.drainQueue()   // I-3: 统一出队点,逻辑抽为 drainQueue(tick 兜底共用)
+      // B5: 终态(settle)后等子进程真正退净(SIGKILL 升级 ≤2s 兜底),保证任意时刻至多一个自动化子进程
+      void runner.exited.then(() => {
+        this.current = null
+        this.drainQueue()   // I-3: 统一出队点,逻辑抽为 drainQueue(tick 兜底共用)
+      })
     })
     return true
   }
