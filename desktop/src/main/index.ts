@@ -26,6 +26,7 @@ import {
 import { AutomationScheduler } from './automationScheduler'
 import type { AutomationTask, AutomationEvent } from '../shared/types'
 import { resolveInterruptTurnId } from './interruptTurnId'
+import { shouldForwardNotification } from './notificationFilter'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -137,7 +138,10 @@ function spawnBackend(): void {
   client = rpcClient
 
   // Forward server-push notifications to renderer.
+  // T12 防御性会话过滤:params.sessionId 存在且不匹配当前活跃会话时丢弃通知。
+  // 无 sessionId 的通知始终放行(兼容)。单会话 v1 下行为不变(see notificationFilter.ts)。
   rpcClient.onNotification((method, params) => {
+    if (!shouldForwardNotification(currentSessionId, params)) return
     sendEvent({ kind: 'notification', method, params })
   })
 
