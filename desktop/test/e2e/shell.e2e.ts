@@ -1436,3 +1436,127 @@ test('T39 插件面板坏配置横幅:mcp-config-error banner 含错误文本', 
   ).toContainText('第 3 行', { timeout: 10000 })
   await app.close(); cleanup()
 })
+
+// ---------------------------------------------------------------------------
+// T42: 附件链 — WRAITH_E2E_ATTACH 注入文本文件 → 点 attach → chip 出现 → 提交 → record 断言
+// ---------------------------------------------------------------------------
+
+test('T42 附件链:注入文件 → chip 出现 → 提交 → turn.submit params.attachments[0].path/kind 正确', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-t42.jsonl`)
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t42-'))
+  // 创建临时文本文件
+  const tmpFile = path.join(os.tmpdir(), `wraith-attach-t42-${process.pid}.txt`)
+  fs.writeFileSync(tmpFile, 'hello attachment\n')
+
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_ATTACH: JSON.stringify([tmpFile]),
+      MOCK_NO_APPROVAL: '1',
+    },
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  // 点 attach 按钮 → chip 出现
+  const attachBtn = win.locator('[data-testid="attach"]')
+  await expect(attachBtn).toBeEnabled({ timeout: 5000 })
+  await attachBtn.click()
+
+  // chip 应出现并包含文件名
+  const chip = win.locator('[data-testid="attachment-chip"]')
+  await expect(chip).toBeVisible({ timeout: 5000 })
+  await expect(chip).toContainText(path.basename(tmpFile))
+
+  // 提交
+  await input.fill('带附件的消息')
+  await input.press('Enter')
+
+  // record 断言 turn.submit params.attachments[0]
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return null
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const submit = [...lines].reverse().find(l => l.method === 'turn.submit')
+      if (!submit || !submit.params?.attachments?.length) return null
+      return {
+        path: submit.params.attachments[0].path,
+        kind: submit.params.attachments[0].kind,
+      }
+    }, { timeout: 10000 })
+    .toEqual({ path: tmpFile, kind: 'text' })
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
+  fs.rmSync(tmpFile, { force: true })
+})
+
+// ---------------------------------------------------------------------------
+// T43: 两附件移除其一 → 提交 → record 断言只剩一个
+// ---------------------------------------------------------------------------
+
+test('T43 两附件移除其一 → 提交 → turn.submit params.attachments 只含一个', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-t43.jsonl`)
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t43-'))
+  const tmpFileA = path.join(os.tmpdir(), `wraith-attach-t43a-${process.pid}.txt`)
+  const tmpFileB = path.join(os.tmpdir(), `wraith-attach-t43b-${process.pid}.txt`)
+  fs.writeFileSync(tmpFileA, 'file A\n')
+  fs.writeFileSync(tmpFileB, 'file B\n')
+
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_ATTACH: JSON.stringify([tmpFileA, tmpFileB]),
+      MOCK_NO_APPROVAL: '1',
+    },
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  // 点 attach → 两个 chip 出现
+  await win.locator('[data-testid="attach"]').click()
+  await expect(win.locator('[data-testid="attachment-chip"]')).toHaveCount(2, { timeout: 5000 })
+
+  // 移除第一个 chip
+  await win.locator('[data-testid="attachment-remove"]').first().click()
+  await expect(win.locator('[data-testid="attachment-chip"]')).toHaveCount(1, { timeout: 5000 })
+
+  // 提交
+  await input.fill('移除一个后提交')
+  await input.press('Enter')
+
+  // record 断言:attachments 只含 1 个(tmpFileB)
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return null
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const submit = [...lines].reverse().find(l => l.method === 'turn.submit')
+      if (!submit || !submit.params?.attachments) return null
+      return submit.params.attachments.length
+    }, { timeout: 10000 })
+    .toBe(1)
+
+  // 确认剩下的是 B
+  const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map((l: string) => JSON.parse(l))
+  const submit = [...lines].reverse().find((l: { method: string }) => l.method === 'turn.submit')
+  expect(submit?.params?.attachments?.[0]?.path).toBe(tmpFileB)
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
+  fs.rmSync(tmpFileA, { force: true })
+  fs.rmSync(tmpFileB, { force: true })
+})

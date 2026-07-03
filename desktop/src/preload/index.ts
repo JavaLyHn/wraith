@@ -10,7 +10,8 @@ import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListRes
 export interface WraithApi {
   initialize(workspaceDir: string | null): Promise<unknown>
   startSession(workspaceDir: string | null): Promise<{ sessionId: string }>
-  submitTurn(input: string): Promise<{ turnId: string; status: string }>
+  submitTurn(input: string, attachments?: { path: string; kind: string }[]): Promise<{ turnId: string; status: string }>
+  pickAttachments(): Promise<{ path: string; name: string; kind: string }[]>
   respondApproval(
     approvalId: string,
     decision: 'APPROVED' | 'REJECTED' | 'MODIFIED' | 'APPROVED_ALL',
@@ -59,8 +60,12 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:startSession', workspaceDir)
   },
 
-  submitTurn(input) {
-    return ipcRenderer.invoke('wraith:submitTurn', input)
+  submitTurn(input, attachments) {
+    return ipcRenderer.invoke('wraith:submitTurn', input, attachments)
+  },
+
+  pickAttachments() {
+    return ipcRenderer.invoke('wraith:pickAttachments') as Promise<{ path: string; name: string; kind: string }[]>
   },
 
   respondApproval(approvalId, decision, opts) {

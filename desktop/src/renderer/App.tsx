@@ -23,7 +23,7 @@ import {
 } from '../shared/transcriptReducer'
 import { messagesToItems } from '../shared/messagesToItems'
 import Transcript from './components/Transcript'
-import Composer from './components/Composer'
+import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
 import DisconnectedBanner from './components/DisconnectedBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
@@ -118,6 +118,7 @@ const connectedInitialState: TranscriptState = {
 export default function App(): JSX.Element {
   const [state, dispatch] = useReducer(reduceAdapter, connectedInitialState)
   const [inputValue, setInputValue] = useState('')
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
   const [view, setView] = useState<'chat' | 'plugins' | 'automations'>('chat')
@@ -309,15 +310,33 @@ export default function App(): JSX.Element {
     prevTurnRef.current = state.turn
   }, [state.turn, fetchSessions])
 
+  // ── pick attachments ──────────────────────────────────────────────────────
+  const handlePickAttachments = useCallback(async () => {
+    try {
+      const picked = await window.wraith.pickAttachments()
+      if (picked.length > 0) {
+        setAttachments(prev => [...prev, ...picked])
+      }
+    } catch (err) {
+      console.error('[wraith] pickAttachments error:', err)
+    }
+  }, [])
+
+  const handleRemoveAttachment = useCallback((index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
   // ── input submit ──────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
     const text = inputValue.trim()
     if (!text || state.turn === 'running') return
     setInputValue('')
+    const pendingAttachments = attachments
+    setAttachments([])
     dispatch({ type: 'markStarted' })
     dispatch({ type: 'addUserItem', text })
     try {
-      await window.wraith.submitTurn(text)
+      await window.wraith.submitTurn(text, pendingAttachments.length > 0 ? pendingAttachments.map(a => ({ path: a.path, kind: a.kind })) : undefined)
     } catch (err) {
       console.error('[wraith] submitTurn error:', err)
       // 失败路径:markStarted 已提前置 turn='running',但本地 RPC 失败(后端死/拒绝)时
@@ -325,7 +344,7 @@ export default function App(): JSX.Element {
       // 复用现有 turn.failed reducer 动作把 turn 归 idle(不新造事件类型,与现有风格一致)。
       dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
     }
-  }, [inputValue, state.turn])
+  }, [inputValue, state.turn, attachments])
 
   // ── approval handlers ──────────────────────────────────────────────────────
   const handleApprovalRespond = useCallback(
@@ -643,6 +662,9 @@ export default function App(): JSX.Element {
                 centered={!state.hasStarted}
                 status={state.status}
                 resources={mcpResources}
+                attachments={attachments}
+                onPickAttachments={handlePickAttachments}
+                onRemoveAttachment={handleRemoveAttachment}
               />
             )
             return state.hasStarted ? (
