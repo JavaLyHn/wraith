@@ -774,6 +774,85 @@ class McpServerManagerTest {
                 "manager.close() 后 list_changed 不应向 registry 写入新工具");
     }
 
+    // ---- Task 8: mcp.status ERROR 通知链端到端断言 ----
+
+    /**
+     * T8:setStatus(ERROR)→statusListener→errorMessage 端到端贯穿测试。
+     *
+     * <p>场景:挂录制 {@code setStatusListener},启动一个必然失败的 server
+     * (URL 含未设置的环境变量 {@code ${UNSET_DEMO_VAR_FOR_TEST}},复用
+     * {@code singleServerFailureDoesNotBlockOthers} 的 bad-config 模式),
+     * {@code configLoader.prepare()} 展开失败 → {@code start()} catch 触发
+     * {@code setStatus(server, ERROR)} → listener 被调用。
+     *
+     * <p>断言:
+     * <ol>
+     *   <li>listener 收到 ERROR 状态的 server。</li>
+     *   <li>该 server 的 {@code errorMessage()} 在 listener 被调用时非 null、非空白。</li>
+     *   <li>(加分)STARTING → ERROR 的顺序可观察。</li>
+     * </ol>
+     *
+     * <p>红绿区分:
+     * <ul>
+     *   <li>RED A:注释 {@code setStatus} 中的 {@code l.accept(server)}——listener 永不被调用,
+     *       {@code errorEvents} 为空,断言 "listener 应收到 ERROR 事件" 失败。</li>
+     *   <li>RED B:注释 {@code start()} catch 中的 {@code setStatus(server, McpServerStatus.ERROR)}
+     *       ——listener 同样收不到 ERROR 事件。</li>
+     *   <li>GREEN:保留完整链,断言全部通过。</li>
+     * </ul>
+     */
+    @Test
+    void errorTransitionFiresStatusListenerWithNonNullErrorMessage() {
+        // 录制所有 STATUS 事件和捕获时的 errorMessage
+        List<McpServerStatus> statusSequence = new ArrayList<>();
+        List<String> capturedErrorMessages = new ArrayList<>();
+
+        manager.setStatusListener(s -> {
+            statusSequence.add(s.status());
+            // 仅在 ERROR 时记录 errorMessage(STARTING 时为 null 属预期)
+            if (s.status() == McpServerStatus.ERROR) {
+                capturedErrorMessages.add(s.errorMessage());
+            }
+        });
+
+        // bad-config:URL 含未展开的 ${UNSET_DEMO_VAR_FOR_TEST},configLoader.prepare() 抛异常
+        McpServerConfig bad = new McpServerConfig();
+        bad.setUrl("https://example.com/${UNSET_DEMO_VAR_FOR_TEST}");
+        loadServersFromMap(Map.of("failing", bad));
+
+        // startAll() 同步等待所有 server 到达终态(READY 或 ERROR)
+        manager.startAll();
+
+        McpServer server = manager.servers().iterator().next();
+
+        // 1. server 最终状态必须是 ERROR
+        assertEquals(McpServerStatus.ERROR, server.status(),
+                "bad-config server 应最终为 ERROR,实际: " + server.status());
+
+        // 2. listener 至少收到一个 ERROR 事件
+        assertTrue(statusSequence.contains(McpServerStatus.ERROR),
+                "statusListener 应收到 ERROR 状态事件,实际序列: " + statusSequence
+                        + "。RED:注释 setStatus() 中的 l.accept(server) 或 "
+                        + "start() catch 中的 setStatus(server, ERROR) 即可重现。");
+
+        // 3. listener 收到 ERROR 时 errorMessage 必须非 null 且非空白
+        assertFalse(capturedErrorMessages.isEmpty(),
+                "ERROR 事件回调未被触发(capturedErrorMessages 为空)");
+        String capturedMsg = capturedErrorMessages.get(0);
+        assertNotNull(capturedMsg,
+                "listener 在 ERROR 状态下捕获的 errorMessage 不应为 null");
+        assertFalse(capturedMsg.isBlank(),
+                "listener 在 ERROR 状态下捕获的 errorMessage 不应为空白,实际: '" + capturedMsg + "'");
+
+        // 4. (可选)STARTING → ERROR 顺序可观察
+        int startingIdx = statusSequence.indexOf(McpServerStatus.STARTING);
+        int errorIdx = statusSequence.lastIndexOf(McpServerStatus.ERROR);
+        if (startingIdx >= 0) {
+            assertTrue(startingIdx < errorIdx,
+                    "STARTING 应先于 ERROR,实际序列: " + statusSequence);
+        }
+    }
+
     // ---- Task 7: start() catch 块关闭本地 client(错误路径泄漏修复)红绿测试 ----
 
     /**
