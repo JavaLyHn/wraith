@@ -116,4 +116,61 @@ class SessionStoreTest {
         List<LlmClient.Message> restored = store.resume(meta.id());
         assertEquals(2, restored.size()); // 垃圾行被跳过
     }
+
+    // ── B2 Fix Tests: setProviderModel 更新 persist 写入的 meta ──────────────
+
+    @Test
+    void setProviderModelUpdatesPersistedMeta(@TempDir Path home) {
+        // 以 deepseek 创建 store,然后切换到 kimi
+        SessionStore store = SessionStore.open(home, "/proj/b2", "deepseek", "deepseek-chat");
+        store.persist(sampleHistory());
+
+        // 切换 provider/model(模拟 sessionSetModel 成功后的调用)
+        store.setProviderModel("kimi", "moonshot-v1-8k");
+
+        // 再次 persist(模拟 persistTurn)
+        store.persist(sampleHistory());
+
+        // 读回 meta,应反映新的 provider/model
+        List<SessionMeta> metas = store.list(10);
+        assertEquals(1, metas.size());
+        SessionMeta meta = metas.get(0);
+        assertEquals("kimi", meta.provider(),
+                "persist 后 meta.provider 应为切换后的新值 kimi");
+        assertEquals("moonshot-v1-8k", meta.model(),
+                "persist 后 meta.model 应为切换后的新值 moonshot-v1-8k");
+    }
+
+    @Test
+    void setProviderModelUpdatesMetaAfterResume(@TempDir Path home) {
+        // 先以 deepseek 存一个会话
+        SessionStore store = SessionStore.open(home, "/proj/b2-resume", "deepseek", "deepseek-chat");
+        store.persist(sampleHistory());
+        String sessionId = store.currentId();
+
+        // resume(模拟 resume 后 restored client 不为 null,调用 setProviderModel)
+        store.resume(sessionId);
+        store.setProviderModel("glm", "glm-4-flash");
+
+        // 继续写入(模拟 persistTurn after resume)
+        store.persist(sampleHistory());
+
+        SessionMeta meta = store.list(10).get(0);
+        assertEquals("glm", meta.provider(),
+                "resume 后 setProviderModel 应使 persist 写入新 provider");
+        assertEquals("glm-4-flash", meta.model(),
+                "resume 后 setProviderModel 应使 persist 写入新 model");
+    }
+
+    @Test
+    void setProviderModelIgnoresNullOrBlank(@TempDir Path home) {
+        // blank/null 不应覆盖已有值
+        SessionStore store = SessionStore.open(home, "/proj/b2-null", "deepseek", "deepseek-chat");
+        store.setProviderModel(null, "");
+        store.persist(sampleHistory());
+
+        SessionMeta meta = store.list(10).get(0);
+        assertEquals("deepseek", meta.provider(), "null/blank provider 不应覆盖原值");
+        assertEquals("deepseek-chat", meta.model(), "null/blank model 不应覆盖原值");
+    }
 }

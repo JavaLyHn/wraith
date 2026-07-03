@@ -1200,6 +1200,7 @@ public class Main {
                             if (restored != null) {
                                 currentClient[0] = restored;
                                 agent.setLlmClient(restored);
+                                sessionStore.setProviderModel(restored.getProviderName(), restored.getModelName());
                             } else {
                                 // 无 key → 保持当前 client,标记 fallback
                                 resumeFallback[0] = true;
@@ -1226,31 +1227,11 @@ public class Main {
                         return true;
                     }
                     public java.util.Map<String, Object> modelList() {
-                        // current: 实际生效的 client
-                        java.util.Map<String, Object> current = java.util.Map.of(
-                                "provider", currentClient[0].getProviderName(),
-                                "model", currentClient[0].getModelName());
-                        // providers: 所有已知 provider 列表(不含 apiKey/baseUrl)
-                        String[] knownProviders = {"glm", "deepseek", "step", "kimi", "freellmapi", "xfyun"};
-                        java.util.List<java.util.Map<String, Object>> providerList = new java.util.ArrayList<>();
-                        for (String p : knownProviders) {
-                            String apiKey = config.getApiKey(p);
-                            boolean hasKey = apiKey != null && !apiKey.isBlank();
-                            String modelName = config.getModel(p);
-                            java.util.Map<String, Object> entry = new java.util.LinkedHashMap<>();
-                            entry.put("name", p);
-                            entry.put("model", modelName != null ? modelName : "");
-                            entry.put("hasKey", hasKey);
-                            providerList.add(entry);
-                        }
-                        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
-                        result.put("current", current);
-                        result.put("default", config.getDefaultProvider() != null ? config.getDefaultProvider() : "");
-                        result.put("providers", providerList);
-                        if (resumeFallback[0]) {
-                            result.put("modelFallback", true);
-                        }
-                        return result;
+                        return com.lyhn.wraith.runtime.appserver.ModelCatalog.result(
+                                config,
+                                currentClient[0].getProviderName(),
+                                currentClient[0].getModelName(),
+                                resumeFallback[0]);
                     }
                     public java.util.Map<String, Object> sessionSetModel(String provider) {
                         com.lyhn.wraith.llm.LlmClient newClient =
@@ -1260,6 +1241,7 @@ public class Main {
                         }
                         currentClient[0] = newClient;
                         agent.setLlmClient(newClient);
+                        sessionStore.setProviderModel(newClient.getProviderName(), newClient.getModelName());
                         return java.util.Map.of(
                                 "provider", newClient.getProviderName(),
                                 "model", newClient.getModelName());

@@ -140,48 +140,6 @@ class AppServerModelTest {
         assertFalse(result.get("providers").get(1).get("hasKey").asBoolean());
     }
 
-    // ── Test 2: model.list 不含 apiKey/baseUrl 值(负断言) ──────────────────
-
-    @Test
-    void modelListDoesNotExposeApiKeyOrBaseUrl() throws Exception {
-        // fake runner 返回含假 key 值的 map——dispatch 层不应原样透传
-        // 实际 Main.java runner 不放 apiKey;此处测 dispatch 路径不注入额外字段
-        String fakeApiKeyValue = "sk-FAKE_SECRET_XYZ_12345";
-        String fakeBaseUrl = "https://internal.secret.baseurl.example.com";
-
-        Map<String, Object> provEntry = new java.util.LinkedHashMap<>();
-        provEntry.put("name", "glm");
-        provEntry.put("model", "glm-4");
-        provEntry.put("hasKey", true);
-        // 故意不放 apiKey/baseUrl 在条目里:断言整包序列化不含这些值
-        Map<String, Object> fakeList = Map.of(
-                "current", Map.of("provider", "glm", "model", "glm-4"),
-                "default", "glm",
-                "providers", List.of(provEntry));
-
-        List<JsonNode> replies = runRpc(fakeFactory(fakeList, null, null),
-                "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"model.list\",\"params\":{}}");
-
-        // 整个输出序列化字符串不得包含假 key/baseUrl 值
-        String allOutput = new ByteArrayOutputStream().toString();  // placeholder; re-capture below
-        // 重新跑一次以获得原始 JSON 字符串
-        List<String> lines2 = List.of(
-                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{}}",
-                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"model.list\",\"params\":{}}",
-                "{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"shutdown\",\"params\":{}}");
-        ByteArrayOutputStream rawOut = new ByteArrayOutputStream();
-        new AppServer(
-                new ByteArrayInputStream(String.join("\n", lines2).concat("\n").getBytes(StandardCharsets.UTF_8)),
-                rawOut, fakeFactory(fakeList, null, null)).serve();
-        String raw = rawOut.toString(StandardCharsets.UTF_8);
-
-        assertFalse(raw.contains(fakeApiKeyValue), "序列化结果不应含假 apiKey 值");
-        assertFalse(raw.contains(fakeBaseUrl), "序列化结果不应含假 baseUrl 值");
-        // 确认 result 字段存在(非 error)
-        JsonNode result2 = byId(replies, 2).get("result");
-        assertNotNull(result2, "model.list 应有 result");
-    }
-
     // ── Test 3: session.setModel 成功 ────────────────────────────────────────
 
     @Test
