@@ -24,6 +24,20 @@ function record(method, params) {
   }
 }
 
+// Optional: deterministic timing trace for the C1 flake investigation.
+// When MOCK_DEBUG_LOG is set, append `<ts> SEND <method>` for every server-push
+// notification and `<ts> RECV <method>` for every received request, synchronously
+// (appendFileSync) so nothing is lost to buffering when the process is under load.
+const mockDebugLogPath = process.env['MOCK_DEBUG_LOG']
+function debugLog(dir, method) {
+  if (!mockDebugLogPath) return
+  try {
+    fs.appendFileSync(mockDebugLogPath, `${Date.now()} ${dir} ${method}\n`)
+  } catch {
+    /* ignore */
+  }
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -55,6 +69,7 @@ function reply(id, result) {
 
 /** Server-push notification. */
 function notify(method, params) {
+  debugLog('SEND', method)
   send({ jsonrpc: '2.0', method, params })
 }
 
@@ -202,6 +217,7 @@ async function emitPostApprovalSequence(approved) {
 async function handleRequest(req) {
   const { id, method, params } = req
   record(method, params)
+  debugLog('RECV', method)
 
   switch (method) {
     case 'initialize': {

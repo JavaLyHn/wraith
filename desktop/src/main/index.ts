@@ -84,7 +84,22 @@ function notifyOS(title: string, body: string): void {
 // Helpers
 // ---------------------------------------------------------------------------
 
+// C1 flake investigation: deterministic trace of notification forwarding.
+// When WRAITH_E2E_DEBUG_LOG is set, append `<ts> FWD <method>` right before we
+// forward each server-push notification to the renderer (synchronous append so
+// nothing is lost to buffering under load).
+const e2eDebugLogPath = process.env['WRAITH_E2E_DEBUG_LOG']
+function e2eDebugLog(method: string): void {
+  if (!e2eDebugLogPath) return
+  try {
+    fs.appendFileSync(e2eDebugLogPath, `${Date.now()} FWD ${method}\n`)
+  } catch {
+    /* ignore */
+  }
+}
+
 function sendEvent(evt: BackendEvent): void {
+  if (evt.kind === 'notification') e2eDebugLog(evt.method)
   mainWindow?.webContents.send('wraith:event', evt)
 }
 

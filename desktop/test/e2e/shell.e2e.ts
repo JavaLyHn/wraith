@@ -158,7 +158,12 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
       WRAITH_E2E_WORKSPACE: startupDir, // startup workspace (getInitialWorkspace)
       WRAITH_E2E_PICK: repickDir, // what the re-pick button resolves to (pickWorkspace)
       WRAITH_E2E_USERDATA: userData,
-      MOCK_SESSIONS_BY_WS: '{}' // repickDir 无历史 → 切换后仍是欢迎态(原断言保持)
+      MOCK_SESSIONS_BY_WS: '{}', // repickDir 无历史 → 切换后仍是欢迎态(原断言保持)
+      // Task 2 根因修复(见下方点击前置等待注释):
+      //   MOCK_SLOW_TURN — turn.started 后停 3s,给 running 态一个可确定性观察的窗口;
+      //   MOCK_NO_APPROVAL — 本轮不挂在审批上,3s 后自行走到 turn.completed → running 稳定清 idle。
+      MOCK_SLOW_TURN: '1',
+      MOCK_NO_APPROVAL: '1'
     }
   })
   const win = await app.firstWindow()
@@ -170,8 +175,28 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
   await input.press('Enter')
   await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 15000 })
 
+  // ── Task 2(清债波 C1)偶发根因修复 ──────────────────────────────────────────
+  // 调查(MOCK_DEBUG_LOG/WRAITH_E2E_DEBUG_LOG 双日志,--repeat-each=60 + yes×4 CPU 负载,
+  // 稳定复现):失败例日志签名恒为「session.start=1(仅启动那次,重选的第二次缺失)」。
+  // 定位=渲染层 running 窗口竞态,非 mock/main 丢事件(SEND==FWD 完全一致):
+  //   • transcript 可见由本地 markStarted 驱动(提交即置,与后端无关,并非 turn 已跑);
+  //   • workspace-switch 钮 disabled={running};running 由 turn.started 通知触发、turn.completed 清除;
+  //     且 handleAddProject 内还有 `if (state.turn === 'running') return` 二重守卫。
+  //   • 旧用例在 transcript 可见后立即 click——此刻 running 仍可能为 idle(turn.submit 回包 ~ turn.started
+  //     通知之间的空窗),看似可点;负载下 turn.started 抢先转发,click 落在 running 窗口,守卫吞掉点击
+  //     → 第二次 session.start 永不发出。注意:光等 toBeEnabled 不够——它会被这段「turn.started 之前」的
+  //     瞬态 idle 满足而提前返回,并未等到 turn 真正跑完。
+  // 修复(brief 分支 3-D:把「transcript 可见」这个错误前置条件换成「turn 确已跑完」的正确前置条件,
+  //   非加长超时、非 sleep):先等 interrupt 钮出现(running 确立,越过瞬态空窗),再等它消失
+  //   (turn.completed → running 稳定清 idle),此时点击必然生效。
+  await expect(win.locator('[data-testid="interrupt"]')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('[data-testid="interrupt"]')).toHaveCount(0, { timeout: 15000 })
+
+  const wsSwitch = win.locator('[data-testid="workspace-switch"]')
+  await expect(wsSwitch).toBeEnabled({ timeout: 10000 })
+
   // re-pick (resolves to repickDir — distinct from startupDir, guard lets it through)
-  await win.locator('[data-testid="workspace-switch"]').click()
+  await wsSwitch.click()
 
   // second session.start carrying repickDir (from WRAITH_E2E_PICK)
   await expect
