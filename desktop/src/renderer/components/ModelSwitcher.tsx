@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover'
 import type { ModelListResult } from '../../shared/types'
 
@@ -12,6 +12,15 @@ interface ModelSwitcherProps {
 export default function ModelSwitcher({ initialModel, running }: ModelSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [displayModel, setDisplayModel] = useState(initialModel)
+
+  // Sync chip when the parent restores a different model (e.g. session resume).
+  // This does NOT clobber an in-popover switch because handleSelect updates
+  // displayModel without changing the parent's `state.model` / `initialModel`;
+  // the effect only re-fires when initialModel itself changes (i.e. dispatch
+  // setModel from App.tsx), not when the user picks inside the popover.
+  useEffect(() => {
+    setDisplayModel(initialModel)
+  }, [initialModel])
   const [data, setData] = useState<ModelListResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [settingDefault, setSettingDefault] = useState(false)

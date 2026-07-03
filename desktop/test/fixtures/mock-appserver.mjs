@@ -302,8 +302,9 @@ async function handleRequest(req) {
       }
       reply(id, {
         sessions: [
-          { id: 'sess_a', cwd: '/p', createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'mock', model: 'mock-model', title: '第一段对话', turns: 2 },
-          { id: 'sess_b', cwd: '/p', createdAt: '2026-06-30T00:00:00Z', updatedAt: '2026-06-30T01:00:00Z', provider: 'mock', model: 'mock-model', title: '早先的对话', turns: 5 }
+          { id: 'sess_a', cwd: '/p', createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'deepseek', model: 'deepseek-chat', title: '第一段对话', turns: 2 },
+          { id: 'sess_b', cwd: '/p', createdAt: '2026-06-30T00:00:00Z', updatedAt: '2026-06-30T01:00:00Z', provider: 'deepseek', model: 'deepseek-chat', title: '早先的对话', turns: 5 },
+          { id: 'sess_fallback', cwd: '/p', createdAt: '2026-06-29T00:00:00Z', updatedAt: '2026-06-29T01:00:00Z', provider: 'deepseek', model: 'deepseek-chat', title: '回退测试对话', turns: 1 }
         ]
       })
       break
@@ -311,12 +312,30 @@ async function handleRequest(req) {
 
     case 'session.resume': {
       const rid = (params && params.sessionId) || 'sess_a'
+      // sess_fallback: simulate key-loss fallback — original provider lost its key,
+      // backend fell back to the default provider/model and sets modelFallback:true.
+      if (rid === 'sess_fallback') {
+        reply(id, {
+          sessionId: rid,
+          messages: [
+            { role: 'user', content: '之前问的问题' },
+            { role: 'assistant', content: '之前的**回答**', reasoningContent: '之前的思考' }
+          ],
+          provider: modelState.current.provider,
+          model: modelState.current.model,
+          modelFallback: true,
+        })
+        break
+      }
+      // Normal resume: emit current provider/model (no fallback)
       reply(id, {
         sessionId: rid,
         messages: [
           { role: 'user', content: '之前问的问题' },
           { role: 'assistant', content: '之前的**回答**', reasoningContent: '之前的思考' }
-        ]
+        ],
+        provider: modelState.current.provider,
+        model: modelState.current.model,
       })
       break
     }

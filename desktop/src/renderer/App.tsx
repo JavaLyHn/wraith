@@ -26,6 +26,7 @@ import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
 import DisconnectedBanner from './components/DisconnectedBanner'
+import ModelFallbackBanner from './components/ModelFallbackBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import Sidebar from './components/Sidebar'
 import PluginsPanel from './components/PluginsPanel'
@@ -127,6 +128,7 @@ export default function App(): JSX.Element {
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
   const [mcpConfigError, setMcpConfigError] = useState<string | null>(null)
   const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
+  const [modelFallbackNotice, setModelFallbackNotice] = useState(false)
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
@@ -226,6 +228,7 @@ export default function App(): JSX.Element {
       await window.wraith.startSession(state.workspace || null)
       statusThrottleRef.current?.cancel() // 紧贴 resetSession:消 await 期间 status 尾巴重新入窗
       dispatch({ type: 'resetSession', ws: state.workspace })
+      setModelFallbackNotice(false) // 新会话:清除残余回退通知
       void fetchSessions()
     } catch (err) {
       console.error('[wraith] newConversation error:', err)
@@ -235,11 +238,15 @@ export default function App(): JSX.Element {
   const handleSelectSession = useCallback(async (id: string) => {
     if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
     try {
-      const { sessionId, messages } = await window.wraith.resumeSession(id)
+      const { sessionId, messages, model, modelFallback } = await window.wraith.resumeSession(id)
       statusThrottleRef.current?.cancel() // 紧贴 resumeSession dispatch:消 await 期间 status 尾巴重新入窗
       dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
       dispatch({ type: 'setSessionId', sessionId })
       dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
+      if (model) {
+        dispatch({ type: 'setModel', model })
+      }
+      setModelFallbackNotice(modelFallback === true)
       void fetchSessions()
     } catch (err) {
       console.error('[wraith] resumeSession error:', err)
@@ -291,8 +298,11 @@ export default function App(): JSX.Element {
         dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(sb) })
         await window.wraith.startSession(ws)
         if (activeId) {
-          const { messages } = await window.wraith.resumeSession(activeId)
+          const { messages, model } = await window.wraith.resumeSession(activeId)
           dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
+          if (model) {
+            dispatch({ type: 'setModel', model })
+          }
         }
         void fetchSessions()
       } catch (err) {
@@ -627,6 +637,9 @@ export default function App(): JSX.Element {
       <div className="relative flex min-w-0 flex-1 flex-col">
         {state.connection === 'disconnected' && (
           <DisconnectedBanner onRestart={handleRestart} />
+        )}
+        {modelFallbackNotice && (
+          <ModelFallbackBanner onDismiss={() => setModelFallbackNotice(false)} />
         )}
 
         {view === 'plugins' ? (

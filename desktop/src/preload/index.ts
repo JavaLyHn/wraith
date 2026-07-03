@@ -27,7 +27,7 @@ export interface WraithApi {
   restartBackend(): Promise<void>
   setApprovalMode(auto: boolean): Promise<{ ok: boolean }>
   listSessions(): Promise<{ sessions: SessionMeta[] }>
-  resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[] }>
+  resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[]; provider?: string; model?: string; modelFallback?: boolean }>
   rewindSession(userOrdinal: number): Promise<{ ok: boolean }>
   mcpList(): Promise<McpListResult>
   mcpEnable(name: string): Promise<{ ok: boolean }>
@@ -119,6 +119,9 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:resumeSession', sessionId) as Promise<{
       sessionId: string
       messages: ResumedMessage[]
+      provider?: string
+      model?: string
+      modelFallback?: boolean
     }>
   },
 
