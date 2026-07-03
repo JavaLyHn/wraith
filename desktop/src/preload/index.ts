@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult } from '../shared/types'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -10,7 +10,8 @@ import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListRes
 export interface WraithApi {
   initialize(workspaceDir: string | null): Promise<unknown>
   startSession(workspaceDir: string | null): Promise<{ sessionId: string }>
-  submitTurn(input: string): Promise<{ turnId: string; status: string }>
+  submitTurn(input: string, attachments?: { path: string; kind: string }[]): Promise<{ turnId: string; status: string }>
+  pickAttachments(): Promise<{ path: string; name: string; kind: string }[]>
   respondApproval(
     approvalId: string,
     decision: 'APPROVED' | 'REJECTED' | 'MODIFIED' | 'APPROVED_ALL',
@@ -26,7 +27,7 @@ export interface WraithApi {
   restartBackend(): Promise<void>
   setApprovalMode(auto: boolean): Promise<{ ok: boolean }>
   listSessions(): Promise<{ sessions: SessionMeta[] }>
-  resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[] }>
+  resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[]; provider?: string; model?: string; modelFallback?: boolean }>
   rewindSession(userOrdinal: number): Promise<{ ok: boolean }>
   mcpList(): Promise<McpListResult>
   mcpEnable(name: string): Promise<{ ok: boolean }>
@@ -48,6 +49,9 @@ export interface WraithApi {
     opts?: { modifiedArgs?: string; allowNetwork?: boolean }): Promise<{ ok: boolean }>
   automationPanelOpened(): Promise<{ ok: boolean }>
   onAutomationEvent(cb: (evt: AutomationEvent) => void): () => void
+  modelList(): Promise<ModelListResult>
+  setModel(provider: string): Promise<{ provider: string; model: string }>
+  setDefaultProvider(provider: string): Promise<{ ok: boolean }>
 }
 
 const wraith: WraithApi = {
@@ -59,8 +63,12 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:startSession', workspaceDir)
   },
 
-  submitTurn(input) {
-    return ipcRenderer.invoke('wraith:submitTurn', input)
+  submitTurn(input, attachments) {
+    return ipcRenderer.invoke('wraith:submitTurn', input, attachments)
+  },
+
+  pickAttachments() {
+    return ipcRenderer.invoke('wraith:pickAttachments') as Promise<{ path: string; name: string; kind: string }[]>
   },
 
   respondApproval(approvalId, decision, opts) {
@@ -111,6 +119,9 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:resumeSession', sessionId) as Promise<{
       sessionId: string
       messages: ResumedMessage[]
+      provider?: string
+      model?: string
+      modelFallback?: boolean
     }>
   },
 
@@ -199,6 +210,18 @@ const wraith: WraithApi = {
     const listener = (_e: Electron.IpcRendererEvent, evt: AutomationEvent) => cb(evt)
     ipcRenderer.on('wraith:automation-event', listener)
     return () => { ipcRenderer.removeListener('wraith:automation-event', listener) }
+  },
+
+  modelList() {
+    return ipcRenderer.invoke('wraith:modelList') as Promise<ModelListResult>
+  },
+
+  setModel(provider) {
+    return ipcRenderer.invoke('wraith:setModel', provider) as Promise<{ provider: string; model: string }>
+  },
+
+  setDefaultProvider(provider) {
+    return ipcRenderer.invoke('wraith:setDefaultProvider', provider) as Promise<{ ok: boolean }>
   },
 }
 

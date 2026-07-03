@@ -147,6 +147,60 @@ public class Agent {
         long startNanos = System.nanoTime();
         AgentBudget budget = AgentBudget.fromLlmClient(llmClient);
         pushStatus(budget, startNanos, "running");
+        return runReActLoop(reasoningTranscript, streamRenderer, budget, startNanos);
+    }
+
+    /**
+     * 带图片附件的 run 重载。
+     * 本轮用户消息为单条 {@code Message.user(parts)}，
+     * parts = [text("附件图片: " + join(imageNames, ", ")), ...extraImageParts, text(input)]。
+     * 无图片时退化为 {@link #run(String)}（行为零变）。
+     */
+    public String run(String userInput,
+                      List<LlmClient.ContentPart> extraImageParts,
+                      List<String> imageNames) {
+        if (extraImageParts == null || extraImageParts.isEmpty()) {
+            return run(userInput);
+        }
+        log.info("ReAct run(imageParts) started: inputLength={}, imageParts={}, imageNames={}",
+                userInput == null ? 0 : userInput.length(),
+                extraImageParts.size(),
+                imageNames == null ? 0 : imageNames.size());
+        pruneHistoricalImagePayloads();
+        memoryManager.addUserMessage(userInput);
+        storeExplicitBrowserMemoryHint(userInput);
+
+        ContextProfile contextProfile = memoryManager.getContextProfile();
+        String memoryContext = memoryManager.buildContextForQuery(userInput, contextProfile.memoryContextTokens());
+        updateSystemPromptWithMemory(memoryContext);
+
+        // 构造单条 parts 用户消息
+        String userMessageContent = prependSkillBodies(userInput);
+        String namesLabel = (imageNames != null && !imageNames.isEmpty())
+                ? String.join(", ", imageNames) : "";
+        List<LlmClient.ContentPart> parts = new ArrayList<>();
+        if (!namesLabel.isEmpty()) {
+            parts.add(LlmClient.ContentPart.text("附件图片: " + namesLabel));
+        }
+        parts.addAll(extraImageParts);
+        parts.add(LlmClient.ContentPart.text(userMessageContent));
+        conversationHistory.add(LlmClient.Message.user(parts));
+
+        StringBuilder reasoningTranscript = new StringBuilder();
+        StreamRenderer streamRenderer = new StreamRenderer(renderer());
+
+        long startNanos = System.nanoTime();
+        AgentBudget budget = AgentBudget.fromLlmClient(llmClient);
+        pushStatus(budget, startNanos, "running");
+        return runReActLoop(reasoningTranscript, streamRenderer, budget, startNanos);
+    }
+
+    /**
+     * ReAct 主循环。由 {@link #run(String)} 及图片重载共用。
+     * 调用前需已将本轮用户消息加入 {@code conversationHistory}。
+     */
+    private String runReActLoop(StringBuilder reasoningTranscript, StreamRenderer streamRenderer,
+                                AgentBudget budget, long startNanos) {
 
         // 主退出条件 = LLM 自己决定（不再调用工具就返回）；
         // budget 仅在 token 用尽 / 检测到死循环 / 超出硬轮数时兜底。

@@ -1436,3 +1436,294 @@ test('T39 插件面板坏配置横幅:mcp-config-error banner 含错误文本', 
   ).toContainText('第 3 行', { timeout: 10000 })
   await app.close(); cleanup()
 })
+
+// ---------------------------------------------------------------------------
+// T42: 附件链 — WRAITH_E2E_ATTACH 注入文本文件 → 点 attach → chip 出现 → 提交 → record 断言
+// ---------------------------------------------------------------------------
+
+test('T42 附件链:注入文件 → chip 出现 → 提交 → turn.submit params.attachments[0].path/kind 正确', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-t42.jsonl`)
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t42-'))
+  // 创建临时文本文件
+  const tmpFile = path.join(os.tmpdir(), `wraith-attach-t42-${process.pid}.txt`)
+  fs.writeFileSync(tmpFile, 'hello attachment\n')
+
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_ATTACH: JSON.stringify([tmpFile]),
+      MOCK_NO_APPROVAL: '1',
+    },
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  // 点 attach 按钮 → chip 出现
+  const attachBtn = win.locator('[data-testid="attach"]')
+  await expect(attachBtn).toBeEnabled({ timeout: 5000 })
+  await attachBtn.click()
+
+  // chip 应出现并包含文件名
+  const chip = win.locator('[data-testid="attachment-chip"]')
+  await expect(chip).toBeVisible({ timeout: 5000 })
+  await expect(chip).toContainText(path.basename(tmpFile))
+
+  // 提交
+  await input.fill('带附件的消息')
+  await input.press('Enter')
+
+  // record 断言 turn.submit params.attachments[0]
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return null
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const submit = [...lines].reverse().find(l => l.method === 'turn.submit')
+      if (!submit || !submit.params?.attachments?.length) return null
+      return {
+        path: submit.params.attachments[0].path,
+        kind: submit.params.attachments[0].kind,
+      }
+    }, { timeout: 10000 })
+    .toEqual({ path: tmpFile, kind: 'text' })
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
+  fs.rmSync(tmpFile, { force: true })
+})
+
+// ---------------------------------------------------------------------------
+// T43: 两附件移除其一 → 提交 → record 断言只剩一个
+// ---------------------------------------------------------------------------
+
+test('T43 两附件移除其一 → 提交 → turn.submit params.attachments 只含一个', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-t43.jsonl`)
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t43-'))
+  const tmpFileA = path.join(os.tmpdir(), `wraith-attach-t43a-${process.pid}.txt`)
+  const tmpFileB = path.join(os.tmpdir(), `wraith-attach-t43b-${process.pid}.txt`)
+  fs.writeFileSync(tmpFileA, 'file A\n')
+  fs.writeFileSync(tmpFileB, 'file B\n')
+
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_ATTACH: JSON.stringify([tmpFileA, tmpFileB]),
+      MOCK_NO_APPROVAL: '1',
+    },
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  // 点 attach → 两个 chip 出现
+  await win.locator('[data-testid="attach"]').click()
+  await expect(win.locator('[data-testid="attachment-chip"]')).toHaveCount(2, { timeout: 5000 })
+
+  // 移除第一个 chip
+  await win.locator('[data-testid="attachment-remove"]').first().click()
+  await expect(win.locator('[data-testid="attachment-chip"]')).toHaveCount(1, { timeout: 5000 })
+
+  // 提交
+  await input.fill('移除一个后提交')
+  await input.press('Enter')
+
+  // record 断言:attachments 只含 1 个(tmpFileB)
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return null
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const submit = [...lines].reverse().find(l => l.method === 'turn.submit')
+      if (!submit || !submit.params?.attachments) return null
+      return submit.params.attachments.length
+    }, { timeout: 10000 })
+    .toBe(1)
+
+  // 确认剩下的是 B
+  const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map((l: string) => JSON.parse(l))
+  const submit = [...lines].reverse().find((l: { method: string }) => l.method === 'turn.submit')
+  expect(submit?.params?.attachments?.[0]?.path).toBe(tmpFileB)
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
+  fs.rmSync(tmpFileA, { force: true })
+  fs.rmSync(tmpFileB, { force: true })
+})
+
+// ---------------------------------------------------------------------------
+// T44: 模型切换下拉 — 开下拉→选另一 provider→chip 文本变+record 断言 session.setModel
+//   + 无 key 项 disabled 断言
+// ---------------------------------------------------------------------------
+
+test('T44 模型切换:开下拉→选 deepseek→chip 文本变+record session.setModel;无 key 项 disabled', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-t44.jsonl`)
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t44-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_USERDATA: userData,
+      MOCK_NO_APPROVAL: '1',
+    },
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 15000 })
+
+  // 点 model-chip 开下拉
+  const chip = win.locator('[data-testid="model-chip"]')
+  await expect(chip).toBeVisible({ timeout: 10000 })
+  await chip.click()
+
+  // 等条目出现(model.list 异步加载)
+  const options = win.locator('[data-testid="model-option"]')
+  await expect(options).toHaveCount(2, { timeout: 10000 })
+
+  // 无 key 项(openai)置灰 disabled
+  const openaiOption = options.filter({ hasText: 'openai' })
+  await expect(openaiOption).toBeDisabled()
+
+  // deepseek 有 key,点击切换
+  const deepseekOption = options.filter({ hasText: 'deepseek' })
+  await expect(deepseekOption).toBeEnabled()
+  await deepseekOption.click()
+
+  // chip 显示新 model
+  await expect(chip).toContainText('deepseek-chat', { timeout: 5000 })
+
+  // record 断言 session.setModel
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return null
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const call = [...lines].reverse().find(l => l.method === 'session.setModel')
+      return call ? call.params.provider : null
+    }, { timeout: 10000 })
+    .toBe('deepseek')
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
+// T45: 设为默认 — 点「默认」→ record 断言 config.setDefaultProvider
+// ---------------------------------------------------------------------------
+
+test('T45 设为默认:点 model-set-default → record config.setDefaultProvider', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-t45.jsonl`)
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t45-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_USERDATA: userData,
+      MOCK_NO_APPROVAL: '1',
+    },
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 15000 })
+
+  // 开下拉
+  const chip = win.locator('[data-testid="model-chip"]')
+  await chip.click()
+
+  // 等条目出现
+  const options = win.locator('[data-testid="model-option"]')
+  await expect(options).toHaveCount(2, { timeout: 10000 })
+
+  // 「设为默认」按钮在 group-hover 下显示:先 hover 触发 CSS,再点击
+  const deepseekOption = options.filter({ hasText: 'deepseek' })
+  await deepseekOption.hover()
+  const setDefaultBtn = win.locator('[data-testid="model-set-default"]').first()
+  await expect(setDefaultBtn).toBeVisible({ timeout: 5000 })
+  await setDefaultBtn.click()
+
+  // record 断言 config.setDefaultProvider
+  await expect
+    .poll(() => {
+      if (!fs.existsSync(recordFile)) return null
+      const lines = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l))
+      const call = [...lines].reverse().find(l => l.method === 'config.setDefaultProvider')
+      return call ? call.params.provider : null
+    }, { timeout: 10000 })
+    .toBe('deepseek')
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
+// T46: 侧栏搜索 — 输入关键字两分区各自过滤,清除恢复原列表
+// ---------------------------------------------------------------------------
+
+test('T46 侧栏搜索:输入关键字过滤会话+项目两分区,清除钮恢复原列表', async () => {
+  const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t46-proj-a-'))
+  const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t46-alpha-b-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t46-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_WORKSPACE: dirA,
+      WRAITH_E2E_PROJECTS: JSON.stringify([
+        { path: dirA, lastUsedAt: 2000 },
+        { path: dirB, lastUsedAt: 1000 },
+      ]),
+      MOCK_SESSIONS_BY_WS: JSON.stringify({
+        [dirA]: [
+          { id: 'sess_t46_1', cwd: dirA, createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'mock', model: 'mock-model', title: 'alpha 测试会话', turns: 1 },
+          { id: 'sess_t46_2', cwd: dirA, createdAt: '2026-07-02T00:00:00Z', updatedAt: '2026-07-02T01:00:00Z', provider: 'mock', model: 'mock-model', title: '无关对话', turns: 1 },
+        ],
+      }),
+    },
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="sidebar"]')).toBeVisible({ timeout: 15000 })
+
+  // 初始状态:两条会话可见
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(2, { timeout: 10000 })
+
+  // 点搜索按钮激活搜索框
+  await win.locator('[data-testid="nav-search"]').click()
+  await expect(win.locator('[data-testid="sidebar-search"]')).toBeVisible({ timeout: 5000 })
+
+  // 输入 "alpha" — 只有「alpha 测试会话」命中;项目分区中路径含 alpha 的 dirB 命中
+  await win.locator('[data-testid="sidebar-search"]').fill('alpha')
+
+  // 会话分区:只剩 1 条(alpha 测试会话)
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(1, { timeout: 5000 })
+  await expect(win.locator('[data-testid="conversation-item"]').first()).toContainText('alpha 测试会话')
+
+  // 项目分区:含 alpha 路径尾段的 dirB 命中
+  await expect(win.locator('[data-testid="search-project-item"]')).toHaveCount(1, { timeout: 5000 })
+  await expect(win.locator('[data-testid="search-project-item"]').first()).toContainText('alpha')
+
+  // 点清除钮 → 搜索框消失,恢复原两条会话
+  await win.locator('[data-testid="sidebar-search-clear"]').click()
+  await expect(win.locator('[data-testid="sidebar-search"]')).toHaveCount(0, { timeout: 5000 })
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(2, { timeout: 5000 })
+
+  await app.close()
+  for (const p of [dirA, dirB, userData]) fs.rmSync(p, { recursive: true, force: true })
+})

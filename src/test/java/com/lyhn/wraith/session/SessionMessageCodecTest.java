@@ -7,7 +7,9 @@ import org.junit.jupiter.api.Test;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class SessionMessageCodecTest {
 
@@ -53,5 +55,50 @@ class SessionMessageCodecTest {
     @Test
     void returnsNullForRolelessNode() throws Exception {
         assertNull(SessionMessageCodec.fromJson(mapper.readTree("{\"content\":\"x\"}")));
+    }
+
+    // --- Task 2: image parts 落盘占位 ---
+
+    /**
+     * 含 image part 的 user 消息:序列化后无 image、text parts 拼接保留。
+     * 反序列化得到的消息 content 包含占位文字，不含 base64。
+     */
+    @Test
+    void roundTripsUserMessageWithImageDropsBase64AndPreservesText() throws Exception {
+        List<LlmClient.ContentPart> parts = List.of(
+                LlmClient.ContentPart.text("附件图片: foo.png"),
+                LlmClient.ContentPart.imageBase64("AAAABASE64DATA", "image/png"),
+                LlmClient.ContentPart.text("请分析这张图片")
+        );
+        LlmClient.Message msg = LlmClient.Message.user(parts);
+
+        // 锁定序列化层：toJson 不应直接序列化 imageBase64 或 contentParts
+        String json = mapper.writeValueAsString(SessionMessageCodec.toJson(mapper, msg));
+        assertFalse(json.contains("AAAABASE64DATA"), "JSON 序列化不得包含 base64 数据");
+        assertFalse(json.contains("imageBase64"), "JSON 序列化不得包含 imageBase64 字段");
+
+        LlmClient.Message back = roundTrip(msg);
+
+        assertEquals("user", back.role());
+        // text parts 必须保留
+        assertTrue(back.content().contains("附件图片: foo.png"), "应保留文件名占位文字");
+        assertTrue(back.content().contains("请分析这张图片"), "应保留用户输入文字");
+        // base64 数据不能落盘
+        assertFalse(back.content().contains("AAAABASE64DATA"), "base64 数据不得落盘");
+        // 反序列化后无 contentParts
+        assertNull(back.contentParts());
+    }
+
+    /**
+     * 纯文本 user 消息 round-trip 不变。
+     */
+    @Test
+    void roundTripsPureTextUserMessageUnchanged() throws Exception {
+        LlmClient.Message msg = LlmClient.Message.user("纯文本消息，无图片");
+        LlmClient.Message back = roundTrip(msg);
+
+        assertEquals("user", back.role());
+        assertEquals("纯文本消息，无图片", back.content());
+        assertNull(back.contentParts());
     }
 }

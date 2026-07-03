@@ -2,10 +2,17 @@
 package com.lyhn.wraith.runtime.appserver;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AppServerTest {
@@ -66,6 +73,104 @@ class AppServerTest {
     private int indexOfResult(List<JsonNode> msgs, int id) {
         for (int i = 0; i < msgs.size(); i++) if (msgs.get(i).path("id").asInt(-1) == id && msgs.get(i).has("result")) return i;
         return -1;
+    }
+
+    // --- 附件 dispatch 用例 ---
+
+    @TempDir
+    Path tmpDir;
+
+    /** 带文本附件的 turn.submit：fake runner 记录 effectiveInput，断言含 fence 块与正文。 */
+    @Test
+    void textAttachmentIsInjectedIntoInput() throws Exception {
+        Path textFile = tmpDir.resolve("note.txt");
+        Files.writeString(textFile, "hello from file", StandardCharsets.UTF_8);
+
+        // 构造 params JSON 含 attachments
+        ObjectMapper m = new ObjectMapper();
+        ObjectNode params = m.createObjectNode();
+        params.put("input", "user question");
+        ArrayNode atts = params.putArray("attachments");
+        ObjectNode att = atts.addObject();
+        att.put("path", textFile.toString());
+        att.put("kind", "text");
+        String paramsJson = m.writeValueAsString(params);
+
+        // fake runner 记录 input
+        AtomicReference<String> capturedInput = new AtomicReference<>();
+        AppServer.SessionRunnerFactory factory = (writer, sessionId, workspaceDir) -> {
+            EventStreamRenderer r = new EventStreamRenderer(writer, sessionId);
+            return new AppServer.SessionRunner() {
+                public EventStreamRenderer renderer() { return r; }
+                public String runTurn(String input) {
+                    capturedInput.set(input);
+                    r.appendAssistantContentDelta("ok");
+                    r.finishAssistantContent();
+                    return "ok";
+                }
+                public String runTurn(String input,
+                                      java.util.List<com.lyhn.wraith.llm.LlmClient.ContentPart> imageParts,
+                                      java.util.List<String> imageNames) throws Exception {
+                    return runTurn(input);
+                }
+            };
+        };
+
+        String rpcInput = String.join("\n",
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.start\",\"params\":{}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"turn.submit\",\"params\":" + paramsJson + "}",
+                "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+
+        ByteArrayInputStream in = new ByteArrayInputStream(rpcInput.getBytes(StandardCharsets.UTF_8));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        AppServer server = new AppServer(in, out, factory);
+        server.serve();
+
+        long deadline = System.currentTimeMillis() + 2000;
+        while (System.currentTimeMillis() < deadline && capturedInput.get() == null) {
+            Thread.sleep(20);
+        }
+
+        String effective = capturedInput.get();
+        assertNotNull(effective, "runner 应被调用");
+        assertTrue(effective.contains("```note.txt\n"), "effectiveInput 应含 fence 块头");
+        assertTrue(effective.contains("hello from file"), "effectiveInput 应含文件内容");
+        assertTrue(effective.contains("user question"), "effectiveInput 应含原始正文");
+    }
+
+    /** 超限附件触发 turn.failed 通知含 "附件错误"，turn.completed 不出现。 */
+    @Test
+    void oversizedAttachmentEmitsTurnFailed() throws Exception {
+        Path bigFile = tmpDir.resolve("huge.txt");
+        // 写一个 > 512 KB 的文本文件
+        byte[] data = new byte[(int)(TurnAttachments.TEXT_MAX + 100)];
+        Files.write(bigFile, data);
+
+        ObjectMapper m = new ObjectMapper();
+        ObjectNode params = m.createObjectNode();
+        params.put("input", "test");
+        ArrayNode atts = params.putArray("attachments");
+        ObjectNode att = atts.addObject();
+        att.put("path", bigFile.toString());
+        att.put("kind", "text");
+        String paramsJson = m.writeValueAsString(params);
+
+        String rpcInput = String.join("\n",
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.start\",\"params\":{}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"turn.submit\",\"params\":" + paramsJson + "}",
+                "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+
+        ByteArrayInputStream in = new ByteArrayInputStream(rpcInput.getBytes(StandardCharsets.UTF_8));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(in, out, fakeFactory()).serve();
+
+        // 附件校验是同步的，结果在 serve() 返回后已写出
+        String output = out.toString(StandardCharsets.UTF_8);
+        assertTrue(output.contains("turn.failed"), "应发出 turn.failed 通知");
+        assertTrue(output.contains("附件错误"), "turn.failed error 应含 '附件错误'");
+        assertFalse(output.contains("turn.completed"), "不应发出 turn.completed");
     }
 
     @Test

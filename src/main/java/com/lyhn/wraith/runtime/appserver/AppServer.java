@@ -25,6 +25,12 @@ public final class AppServer {
     public interface SessionRunner {
         EventStreamRenderer renderer();
         String runTurn(String input) throws Exception;
+        /** 带图片附件的重载；T2 覆写以传递图片给 LLM。默认退化为纯文本 runTurn。 */
+        default String runTurn(String input,
+                               java.util.List<com.lyhn.wraith.llm.LlmClient.ContentPart> imageParts,
+                               java.util.List<String> imageNames) throws Exception {
+            return runTurn(input);
+        }
         /** 切换审批模式。auto=true → 关闭 HITL（自动放行）。默认 no-op，旧实现无需改动。 */
         default void setApprovalMode(boolean auto) { }
         /** 本项目历史会话(最近在前)。默认空。 */
@@ -41,6 +47,29 @@ public final class AppServer {
         default boolean rewind(int userOrdinal) { return false; }
         /** MCP 操作面。实现可返回 null(表示 mcp 不可用)。默认 null。 */
         default McpOps mcp() { return null; }
+        /**
+         * 当前可用 provider 列表及当前生效 client 信息。
+         * 返回 {@code {current:{provider,model}, default:String, providers:[{name,model,hasKey}]}}。
+         * 默认返回 null(-32000)。
+         */
+        default java.util.Map<String, Object> modelList() { return null; }
+        /**
+         * 会话级切换 provider(不写 config)。
+         * 成功返回 {@code {provider, model}}；无 key/未知 provider → 抛 {@link IllegalArgumentException}(-32602)。
+         * 默认抛出。
+         */
+        default java.util.Map<String, Object> sessionSetModel(String provider) {
+            throw new UnsupportedOperationException("sessionSetModel not implemented");
+        }
+        /**
+         * 持久化默认 provider(存 config.json)。
+         * 校验存在+有 key → 写盘 → 返回 {@code {ok:true}}。
+         * 未知/无 key → 抛 {@link IllegalArgumentException}(-32602)。
+         * 默认抛出。
+         */
+        default java.util.Map<String, Object> configSetDefaultProvider(String provider) {
+            throw new UnsupportedOperationException("configSetDefaultProvider not implemented");
+        }
     }
 
     private final BufferedReader in;
@@ -127,6 +156,38 @@ public final class AppServer {
                     ok(msg);
                 } catch (IOException e) { writer.error(msg.id(), -32000, "配置写入失败: " + e.getMessage()); }
             });
+            case "model.list" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                java.util.Map<String, Object> listResult = session.modelList();
+                if (listResult == null) { writer.error(msg.id(), -32000, "model.list unavailable"); return true; }
+                writer.result(msg.id(), listResult);
+            }
+            case "session.setModel" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String provider = textParam(msg.params(), "provider");
+                if (provider == null) { writer.error(msg.id(), -32602, "缺 provider"); return true; }
+                try {
+                    java.util.Map<String, Object> r = session.sessionSetModel(provider);
+                    writer.result(msg.id(), r);
+                } catch (IllegalArgumentException e) {
+                    writer.error(msg.id(), -32602, e.getMessage());
+                } catch (UnsupportedOperationException e) {
+                    writer.error(msg.id(), -32000, e.getMessage());
+                }
+            }
+            case "config.setDefaultProvider" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String provider = textParam(msg.params(), "provider");
+                if (provider == null) { writer.error(msg.id(), -32602, "缺 provider"); return true; }
+                try {
+                    java.util.Map<String, Object> r = session.configSetDefaultProvider(provider);
+                    writer.result(msg.id(), r);
+                } catch (IllegalArgumentException e) {
+                    writer.error(msg.id(), -32602, e.getMessage());
+                } catch (UnsupportedOperationException e) {
+                    writer.error(msg.id(), -32000, e.getMessage());
+                }
+            }
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
                 return false;
@@ -165,13 +226,28 @@ public final class AppServer {
         }
         JsonNode params = msg.params();
         String input = (params != null && params.hasNonNull("input")) ? params.get("input").asText() : "";
+
+        // 附件解析与校验（失败走 started→turn.failed 时序，不发 LLM）
+        TurnAttachments.Resolved att;
+        try {
+            att = TurnAttachments.resolve(params == null ? null : params.get("attachments"));
+        } catch (IOException e) {
+            String turnId = "turn_" + turnSeq.incrementAndGet();
+            writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
+            writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
+            writer.notify("turn.failed", Map.of("sessionId", sessionId, "turnId", turnId, "error", "附件错误: " + e.getMessage()));
+            return;
+        }
+        String effectiveInput = att.textPrefix().isEmpty() ? input : att.textPrefix() + input;
+
         String turnId = "turn_" + turnSeq.incrementAndGet();
         session.renderer().setCurrentTurnId(turnId);
         writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
         writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
+        final TurnAttachments.Resolved attFinal = att;
         Thread t = new Thread(() -> {
             try {
-                session.runTurn(input);
+                session.runTurn(effectiveInput, attFinal.imageParts(), attFinal.imageNames());
                 String persisted = session.persistTurn();
                 String reported = (persisted != null) ? persisted : sessionId;
                 if (persisted != null) sessionId = persisted;
@@ -265,6 +341,23 @@ public final class AppServer {
             wire.add(com.lyhn.wraith.session.SessionMessageCodec.toJson(JsonRpc.MAPPER, m));
         }
         sessionId = id; // 活跃会话切到 resume 的
-        writer.result(msg.id(), Map.of("sessionId", id, "messages", wire));
+        // 取实际生效的 provider/model(由 runner 的 modelList 提供),以及 modelFallback 标志
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("sessionId", id);
+        result.put("messages", wire);
+        java.util.Map<String, Object> ml = session.modelList();
+        if (ml != null) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> current = (java.util.Map<String, Object>) ml.get("current");
+            if (current != null) {
+                result.put("provider", current.get("provider"));
+                result.put("model", current.get("model"));
+            }
+            Object fallback = ml.get("modelFallback");
+            if (Boolean.TRUE.equals(fallback)) {
+                result.put("modelFallback", true);
+            }
+        }
+        writer.result(msg.id(), result);
     }
 }

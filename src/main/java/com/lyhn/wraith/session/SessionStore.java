@@ -42,8 +42,8 @@ public final class SessionStore {
     private final ObjectMapper mapper = new ObjectMapper();
     private final Path dir;
     private final String cwd;
-    private final String provider;
-    private final String model;
+    private String provider;
+    private String model;
 
     // 当前正在写入的会话(惰性创建文件)
     private String currentId;
@@ -69,6 +69,15 @@ public final class SessionStore {
         currentId = null;
         createdAt = null;
         title = null;
+    }
+
+    /**
+     * 更新 live provider/model(setModel 或 resume 恢复 provider 后调用)。
+     * 下次 persist 将使用新值写入 meta,防止 stale provider 被记录。
+     */
+    public synchronized void setProviderModel(String provider, String model) {
+        if (provider != null && !provider.isBlank()) this.provider = provider;
+        if (model != null && !model.isBlank()) this.model = model;
     }
 
     /** 把当前对话历史整体落盘(剔除 system / 空对话)。首次写入惰性分配会话 ID。 */
@@ -133,6 +142,14 @@ public final class SessionStore {
         createdAt = rec.meta().createdAt();
         title = rec.meta().title();
         return rec.messages();
+    }
+
+    /** 读取指定 id 会话的元信息(不加载消息体)。id 不存在返回 null。 */
+    public SessionMeta meta(String id) {
+        if (id == null || id.isBlank()) return null;
+        Path file = dir.resolve(safeId(id) + ".jsonl");
+        if (!Files.isRegularFile(file)) return null;
+        return readMeta(file);
     }
 
     /** 本项目最近更新的会话。 */

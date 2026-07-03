@@ -217,15 +217,54 @@ ipcMain.handle('wraith:startSession', async (_e, workspaceDir: string | null) =>
   return r
 })
 
-ipcMain.handle('wraith:submitTurn', async (_e, input: string) => {
+ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { path: string; kind: string }[]) => {
   if (!client) throw new Error('Backend not connected')
   const result = await client.request('turn.submit', {
     sessionId: currentSessionId,
-    input
+    input,
+    ...(attachments?.length ? { attachments: attachments.map(a => ({ path: a.path, kind: a.kind })) } : {})
   })
   const r = result as { turnId: string; status: string }
   currentTurnId = r.turnId
   return r
+})
+
+ipcMain.handle('wraith:pickAttachments', async () => {
+  // E2E 分支:WRAITH_E2E_ATTACH 是 JSON 数组 of paths,直接返回注入值。照 WRAITH_E2E_PICK 先例。
+  if (process.env['WRAITH_E2E'] === '1' && process.env['WRAITH_E2E_ATTACH']) {
+    let paths: string[] = []
+    try { paths = JSON.parse(process.env['WRAITH_E2E_ATTACH']) as string[] } catch { /* 坏 JSON → 空 */ }
+    const { attachmentKind } = await import('../shared/attachmentKind.js')
+    return paths.map(p => ({
+      path: p,
+      name: path.basename(p),
+      kind: attachmentKind(p)
+    }))
+  }
+  const result = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, {
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+          { name: '文本 / 代码', extensions: ['txt', 'md', 'ts', 'tsx', 'js', 'jsx', 'json', 'yaml', 'yml', 'toml', 'xml', 'html', 'css', 'sh', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'h'] },
+          { name: '所有文件', extensions: ['*'] }
+        ]
+      })
+    : await dialog.showOpenDialog({
+        properties: ['openFile', 'multiSelections'],
+        filters: [
+          { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] },
+          { name: '文本 / 代码', extensions: ['txt', 'md', 'ts', 'tsx', 'js', 'jsx', 'json', 'yaml', 'yml', 'toml', 'xml', 'html', 'css', 'sh', 'py', 'java', 'go', 'rs', 'c', 'cpp', 'h'] },
+          { name: '所有文件', extensions: ['*'] }
+        ]
+      })
+  if (result.canceled || result.filePaths.length === 0) return []
+  const { attachmentKind } = await import('../shared/attachmentKind.js')
+  return result.filePaths.map(p => ({
+    path: p,
+    name: path.basename(p),
+    kind: attachmentKind(p)
+  }))
 })
 
 ipcMain.handle(
@@ -364,6 +403,21 @@ ipcMain.handle('wraith:restartBackend', async () => {
   currentTurnId = null
   spawnBackend()
   // Renderer is responsible for re-running initialize/startSession after restart.
+})
+
+ipcMain.handle('wraith:modelList', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('model.list', {})
+})
+
+ipcMain.handle('wraith:setModel', async (_e, provider: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.setModel', { sessionId: currentSessionId, provider })
+})
+
+ipcMain.handle('wraith:setDefaultProvider', async (_e, provider: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.setDefaultProvider', { provider })
 })
 
 ipcMain.handle('wraith:setApprovalMode', async (_e, auto: boolean) => {

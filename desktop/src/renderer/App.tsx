@@ -23,9 +23,10 @@ import {
 } from '../shared/transcriptReducer'
 import { messagesToItems } from '../shared/messagesToItems'
 import Transcript from './components/Transcript'
-import Composer from './components/Composer'
+import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
 import DisconnectedBanner from './components/DisconnectedBanner'
+import ModelFallbackBanner from './components/ModelFallbackBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import Sidebar from './components/Sidebar'
 import PluginsPanel from './components/PluginsPanel'
@@ -118,6 +119,7 @@ const connectedInitialState: TranscriptState = {
 export default function App(): JSX.Element {
   const [state, dispatch] = useReducer(reduceAdapter, connectedInitialState)
   const [inputValue, setInputValue] = useState('')
+  const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
   const [view, setView] = useState<'chat' | 'plugins' | 'automations'>('chat')
@@ -126,6 +128,7 @@ export default function App(): JSX.Element {
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
   const [mcpConfigError, setMcpConfigError] = useState<string | null>(null)
   const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
+  const [modelFallbackNotice, setModelFallbackNotice] = useState(false)
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
@@ -225,6 +228,7 @@ export default function App(): JSX.Element {
       await window.wraith.startSession(state.workspace || null)
       statusThrottleRef.current?.cancel() // 紧贴 resetSession:消 await 期间 status 尾巴重新入窗
       dispatch({ type: 'resetSession', ws: state.workspace })
+      setModelFallbackNotice(false) // 新会话:清除残余回退通知
       void fetchSessions()
     } catch (err) {
       console.error('[wraith] newConversation error:', err)
@@ -234,11 +238,15 @@ export default function App(): JSX.Element {
   const handleSelectSession = useCallback(async (id: string) => {
     if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
     try {
-      const { sessionId, messages } = await window.wraith.resumeSession(id)
+      const { sessionId, messages, model, modelFallback } = await window.wraith.resumeSession(id)
       statusThrottleRef.current?.cancel() // 紧贴 resumeSession dispatch:消 await 期间 status 尾巴重新入窗
       dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
       dispatch({ type: 'setSessionId', sessionId })
       dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
+      if (model) {
+        dispatch({ type: 'setModel', model })
+      }
+      setModelFallbackNotice(modelFallback === true)
       void fetchSessions()
     } catch (err) {
       console.error('[wraith] resumeSession error:', err)
@@ -290,8 +298,11 @@ export default function App(): JSX.Element {
         dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(sb) })
         await window.wraith.startSession(ws)
         if (activeId) {
-          const { messages } = await window.wraith.resumeSession(activeId)
+          const { messages, model } = await window.wraith.resumeSession(activeId)
           dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
+          if (model) {
+            dispatch({ type: 'setModel', model })
+          }
         }
         void fetchSessions()
       } catch (err) {
@@ -309,15 +320,33 @@ export default function App(): JSX.Element {
     prevTurnRef.current = state.turn
   }, [state.turn, fetchSessions])
 
+  // ── pick attachments ──────────────────────────────────────────────────────
+  const handlePickAttachments = useCallback(async () => {
+    try {
+      const picked = await window.wraith.pickAttachments()
+      if (picked.length > 0) {
+        setAttachments(prev => [...prev, ...picked])
+      }
+    } catch (err) {
+      console.error('[wraith] pickAttachments error:', err)
+    }
+  }, [])
+
+  const handleRemoveAttachment = useCallback((index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index))
+  }, [])
+
   // ── input submit ──────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
     const text = inputValue.trim()
     if (!text || state.turn === 'running') return
     setInputValue('')
+    const pendingAttachments = attachments
+    setAttachments([])
     dispatch({ type: 'markStarted' })
     dispatch({ type: 'addUserItem', text })
     try {
-      await window.wraith.submitTurn(text)
+      await window.wraith.submitTurn(text, pendingAttachments.length > 0 ? pendingAttachments.map(a => ({ path: a.path, kind: a.kind })) : undefined)
     } catch (err) {
       console.error('[wraith] submitTurn error:', err)
       // 失败路径:markStarted 已提前置 turn='running',但本地 RPC 失败(后端死/拒绝)时
@@ -325,7 +354,7 @@ export default function App(): JSX.Element {
       // 复用现有 turn.failed reducer 动作把 turn 归 idle(不新造事件类型,与现有风格一致)。
       dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
     }
-  }, [inputValue, state.turn])
+  }, [inputValue, state.turn, attachments])
 
   // ── approval handlers ──────────────────────────────────────────────────────
   const handleApprovalRespond = useCallback(
@@ -477,14 +506,21 @@ export default function App(): JSX.Element {
         await window.wraith.startSession(projectPath)
         statusThrottleRef.current?.cancel() // 紧贴 resetSession:消 await 期间 status 尾巴重新入窗
         dispatch({ type: 'resetSession', ws: projectPath })
+        setModelFallbackNotice(false) // 切项目:先清残余回退通知,自动恢复后按会话重置
         const { sessions } = await window.wraith.listSessions()
         setSessions(sessions)
         if (sessions.length > 0) {
           // session.list 按 updatedAt 倒序:第一条即最近会话
-          const { sessionId, messages } = await window.wraith.resumeSession(sessions[0]!.id)
+          const { sessionId, messages, model, modelFallback } = await window.wraith.resumeSession(sessions[0]!.id)
           dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
           dispatch({ type: 'setSessionId', sessionId })
           dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
+          if (model) {
+            dispatch({ type: 'setModel', model }) // 自动恢复路径同 handleSelectSession:消费 provider/model
+          }
+          if (modelFallback === true) {
+            setModelFallbackNotice(true) // key 失效回退也要在切项目自动恢复时提示
+          }
         }
         void fetchProjects() // lastUsedAt 刷新 → 浮顶
         void fetchMcp()
@@ -609,6 +645,9 @@ export default function App(): JSX.Element {
         {state.connection === 'disconnected' && (
           <DisconnectedBanner onRestart={handleRestart} />
         )}
+        {modelFallbackNotice && (
+          <ModelFallbackBanner onDismiss={() => setModelFallbackNotice(false)} />
+        )}
 
         {view === 'plugins' ? (
           <PluginsPanel
@@ -643,6 +682,9 @@ export default function App(): JSX.Element {
                 centered={!state.hasStarted}
                 status={state.status}
                 resources={mcpResources}
+                attachments={attachments}
+                onPickAttachments={handlePickAttachments}
+                onRemoveAttachment={handleRemoveAttachment}
               />
             )
             return state.hasStarted ? (

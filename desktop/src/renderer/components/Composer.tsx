@@ -1,17 +1,21 @@
 import { useCallback, useRef, useState } from 'react'
 import { Switch } from './ui/switch'
 import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
   TooltipProvider,
 } from './ui/tooltip'
 import { baseName } from '../lib/paths'
 import { shouldSendOnEnter } from '../../shared/composerKeys'
 import StatusChip from './StatusChip'
+import ModelSwitcher from './ModelSwitcher'
 import type { StatusData, McpResourceView } from '../../shared/types'
 import { detectMention, filterMentionItems, insertMention } from '../../shared/mentionTrigger'
 import type { MentionState } from '../../shared/mentionTrigger'
+
+export interface AttachmentItem {
+  path: string
+  name: string
+  kind: string
+}
 
 interface ComposerProps {
   value: string
@@ -28,6 +32,9 @@ interface ComposerProps {
   centered?: boolean
   status?: StatusData | null
   resources?: McpResourceView[]
+  attachments?: AttachmentItem[]
+  onPickAttachments?: () => void
+  onRemoveAttachment?: (index: number) => void
 }
 
 export default function Composer({
@@ -44,6 +51,9 @@ export default function Composer({
   centered = false,
   status,
   resources = [],
+  attachments = [],
+  onPickAttachments,
+  onRemoveAttachment,
 }: ComposerProps): JSX.Element {
   const [mention, setMention] = useState<MentionState>({ active: false, start: 0, query: '' })
   const [mentionIndex, setMentionIndex] = useState(0)
@@ -115,6 +125,29 @@ export default function Composer({
           </div>
         )}
 
+        {/* attachment chips row — 仅在有附件时显示(输入框上方) */}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
+            {attachments.map((a, i) => (
+              <span
+                key={a.path + i}
+                data-testid="attachment-chip"
+                className="flex max-w-[200px] items-center gap-1 rounded-md border border-border bg-bg px-2 py-0.5 text-xs text-fg"
+              >
+                <span className="truncate">{a.name}</span>
+                <button
+                  data-testid="attachment-remove"
+                  aria-label={`移除 ${a.name}`}
+                  onClick={() => onRemoveAttachment?.(i)}
+                  className="ml-0.5 shrink-0 text-fg-subtle hover:text-fg"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* text row */}
         <textarea
           ref={textareaRef}
@@ -133,30 +166,19 @@ export default function Composer({
 
         {/* control row */}
         <div className="flex items-center gap-2 px-3 pb-2.5 pt-1">
-          {/* attach — disabled placeholder */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                data-testid="attach"
-                disabled
-                aria-label="附件"
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle opacity-50 disabled:cursor-not-allowed"
-              >
-                +
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>附件在后续阶段</TooltipContent>
-          </Tooltip>
+          {/* attach — functional */}
+          <button
+            data-testid="attach"
+            disabled={running}
+            aria-label="附件"
+            onClick={onPickAttachments}
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            +
+          </button>
 
-          {/* model chip — read only */}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span className="cursor-default rounded-lg border border-border px-2 py-1 text-xs text-fg-muted">
-                {model || '—'}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>模型/强度切换在后续阶段</TooltipContent>
-          </Tooltip>
+          {/* model chip — interactive switcher */}
+          <ModelSwitcher initialModel={model} running={running} />
 
           {/* token 状态 — status 事件驱动 */}
           <StatusChip status={status} />

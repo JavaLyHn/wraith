@@ -1145,18 +1145,24 @@ public class Main {
                     }
                 });
 
-                com.lyhn.wraith.agent.Agent agent = new com.lyhn.wraith.agent.Agent(client, registry);
+                // 可变 client 持有(会话级 provider 切换用)
+                com.lyhn.wraith.llm.LlmClient[] currentClient = { client };
+
+                com.lyhn.wraith.agent.Agent agent = new com.lyhn.wraith.agent.Agent(currentClient[0], registry);
                 agent.setRenderer(renderer);
 
                 com.lyhn.wraith.session.SessionStore sessionStore =
                         com.lyhn.wraith.session.SessionStore.open(
                                 java.nio.file.Path.of(System.getProperty("user.home")),
-                                root, client.getProviderName(), client.getModelName());
+                                root, currentClient[0].getProviderName(), currentClient[0].getModelName());
                 sessionStore.startNew();
 
                 com.lyhn.wraith.hitl.RendererHitlHandler rendererHitl =
                         new com.lyhn.wraith.hitl.RendererHitlHandler(renderer, hitl.isEnabled());
                 hitl.setDelegate(rendererHitl);
+
+                // resume 后若 provider 恢复失败,置此标志供 modelList 回传 modelFallback
+                boolean[] resumeFallback = { false };
 
                 return new com.lyhn.wraith.runtime.appserver.AppServer.SessionRunner() {
                     public com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer() { return renderer; }
@@ -1169,6 +1175,14 @@ public class Main {
                         }
                         return agent.run(expanded);
                     }
+                    public String runTurn(String input, java.util.List<com.lyhn.wraith.llm.LlmClient.ContentPart> imageParts,
+                                         java.util.List<String> imageNames) throws Exception {
+                        String expanded = input;
+                        com.lyhn.wraith.mcp.McpServerManager m = appServerMcp.manager();
+                        if (m != null) expanded = new com.lyhn.wraith.mcp.mention.AtMentionExpander(m).expand(input);
+                        return imageParts == null || imageParts.isEmpty()
+                                ? agent.run(expanded) : agent.run(expanded, imageParts, imageNames);
+                    }
                     public com.lyhn.wraith.runtime.appserver.McpOps mcp() { return appServerMcp; }
                     public void setApprovalMode(boolean auto) { hitl.setEnabled(!auto); }
                     public java.util.List<com.lyhn.wraith.session.SessionMeta> listSessions() {
@@ -1177,6 +1191,21 @@ public class Main {
                     public java.util.List<com.lyhn.wraith.llm.LlmClient.Message> resume(String id) {
                         java.util.List<com.lyhn.wraith.llm.LlmClient.Message> msgs = sessionStore.resume(id);
                         agent.restoreHistory(msgs);
+                        resumeFallback[0] = false; // 每次 resume 复位
+                        // 按 meta.provider 尝试恢复 client(会话级;失败保持当前+标记 fallback)
+                        com.lyhn.wraith.session.SessionMeta meta = sessionStore.meta(id);
+                        if (meta != null && meta.provider() != null && !meta.provider().isBlank()) {
+                            com.lyhn.wraith.llm.LlmClient restored =
+                                    com.lyhn.wraith.llm.LlmClientFactory.create(meta.provider(), config);
+                            if (restored != null) {
+                                currentClient[0] = restored;
+                                agent.setLlmClient(restored);
+                                sessionStore.setProviderModel(restored.getProviderName(), restored.getModelName());
+                            } else {
+                                // 无 key → 保持当前 client,标记 fallback
+                                resumeFallback[0] = true;
+                            }
+                        }
                         return msgs;
                     }
                     public String persistTurn() {
@@ -1196,6 +1225,36 @@ public class Main {
                             sessionStore.deleteCurrent();
                         }
                         return true;
+                    }
+                    public java.util.Map<String, Object> modelList() {
+                        return com.lyhn.wraith.runtime.appserver.ModelCatalog.result(
+                                config,
+                                currentClient[0].getProviderName(),
+                                currentClient[0].getModelName(),
+                                resumeFallback[0]);
+                    }
+                    public java.util.Map<String, Object> sessionSetModel(String provider) {
+                        com.lyhn.wraith.llm.LlmClient newClient =
+                                com.lyhn.wraith.llm.LlmClientFactory.create(provider, config);
+                        if (newClient == null) {
+                            throw new IllegalArgumentException("未配置 " + provider + " 的 API Key");
+                        }
+                        currentClient[0] = newClient;
+                        agent.setLlmClient(newClient);
+                        sessionStore.setProviderModel(newClient.getProviderName(), newClient.getModelName());
+                        return java.util.Map.of(
+                                "provider", newClient.getProviderName(),
+                                "model", newClient.getModelName());
+                    }
+                    public java.util.Map<String, Object> configSetDefaultProvider(String provider) {
+                        com.lyhn.wraith.llm.LlmClient check =
+                                com.lyhn.wraith.llm.LlmClientFactory.create(provider, config);
+                        if (check == null) {
+                            throw new IllegalArgumentException("未配置 " + provider + " 的 API Key");
+                        }
+                        config.setDefaultProvider(provider);
+                        config.save();
+                        return java.util.Map.of("ok", true);
                     }
                 };
             }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
