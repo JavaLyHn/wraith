@@ -52,6 +52,8 @@ export function applyRunEvent(s: RunState, e: RunEvent): RunState {
 }
 
 export function summaryOf(s: RunState): string {
-  const text = s.lastMessage || s.summaryBuf
+  // Guard: lastMessage/summaryBuf may be undefined when called with a partial RunState
+  // (e.g. stopAll() passes { phase: 'interrupted' } as RunState — no summaryBuf/lastMessage).
+  const text = s.lastMessage || s.summaryBuf || ''
   return text.replace(/\s+/g, ' ').trim().slice(0, 120)
 }

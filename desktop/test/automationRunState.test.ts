@@ -88,4 +88,15 @@ describe('applyRunEvent', () => {
     expect(summaryOf(s).length).toBe(120)
     expect(summaryOf(s)).not.toContain('\n')
   })
+
+  // Part B 红绿:stopAll() 传入 { phase:'interrupted' } as RunState → summaryBuf/lastMessage 均 undefined
+  // 红(修复前):text = undefined || undefined = undefined → undefined.replace(...) → TypeError crash
+  // 绿(修复后):text = undefined || undefined || '' = '' → ''.replace(...) = '' → 不崩溃
+  it('summaryOf(Part B):对 stopAll 传入的 partial RunState({phase:"interrupted"}) 不崩溃,返回空字符串', () => {
+    // 直接模拟 stopAll() 的 partial cast:{ phase: 'interrupted' } as RunState
+    const partialState = { phase: 'interrupted' } as import('../src/main/automationRunState').RunState
+    // 修复前此行会 TypeError: Cannot read properties of undefined (reading 'replace')
+    expect(() => summaryOf(partialState)).not.toThrow()
+    expect(summaryOf(partialState)).toBe('')
+  })
 })

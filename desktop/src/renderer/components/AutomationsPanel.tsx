@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { AutomationTask, ProjectView } from '../../shared/types'
 import AutomationForm from './AutomationForm'
 import AutomationRuns from './AutomationRuns'
@@ -17,6 +17,8 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
   const [creating, setCreating] = useState(false)
   const [tab, setTab] = useState<'def' | 'runs'>('def')
   const [removeConfirming, setRemoveConfirming] = useState(false)
+  const [runNowBusy, setRunNowBusy] = useState(false)
+  const runNowBusyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchTasks = useCallback(async () => {
     try { const { tasks } = await window.wraith.automationList(); setTasks(tasks) }
@@ -42,6 +44,11 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
 
   useEffect(() => { setRemoveConfirming(false); setTab('def') }, [selectedId, creating])
 
+  // Cleanup runNow busy hint timer on unmount
+  useEffect(() => {
+    return () => { if (runNowBusyTimerRef.current !== null) clearTimeout(runNowBusyTimerRef.current) }
+  }, [])
+
   const current = creating ? null : tasks.find(t => t.id === selectedId) ?? tasks[0] ?? null
 
   const handleSave = useCallback(async (t: AutomationTask): Promise<boolean> => {
@@ -50,7 +57,20 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
   }, [fetchTasks])
 
   const handleRunNow = useCallback(async (t: AutomationTask) => {
-    try { await window.wraith.automationRunNow(t.id); setTab('runs') }
+    try {
+      const result = await window.wraith.automationRunNow(t.id)
+      if (result.ok) {
+        setTab('runs')
+      } else {
+        // Task is in settle window (B5) or already active — surface transient hint
+        setRunNowBusy(true)
+        if (runNowBusyTimerRef.current !== null) clearTimeout(runNowBusyTimerRef.current)
+        runNowBusyTimerRef.current = setTimeout(() => {
+          setRunNowBusy(false)
+          runNowBusyTimerRef.current = null
+        }, 3000)
+      }
+    }
     catch (err) { console.error('[wraith] automationRunNow error:', err) }
   }, [])
 
@@ -102,6 +122,12 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
           </div>
         </div>
         <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-4">
+          {runNowBusy && (
+            <div data-testid="runnow-busy-hint"
+              className="mb-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
+              任务正在收尾,稍后重试
+            </div>
+          )}
           {!current && !creating ? (
             <div className="text-xs text-fg-subtle">选择或新建任务</div>
           ) : (
