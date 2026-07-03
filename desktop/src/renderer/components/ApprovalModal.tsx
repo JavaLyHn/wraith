@@ -169,7 +169,7 @@ export default function ApprovalModal({
               onReject()
             }}
             disabled={submitting}
-            className="rounded-lg border border-border px-4 py-1.5 text-xs text-fg-muted hover:bg-black/[0.03] disabled:cursor-not-allowed disabled:opacity-40"
+            className="rounded-lg border border-border px-4 py-1.5 text-xs text-fg-muted hover:bg-surface/60 disabled:cursor-not-allowed disabled:opacity-40"
           >
             拒绝
           </button>

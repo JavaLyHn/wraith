@@ -76,6 +76,7 @@ class AppServerApprovalRespondTest {
         feed.write("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\",\"params\":{}}\n".getBytes(StandardCharsets.UTF_8));
         feed.flush();
         server.join(2000);
+        assertFalse(server.isAlive());
     }
 
     @Test
@@ -130,6 +131,7 @@ class AppServerApprovalRespondTest {
         feed.write("{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\",\"params\":{}}\n".getBytes(StandardCharsets.UTF_8));
         feed.flush();
         server.join(2000);
+        assertFalse(server.isAlive());
     }
 
     @Test
