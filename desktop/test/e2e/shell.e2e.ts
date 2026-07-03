@@ -761,6 +761,85 @@ test('编辑用户消息 → session.rewind + 新文本重发,气泡更新', asy
 })
 
 // ---------------------------------------------------------------------------
+// Test 18b(负向,I-1): 编辑重发路径的 submit→turn.started 竞态窗口关闭验证。
+//   编辑重发走 rewindSession→truncateAtUser→addUserItem→markStarted→submitTurn(与主 submit 对称)。
+//   markStarted 提交瞬间即置 running,竞态窗口内(turn.started 尚未到达,MOCK_SLOW_TURN 放大)
+//   force 点击 workspace-switch 必须被 turnRef 守卫吞掉——session.start 计数不增。
+//   与 Task 2 修掉的 workspace-switch 负向(Test 4b)同尺寸,只是入口换成编辑重发路径。
+// ---------------------------------------------------------------------------
+
+test('编辑重发负向:竞态窗口内点击 workspace-switch 不产生第二次 session.start', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-edit-race.jsonl`)
+  const startupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-edit-race-startup-'))
+  const repickDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-edit-race-repick-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-edit-race-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_WORKSPACE: startupDir,
+      WRAITH_E2E_PICK: repickDir, // 若守卫失效,click 会走 switchToProject 发出第二次 session.start
+      WRAITH_E2E_USERDATA: userData,
+      MOCK_SESSIONS_BY_WS: '{}',
+      // MOCK_SLOW_TURN:turn.started 后停 3s,放大编辑重发 submit→turn(running)确立后的窗口;
+      // MOCK_NO_APPROVAL:不挂审批,首轮秒级完成(经 3s SLOW 延迟后 turn.completed),重发窗口稳定。
+      MOCK_SLOW_TURN: '1',
+      MOCK_NO_APPROVAL: '1',
+    },
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  const startCount = (): number => {
+    if (!fs.existsSync(recordFile)) return 0
+    return fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean)
+      .map(l => JSON.parse(l)).filter(l => l.method === 'session.start').length
+  }
+  await expect.poll(startCount, { timeout: 10000 }).toBe(1)
+
+  // 首轮完整跑完(SLOW 3s 后 turn.completed → running 清 idle;interrupt 钮消失)
+  await input.fill('原始消息')
+  await input.press('Enter')
+  await expect(win.locator('[data-testid="user-msg"]')).toHaveText('原始消息', { timeout: 10000 })
+  await expect(win.locator('[data-testid="interrupt"]')).toHaveCount(0, { timeout: 15000 })
+
+  // hover 出编辑按钮 → 内联编辑 → 保存并重发(进入 handleEditMessage)
+  await win.locator('[data-testid="user-msg"]').first().hover()
+  await win.locator('[data-testid="msg-edit"]').click()
+  const editInput = win.locator('[data-testid="msg-edit-input"]')
+  await expect(editInput).toBeVisible({ timeout: 5000 })
+  await editInput.fill('改后的消息')
+  await win.locator('[data-testid="msg-edit-save"]').click()
+
+  // ★ 竞态窗口:markStarted 已在 submitTurn 前置 running(修复后),但后端 turn.started(SLOW 3s)未到。
+  //   先等气泡翻到改后文本(markStarted+addUserItem 已生效,窗口已开),再 force 点击。
+  //   修复前 markStarted 不动 turn,此空窗内 running===false,守卫放行 → 误发第二次 session.start。
+  await expect(win.locator('[data-testid="user-msg"]').first()).toHaveText('改后的消息', { timeout: 10000 })
+  await win.locator('[data-testid="workspace-switch"]').click({ force: true })
+
+  // 等第二轮完整跑完,期间给足时间让任何误触发的 switchToProject 发出第二次 session.start。
+  await expect(win.locator('[data-testid="interrupt"]')).toHaveCount(0, { timeout: 15000 })
+  expect(startCount(), '编辑重发竞态窗口内的点击不得触发第二次 session.start').toBe(1)
+  const startedWorkspaces = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean)
+    .map(l => JSON.parse(l)).filter(l => l.method === 'session.start').map(l => l.params?.workspaceDir)
+  expect(startedWorkspaces).not.toContain(repickDir)
+
+  // 气泡仍是改后的消息,未被重置回欢迎态
+  await expect(win.locator('[data-testid="user-msg"]')).toHaveText('改后的消息')
+  await expect(win.locator('text=今天做点什么？')).toHaveCount(0)
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(startupDir, { recursive: true, force: true })
+  fs.rmSync(repickDir, { recursive: true, force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
 // Test 19: 删除消息 → 二次确认 → rewind,气泡消失
 // ---------------------------------------------------------------------------
 
@@ -1317,6 +1396,29 @@ test('T37 运行历史跳转会话(回放可见)', async () => {
   await win.locator('[data-testid="automation-run-open"]').first().click()
   await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 10000 })
   await expect(win.locator('text=之前问的问题')).toBeVisible({ timeout: 10000 }) // mock resume 回放
+  await app.close(); cleanup()
+})
+
+// ---------------------------------------------------------------------------
+// A4: 面板停留期间跑完一次运行,红点不亮(spec 验收)
+//   createAndRunTask 已打开面板并切到 runs tab。任务在面板可见期间跑到终态。
+//   AutomationsPanel 收到 runs-changed 后(80ms debounce)会重发 automationPanelOpened,
+//   把「面板可见期间到达的终态」即时标为已读 → badge 不重亮。
+//   注意留足余量:80ms debounce + panelOpened IPC 往返,用 expect.poll auto-retry。
+// ---------------------------------------------------------------------------
+
+test('A4 面板停留期间跑完运行 → 红点不亮', async () => {
+  const { app, win, cleanup } = await launchAutoApp()
+  await createAndRunTask(win, '面板内任务')
+  // 面板已打开、已切 runs;等运行到终态成功
+  await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('成功', { timeout: 15000 })
+  // 断言红点不亮:给足 80ms debounce + panelOpened 往返余量,poll 期内 badge 计数应稳定为 0。
+  await expect.poll(
+    async () => win.locator('[data-testid="nav-automations-badge"]').count(),
+    { timeout: 10000 },
+  ).toBe(0)
+  // 再稳一拍:确认不是短暂 0——短窗内复查仍为 0(亮后随事件消也算过,此处直接要求终态不亮)。
+  await expect(win.locator('[data-testid="nav-automations-badge"]')).toHaveCount(0)
   await app.close(); cleanup()
 })
 
