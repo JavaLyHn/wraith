@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ToolRegistryTest {
@@ -357,6 +358,71 @@ class ToolRegistryTest {
 
         assertEquals(List.of("global:默认用中文回答"), saved);
         assertTrue(result.contains("长期记忆(global)"));
+    }
+
+    // -----------------------------------------------------------------------
+    // T6: write_file no-op 短路 — diff observer 行为验证
+    // -----------------------------------------------------------------------
+
+    /** no-op write(内容与现有文件完全相同)不触发 writeFileObserver。 */
+    @Test
+    void noOpWriteDoesNotFireDiffObserver(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("same.txt");
+        String content = "hello world";
+        Files.writeString(file, content);
+
+        ToolRegistry registry = new ToolRegistry();
+        registry.setProjectPath(tempDir.toString());
+        List<String[]> emissions = new ArrayList<>();
+        registry.setWriteFileObserver((path, ba) -> emissions.add(ba));
+
+        // 写入与文件完全一致的内容
+        String result = registry.executeTool("write_file",
+                "{\"path\":\"same.txt\",\"content\":\"hello world\"}");
+
+        // diff observer 不应触发
+        assertTrue(emissions.isEmpty(), "no-op write 不应触发 diff observer，emissions=" + emissions.size());
+        // 工具仍应返回成功
+        assertTrue(result.contains("文件已写入"), "工具成功返回不应改变，got: " + result);
+    }
+
+    /** 内容真实变更时,writeFileObserver 正常触发,携带 before/after。 */
+    @Test
+    void realChangeFiresDiffObserver(@TempDir Path tempDir) throws Exception {
+        Path file = tempDir.resolve("changed.txt");
+        String before = "old content";
+        String after = "new content";
+        Files.writeString(file, before);
+
+        ToolRegistry registry = new ToolRegistry();
+        registry.setProjectPath(tempDir.toString());
+        List<String[]> emissions = new ArrayList<>();
+        registry.setWriteFileObserver((path, ba) -> emissions.add(ba));
+
+        String result = registry.executeTool("write_file",
+                "{\"path\":\"changed.txt\",\"content\":\"new content\"}");
+
+        assertEquals(1, emissions.size(), "内容变更应触发一次 diff observer");
+        assertEquals(before, emissions.get(0)[0], "diff[0] 应为 before");
+        assertEquals(after, emissions.get(0)[1], "diff[1] 应为 after");
+        assertTrue(result.contains("文件已写入"), "工具成功返回不应改变，got: " + result);
+    }
+
+    /** 新建文件(before 为 null)触发 writeFileObserver,属于真实 ADD。 */
+    @Test
+    void newFileWriteFiresDiffObserver(@TempDir Path tempDir) {
+        ToolRegistry registry = new ToolRegistry();
+        registry.setProjectPath(tempDir.toString());
+        List<String[]> emissions = new ArrayList<>();
+        registry.setWriteFileObserver((path, ba) -> emissions.add(ba));
+
+        String result = registry.executeTool("write_file",
+                "{\"path\":\"newfile.txt\",\"content\":\"brand new\"}");
+
+        assertEquals(1, emissions.size(), "新建文件应触发 diff observer (real ADD)");
+        assertNull(emissions.get(0)[0], "新建文件 before 应为 null");
+        assertEquals("brand new", emissions.get(0)[1], "新建文件 after 内容应正确");
+        assertTrue(result.contains("文件已写入"), "工具成功返回不应改变，got: " + result);
     }
 
     private static void restoreSystemProperty(String key, String previous) {
