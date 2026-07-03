@@ -65,3 +65,13 @@ export function shouldForwardNotification(
   // params.sessionId 存在:仅当匹配活跃会话时放行
   return p['sessionId'] === activeSessionId
 }
+
+/**
+ * v1 会话通知过滤总开关(kill-switch)。必须保持 false:
+ * 单会话下 sessionId 在 turn.completed 时从 session.start 的 sess_… 换为持久化 id
+ * (== 20260703T…),启用过滤会误丢弃 turn.completed → turn 永卡 running。
+ * 启用前置:main 在 turn.completed 采用持久化 id 更新 currentSessionId + resumeSession 同步 id
+ * (未来多会话设计,不在本波次范围)。详见 T12 review / ROADMAP backlog。
+ * 单测 notificationFilter.test.ts 锁定此值为 false,防误翻。
+ */
+export const MULTI_SESSION_FILTER_ENABLED = false

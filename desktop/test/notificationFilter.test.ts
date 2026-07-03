@@ -17,7 +17,15 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { shouldForwardNotification } from '../src/main/notificationFilter'
+import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from '../src/main/notificationFilter'
+
+describe('T12 kill-switch: MULTI_SESSION_FILTER_ENABLED 必须为 false(锁定值防误翻)', () => {
+  // 若有人把此常量翻成 true,v1 会因 session.start id 与 turn.completed 持久化 id
+  // 命名空间分歧而误丢 turn.completed → turn 永卡 running(T12 blocker)。此测试硬锁其值。
+  it('常量恒为 false(启用需先解 id-lineage,见 notificationFilter.ts 注释)', () => {
+    expect(MULTI_SESSION_FILTER_ENABLED).toBe(false)
+  })
+})
 
 // ---------------------------------------------------------------------------
 // v1 默认路径:门控关闭(multiSessionEnabled = false / 默认值)

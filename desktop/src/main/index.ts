@@ -26,20 +26,10 @@ import {
 import { AutomationScheduler } from './automationScheduler'
 import type { AutomationTask, AutomationEvent } from '../shared/types'
 import { resolveInterruptTurnId } from './interruptTurnId'
-import { shouldForwardNotification } from './notificationFilter'
+import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from './notificationFilter'
 
-// ---------------------------------------------------------------------------
-// T12 — 多会话过滤门控(v1 必须保持 false)
-// ---------------------------------------------------------------------------
-// v1 是严格单会话,但 session id 在生命周期内会发生一次切换:
-//   session.start 返回 sess_<nanotime-hex>(wire id)
-//   → 第一个 turn.completed 携带持久化 id(20260703T…-hex,另一命名空间)
-// 若启用过滤(true),main.currentSessionId(== sess_…)与后端通知 sessionId
-// (== 20260703T…)不匹配,turn.completed 会被误丢弃 → turn 永卡 running。
-// 启用前置条件:main 在 turn.completed 时采用持久化 id 更新 currentSessionId,
-// 并在 resumeSession 时同步 id —— 属于未来多会话设计,不在本波次范围。
-// 详见 T12 review / ROADMAP backlog。
-const MULTI_SESSION_FILTER_ENABLED = false
+// T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
+// (v1 必须保持 false;单测锁定其值防误翻)。
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
