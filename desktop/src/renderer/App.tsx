@@ -506,14 +506,21 @@ export default function App(): JSX.Element {
         await window.wraith.startSession(projectPath)
         statusThrottleRef.current?.cancel() // 紧贴 resetSession:消 await 期间 status 尾巴重新入窗
         dispatch({ type: 'resetSession', ws: projectPath })
+        setModelFallbackNotice(false) // 切项目:先清残余回退通知,自动恢复后按会话重置
         const { sessions } = await window.wraith.listSessions()
         setSessions(sessions)
         if (sessions.length > 0) {
           // session.list 按 updatedAt 倒序:第一条即最近会话
-          const { sessionId, messages } = await window.wraith.resumeSession(sessions[0]!.id)
+          const { sessionId, messages, model, modelFallback } = await window.wraith.resumeSession(sessions[0]!.id)
           dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
           dispatch({ type: 'setSessionId', sessionId })
           dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
+          if (model) {
+            dispatch({ type: 'setModel', model }) // 自动恢复路径同 handleSelectSession:消费 provider/model
+          }
+          if (modelFallback === true) {
+            setModelFallbackNotice(true) // key 失效回退也要在切项目自动恢复时提示
+          }
         }
         void fetchProjects() // lastUsedAt 刷新 → 浮顶
         void fetchMcp()

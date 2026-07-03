@@ -1,13 +1,18 @@
 /**
  * E2E: Session resume restores provider/model and shows fallback banner (I-1 fix)
  *
- * Test T-R1: resuming a normal session (sess_a) updates the model chip to the
- *   session's model ('deepseek-chat') — discriminating because startup sets the
- *   chip to 'mock-model' (from initialize reply) so we can observe a real change.
+ * Sessions are injected per-test via MOCK_SESSIONS_BY_WS (the established fixture
+ * mechanism, mirroring the T46 search test) so this spec is isolated from the
+ * mock's DEFAULT session list — the default stays 2 sessions and shell.e2e.ts's
+ * `toHaveCount(2)` is unaffected.
  *
- * Test T-R2: resuming the fallback session (sess_fallback) shows the
- *   model-fallback-banner AND updates the chip to the fallback (default) model;
- *   clicking dismiss removes the banner.
+ * Test T-R1: resuming a normal session updates the model chip to the session's
+ *   effective model ('deepseek-chat') — discriminating because startup sets the
+ *   chip to 'mock-model' (from the initialize reply) so we observe a real change.
+ *
+ * Test T-R2: resuming the fallback session (id 'sess_fallback', which triggers the
+ *   mock's modelFallback:true resume branch) shows the model-fallback-banner AND
+ *   updates the chip to the fallback (default) model; clicking dismiss removes it.
  *
  * RED behaviour (pre-fix):
  *   T-R1 — chip stays 'mock-model' (handleSelectSession never dispatches setModel).
@@ -32,6 +37,7 @@ const mockPath = path.resolve(__dirname, '../fixtures/mock-appserver.mjs')
 
 test('T-R1 resume 正常会话:model-chip 更新为会话模型(deepseek-chat)', async () => {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-tr1-'))
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-tr1-'))
   const app = await electron.launch({
     args: [mainPath],
     env: {
@@ -39,32 +45,40 @@ test('T-R1 resume 正常会话:model-chip 更新为会话模型(deepseek-chat)',
       WRAITH_APPSERVER_CMD: 'node ' + mockPath,
       WRAITH_E2E: '1',
       WRAITH_E2E_USERDATA: userData,
-    }
+      WRAITH_E2E_WORKSPACE: ws,
+      WRAITH_E2E_PROJECTS: JSON.stringify([{ path: ws, lastUsedAt: 2000 }]),
+      MOCK_SESSIONS_BY_WS: JSON.stringify({
+        [ws]: [
+          { id: 'sess_normal', cwd: ws, createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'deepseek', model: 'deepseek-chat', title: '正常会话', turns: 2 },
+        ],
+      }),
+    },
   })
 
   const win = await app.firstWindow()
   await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 15000 })
 
-  // On startup, initialize returns model:'mock-model', chip should show that.
-  // This confirms the chip is live and gives us a pre-resume baseline to compare against.
+  // Startup initialize returns model:'mock-model' → chip baseline, distinct from the
+  // resumed model so the post-resume assertion has discriminating power.
   const chip = win.locator('[data-testid="model-chip"]')
   await expect(chip).toBeVisible({ timeout: 10000 })
   await expect(chip).toHaveText('mock-model', { timeout: 10000 })
 
-  // Session list has 3 items; first is sess_a (deepseek/deepseek-chat).
-  // Pre-fix: chip stays 'mock-model' after click → assertion below would FAIL.
-  // Post-fix: handleSelectSession dispatches setModel('deepseek-chat') → chip updates.
+  // Resume the (only) session. Pre-fix: chip stays 'mock-model'. Post-fix:
+  // handleSelectSession dispatches setModel → ModelSwitcher effect syncs the chip.
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(1, { timeout: 10000 })
   await win.locator('[data-testid="conversation-item"]').first().click()
   await expect(win.locator('[data-testid="user-msg"]')).toContainText('之前问的问题', { timeout: 10000 })
 
-  // Chip must now reflect the resumed session's model, not the stale startup model.
+  // Chip must now reflect the resumed session's effective model.
   await expect(chip).toHaveText('deepseek-chat', { timeout: 10000 })
 
-  // No fallback banner should appear for a normal resume.
+  // No fallback banner for a normal resume.
   await expect(win.locator('[data-testid="model-fallback-banner"]')).toHaveCount(0)
 
   await app.close()
   fs.rmSync(userData, { recursive: true, force: true })
+  fs.rmSync(ws, { recursive: true, force: true })
 })
 
 // ---------------------------------------------------------------------------
@@ -73,6 +87,7 @@ test('T-R1 resume 正常会话:model-chip 更新为会话模型(deepseek-chat)',
 
 test('T-R2 resume 回退会话:横幅可见+chip 显示默认模型+dismiss 清除横幅', async () => {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-tr2-'))
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-tr2-'))
   const app = await electron.launch({
     args: [mainPath],
     env: {
@@ -80,26 +95,31 @@ test('T-R2 resume 回退会话:横幅可见+chip 显示默认模型+dismiss 清�
       WRAITH_APPSERVER_CMD: 'node ' + mockPath,
       WRAITH_E2E: '1',
       WRAITH_E2E_USERDATA: userData,
-    }
+      WRAITH_E2E_WORKSPACE: ws,
+      WRAITH_E2E_PROJECTS: JSON.stringify([{ path: ws, lastUsedAt: 2000 }]),
+      MOCK_SESSIONS_BY_WS: JSON.stringify({
+        [ws]: [
+          // id 'sess_fallback' triggers the mock's modelFallback:true resume branch.
+          { id: 'sess_fallback', cwd: ws, createdAt: '2026-06-29T00:00:00Z', updatedAt: '2026-06-29T01:00:00Z', provider: 'deepseek', model: 'deepseek-chat', title: '回退测试对话', turns: 1 },
+        ],
+      }),
+    },
   })
 
   const win = await app.firstWindow()
   await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 15000 })
 
-  // Session list has 3 items: sess_a, sess_b, sess_fallback (third, index 2).
-  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(3, { timeout: 10000 })
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(1, { timeout: 10000 })
 
-  // Click the fallback session (third item = sess_fallback).
-  // Pre-fix: banner never appears (modelFallback not consumed) → T-R2 would FAIL.
+  // Resume the fallback session. Pre-fix: banner never appears (field dropped).
   // Post-fix: setModelFallbackNotice(true) renders ModelFallbackBanner.
-  await win.locator('[data-testid="conversation-item"]').nth(2).click()
+  await win.locator('[data-testid="conversation-item"]').first().click()
   await expect(win.locator('[data-testid="user-msg"]')).toContainText('之前问的问题', { timeout: 10000 })
 
-  // Banner must be visible.
   const banner = win.locator('[data-testid="model-fallback-banner"]')
   await expect(banner).toBeVisible({ timeout: 10000 })
 
-  // Chip must show the fallback (default) model = deepseek-chat.
+  // Chip shows the fallback (default) model.
   await expect(win.locator('[data-testid="model-chip"]')).toHaveText('deepseek-chat', { timeout: 10000 })
 
   // Dismiss → banner gone.
@@ -108,4 +128,5 @@ test('T-R2 resume 回退会话:横幅可见+chip 显示默认模型+dismiss 清�
 
   await app.close()
   fs.rmSync(userData, { recursive: true, force: true })
+  fs.rmSync(ws, { recursive: true, force: true })
 })

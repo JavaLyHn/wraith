@@ -302,9 +302,8 @@ async function handleRequest(req) {
       }
       reply(id, {
         sessions: [
-          { id: 'sess_a', cwd: '/p', createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'deepseek', model: 'deepseek-chat', title: '第一段对话', turns: 2 },
-          { id: 'sess_b', cwd: '/p', createdAt: '2026-06-30T00:00:00Z', updatedAt: '2026-06-30T01:00:00Z', provider: 'deepseek', model: 'deepseek-chat', title: '早先的对话', turns: 5 },
-          { id: 'sess_fallback', cwd: '/p', createdAt: '2026-06-29T00:00:00Z', updatedAt: '2026-06-29T01:00:00Z', provider: 'deepseek', model: 'deepseek-chat', title: '回退测试对话', turns: 1 }
+          { id: 'sess_a', cwd: '/p', createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'mock', model: 'mock-model', title: '第一段对话', turns: 2 },
+          { id: 'sess_b', cwd: '/p', createdAt: '2026-06-30T00:00:00Z', updatedAt: '2026-06-30T01:00:00Z', provider: 'mock', model: 'mock-model', title: '早先的对话', turns: 5 }
         ]
       })
       break
