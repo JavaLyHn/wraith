@@ -47,6 +47,29 @@ public final class AppServer {
         default boolean rewind(int userOrdinal) { return false; }
         /** MCP 操作面。实现可返回 null(表示 mcp 不可用)。默认 null。 */
         default McpOps mcp() { return null; }
+        /**
+         * 当前可用 provider 列表及当前生效 client 信息。
+         * 返回 {@code {current:{provider,model}, default:String, providers:[{name,model,hasKey}]}}。
+         * 默认返回 null(-32000)。
+         */
+        default java.util.Map<String, Object> modelList() { return null; }
+        /**
+         * 会话级切换 provider(不写 config)。
+         * 成功返回 {@code {provider, model}}；无 key/未知 provider → 抛 {@link IllegalArgumentException}(-32602)。
+         * 默认抛出。
+         */
+        default java.util.Map<String, Object> sessionSetModel(String provider) {
+            throw new UnsupportedOperationException("sessionSetModel not implemented");
+        }
+        /**
+         * 持久化默认 provider(存 config.json)。
+         * 校验存在+有 key → 写盘 → 返回 {@code {ok:true}}。
+         * 未知/无 key → 抛 {@link IllegalArgumentException}(-32602)。
+         * 默认抛出。
+         */
+        default java.util.Map<String, Object> configSetDefaultProvider(String provider) {
+            throw new UnsupportedOperationException("configSetDefaultProvider not implemented");
+        }
     }
 
     private final BufferedReader in;
@@ -133,6 +156,38 @@ public final class AppServer {
                     ok(msg);
                 } catch (IOException e) { writer.error(msg.id(), -32000, "配置写入失败: " + e.getMessage()); }
             });
+            case "model.list" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                java.util.Map<String, Object> listResult = session.modelList();
+                if (listResult == null) { writer.error(msg.id(), -32000, "model.list unavailable"); return true; }
+                writer.result(msg.id(), listResult);
+            }
+            case "session.setModel" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String provider = textParam(msg.params(), "provider");
+                if (provider == null) { writer.error(msg.id(), -32602, "缺 provider"); return true; }
+                try {
+                    java.util.Map<String, Object> r = session.sessionSetModel(provider);
+                    writer.result(msg.id(), r);
+                } catch (IllegalArgumentException e) {
+                    writer.error(msg.id(), -32602, e.getMessage());
+                } catch (UnsupportedOperationException e) {
+                    writer.error(msg.id(), -32000, e.getMessage());
+                }
+            }
+            case "config.setDefaultProvider" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String provider = textParam(msg.params(), "provider");
+                if (provider == null) { writer.error(msg.id(), -32602, "缺 provider"); return true; }
+                try {
+                    java.util.Map<String, Object> r = session.configSetDefaultProvider(provider);
+                    writer.result(msg.id(), r);
+                } catch (IllegalArgumentException e) {
+                    writer.error(msg.id(), -32602, e.getMessage());
+                } catch (UnsupportedOperationException e) {
+                    writer.error(msg.id(), -32000, e.getMessage());
+                }
+            }
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
                 return false;
@@ -286,6 +341,23 @@ public final class AppServer {
             wire.add(com.lyhn.wraith.session.SessionMessageCodec.toJson(JsonRpc.MAPPER, m));
         }
         sessionId = id; // 活跃会话切到 resume 的
-        writer.result(msg.id(), Map.of("sessionId", id, "messages", wire));
+        // 取实际生效的 provider/model(由 runner 的 modelList 提供),以及 modelFallback 标志
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("sessionId", id);
+        result.put("messages", wire);
+        java.util.Map<String, Object> ml = session.modelList();
+        if (ml != null) {
+            @SuppressWarnings("unchecked")
+            java.util.Map<String, Object> current = (java.util.Map<String, Object>) ml.get("current");
+            if (current != null) {
+                result.put("provider", current.get("provider"));
+                result.put("model", current.get("model"));
+            }
+            Object fallback = ml.get("modelFallback");
+            if (Boolean.TRUE.equals(fallback)) {
+                result.put("modelFallback", true);
+            }
+        }
+        writer.result(msg.id(), result);
     }
 }

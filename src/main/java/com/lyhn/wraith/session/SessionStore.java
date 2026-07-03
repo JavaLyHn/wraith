@@ -135,6 +135,14 @@ public final class SessionStore {
         return rec.messages();
     }
 
+    /** 读取指定 id 会话的元信息(不加载消息体)。id 不存在返回 null。 */
+    public SessionMeta meta(String id) {
+        if (id == null || id.isBlank()) return null;
+        Path file = dir.resolve(safeId(id) + ".jsonl");
+        if (!Files.isRegularFile(file)) return null;
+        return readMeta(file);
+    }
+
     /** 本项目最近更新的会话。 */
     public Optional<SessionMeta> latest() {
         return list(1).stream().findFirst();
