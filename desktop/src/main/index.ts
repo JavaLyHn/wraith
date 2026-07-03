@@ -25,6 +25,7 @@ import {
 } from './automationsStore'
 import { AutomationScheduler } from './automationScheduler'
 import type { AutomationTask, AutomationEvent } from '../shared/types'
+import { resolveInterruptTurnId } from './interruptTurnId'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -219,6 +220,10 @@ ipcMain.handle('wraith:startSession', async (_e, workspaceDir: string | null) =>
 
 ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { path: string; kind: string }[]) => {
   if (!client) throw new Error('Backend not connected')
+  // T11 硬化:进入早窗(submit 在途、尚未 resolve)前清零 currentTurnId,
+  // 使此窗口内的 turn.interrupt 发送 null 而非陈旧的上一 turn id。
+  // 后端按线程中断、不读 turnId,运行时行为不变(纯防御性)。
+  currentTurnId = null
   const result = await client.request('turn.submit', {
     sessionId: currentSessionId,
     input,
@@ -287,10 +292,11 @@ ipcMain.handle(
 
 ipcMain.handle('wraith:interrupt', async () => {
   if (!client) throw new Error('Backend not connected')
-  // Best-effort: use tracked ids; may be null if turn not started yet.
+  // T11 硬化:resolveInterruptTurnId 确保早窗(currentTurnId 已清零)发 null,
+  // 而非陈旧的上一 turn id。后端按线程中断不读 turnId,行为不变(纯防御性)。
   await client.request('turn.interrupt', {
     sessionId: currentSessionId,
-    turnId: currentTurnId
+    turnId: resolveInterruptTurnId(currentTurnId)
   })
 })
 
