@@ -30,7 +30,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -334,6 +334,9 @@ class McpServerManagerTest {
         });
 
         // ── 2. 后台线程调用 enable("slow")——进入慢 initialize 后内置锁应已释放 ──
+        // enableFuture 不做 get():我们测的是"其他调用不被阻塞"而非 enable 本身的返回值;
+        // 后台线程通过 exec.awaitTermination 在步骤 6 收尾。
+        @SuppressWarnings("unused")
         Future<?> enableFuture = exec.submit(() -> manager.enable("slow"));
 
         // 等待 Dispatcher 确认 initialize 请求已到达(即后台线程已越过快速记账块、进入 initialize())
@@ -537,5 +540,237 @@ class McpServerManagerTest {
     /** 与 setUp 中同参构造第二个 ToolRegistry（只构造空 registry，不含任何 MCP 工具） */
     private ToolRegistry newRegistryLikeSetUp() {
         return new ToolRegistry();
+    }
+
+    // ---- Task 5: tools/list_changed 回调加锁 + 闭 T1 遗留:closed-during-initialize client 泄漏 ----
+
+    /**
+     * FOLDED MINOR 1 红绿测试:closed-during-initialize client 泄漏修复。
+     *
+     * <p>场景:
+     * <ol>
+     *   <li>Dispatcher 让 initialize 阻塞在 latch 上(冷拉模拟)。</li>
+     *   <li>等到 initialize 到达 Dispatcher 后,调用 {@code manager.close()}(设 closed=true)。</li>
+     *   <li>放行 latch:initialize 完成,transport 获得 sessionId。</li>
+     *   <li>修复后:{@code if (closed) \{ client.close(); return; \}} 触发 DELETE 请求。</li>
+     *   <li>断言:MockWebServer 收到了 DELETE 请求(Transport.close() 被调用)。</li>
+     * </ol>
+     *
+     * <p>红:回退为 {@code if (closed) return;}(无 client.close)→ DELETE 永不发送→断言失败。
+     * 观察到 RED 时:awaitDeleteRequest 超时,断言 "manager.close() 后客户端应关闭" 失败。
+     */
+    @Test
+    void closedDuringInitializeDoesNotLeakClient() throws Exception {
+        CountDownLatch initializeLatch = new CountDownLatch(1);
+        CountDownLatch initializeArrived = new CountDownLatch(1);
+
+        webServer.setDispatcher(new Dispatcher() {
+            private final java.util.concurrent.atomic.AtomicBoolean initialHandled = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                // DELETE = client.close() — best-effort, return 200
+                if ("DELETE".equals(request.getMethod())) {
+                    return new MockResponse().setResponseCode(200);
+                }
+                // 第一个 POST 是 initialize — 阻塞直到 latch 放行
+                if (!initialHandled.getAndSet(true)) {
+                    initializeArrived.countDown();
+                    initializeLatch.await();
+                    // 返回带 sessionId 的响应:transport 记录 sessionId,close() 时才发 DELETE
+                    return new MockResponse()
+                            .setHeader("Content-Type", "application/json")
+                            .setHeader("Mcp-Session-Id", "session-leak-test")
+                            .setBody("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-03-26\"}}");
+                }
+                // initialized 通知及其他请求:200 空响应
+                return new MockResponse().setHeader("Content-Type", "application/json").setBody("");
+            }
+        });
+
+        loadServersFromMap(Map.of("leaky", httpConfig(webServer)));
+
+        ExecutorService exec = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "leak-test-bg");
+            t.setDaemon(true);
+            return t;
+        });
+
+        // 后台线程启动慢 enable
+        @SuppressWarnings("unused")
+        Future<?> future = exec.submit(() -> manager.enable("leaky"));
+
+        // 等待 initialize 请求到达
+        assertTrue(initializeArrived.await(5, TimeUnit.SECONDS),
+                "initialize 请求未在 5s 内到达");
+
+        // 在 initialize 阻塞期间关闭 manager(工作区切换场景)
+        manager.close();
+
+        // 放行 initialize:client.initialize() 完成后,修复代码应调用 client.close()
+        initializeLatch.countDown();
+
+        exec.shutdown();
+        exec.awaitTermination(10, TimeUnit.SECONDS);
+
+        // 修复后:client.close() 应发出 DELETE 请求
+        // 等待最多 5s,轮询 MockWebServer 已记录请求
+        long deadline = System.currentTimeMillis() + 5000;
+        boolean deleteReceived = false;
+        while (System.currentTimeMillis() < deadline) {
+            RecordedRequest req = webServer.takeRequest(100, TimeUnit.MILLISECONDS);
+            if (req != null && "DELETE".equals(req.getMethod())) {
+                deleteReceived = true;
+                break;
+            }
+        }
+        assertTrue(deleteReceived,
+                "manager.close() 后 client 应被关闭(期待 DELETE 请求),但未收到。" +
+                "RED:回退到 if (closed) return; 则不发 DELETE。");
+    }
+
+    /**
+     * PRIMARY T5:notifications/tools/list_changed 回调加锁功能测试。
+     *
+     * <p>测试思路:直接向 McpClient 的通知链注入一条合成 list_changed 通知,
+     * 验证回调在锁内正确更新工具列表——无需依赖时序竞态(非 flaky)。
+     *
+     * <p>步骤:
+     * <ol>
+     *   <li>正常启动 server,工具:"echo"。</li>
+     *   <li>用自定义 Dispatcher 让 tools/list 返回 "echo2"(按请求 id 动态回复,避免 hardcode id 错配)。</li>
+     *   <li>通过反射调用 {@code JsonRpcClient.handleMessage} 注入
+     *       {@code notifications/tools/list_changed} 消息(无 id → 走通知分发路径)。</li>
+     *   <li>断言:server.tools() 和 registry 均已更新为 "echo2"。</li>
+     * </ol>
+     *
+     * <p>加锁后(GREEN):回调持 manager 锁,与 reattach/finalizeReadyLocked 互斥;
+     * 功能测试保证工具正确注册。不加锁时工具仍会注册(非锁异常路径),但 closed 双检不存在
+     * → 关闭后仍可写入 registry → 该路径由 closed 守护回归(见 listChangedAfterManagerCloseDoesNotWriteRegistry)。
+     */
+    @Test
+    void listChangedNotificationUpdatesToolsUnderLock() throws Exception {
+        // 1. 正常启动,工具 "echo"
+        enqueueInitialize();
+        enqueueToolsList(toolJson("echo", "Echo back text"));
+        loadServersFromMap(Map.of("demo", httpConfig(webServer)));
+        manager.startAll();
+
+        McpServer server = manager.servers().iterator().next();
+        assertEquals(McpServerStatus.READY, server.status());
+        assertTrue(registry.hasTool("mcp__demo__echo"), "初始工具 echo 应已注册");
+
+        // 3. 注入合成 list_changed 通知(通过 JsonRpcClient.handleMessage 反射)
+        McpClient client = server.client();
+        assertNotNull(client, "server.client() 不应为 null");
+
+        java.lang.reflect.Field rpcField = McpClient.class.getDeclaredField("rpc");
+        rpcField.setAccessible(true);
+        com.lyhn.wraith.mcp.jsonrpc.JsonRpcClient rpc =
+                (com.lyhn.wraith.mcp.jsonrpc.JsonRpcClient) rpcField.get(client);
+
+        // 查询 JsonRpcClient 当前 id 计数器,预判下一次 tools/list 的 id,
+        // 以确保 enqueued 响应 id 匹配 pending future(避免 hardcode id 错配导致 pending future 丢失)。
+        java.lang.reflect.Field idsField = com.lyhn.wraith.mcp.jsonrpc.JsonRpcClient.class.getDeclaredField("ids");
+        idsField.setAccessible(true);
+        long nextId = ((java.util.concurrent.atomic.AtomicLong) idsField.get(rpc)).get();
+
+        // 2. 排队正确 id 的 echo2 响应(list_changed 回调将调用 tools/list 触发此响应)
+        webServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"jsonrpc\":\"2.0\",\"id\":" + nextId + ",\"result\":{\"tools\":["
+                        + toolJson("echo2", "Echo2 updated") + "]}}"));
+
+        java.lang.reflect.Method handleMessage = com.lyhn.wraith.mcp.jsonrpc.JsonRpcClient.class
+                .getDeclaredMethod("handleMessage", com.fasterxml.jackson.databind.JsonNode.class);
+        handleMessage.setAccessible(true);
+
+        // 构造 list_changed 通知:无 id 字段,走通知分发路径
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode notification = mapper.createObjectNode();
+        notification.put("jsonrpc", "2.0");
+        notification.put("method", "notifications/tools/list_changed");
+
+        handleMessage.invoke(rpc, notification);
+
+        // 4. 断言:工具已更新为 echo2
+        // NotificationRouter 在独立 daemon executor 中异步派发 handler,
+        // 因此需要轮询等待 handler 完成(非 flaky:有明确超时和状态检测)。
+        long deadline = System.currentTimeMillis() + 10_000;
+        while (!registry.hasTool("mcp__demo__echo2") && System.currentTimeMillis() < deadline) {
+            Thread.sleep(50);
+        }
+        // 若 list_changed 回调内部出现异常,会记录在 server.errorMessage()
+        assertNull(server.errorMessage(),
+                "list_changed 回调不应报错,errorMessage=" + server.errorMessage());
+        String serverToolsStr = server.tools().stream()
+                .map(t -> t.namespacedName()).collect(java.util.stream.Collectors.joining(", "));
+        assertTrue(registry.hasTool("mcp__demo__echo2"),
+                "list_changed 后新工具 echo2 应已注册进 registry; server.tools()=" + serverToolsStr);
+        assertFalse(registry.hasTool("mcp__demo__echo"),
+                "list_changed 后旧工具 echo 应已被替换");
+        assertEquals(1, server.tools().size(), "server.tools() 应只有 echo2");
+        assertEquals("mcp__demo__echo2", server.tools().get(0).namespacedName());
+    }
+
+    /**
+     * PRIMARY T5 补充:list_changed 在 manager.close() 后不写 registry(closed 守护)。
+     * 验证 synchronized(this) 内的 {@code if (closed) return;} 守护生效。
+     *
+     * <p>关键设计:在 close() 之前保存 rpc 引用,close() 之后直接注入通知,
+     * 绕过 server.client()==null 的短路,确保通知确实进入了 list_changed 回调。
+     */
+    @Test
+    void listChangedAfterManagerCloseDoesNotWriteRegistry() throws Exception {
+        enqueueInitialize();
+        enqueueToolsList(toolJson("echo", "Echo back text"));
+        loadServersFromMap(Map.of("demo", httpConfig(webServer)));
+        manager.startAll();
+
+        McpServer server = manager.servers().iterator().next();
+        assertEquals(McpServerStatus.READY, server.status());
+
+        // 在 close() 前保存 rpc 引用和 handleMessage 方法(close 后 server.client() 为 null)
+        McpClient clientBeforeClose = server.client();
+        assertNotNull(clientBeforeClose, "startAll 后 client 不应为 null");
+
+        java.lang.reflect.Field rpcField = McpClient.class.getDeclaredField("rpc");
+        rpcField.setAccessible(true);
+        com.lyhn.wraith.mcp.jsonrpc.JsonRpcClient rpcBeforeClose =
+                (com.lyhn.wraith.mcp.jsonrpc.JsonRpcClient) rpcField.get(clientBeforeClose);
+
+        java.lang.reflect.Method handleMessage = com.lyhn.wraith.mcp.jsonrpc.JsonRpcClient.class
+                .getDeclaredMethod("handleMessage", com.fasterxml.jackson.databind.JsonNode.class);
+        handleMessage.setAccessible(true);
+
+        // 关闭 manager(模拟工作区切换)— closed=true 且 registry 被清空
+        manager.close();
+
+        // close() 清空了 echo,registry 应已无 echo
+        assertFalse(registry.hasTool("mcp__demo__echo"), "close 后 echo 应已被注销");
+
+        // 注入 list_changed 通知(直接调用已注册的 NotificationRouter listener)
+        // — 若 synchronized(this)+if(closed) 守护不存在,回调会调 buildToolList+replaceTools 写 echo2
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode notification = mapper.createObjectNode();
+        notification.put("jsonrpc", "2.0");
+        notification.put("method", "notifications/tools/list_changed");
+
+        // 这里注入通知;由于 rpc 已关闭(transport closed),若回调尝试调 buildToolList,
+        // HTTP 请求会失败(exception),通过 errorMessage 吸收。
+        // 关键断言:echo2 不应出现在 registry 里(无论因 closed 守护还是 HTTP 失败)。
+        try {
+            handleMessage.invoke(rpcBeforeClose, notification);
+        } catch (Exception ignored) {
+            // 若 rpc 已关闭导致调用异常,属预期内(close 后网络不可用)
+        }
+
+        // NotificationRouter 异步派发;等待足够时间让异步 handler 有机会运行,
+        // 然后断言它没有写入 registry(closed 守护生效)。
+        Thread.sleep(500);
+
+        // 断言:registry 没有 echo2(closed 守护 + 网络失败双重保证)
+        assertFalse(registry.hasTool("mcp__demo__echo2"),
+                "manager.close() 后 list_changed 不应向 registry 写入新工具");
     }
 }

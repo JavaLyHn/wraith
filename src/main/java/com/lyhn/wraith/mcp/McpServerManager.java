@@ -449,14 +449,18 @@ public class McpServerManager implements AutoCloseable {
      * <h3>closed 再校验链</h3>
      * <ul>
      *   <li>锁内起始:第一道 {@code if (closed) return}(记账前)。</li>
-     *   <li>锁外 initialize 后:第二道 {@code if (closed) return}(不进 finalizeReadyLocked)。</li>
-     *   <li>finalizeReadyLocked 内:第三道 {@code if (closed) return}(不注册工具)。</li>
+     *   <li>锁外 initialize 后(第二道):{@code if (closed) \{ client.close(); return; \}}——
+     *       initialize 完成即有活跃子进程/HTTP 会话,必须立即关闭防泄漏,
+     *       不能等到 buildToolList 之后再检查。</li>
+     *   <li>锁外 buildToolList 后(第三道):同上,防 buildToolList 期间 manager 被关闭。</li>
+     *   <li>finalizeReadyLocked 内(第四道):{@code if (closed) return}(不注册工具)。</li>
      * </ul>
      *
      * <h3>TOCTOU 防御</h3>
      * <p>置 STARTING + 在 servers map 中可见由调用方(enable/reloadFromConfig)在自己的
-     * {@code synchronized} 块内完成或由 start() 自身记账块完成,并发 enable 会看到
-     * STARTING 状态,不会重复启动同一 server。
+     * {@code synchronized} 块内完成或由 start() 自身记账块完成。不重复启动同一 server 的
+     * 不变量由 {@code AppServerMcp.mcpControlExecutor} 单线程串行化 enable/restart/reload
+     * 请求来保证,并非依赖 STARTING 状态的 in-manager 再入检测。
      */
     private void start(McpServer server) {
         // ── 快速记账:持锁区(不含 initialize) ──────────────────────────────────
@@ -479,10 +483,15 @@ public class McpServerManager implements AutoCloseable {
             McpTransport transport = createTransport(server.config());
             McpClient client = new McpClient(server.name(), transport);
             client.initialize();
+            // closed 再校验(第一道):initialize 期间若 manager 被 close/换工作区,
+            // 必须立即关闭已建连的 client 防子进程/HTTP 会话泄漏,然后退出。
+            // 不能等到 buildToolList 之后再检查——buildToolList 会再发网络请求,
+            // 而已关闭的工作区不应再占用子进程/连接资源。
+            if (closed) { client.close(); return; }
             registerNotificationHandlers(server, client);
             List<McpToolDescriptor> tools = buildToolList(server, client);
-            // closed 再校验:initialize 期间若 manager 被 close/换工作区,不进 finalize。
-            if (closed) return;
+            // closed 再校验(第二道):buildToolList 期间若 manager 被关闭,同样关闭 client。
+            if (closed) { client.close(); return; }
             // 注册、tools()、markStarted()、setStatus(READY) 四步纳入同一锁,
             // 与 reattach(synchronized) 互斥,消除次级竞态窗:
             // 保证注册时刻读取的是最新 toolRegistry,且 reattach 若在注册后抢锁
@@ -554,13 +563,22 @@ public class McpServerManager implements AutoCloseable {
 
     private void registerNotificationHandlers(McpServer server, McpClient client) {
         NotificationRouter router = new NotificationRouter();
+        // 锁不变量:回调运行在 McpClient reader 线程,调用时不持任何 manager 锁,
+        // 因此在此处获取 this 锁不会引入嵌套锁反转。
+        // 加锁目的:与 reattach(synchronized) 和 finalizeReadyLocked(synchronized) 互斥,
+        // 消除 list_changed 并发写入已废弃 registry 的丢更新窗口。
+        // 锁顺序:manager-monitor → ToolRegistry-monitor(ToolRegistry 变更器自身 synchronized),
+        // reattach/finalizeReadyLocked 与此回调持相同锁顺序,无反转。
         router.on("notifications/tools/list_changed", ignored -> {
-            try {
-                List<McpToolDescriptor> tools = buildToolList(server, client);
-                replaceTools(server, client, tools);
-                server.tools(tools);
-            } catch (Exception e) {
-                server.errorMessage("tools/list_changed 处理失败: " + e.getMessage());
+            synchronized (McpServerManager.this) {
+                if (closed) return; // manager 已关闭:不再操作 registry
+                try {
+                    List<McpToolDescriptor> tools = buildToolList(server, client);
+                    replaceTools(server, client, tools);
+                    server.tools(tools);
+                } catch (Exception e) {
+                    server.errorMessage("tools/list_changed 处理失败: " + e.getMessage());
+                }
             }
         });
         router.on("notifications/resources/list_changed", ignored -> resourceCache.invalidateServer(server.name()));
