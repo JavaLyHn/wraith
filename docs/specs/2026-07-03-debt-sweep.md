@@ -72,6 +72,7 @@
 - **验收**:fake-child 单测(慢退子进程下第二任务的 spawn 时刻晚于第一 child exit)。
 
 ### B6 E-2 微项打包(一个任务顺手清)
+- **侧栏红点动效**(用户 2026-07-03 提出):`nav-automations-badge` 由静态圆点改为涟漪 ping——实心红点不动,外圈同色光晕周期扩散淡出(Tailwind `animate-ping` 双层 span 模式);`data-testid` 保留在外层容器(T34 断言不受影响);配 `motion-reduce:hidden`(或等价)尊重系统减动效设置(与 B4 可及性口径一致);
 - 坏 JSON warn 的 console.warn spy 断言;坏 JSON 场景补 `readLastPanelOpenedAt` 断言(Task 1 遗留);
 - `waiting_approval` 与 `failed` 状态色区分(waiting 用 warning 色);
 - AutomationRuns stop 按钮 then 链改 async 风格(与文件一致);
