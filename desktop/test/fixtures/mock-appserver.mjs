@@ -7,6 +7,7 @@
  *
  * Env flags:
  *   MOCK_EXIT_AFTER_INIT=1  — exit(1) after initialize reply (simulates backend crash)
+ *   MOCK_SUBMIT_FAIL=1      — reply error to turn.submit (simulates backend rejecting the turn)
  */
 
 import readline from 'readline'
@@ -269,6 +270,11 @@ async function handleRequest(req) {
     }
 
     case 'turn.submit': {
+      // MOCK_SUBMIT_FAIL=1: reply error instead of starting a turn (simulates backend rejecting)
+      if (process.env['MOCK_SUBMIT_FAIL'] === '1') {
+        send({ jsonrpc: '2.0', id, error: { code: -32000, message: 'mock: turn.submit rejected' } })
+        break
+      }
       // Assign a fresh turnId for this turn; all notifications in this turn share it
       turnId = `turn_${++turnSeq}`
       // Immediately reply with turnId + status, then stream notifications

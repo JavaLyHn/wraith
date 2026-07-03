@@ -317,10 +317,15 @@ public class ToolRegistry {
                             Files.createDirectories(parent);
                         }
                         Files.writeString(safe, content);
-                        try {
-                            writeFileObserver.accept(path, new String[]{before, content});
-                        } catch (Exception ignored) {
-                            // observer 失败不能影响 write_file 主路径
+                        // before != null 且内容完全相同 → 真正的 no-op 重写，不触发 diff observer
+                        // (before == null 表示新建文件或二进制/大文件读不出，属于真实 ADD，仍须触发)
+                        boolean isNoOp = before != null && before.equals(content);
+                        if (!isNoOp) {
+                            try {
+                                writeFileObserver.accept(path, new String[]{before, content});
+                            } catch (Exception ignored) {
+                                // observer 失败不能影响 write_file 主路径
+                            }
                         }
                         runPostEditLspHook(path, safe);
                         return "文件已写入: " + path;

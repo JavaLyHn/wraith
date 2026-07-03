@@ -200,26 +200,31 @@ public class McpServerManager implements AutoCloseable {
         return thread;
     }
 
-    public synchronized String restart(String name) {
-        McpServer server = servers.get(name);
-        if (server == null) {
-            return "未找到 MCP server: " + name;
+    public String restart(String name) {
+        McpServer server;
+        synchronized (this) {
+            server = servers.get(name);
+            if (server == null) {
+                return "未找到 MCP server: " + name;
+            }
+            server.config().setDisabled(false);
+            // start() 内部持锁完成快速记账后自行释放锁再执行慢 initialize,
+            // 此处不再持锁跨越整个 start() 调用。
         }
-        unregisterTools(server);
-        server.close();
-        server.config().setDisabled(false);
         start(server);
         return server.status() == McpServerStatus.READY
                 ? "✅ MCP server 已重启: " + name
                 : "❌ MCP server 重启失败: " + name + " - " + server.errorMessage();
     }
 
-    public synchronized String restartWithArgs(String name, List<String> args) {
-        McpServer server = servers.get(name);
-        if (server == null) {
-            return "未找到 MCP server: " + name;
+    public String restartWithArgs(String name, List<String> args) {
+        synchronized (this) {
+            McpServer server = servers.get(name);
+            if (server == null) {
+                return "未找到 MCP server: " + name;
+            }
+            server.config().setArgs(args);
         }
-        server.config().setArgs(args);
         return restart(name);
     }
 
@@ -240,12 +245,16 @@ public class McpServerManager implements AutoCloseable {
         return "⏸️ MCP server 已禁用: " + name;
     }
 
-    public synchronized String enable(String name) {
-        McpServer server = servers.get(name);
-        if (server == null) {
-            return "未找到 MCP server: " + name;
+    public String enable(String name) {
+        McpServer server;
+        synchronized (this) {
+            server = servers.get(name);
+            if (server == null) {
+                return "未找到 MCP server: " + name;
+            }
+            server.config().setDisabled(false);
+            // 仅记账,不持锁跨越慢 start()——start() 内部会在快速记账后自行释放锁。
         }
-        server.config().setDisabled(false);
         start(server);
         return server.status() == McpServerStatus.READY
                 ? "▶️ MCP server 已启用: " + name
@@ -423,33 +432,82 @@ public class McpServerManager implements AutoCloseable {
         }
     }
 
+    /**
+     * 启动单个 MCP server。
+     *
+     * <h3>锁窄化(方案 A)——防冷拉阻塞 dispatch 线程</h3>
+     * <p>原实现被 {@code enable}/{@code reloadFromConfig}(均 synchronized)调用时,
+     * 整段包括慢 {@code client.initialize()}(npx/uvx 冷拉,5-30s+)都在内置锁内执行,
+     * 导致 {@code reloadFromConfig}/{@code reattach} 争同一把锁 → dispatch 单线程冻结。
+     *
+     * <p>修复:把快速记账(closed 校验 + unregisterTools + server.close() + 置 STARTING)
+     * 收入一个 {@code synchronized(this)} 块;随后在<b>锁外</b>执行慢 {@code initialize()};
+     * 完成后经 {@link #finalizeReadyLocked} 再入锁做工具注册 + 置 READY。
+     * {@code reloadFromConfig} 和 {@code reattach} 因此只需短暂争锁做 registry 交换,
+     * 不再等待在途冷拉。
+     *
+     * <h3>closed 再校验链</h3>
+     * <ul>
+     *   <li>锁内起始:第一道 {@code if (closed) return}(记账前)。</li>
+     *   <li>锁外 initialize 后(第二道):{@code if (closed) \{ client.close(); return; \}}——
+     *       initialize 完成即有活跃子进程/HTTP 会话,必须立即关闭防泄漏,
+     *       不能等到 buildToolList 之后再检查。</li>
+     *   <li>锁外 buildToolList 后(第三道):同上,防 buildToolList 期间 manager 被关闭。</li>
+     *   <li>finalizeReadyLocked 内(第四道):{@code if (closed) return}(不注册工具)。</li>
+     * </ul>
+     *
+     * <h3>TOCTOU 防御</h3>
+     * <p>置 STARTING + 在 servers map 中可见由调用方(enable/reloadFromConfig)在自己的
+     * {@code synchronized} 块内完成或由 start() 自身记账块完成。不重复启动同一 server 的
+     * 不变量由 {@code AppServerMcp.mcpControlExecutor} 单线程串行化 enable/restart/reload
+     * 请求来保证,并非依赖 STARTING 状态的 in-manager 再入检测。
+     */
     private void start(McpServer server) {
-        if (closed) return;
-        unregisterTools(server);
-        server.close();
-        if (server.config().isDisabled()) {
-            setStatus(server, McpServerStatus.DISABLED);
-            return;
+        // ── 快速记账:持锁区(不含 initialize) ──────────────────────────────────
+        synchronized (this) {
+            if (closed) return;
+            unregisterTools(server);
+            server.close();
+            if (server.config().isDisabled()) {
+                setStatus(server, McpServerStatus.DISABLED);
+                return;
+            }
+            setStatus(server, McpServerStatus.STARTING);
+            server.errorMessage(null);
         }
-        setStatus(server, McpServerStatus.STARTING);
-        server.errorMessage(null);
+        // ── 慢初始化:锁外执行(npx/uvx 冷拉期间 reloadFromConfig/reattach 可正常获锁) ──
+        // client 在 try 外声明:若 initialize() 成功但后续步骤(buildToolList 等)抛异常,
+        // catch 块可关闭已建连的本地 client,防止子进程/HTTP 会话泄漏(T5 review 发现的错误路径)。
+        McpClient client = null;
         try {
             // 在单 server 启动路径里展开 ${VAR} 与校验 transport，
             // 单个失败仅标 ERROR，不会阻塞其他 server。
             configLoader.prepare(server.config());
             McpTransport transport = createTransport(server.config());
-            McpClient client = new McpClient(server.name(), transport);
+            client = new McpClient(server.name(), transport);
             client.initialize();
+            // closed 再校验(第一道):initialize 期间若 manager 被 close/换工作区,
+            // 必须立即关闭已建连的 client 防子进程/HTTP 会话泄漏,然后退出。
+            // 不能等到 buildToolList 之后再检查——buildToolList 会再发网络请求,
+            // 而已关闭的工作区不应再占用子进程/连接资源。
+            if (closed) { client.close(); return; }
             registerNotificationHandlers(server, client);
             List<McpToolDescriptor> tools = buildToolList(server, client);
-            if (closed) return;
+            // closed 再校验(第二道):buildToolList 期间若 manager 被关闭,同样关闭 client。
+            if (closed) { client.close(); return; }
             // 注册、tools()、markStarted()、setStatus(READY) 四步纳入同一锁,
             // 与 reattach(synchronized) 互斥,消除次级竞态窗:
             // 保证注册时刻读取的是最新 toolRegistry,且 reattach 若在注册后抢锁
             // 能看到 server 已 READY 且 tools 非空,从而正确搬迁工具。
             finalizeReadyLocked(server, client, tools);
         } catch (Exception e) {
+            // server.close() 清理 server.client()(若 finalizeReadyLocked 已赋值)。
+            // 但若异常发生在 initialize() 之后、finalizeReadyLocked 之前,
+            // 本地 client 变量从未赋给 server,server.close() 不会关闭它 → 需额外关闭。
+            // McpClient.close() 是幂等的(transport.close() 检查 sessionId 是否空后再发 DELETE),
+            // 即便 server.close() 与 client.close() 操作相同底层连接也安全。
             server.close();
+            if (client != null) { client.close(); }
             server.errorMessage(e.getMessage());
             setStatus(server, McpServerStatus.ERROR);
         }
@@ -514,13 +572,22 @@ public class McpServerManager implements AutoCloseable {
 
     private void registerNotificationHandlers(McpServer server, McpClient client) {
         NotificationRouter router = new NotificationRouter();
+        // 锁不变量:回调运行在 McpClient reader 线程,调用时不持任何 manager 锁,
+        // 因此在此处获取 this 锁不会引入嵌套锁反转。
+        // 加锁目的:与 reattach(synchronized) 和 finalizeReadyLocked(synchronized) 互斥,
+        // 消除 list_changed 并发写入已废弃 registry 的丢更新窗口。
+        // 锁顺序:manager-monitor → ToolRegistry-monitor(ToolRegistry 变更器自身 synchronized),
+        // reattach/finalizeReadyLocked 与此回调持相同锁顺序,无反转。
         router.on("notifications/tools/list_changed", ignored -> {
-            try {
-                List<McpToolDescriptor> tools = buildToolList(server, client);
-                replaceTools(server, client, tools);
-                server.tools(tools);
-            } catch (Exception e) {
-                server.errorMessage("tools/list_changed 处理失败: " + e.getMessage());
+            synchronized (McpServerManager.this) {
+                if (closed) return; // manager 已关闭:不再操作 registry
+                try {
+                    List<McpToolDescriptor> tools = buildToolList(server, client);
+                    replaceTools(server, client, tools);
+                    server.tools(tools);
+                } catch (Exception e) {
+                    server.errorMessage("tools/list_changed 处理失败: " + e.getMessage());
+                }
             }
         });
         router.on("notifications/resources/list_changed", ignored -> resourceCache.invalidateServer(server.name()));
@@ -598,31 +665,42 @@ public class McpServerManager implements AutoCloseable {
         }
     }
 
-    /** 单 server 按当前配置重载:配置无此名→移除;有→关旧建新并启动;全新→建并启动。返回人话结果。 */
-    public synchronized String reloadFromConfig(String name) {
-        if (closed) return "已关闭";
-        Map<String, McpServerConfig> configs;
-        try {
-            configs = configLoader.load();
-        } catch (IOException e) {
-            return "配置读取失败: " + e.getMessage();
-        }
-        McpServer existing = servers.get(name);
-        McpServerConfig cfg = configs.get(name);
-        if (cfg == null) {
+    /**
+     * 单 server 按当前配置重载:配置无此名→移除;有→关旧建新并启动;全新→建并启动。返回人话结果。
+     *
+     * <p>锁窄化:仅在 {@code synchronized(this)} 块内完成快速记账(closed 校验、旧 server 拆卸、
+     * 新 server 入 map);{@code start()} 在锁外调用——其内部的冷拉 initialize 不再持有 manager 锁,
+     * 不阻塞 dispatch 线程上的其他 RPC。
+     */
+    public String reloadFromConfig(String name) {
+        McpServer fresh;
+        synchronized (this) {
+            if (closed) return "已关闭";
+            Map<String, McpServerConfig> configs;
+            try {
+                configs = configLoader.load();
+            } catch (IOException e) {
+                return "配置读取失败: " + e.getMessage();
+            }
+            McpServer existing = servers.get(name);
+            McpServerConfig cfg = configs.get(name);
+            if (cfg == null) {
+                if (existing != null) {
+                    unregisterTools(existing);
+                    existing.close();
+                    servers.remove(name);
+                }
+                return "已移除: " + name;
+            }
             if (existing != null) {
                 unregisterTools(existing);
                 existing.close();
-                servers.remove(name);
             }
-            return "已移除: " + name;
+            fresh = newServer(name, cfg);
+            servers.put(name, fresh);
+            // start() 的快速记账块(含 closed 再校验 + setStatus(STARTING))将在锁外的 start() 调用内
+            // 通过其自身的 synchronized(this) 执行;新建的 fresh 已入 map,并发 enable 能看到 STARTING。
         }
-        if (existing != null) {
-            unregisterTools(existing);
-            existing.close();
-        }
-        McpServer fresh = newServer(name, cfg);
-        servers.put(name, fresh);
         start(fresh);
         return fresh.status() == McpServerStatus.READY ? "已就绪: " + name
                 : name + " 状态: " + fresh.status() + (fresh.errorMessage() == null ? "" : " — " + fresh.errorMessage());
@@ -664,8 +742,29 @@ public class McpServerManager implements AutoCloseable {
         return (minutes / 60) + "h";
     }
 
+    /**
+     * 关闭所有 server,注销工具并终止子进程/HTTP 会话。
+     *
+     * <h3>锁不变量</h3>
+     * <p>{@code synchronized} 使 {@code close()} 与其他生命周期方法(enable/disable/restart/
+     * reload/reattach/finalizeReadyLocked)锁语义对称。
+     *
+     * <p>当前调用方({@code AppServerMcp.ensureFor},自身 synchronized)在调用前已通过
+     * {@code shutdownNow} 先行串行化,{@code closed} volatile 也在每个入口再校验——
+     * 加锁属防御性硬化,为未来调用方兜底。
+     *
+     * <h3>锁顺序与死锁分析</h3>
+     * <p>持锁期间执行:
+     * <ol>
+     *   <li>{@code unregisterTools}:获取 ToolRegistry monitor(manager-monitor → registry-monitor)。
+     *       此顺序与 disable/finalizeReadyLocked/reattach 相同,无反转。</li>
+     *   <li>{@code server.close()}:best-effort I/O(HTTP DELETE,5s 超时;stdio stdin EOF + 进程销毁)。
+     *       持管理器锁期间进行 I/O 会短暂阻塞其他等待者,但 shutdown 是终态,
+     *       不存在"等待者持有 server 资源并反向等待管理器锁"的场景,故无真死锁。</li>
+     * </ol>
+     */
     @Override
-    public void close() {
+    public synchronized void close() {
         closed = true;
         for (McpServer server : servers.values()) {
             unregisterTools(server);

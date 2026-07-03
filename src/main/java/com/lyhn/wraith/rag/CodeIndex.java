@@ -73,6 +73,7 @@ public class CodeIndex {
 
         int processed = 0;
         int total = filesToIndex.size();
+        int failedFiles = 0;
 
         for (Path file : filesToIndex) {
             processed++;
@@ -98,6 +99,7 @@ public class CodeIndex {
                 String message = "   ⚠️ 索引失败: " + file + " - " + e.getMessage();
                 emit(message);
                 log.warn("code index failed for file {}", file, e);
+                failedFiles++;
             }
         }
 
@@ -108,7 +110,10 @@ public class CodeIndex {
             store.insertRelations(allRelations);
 
             VectorStore.IndexStats stats = store.getStats();
-            String msg = String.format("索引完成：%d 个代码块，%d 条关系", stats.chunkCount(), stats.relationCount());
+            String msg = failedFiles > 0
+                    ? String.format("索引完成：%d 个代码块，%d 条关系（%d 个文件失败，建议重试）",
+                            stats.chunkCount(), stats.relationCount(), failedFiles)
+                    : String.format("索引完成：%d 个代码块，%d 条关系", stats.chunkCount(), stats.relationCount());
             emit("✅ " + msg);
             return new IndexResult(stats.chunkCount(), stats.relationCount(), msg);
         } catch (Exception e) {

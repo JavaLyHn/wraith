@@ -25,6 +25,11 @@ import {
 } from './automationsStore'
 import { AutomationScheduler } from './automationScheduler'
 import type { AutomationTask, AutomationEvent } from '../shared/types'
+import { resolveInterruptTurnId } from './interruptTurnId'
+import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from './notificationFilter'
+
+// T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
+// (v1 必须保持 false;单测锁定其值防误翻)。
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -136,7 +141,13 @@ function spawnBackend(): void {
   client = rpcClient
 
   // Forward server-push notifications to renderer.
+  // T12 防御性会话过滤:MULTI_SESSION_FILTER_ENABLED = false 时始终放行(v1 byte-identical)。
+  // v1 会话 id 于 turn.completed 时从 sess_… 换为持久化 id(20260703T…),
+  // 若门控开启将误丢弃 turn.completed 导致 turn 永卡 running。
+  // 启用前须先在 turn.completed / resumeSession 处同步 currentSessionId 为持久化 id。
+  // TODO(resume-sync): wraith:resumeSession 也需要在启用前将 currentSessionId 同步为持久化 id。
   rpcClient.onNotification((method, params) => {
+    if (!shouldForwardNotification(currentSessionId, params, MULTI_SESSION_FILTER_ENABLED)) return
     sendEvent({ kind: 'notification', method, params })
   })
 
@@ -219,6 +230,10 @@ ipcMain.handle('wraith:startSession', async (_e, workspaceDir: string | null) =>
 
 ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { path: string; kind: string }[]) => {
   if (!client) throw new Error('Backend not connected')
+  // T11 硬化:进入早窗(submit 在途、尚未 resolve)前清零 currentTurnId,
+  // 使此窗口内的 turn.interrupt 发送 null 而非陈旧的上一 turn id。
+  // 后端按线程中断、不读 turnId,运行时行为不变(纯防御性)。
+  currentTurnId = null
   const result = await client.request('turn.submit', {
     sessionId: currentSessionId,
     input,
@@ -287,10 +302,11 @@ ipcMain.handle(
 
 ipcMain.handle('wraith:interrupt', async () => {
   if (!client) throw new Error('Backend not connected')
-  // Best-effort: use tracked ids; may be null if turn not started yet.
+  // T11 硬化:resolveInterruptTurnId 确保早窗(currentTurnId 已清零)发 null,
+  // 而非陈旧的上一 turn id。后端按线程中断不读 turnId,行为不变(纯防御性)。
   await client.request('turn.interrupt', {
     sessionId: currentSessionId,
-    turnId: currentTurnId
+    turnId: resolveInterruptTurnId(currentTurnId)
   })
 })
 

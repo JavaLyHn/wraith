@@ -39,14 +39,24 @@ export class AutomationRunner {
     return new Promise<RunState>(resolve => {
       this.settle = resolve
       const { cmd, args } = resolveBackendCommand(this.env, defaultJarPath(this.homedir))
-      const proc = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams
+      let proc: ChildProcessWithoutNullStreams
+      try {
+        proc = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams
+      } catch (spawnErr) {
+        // spawn 同步抛(ERR_INVALID_ARG_* / EMFILE / ENFILE 等):子进程未建立,
+        // exit/error 事件永不到达 → 手动 resolve exited 释放 scheduler 并发槽,
+        // 再走 failEarly 进入与异步 error 事件相同的终态路径。
+        this.exitedResolve?.(); this.exitedResolve = null
+        this.failEarly(String(spawnErr))
+        return
+      }
       this.child = proc
       const client = new JsonRpcClient(line => {
         if (!proc.killed && proc.stdin.writable) proc.stdin.write(line + '\n')
       })
       this.client = client
       readline.createInterface({ input: proc.stdout }).on('line', l => client.handleLine(l))
-      proc.stderr.on('data', (c: Buffer) => process.stderr.write(`${this.taskId ? `[automation:${this.taskId}] ` : '[automation] '}${c}`))
+      readline.createInterface({ input: proc.stderr }).on('line', l => process.stderr.write(`${this.taskId ? `[automation:${this.taskId}] ` : '[automation] '}${l}\n`))
       proc.on('exit', () => {
         // B5: 子进程退净,resolve exited(幂等)
         this.exitedResolve?.(); this.exitedResolve = null

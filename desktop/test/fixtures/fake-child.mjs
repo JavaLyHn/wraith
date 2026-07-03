@@ -97,6 +97,15 @@ rl.on('line', line => {
         // Write one line to stderr so the runner's stderr prefix forwarding can be tested.
         process.stderr.write('fake stderr line\n')
       }
+      if (flags.has('emit-stderr-multiline')) {
+        // Write a multi-line chunk in a single write() call (two logical lines, one chunk).
+        // Used by T10 test to verify the runner prefixes EACH line, not just the first.
+        process.stderr.write('stderr-line-one\nstderr-line-two\n')
+        // Also simulate a line split across two chunks: partial first chunk (no trailing \n),
+        // then second chunk completes the line and adds another complete line.
+        process.stderr.write('split-line-part')
+        process.stderr.write('-rest\nstderr-line-four\n')
+      }
       if (flags.has('complete-then-hang')) {
         // Immediately emit turn.completed so run() settles as success, then hang.
         // The runner will call killChild() → SIGTERM. If ignore-sigterm is also set,
