@@ -56,7 +56,7 @@ export class AutomationRunner {
       })
       this.client = client
       readline.createInterface({ input: proc.stdout }).on('line', l => client.handleLine(l))
-      proc.stderr.on('data', (c: Buffer) => process.stderr.write(`${this.taskId ? `[automation:${this.taskId}] ` : '[automation] '}${c}`))
+      readline.createInterface({ input: proc.stderr }).on('line', l => process.stderr.write(`${this.taskId ? `[automation:${this.taskId}] ` : '[automation] '}${l}\n`))
       proc.on('exit', () => {
         // B5: 子进程退净,resolve exited(幂等)
         this.exitedResolve?.(); this.exitedResolve = null

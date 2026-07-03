@@ -111,6 +111,64 @@ describe('AutomationRunner stderr 前缀(A6)', () => {
   }, 10_000)
 })
 
+describe('T10: stderr 多行 chunk 逐行前缀(每行带 taskId)', () => {
+  /**
+   * 红绿验证:
+   *   RED  — 旧实现 `proc.stderr.on('data', c => write(prefix + c))` 对整 chunk 前缀一次:
+   *          多行 chunk "line1\nline2\n" → "[automation:id] line1\nline2\n"
+   *          → 只有 line1 带前缀,line2 裸露。
+   *   GREEN — 改为 readline.createInterface(stderr).on('line', ...) 逐行前缀:
+   *          每行均得到前缀 → spy.calls 中每次 write 均以 [automation:t10] 开头。
+   *
+   * fake-child flag `emit-stderr-multiline`:
+   *   写入 "stderr-line-one\nstderr-line-two\n"(同一 write → 单 chunk,两逻辑行)
+   *   再写 "split-line-part"(不含 \n)+ "-rest\nstderr-line-four\n"(跨 chunk 断行)
+   *   最终产生 4 条 stderr 逻辑行: stderr-line-one / stderr-line-two /
+   *                                  split-line-part-rest / stderr-line-four
+   */
+  it('多行 chunk + 跨 chunk 断行 → 每行均携带 taskId 前缀', async () => {
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const cmd = ['node', fakeChild, 'emit-stderr-multiline'].join(' ')
+    const env = { ...process.env, WRAITH_APPSERVER_CMD: cmd } as NodeJS.ProcessEnv
+    const runner = new AutomationRunner(env, '/nonexistent-home', {
+      onUpdate: () => { /* 不关心状态 */ },
+      onApproval: () => { /* 不触发 */ },
+    }, 't10')
+    const prefix = '[automation:t10] '
+    const expectedLines = [
+      'stderr-line-one',
+      'stderr-line-two',
+      'split-line-part-rest',
+      'stderr-line-four',
+    ]
+    void runner.run('/tmp', 'hi')
+    try {
+      // 等待全部 4 条 stderr 行均被写入(每行一次 write 调用,每次均含前缀)
+      await expect.poll(
+        () => {
+          const calls = spy.mock.calls.map(c => String(c[0]))
+          return expectedLines.every(line =>
+            calls.some(written => written === `${prefix}${line}\n`),
+          )
+        },
+        { timeout: 5000 },
+      ).toBe(true)
+
+      // 强断言:spy 接收到的每条以 '[automation' 开头的写入,都必须以 prefix 开头(无裸行)
+      const stderrWrites = spy.mock.calls
+        .map(c => String(c[0]))
+        .filter(s => s.includes('stderr-line') || s.includes('split-line'))
+      expect(stderrWrites.length).toBeGreaterThanOrEqual(4)
+      for (const written of stderrWrites) {
+        expect(written).toMatch(new RegExp(`^${prefix.replace('[', '\\[').replace(']', '\\]')}`))
+      }
+    } finally {
+      runner.stop()
+      spy.mockRestore()
+    }
+  }, 10_000)
+})
+
 describe('B5: 严格并发1——exited 在子进程真正退净后才 resolve', () => {
   /**
    * 验证 AutomationRunner.exited promise 的核心语义:
