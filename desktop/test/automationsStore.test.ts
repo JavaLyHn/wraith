@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -75,8 +75,12 @@ describe('automationsStore', () => {
   it('坏 JSON 按空处理不崩', () => {
     fs.writeFileSync(path.join(dir, 'automations.json'), 'not json', 'utf8')
     fs.writeFileSync(path.join(dir, 'runs.json'), '[broken', 'utf8')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(readTasks(dir)).toEqual([])
     expect(readRuns(dir)).toEqual([])
+    expect(readLastPanelOpenedAt(dir)).toBe(0)                              // 坏文件按缺省
+    expect(warnSpy.mock.calls.some(c => String(c[0]).includes('[automations]'))).toBe(true)
+    warnSpy.mockRestore()
   })
 
   it('sweepNonTerminalRuns:仅非终态被改为 interrupted,终态原样', () => {

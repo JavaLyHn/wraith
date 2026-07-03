@@ -118,8 +118,10 @@ export default function Sidebar({
             <span className="flex items-center">
               自动化
               {automationBadge && (
-                <span data-testid="nav-automations-badge"
-                  className="ml-auto h-2 w-2 shrink-0 rounded-full bg-danger" />
+                <span data-testid="nav-automations-badge" className="relative ml-auto flex h-2 w-2 shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75 motion-reduce:hidden" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-danger" />
+                </span>
               )}
             </span>
           </button>

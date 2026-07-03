@@ -12,7 +12,7 @@ const STATUS_LABEL: Record<AutomationRun['status'], string> = {
   running: '运行中', waiting_approval: '等待审批', success: '成功', failed: '失败', interrupted: '中断',
 }
 const STATUS_COLOR: Record<AutomationRun['status'], string> = {
-  running: 'text-warning', waiting_approval: 'text-danger', success: 'text-success',
+  running: 'text-warning', waiting_approval: 'text-warning', success: 'text-success',
   failed: 'text-danger', interrupted: 'text-fg-subtle',
 }
 
@@ -59,7 +59,7 @@ export default function AutomationRuns({ taskId, projectPath, onOpenSession, onA
               )}
               {(r.status === 'running' || r.status === 'waiting_approval') && (
                 <button data-testid="automation-run-stop"
-                  onClick={() => void window.wraith.automationStop(r.runId).then(() => void fetchRuns()).catch(err => console.error('[wraith] automationStop error:', err))}
+                  onClick={() => { void (async () => { try { await window.wraith.automationStop(r.runId); await fetchRuns() } catch (err) { console.error('[wraith] automationStop error:', err) } })() }}
                   className="rounded border border-border px-2 py-0.5 text-[11px] text-fg-muted hover:text-danger">终止</button>
               )}
               {r.sessionId && r.endedAt !== undefined && (
