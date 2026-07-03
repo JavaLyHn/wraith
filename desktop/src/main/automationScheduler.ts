@@ -138,8 +138,10 @@ export class AutomationScheduler {
     try {
       if (!fs.statSync(task.projectPath).isDirectory()) throw new Error()
     } catch {
-      putRun(dir, { runId, taskId: task.id, startedAt, endedAt: startedAt, status: 'failed', summary: '项目目录不存在' })
+      const failedRun: AutomationRun = { runId, taskId: task.id, startedAt, endedAt: startedAt, status: 'failed', summary: '项目目录不存在' }
+      putRun(dir, failedRun)
       this.deps.onRunsChanged()
+      this.deps.onTerminal(failedRun)
       return false
     }
     putRun(dir, { runId, taskId: task.id, startedAt, status: 'running' })
@@ -155,7 +157,7 @@ export class AutomationScheduler {
         this.deps.onRunsChanged()
       },
       onApproval: (_approvalId, payload) => this.deps.onApproval(runId, payload),
-    })
+    }, task.id)
     this.current = { runId, taskId: task.id, runner }
     void runner.run(task.projectPath, task.prompt).then(finalState => {
       this.finishRun(runId, task.id, finalState, startedAt)

@@ -96,6 +96,12 @@ export function writeLastPanelOpenedAt(dir: string, ts: number): void {
   writeJson(runsPath(dir), { ...f, lastPanelOpenedAt: ts })
 }
 
+/** A3: renderer 全量回写入口——lastFiredAt 归调度器所有,已存在任务保留 store 现值。 */
+export function upsertTaskFromRenderer(dir: string, task: AutomationTask): void {
+  const existing = readTasks(dir).find(t => t.id === task.id)
+  upsertTask(dir, existing ? { ...task, lastFiredAt: existing.lastFiredAt } : task)
+}
+
 /** 红点:有挂起审批,或有终态运行晚于上次打开面板(spec §1.1-6)。 */
 export function badgeVisible(runs: AutomationRun[], lastPanelOpenedAt: number): boolean {
   return runs.some(r => r.status === 'waiting_approval')

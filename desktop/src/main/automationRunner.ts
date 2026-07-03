@@ -28,6 +28,7 @@ export class AutomationRunner {
     private readonly env: NodeJS.ProcessEnv,
     private readonly homedir: string,
     private readonly cb: RunnerCallbacks,
+    private readonly taskId?: string,
   ) {}
 
   run(projectPath: string, prompt: string): Promise<RunState> {
@@ -41,7 +42,7 @@ export class AutomationRunner {
       })
       this.client = client
       readline.createInterface({ input: proc.stdout }).on('line', l => client.handleLine(l))
-      proc.stderr.on('data', (c: Buffer) => process.stderr.write(`[automation] ${c}`))
+      proc.stderr.on('data', (c: Buffer) => process.stderr.write(`${this.taskId ? `[automation:${this.taskId}] ` : '[automation] '}${c}`))
       proc.on('exit', () => {
         // exit 时真实清理升级 timer(进程已终止,SIGKILL 不再需要)
         if (this.sigkillTimer !== null) { clearTimeout(this.sigkillTimer); this.sigkillTimer = null }

@@ -16,6 +16,8 @@
  *                          real Java thread-interrupt) then hang. Verifies the runner ignores that
  *                          terminal notification while stopping and lands on `interrupted` (via
  *                          SIGTERM→exit→stopped), not `failed`.
+ *   emit-stderr          — after turn.submit succeeds, write one line to stderr then hang.
+ *                          Used to verify the runner's stderr prefix forwarding (A6).
  *   signal-on-sigterm    — write the marker line "SIGTERM_RECEIVED\n" to stdout when SIGTERM arrives,
  *                          then hang (does NOT exit). Lets tests assert SIGTERM was delivered promptly
  *                          without waiting for process exit. Implies the process stays alive after
@@ -70,6 +72,10 @@ rl.on('line', line => {
       break
     case 'turn.submit':
       send({ jsonrpc: '2.0', id, result: { turnId: 'turn_fake_1' } })
+      if (flags.has('emit-stderr')) {
+        // Write one line to stderr so the runner's stderr prefix forwarding can be tested.
+        process.stderr.write('fake stderr line\n')
+      }
       // then hang — no turn.completed. The turn "runs" indefinitely until stopped.
       break
     case 'turn.interrupt':

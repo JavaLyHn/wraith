@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import path from 'node:path'
 import os from 'node:os'
 import fs from 'node:fs'
@@ -86,5 +86,27 @@ describe('AutomationRunner 终止路径(I-6,真 fake-child 子进程)', () => {
     expect(final.phase).toBe('interrupted')
     // 反证:若 turn.failed 被 dispatch(无 guard),phase 会是 failed
     expect(final.phase).not.toBe('failed')
+  }, 10_000)
+})
+
+describe('AutomationRunner stderr 前缀(A6)', () => {
+  it('stderr 转发带 taskId 前缀', async () => {
+    const spy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true)
+    const cmd = ['node', fakeChild, 'emit-stderr'].join(' ')
+    const env = { ...process.env, WRAITH_APPSERVER_CMD: cmd } as NodeJS.ProcessEnv
+    const runner = new AutomationRunner(env, '/nonexistent-home', {
+      onUpdate: () => { /* 不关心 */ },
+      onApproval: () => { /* 不触发 */ },
+    }, 'task-42')
+    void runner.run('/tmp', 'hi')
+    try {
+      await expect.poll(() =>
+        spy.mock.calls.some(c => String(c[0]).startsWith('[automation:task-42]')),
+        { timeout: 5000 },
+      ).toBe(true)
+    } finally {
+      runner.stop()
+      spy.mockRestore()
+    }
   }, 10_000)
 })

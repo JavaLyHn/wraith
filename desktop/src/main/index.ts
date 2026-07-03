@@ -21,7 +21,7 @@ import type { BackendEvent } from '../shared/types'
 import {
   readTasks as autoReadTasks, upsertTask as autoUpsertTask, removeTask as autoRemoveTask,
   readRuns as autoReadRuns, readLastPanelOpenedAt, writeLastPanelOpenedAt, badgeVisible,
-  sweepNonTerminalRuns,
+  sweepNonTerminalRuns, upsertTaskFromRenderer as autoUpsertTaskFromRenderer,
 } from './automationsStore'
 import { AutomationScheduler } from './automationScheduler'
 import type { AutomationTask, AutomationEvent } from '../shared/types'
@@ -395,7 +395,7 @@ ipcMain.handle('wraith:rewindSession', async (_e, userOrdinal: number) => {
 
 ipcMain.handle('wraith:automationList', async () => ({ tasks: autoReadTasks(app.getPath('userData')) }))
 ipcMain.handle('wraith:automationUpsert', async (_e, task: AutomationTask) => {
-  autoUpsertTask(app.getPath('userData'), task)
+  autoUpsertTaskFromRenderer(app.getPath('userData'), task)
   return { ok: true }
 })
 ipcMain.handle('wraith:automationRemove', async (_e, id: string) => {
