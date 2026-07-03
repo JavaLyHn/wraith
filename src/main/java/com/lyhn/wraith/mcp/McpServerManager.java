@@ -443,7 +443,9 @@ public class McpServerManager implements AutoCloseable {
             registerNotificationHandlers(server, client);
             List<McpToolDescriptor> tools = buildToolList(server, client);
             if (closed) return;
-            replaceTools(server, client, tools);
+            // closed 双检 + 工具注册 均在锁点内完成,与 reattach(synchronized) 互斥:
+            // 保证注册时刻读取的是最新 toolRegistry,消除在途 READY 与 reattach 间的竞态窗。
+            registerToolsLocked(server, client, tools);
             server.client(client);
             server.tools(tools);
             server.markStarted();
@@ -453,6 +455,16 @@ public class McpServerManager implements AutoCloseable {
             server.errorMessage(e.getMessage());
             setStatus(server, McpServerStatus.ERROR);
         }
+    }
+
+    /**
+     * 在 synchronized(this) 内读取最新 {@code toolRegistry} 并注册工具。
+     * 与 {@link #reattach(ToolRegistry)} 互斥,确保注册动作始终落进当前 registry。
+     */
+    private synchronized void registerToolsLocked(McpServer server, McpClient client, List<McpToolDescriptor> tools) {
+        if (closed) return;
+        // 重新读取 volatile toolRegistry(与 reattach 同一锁,所见值必然是最新的)
+        toolRegistry.replaceMcpToolOutputsForServer(server.name(), tools, invokerFactory(server, client));
     }
 
     private List<McpToolDescriptor> buildToolList(McpServer server, McpClient client) throws IOException {
