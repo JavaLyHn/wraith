@@ -19,7 +19,7 @@ import {
 } from './settings'
 import type { BackendEvent } from '../shared/types'
 import {
-  readTasks as autoReadTasks, upsertTask as autoUpsertTask, removeTask as autoRemoveTask,
+  readTasks as autoReadTasks, removeTask as autoRemoveTask,
   readRuns as autoReadRuns, readLastPanelOpenedAt, writeLastPanelOpenedAt, badgeVisible,
   sweepNonTerminalRuns, upsertTaskFromRenderer as autoUpsertTaskFromRenderer,
 } from './automationsStore'

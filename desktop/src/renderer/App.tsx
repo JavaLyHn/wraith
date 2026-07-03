@@ -220,22 +220,22 @@ export default function App(): JSX.Element {
   }, [])
 
   const handleNewConversation = useCallback(async () => {
-    if (state.turn === 'running') return
+    if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
     try {
-      statusThrottleRef.current?.cancel()
       await window.wraith.startSession(state.workspace || null)
+      statusThrottleRef.current?.cancel() // 紧贴 resetSession:消 await 期间 status 尾巴重新入窗
       dispatch({ type: 'resetSession', ws: state.workspace })
       void fetchSessions()
     } catch (err) {
       console.error('[wraith] newConversation error:', err)
     }
-  }, [state.turn, state.workspace, fetchSessions])
+  }, [state.workspace, fetchSessions]) // running 守卫改读 turnRef,不再依赖 state.turn
 
   const handleSelectSession = useCallback(async (id: string) => {
-    if (state.turn === 'running') return
+    if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
     try {
-      statusThrottleRef.current?.cancel()
       const { sessionId, messages } = await window.wraith.resumeSession(id)
+      statusThrottleRef.current?.cancel() // 紧贴 resumeSession dispatch:消 await 期间 status 尾巴重新入窗
       dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
       dispatch({ type: 'setSessionId', sessionId })
       dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
@@ -243,7 +243,7 @@ export default function App(): JSX.Element {
     } catch (err) {
       console.error('[wraith] resumeSession error:', err)
     }
-  }, [state.turn, fetchSessions])
+  }, [fetchSessions]) // running 守卫改读 turnRef,不再依赖 state.turn
 
   // ── startup flow (runs once) ───────────────────────────────────────────────
   useEffect(() => {
@@ -413,23 +413,31 @@ export default function App(): JSX.Element {
   // ── 消息编辑/删除(真回溯:后端裁剪 → 本地裁剪 → 编辑则重发) ─────────────────
   const handleEditMessage = useCallback(
     async (ordinal: number, newText: string) => {
-      if (state.turn === 'running') return
+      if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
       try {
         await window.wraith.rewindSession(ordinal)
         dispatch({ type: 'truncateAtUser', ordinal })
         dispatch({ type: 'addUserItem', text: newText })
         void fetchSessions()
+        // I-1:与主 submit 路径(handleSubmit)对称——submitTurn 前即置 running,从源头
+        // 关闭 submit→turn.started 竞态窗(否则重发后到 turn.started 之间 turn 保持 idle,
+        // 窗内点 workspace-switch 会误发第二次 session.start)。
+        dispatch({ type: 'markStarted' })
         await window.wraith.submitTurn(newText)
       } catch (err) {
         console.error('[wraith] editMessage error:', err)
+        // 失败兜底:markStarted 已提前置 running,本地 RPC 失败(后端死/拒绝)时不会再有
+        // turn.started/turn.completed/turn.failed 通知到达来清 turn,会永久卡 running。
+        // 复用现有 turn.failed reducer 动作把 turn 归 idle(与 handleSubmit 完全对称)。
+        dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
       }
     },
-    [state.turn, fetchSessions],
+    [fetchSessions], // running 守卫改读 turnRef,不再依赖 state.turn
   )
 
   const handleDeleteMessage = useCallback(
     async (ordinal: number) => {
-      if (state.turn === 'running') return
+      if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
       try {
         await window.wraith.rewindSession(ordinal)
         dispatch({ type: 'truncateAtUser', ordinal })
@@ -438,7 +446,7 @@ export default function App(): JSX.Element {
         console.error('[wraith] deleteMessage error:', err)
       }
     },
-    [state.turn, fetchSessions],
+    [fetchSessions], // running 守卫改读 turnRef,不再依赖 state.turn
   )
 
   // ── approval mode toggle ──────────────────────────────────────────────────
@@ -466,8 +474,8 @@ export default function App(): JSX.Element {
           void fetchProjects() // 目录失踪 → 条目置灰,状态不变
           return false
         }
-        statusThrottleRef.current?.cancel()
         await window.wraith.startSession(projectPath)
+        statusThrottleRef.current?.cancel() // 紧贴 resetSession:消 await 期间 status 尾巴重新入窗
         dispatch({ type: 'resetSession', ws: projectPath })
         const { sessions } = await window.wraith.listSessions()
         setSessions(sessions)
@@ -530,14 +538,14 @@ export default function App(): JSX.Element {
 
   // ── 运行历史:跳转到对应会话 ─────────────────────────────────────────────────
   const handleOpenAutomationSession = useCallback(async (projectPath: string, sessionId: string) => {
-    if (state.turn === 'running') return
+    if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
     setView('chat')
     if (projectPath !== state.workspace) {
       const ok = await switchToProject(projectPath)
       if (!ok) return
     }
     await handleSelectSession(sessionId)
-  }, [state.turn, state.workspace, switchToProject, handleSelectSession])
+  }, [state.workspace, switchToProject, handleSelectSession]) // running 守卫改读 turnRef,不再依赖 state.turn
 
   // ── 运行历史:重弹已缓存的审批弹窗(先验证 run 仍在 waiting_approval,再重弹) ──
   const handleReopenApproval = useCallback(async (runId: string) => {
