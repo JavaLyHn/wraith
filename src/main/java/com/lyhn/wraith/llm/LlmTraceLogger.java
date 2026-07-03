@@ -28,6 +28,7 @@ public final class LlmTraceLogger {
     /**
      * 对请求体 JSON 字符串中 {@code imageBase64} 字段的 base64 值做安全截断:
      * 保留前 64 字符并追加 {@code …[truncated]},避免大 base64 载荷污染日志。
+     * 预防性工具,当前无调用点,供未来请求体调试日志接入时使用。
      *
      * @param json 原始请求体 JSON 字符串
      * @return 截断后的字符串;若无 base64 字段则原样返回

@@ -71,6 +71,12 @@ class SessionMessageCodecTest {
                 LlmClient.ContentPart.text("请分析这张图片")
         );
         LlmClient.Message msg = LlmClient.Message.user(parts);
+
+        // 锁定序列化层：toJson 不应直接序列化 imageBase64 或 contentParts
+        String json = mapper.writeValueAsString(SessionMessageCodec.toJson(mapper, msg));
+        assertFalse(json.contains("AAAABASE64DATA"), "JSON 序列化不得包含 base64 数据");
+        assertFalse(json.contains("imageBase64"), "JSON 序列化不得包含 imageBase64 字段");
+
         LlmClient.Message back = roundTrip(msg);
 
         assertEquals("user", back.role());
