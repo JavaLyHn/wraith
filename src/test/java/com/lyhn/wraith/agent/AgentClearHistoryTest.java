@@ -14,6 +14,7 @@ import java.util.Queue;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentClearHistoryTest {
@@ -51,6 +52,56 @@ class AgentClearHistoryTest {
             assertEquals("", skillContextBuffer.drain(), "/clear should drop pending skill injection");
             assertTrue(agent.currentStatus("idle").totalTokens() < beforeClearTokens,
                     "status ctx should reflect the cleared conversation instead of the previous LLM usage");
+        } finally {
+            if (oldMemoryDir == null) {
+                System.clearProperty("wraith.memory.dir");
+            } else {
+                System.setProperty("wraith.memory.dir", oldMemoryDir);
+            }
+        }
+    }
+
+    /**
+     * run(String, List<ContentPart>, List<String>) 后末条 user 消息应是 parts 结构，
+     * 包含文件名占位文字 part、image part，以及 userInput text part。
+     */
+    @Test
+    void runWithImagePartsAddsPartsUserMessageToHistory() {
+        String oldMemoryDir = System.getProperty("wraith.memory.dir");
+        System.setProperty("wraith.memory.dir", tempDir.toString());
+        try {
+            RecordingClient llmClient = new RecordingClient(List.of(
+                    new LlmClient.ChatResponse("assistant", "已分析图片。", null, 10, 5)
+            ));
+            Agent agent = new Agent(llmClient);
+
+            List<LlmClient.ContentPart> imageParts = List.of(
+                    LlmClient.ContentPart.imageBase64("FAKEBASE64", "image/png")
+            );
+            List<String> imageNames = List.of("screenshot.png");
+
+            agent.run("请描述图片内容", imageParts, imageNames);
+
+            List<LlmClient.Message> history = agent.getConversationHistory();
+            // 最后一条 user 消息（倒数第二条：user + assistant 的顺序）
+            LlmClient.Message lastUser = history.stream()
+                    .filter(m -> "user".equals(m.role()))
+                    .reduce((a, b) -> b)
+                    .orElse(null);
+            assertNotNull(lastUser, "history 中应有 user 消息");
+            assertTrue(lastUser.hasContentParts(), "重载后末条 user 消息应有 contentParts");
+            // parts 中应包含文件名占位
+            boolean hasNamePart = lastUser.contentParts().stream()
+                    .anyMatch(p -> p.isText() && p.text() != null && p.text().contains("screenshot.png"));
+            assertTrue(hasNamePart, "parts 中应含 '附件图片: screenshot.png' 文字 part");
+            // parts 中应包含 image part
+            boolean hasImagePart = lastUser.contentParts().stream()
+                    .anyMatch(LlmClient.ContentPart::isImage);
+            assertTrue(hasImagePart, "parts 中应含 image part");
+            // parts 中应包含用户文字
+            boolean hasUserText = lastUser.contentParts().stream()
+                    .anyMatch(p -> p.isText() && p.text() != null && p.text().contains("请描述图片内容"));
+            assertTrue(hasUserText, "parts 中应含用户输入文字");
         } finally {
             if (oldMemoryDir == null) {
                 System.clearProperty("wraith.memory.dir");

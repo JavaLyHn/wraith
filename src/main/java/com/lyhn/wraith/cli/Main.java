@@ -1169,6 +1169,14 @@ public class Main {
                         }
                         return agent.run(expanded);
                     }
+                    public String runTurn(String input, java.util.List<com.lyhn.wraith.llm.LlmClient.ContentPart> imageParts,
+                                         java.util.List<String> imageNames) throws Exception {
+                        String expanded = input;
+                        com.lyhn.wraith.mcp.McpServerManager m = appServerMcp.manager();
+                        if (m != null) expanded = new com.lyhn.wraith.mcp.mention.AtMentionExpander(m).expand(input);
+                        return imageParts == null || imageParts.isEmpty()
+                                ? agent.run(expanded) : agent.run(expanded, imageParts, imageNames);
+                    }
                     public com.lyhn.wraith.runtime.appserver.McpOps mcp() { return appServerMcp; }
                     public void setApprovalMode(boolean auto) { hitl.setEnabled(!auto); }
                     public java.util.List<com.lyhn.wraith.session.SessionMeta> listSessions() {
