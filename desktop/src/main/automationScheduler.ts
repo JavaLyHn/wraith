@@ -52,7 +52,7 @@ export class AutomationScheduler {
     if (this.timer) { clearInterval(this.timer); this.timer = null }
     const cur = this.current
     if (cur) {
-      cur.runner.stop()
+      cur.runner.stopNow()
       this.finishRun(cur.runId, cur.taskId, { phase: 'interrupted' } as RunState)
     }
     this.queue = []

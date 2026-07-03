@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import path from 'node:path'
+import os from 'node:os'
+import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { AutomationRunner } from '../src/main/automationRunner'
 import type { RunState } from '../src/main/automationRunState'
@@ -33,6 +35,34 @@ async function waitRunning(states: RunState[], timeoutMs = 5000): Promise<void> 
   }
   throw new Error('runner 未在超时内进入 running')
 }
+
+describe('AutomationRunner.stopNow()(A2,will-quit 同步信号)', () => {
+  it('stopNow 立即发 SIGTERM(不等 500ms 宽限)', async () => {
+    // fake-child 收到 SIGTERM 时写 marker 文件,然后挂起(不退出)
+    // SIGKILL 升级(2s)最终回收它,run() 落 interrupted
+    const markerPath = path.join(os.tmpdir(), `sigterm-marker-${Date.now()}-${process.pid}.txt`)
+    // 清理可能残留的 marker(paranoia)
+    try { fs.unlinkSync(markerPath) } catch { /* 不存在则跳过 */ }
+
+    const { runner, states } = makeRunner(['signal-on-sigterm', markerPath])
+    const done = runner.run('/tmp', 'hi')
+    await waitRunning(states)
+
+    const t0 = Date.now()
+    runner.stopNow()
+
+    // SIGTERM 应当在 500ms 内到达 fake-child(stopNow 不等宽限)
+    await expect.poll(() => fs.existsSync(markerPath), { timeout: 1500 }).toBe(true)
+    expect(Date.now() - t0).toBeLessThan(500)
+
+    // run() 最终以 interrupted 落地(fake-child 被 SIGKILL 升级后退出 → exit→stopped→interrupted)
+    const final = await done
+    expect(final.phase).toBe('interrupted')
+
+    // 清理 marker 文件
+    try { fs.unlinkSync(markerPath) } catch { /* 已删或不存在 */ }
+  }, 10_000)
+})
 
 describe('AutomationRunner 终止路径(I-6,真 fake-child 子进程)', () => {
   it('用例1:stop() 后子进程忽略 SIGTERM → 2s 升级 SIGKILL → run() resolve 为 interrupted', async () => {

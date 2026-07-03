@@ -106,6 +106,12 @@ export class AutomationRunner {
     gracefulTimer.unref()
   }
 
+  /** A2: will-quit 专用——立即回收(SIGTERM 当场发出+2s SIGKILL 升级),不发 interrupt、不等宽限。 */
+  stopNow(): void {
+    this.stopping = true
+    this.killChild()
+  }
+
   respondApproval(approvalId: string, decision: string, opts: { modifiedArgs?: string; allowNetwork?: boolean } | null): void {
     const c = this.client
     if (!c) return

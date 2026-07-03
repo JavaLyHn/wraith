@@ -10,22 +10,42 @@
  * only reliable channel, and WRAITH_APPSERVER_CMD is whitespace-split so `node <script> <flag>`
  * lands each flag as a separate argv entry.
  *
- *   ignore-sigterm    — install a no-op SIGTERM handler so the process refuses to die on SIGTERM
- *                       (forces the runner's 2s SIGKILL upgrade). Then hang.
- *   fail-on-interrupt — on a `turn.interrupt` request, emit a `turn.failed` notification (mimics a
- *                       real Java thread-interrupt) then hang. Verifies the runner ignores that
- *                       terminal notification while stopping and lands on `interrupted` (via
- *                       SIGTERM→exit→stopped), not `failed`.
+ *   ignore-sigterm       — install a no-op SIGTERM handler so the process refuses to die on SIGTERM
+ *                          (forces the runner's 2s SIGKILL upgrade). Then hang.
+ *   fail-on-interrupt    — on a `turn.interrupt` request, emit a `turn.failed` notification (mimics a
+ *                          real Java thread-interrupt) then hang. Verifies the runner ignores that
+ *                          terminal notification while stopping and lands on `interrupted` (via
+ *                          SIGTERM→exit→stopped), not `failed`.
+ *   signal-on-sigterm    — write the marker line "SIGTERM_RECEIVED\n" to stdout when SIGTERM arrives,
+ *                          then hang (does NOT exit). Lets tests assert SIGTERM was delivered promptly
+ *                          without waiting for process exit. Implies the process stays alive after
+ *                          SIGTERM so SIGKILL upgrade eventually reaps it.
  *
  * With neither flag it replies to interrupt and exits on SIGTERM (baseline).
  */
 
 import readline from 'readline'
+import fs from 'fs'
 
 const flags = new Set(process.argv.slice(2))
 
 if (flags.has('ignore-sigterm')) {
   process.on('SIGTERM', () => { /* refuse to die on SIGTERM → runner must SIGKILL */ })
+}
+
+if (flags.has('signal-on-sigterm')) {
+  // Write a marker file when SIGTERM arrives then hang (do NOT exit).
+  // The marker file path is passed as the next argv after 'signal-on-sigterm':
+  //   node fake-child.mjs signal-on-sigterm /path/to/marker
+  // The test polls for the file's existence to confirm SIGTERM was delivered promptly.
+  // SIGKILL will eventually reap this process.
+  const markerIndex = process.argv.indexOf('signal-on-sigterm')
+  const markerPath = process.argv[markerIndex + 1] ?? '/tmp/fake-child-sigterm.marker'
+  process.on('SIGTERM', () => {
+    // Sync write: guaranteed flushed before SIGKILL might arrive (2s later)
+    fs.writeFileSync(markerPath, '1')
+    // hang — SIGKILL will eventually reap us
+  })
 }
 
 function send(obj) {
