@@ -4,8 +4,10 @@ import com.lyhn.wraith.mcp.config.McpConfigLoader;
 import com.lyhn.wraith.mcp.config.McpServerConfig;
 import com.lyhn.wraith.mcp.protocol.McpToolDescriptor;
 import com.lyhn.wraith.tool.ToolRegistry;
+import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
+import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,7 +25,12 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -267,6 +274,98 @@ class McpServerManagerTest {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    // ---- 清债波 2 Task 1: MCP 冷启动锁窄化并发红绿测试 ----
+
+    /**
+     * 验证锁窄化(方案 A)的核心不变量:
+     *
+     * <p>场景:
+     * <ol>
+     *   <li>用 CountDownLatch 驱动的自定义 MockWebServer Dispatcher 模拟慢冷拉:
+     *       initialize 请求在 latch 放行前一直阻塞。</li>
+     *   <li>在后台线程调用 {@code enable("slow")},其内部的 {@code start()} 进入慢 initialize
+     *       后内置锁已释放(快速记账块退出后)。</li>
+     *   <li>主线程分别调用 {@code reloadFromConfig("other")}(空配置→"已移除"快速路径)
+     *       和 {@code reattach(fresh)},两者都需要获取内置锁——若锁仍被 initialize 持有则会死阻。</li>
+     *   <li>断言两次调用均在 2s 内返回,而非等待 latch 释放。</li>
+     *   <li>放行 latch,后台线程完成 initialize(或因 manager.close() 短路退出),清理收尾。</li>
+     * </ol>
+     *
+     * <p>红绿区分:若把 {@code start()} 中的 {@code client.initialize()} 重新包入
+     * {@code synchronized(this)} 块(旧行为),则 {@code reloadFromConfig} 和 {@code reattach}
+     * 会在 latch 未放行时永远等待内置锁,超时断言必然失败——此时为"红"。
+     * 当前锁窄化代码 initialize 在锁外执行,两次调用均快速返回——此时为"绿"。
+     */
+    @Test
+    void coldStartInitializeReleasesLockSoReloadAndReattachAreNotBlocked() throws Exception {
+        // ── 1. 用自定义 Dispatcher 模拟冷拉:initialize 请求阻塞在 initializeLatch 上 ──
+        CountDownLatch initializeLatch = new CountDownLatch(1);   // 控制 initialize 响应时机
+        CountDownLatch initializeBlocking = new CountDownLatch(1); // 指示 initialize 请求已到达
+
+        // 替换 MockWebServer 的默认 QueueDispatcher,用 latch 驱动
+        webServer.setDispatcher(new Dispatcher() {
+            private int callCount = 0;
+
+            @Override
+            public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+                int call = ++callCount;
+                if (call == 1) {
+                    // 第一个请求:initialize — 阻塞直到 latch 放行
+                    initializeBlocking.countDown(); // 通知主线程"已进入 initialize 阻塞"
+                    initializeLatch.await();        // 等主线程断言完后放行
+                    return new MockResponse()
+                            .setHeader("Content-Type", "application/json")
+                            .setHeader("Mcp-Session-Id", "session-cold")
+                            .setBody("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-03-26\"}}");
+                }
+                // 其余请求(initialized 通知 / tools/list)快速返回空 200
+                return new MockResponse().setHeader("Content-Type", "application/json").setBody("");
+            }
+        });
+
+        loadServersFromMap(Map.of("slow", httpConfig(webServer)));
+
+        ExecutorService exec = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "cold-start-bg");
+            t.setDaemon(true);
+            return t;
+        });
+
+        // ── 2. 后台线程调用 enable("slow")——进入慢 initialize 后内置锁应已释放 ──
+        Future<?> enableFuture = exec.submit(() -> manager.enable("slow"));
+
+        // 等待 Dispatcher 确认 initialize 请求已到达(即后台线程已越过快速记账块、进入 initialize())
+        assertTrue(initializeBlocking.await(5, TimeUnit.SECONDS),
+                "后台线程未能在 5s 内到达 initialize 阻塞点");
+
+        // ── 3. 主线程:验证 reloadFromConfig 不阻塞 ──
+        // "other" 不在 servers map 也不在(空)配置文件,走"已移除"快速路径;
+        // 该路径必须获取内置锁——若 initialize 持锁则会死阻。
+        long t0 = System.nanoTime();
+        String reloadMsg = manager.reloadFromConfig("other");
+        long reloadMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t0);
+
+        // ── 4. 主线程:验证 reattach 不阻塞 ──
+        ToolRegistry fresh = newRegistryLikeSetUp();
+        long t1 = System.nanoTime();
+        manager.reattach(fresh);
+        long reattachMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - t1);
+
+        // ── 5. 断言:两次调用都在 2s 内完成(绿),而非等待 latch 放行(红) ──
+        assertTrue(reloadMs < 2000,
+                "reloadFromConfig 耗时 " + reloadMs + "ms ≥ 2000ms,疑似被慢 initialize 阻塞(旧锁行为)");
+        assertTrue(reattachMs < 2000,
+                "reattach 耗时 " + reattachMs + "ms ≥ 2000ms,疑似被慢 initialize 阻塞(旧锁行为)");
+        // reloadFromConfig("other") 无配置条目 → "已移除"
+        assertTrue(reloadMsg.contains("已移除") || reloadMsg.contains("already"),
+                "reloadFromConfig 应走移除路径,实际: " + reloadMsg);
+
+        // ── 6. 清理:放行 latch → 后台线程完成 initialize → 测试正常退出 ──
+        initializeLatch.countDown();
+        exec.shutdown();
+        exec.awaitTermination(10, TimeUnit.SECONDS);
     }
 
     // ---- Phase E-1 Task 1 新增测试 ----
