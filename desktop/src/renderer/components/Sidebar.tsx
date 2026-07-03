@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react'
 import {
   Tooltip,
   TooltipTrigger,
@@ -5,6 +6,7 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import ProjectSwitcher from './ProjectSwitcher'
+import { filterSidebar } from '../lib/sidebarSearch'
 import type { SessionMeta, ProjectView } from '../../shared/types'
 
 interface SidebarProps {
@@ -26,10 +28,6 @@ interface SidebarProps {
   automationBadge: boolean
 }
 
-const NAV_DISABLED: { key: string; label: string; hint: string }[] = [
-  { key: 'search', label: '搜索', hint: '搜索在后续阶段' },
-]
-
 export default function Sidebar({
   workspace,
   projects,
@@ -48,6 +46,36 @@ export default function Sidebar({
   onOpenAutomations,
   automationBadge,
 }: SidebarProps): JSX.Element {
+  const [searchActive, setSearchActive] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (searchActive) {
+      inputRef.current?.focus()
+    }
+  }, [searchActive])
+
+  const handleSearchActivate = () => {
+    setSearchActive(true)
+  }
+
+  const handleSearchClear = () => {
+    setSearchQuery('')
+    setSearchActive(false)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Escape') {
+      handleSearchClear()
+    }
+  }
+
+  const sessionItems = sessions.map(s => ({ id: s.id, title: s.title }))
+  const filtered = searchActive
+    ? filterSidebar(sessionItems, projects, searchQuery)
+    : { sessions: sessionItems, projects }
+
   return (
     <TooltipProvider delayDuration={200}>
       <aside
@@ -82,21 +110,36 @@ export default function Sidebar({
 
         {/* nav */}
         <nav className="mt-3 flex flex-col gap-0.5 px-3">
-          {/* search — disabled placeholder */}
-          {NAV_DISABLED.filter(n => n.key === 'search').map(n => (
-            <Tooltip key={n.key}>
-              <TooltipTrigger asChild>
-                <button
-                  data-testid={`nav-${n.key}`}
-                  disabled
-                  className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted opacity-60"
-                >
-                  {n.label}
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>{n.hint}</TooltipContent>
-            </Tooltip>
-          ))}
+          {/* search — 非激活态显示放大镜按钮;激活态显示输入框 */}
+          {!searchActive ? (
+            <button
+              data-testid="nav-search"
+              onClick={handleSearchActivate}
+              className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60"
+            >
+              🔍 搜索
+            </button>
+          ) : (
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-surface/60 px-2 py-1">
+              <input
+                ref={inputRef}
+                data-testid="sidebar-search"
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="搜索会话/项目"
+                className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-subtle"
+              />
+              <button
+                data-testid="sidebar-search-clear"
+                onClick={handleSearchClear}
+                className="shrink-0 text-fg-muted hover:text-fg"
+              >
+                ✕
+              </button>
+            </div>
+          )}
 
           {/* plugins — enabled */}
           <button
@@ -127,26 +170,82 @@ export default function Sidebar({
           </button>
         </nav>
 
-        {/* conversations — from session.list */}
-        <div className="mt-4 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">对话</div>
-        <div className="flex-1 overflow-y-auto px-3">
-          {sessions.length === 0 ? (
-            <div className="px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>
+        {/* conversations list */}
+        <div className="flex-1 overflow-y-auto">
+          {searchActive ? (
+            /* 激活态:两分区 */
+            <>
+              {/* 会话分区 */}
+              <div className="mt-4 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">会话</div>
+              <div className="px-3">
+                {filtered.sessions.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-fg-subtle">无匹配</div>
+                ) : (
+                  filtered.sessions.map(s => (
+                    <button
+                      key={s.id}
+                      data-testid="conversation-item"
+                      onClick={() => onSelectSession(s.id)}
+                      className={
+                        'mb-0.5 block w-full truncate rounded-lg px-3 py-2 text-left text-xs ' +
+                        (s.id === activeSessionId ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')
+                      }
+                      title={s.title}
+                    >
+                      {s.title || '(未命名)'}
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {/* 项目分区 */}
+              <div className="mt-3 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">项目</div>
+              <div className="px-3">
+                {filtered.projects.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-fg-subtle">无匹配</div>
+                ) : (
+                  filtered.projects.map(p => {
+                    const displayName = p.name || p.path.split('/').filter(Boolean).pop() || p.path
+                    return (
+                      <button
+                        key={p.path}
+                        data-testid="search-project-item"
+                        onClick={() => onActivateProject(p.path)}
+                        className="mb-0.5 block w-full truncate rounded-lg px-3 py-2 text-left text-xs text-fg-muted hover:bg-surface/60"
+                        title={p.path}
+                      >
+                        {displayName}
+                      </button>
+                    )
+                  })
+                )}
+              </div>
+            </>
           ) : (
-            sessions.map(s => (
-              <button
-                key={s.id}
-                data-testid="conversation-item"
-                onClick={() => onSelectSession(s.id)}
-                className={
-                  'mb-0.5 block w-full truncate rounded-lg px-3 py-2 text-left text-xs ' +
-                  (s.id === activeSessionId ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')
-                }
-                title={s.title}
-              >
-                {s.title || '(未命名)'}
-              </button>
-            ))
+            /* 非激活态:原会话列表 */
+            <>
+              <div className="mt-4 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">对话</div>
+              <div className="px-3">
+                {sessions.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>
+                ) : (
+                  sessions.map(s => (
+                    <button
+                      key={s.id}
+                      data-testid="conversation-item"
+                      onClick={() => onSelectSession(s.id)}
+                      className={
+                        'mb-0.5 block w-full truncate rounded-lg px-3 py-2 text-left text-xs ' +
+                        (s.id === activeSessionId ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')
+                      }
+                      title={s.title}
+                    >
+                      {s.title || '(未命名)'}
+                    </button>
+                  ))
+                )}
+              </div>
+            </>
           )}
         </div>
 

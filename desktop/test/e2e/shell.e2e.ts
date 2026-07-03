@@ -1669,3 +1669,61 @@ test('T45 设为默认:点 model-set-default → record config.setDefaultProvide
   fs.rmSync(recordFile, { force: true })
   fs.rmSync(userData, { recursive: true, force: true })
 })
+
+// ---------------------------------------------------------------------------
+// T46: 侧栏搜索 — 输入关键字两分区各自过滤,清除恢复原列表
+// ---------------------------------------------------------------------------
+
+test('T46 侧栏搜索:输入关键字过滤会话+项目两分区,清除钮恢复原列表', async () => {
+  const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t46-proj-a-'))
+  const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t46-alpha-b-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t46-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_WORKSPACE: dirA,
+      WRAITH_E2E_PROJECTS: JSON.stringify([
+        { path: dirA, lastUsedAt: 2000 },
+        { path: dirB, lastUsedAt: 1000 },
+      ]),
+      MOCK_SESSIONS_BY_WS: JSON.stringify({
+        [dirA]: [
+          { id: 'sess_t46_1', cwd: dirA, createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'mock', model: 'mock-model', title: 'alpha 测试会话', turns: 1 },
+          { id: 'sess_t46_2', cwd: dirA, createdAt: '2026-07-02T00:00:00Z', updatedAt: '2026-07-02T01:00:00Z', provider: 'mock', model: 'mock-model', title: '无关对话', turns: 1 },
+        ],
+      }),
+    },
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="sidebar"]')).toBeVisible({ timeout: 15000 })
+
+  // 初始状态:两条会话可见
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(2, { timeout: 10000 })
+
+  // 点搜索按钮激活搜索框
+  await win.locator('[data-testid="nav-search"]').click()
+  await expect(win.locator('[data-testid="sidebar-search"]')).toBeVisible({ timeout: 5000 })
+
+  // 输入 "alpha" — 只有「alpha 测试会话」命中;项目分区中路径含 alpha 的 dirB 命中
+  await win.locator('[data-testid="sidebar-search"]').fill('alpha')
+
+  // 会话分区:只剩 1 条(alpha 测试会话)
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(1, { timeout: 5000 })
+  await expect(win.locator('[data-testid="conversation-item"]').first()).toContainText('alpha 测试会话')
+
+  // 项目分区:含 alpha 路径尾段的 dirB 命中
+  await expect(win.locator('[data-testid="search-project-item"]')).toHaveCount(1, { timeout: 5000 })
+  await expect(win.locator('[data-testid="search-project-item"]').first()).toContainText('alpha')
+
+  // 点清除钮 → 搜索框消失,恢复原两条会话
+  await win.locator('[data-testid="sidebar-search-clear"]').click()
+  await expect(win.locator('[data-testid="sidebar-search"]')).toHaveCount(0, { timeout: 5000 })
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(2, { timeout: 5000 })
+
+  await app.close()
+  for (const p of [dirA, dirB, userData]) fs.rmSync(p, { recursive: true, force: true })
+})
