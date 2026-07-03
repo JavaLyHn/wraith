@@ -135,12 +135,12 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                 <div className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{current.error}</div>
               )}
               <div className="mb-4 flex items-center gap-2">
-                <button data-testid="mcp-toggle" disabled={busy}
+                <button data-testid="mcp-toggle" disabled={busy || current.state === 'starting'}
                   onClick={() => props.onToggle(current.name, !current.enabled)}
                   className="rounded-lg border border-border px-3 py-1.5 text-xs text-fg hover:border-accent disabled:opacity-60">
                   {current.enabled ? '停用' : '启用'}
                 </button>
-                <button data-testid="mcp-restart" disabled={busy || !current.enabled}
+                <button data-testid="mcp-restart" disabled={busy || !current.enabled || current.state === 'starting'}
                   onClick={() => props.onRestart(current.name)}
                   className="rounded-lg border border-border px-3 py-1.5 text-xs text-fg hover:border-accent disabled:opacity-60">
                   重启
