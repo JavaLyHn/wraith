@@ -25,6 +25,12 @@ public final class AppServer {
     public interface SessionRunner {
         EventStreamRenderer renderer();
         String runTurn(String input) throws Exception;
+        /** 带图片附件的重载；T2 覆写以传递图片给 LLM。默认退化为纯文本 runTurn。 */
+        default String runTurn(String input,
+                               java.util.List<com.lyhn.wraith.llm.LlmClient.ContentPart> imageParts,
+                               java.util.List<String> imageNames) throws Exception {
+            return runTurn(input);
+        }
         /** 切换审批模式。auto=true → 关闭 HITL（自动放行）。默认 no-op，旧实现无需改动。 */
         default void setApprovalMode(boolean auto) { }
         /** 本项目历史会话(最近在前)。默认空。 */
@@ -165,13 +171,28 @@ public final class AppServer {
         }
         JsonNode params = msg.params();
         String input = (params != null && params.hasNonNull("input")) ? params.get("input").asText() : "";
+
+        // 附件解析与校验（失败走 started→turn.failed 时序，不发 LLM）
+        TurnAttachments.Resolved att;
+        try {
+            att = TurnAttachments.resolve(params == null ? null : params.get("attachments"));
+        } catch (IOException e) {
+            String turnId = "turn_" + turnSeq.incrementAndGet();
+            writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
+            writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
+            writer.notify("turn.failed", Map.of("sessionId", sessionId, "turnId", turnId, "error", "附件错误: " + e.getMessage()));
+            return;
+        }
+        String effectiveInput = att.textPrefix().isEmpty() ? input : att.textPrefix() + input;
+
         String turnId = "turn_" + turnSeq.incrementAndGet();
         session.renderer().setCurrentTurnId(turnId);
         writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
         writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
+        final TurnAttachments.Resolved attFinal = att;
         Thread t = new Thread(() -> {
             try {
-                session.runTurn(input);
+                session.runTurn(effectiveInput, attFinal.imageParts(), attFinal.imageNames());
                 String persisted = session.persistTurn();
                 String reported = (persisted != null) ? persisted : sessionId;
                 if (persisted != null) sessionId = persisted;
