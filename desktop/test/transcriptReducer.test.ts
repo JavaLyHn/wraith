@@ -10,6 +10,7 @@ import {
   clearApproval,
   setModel,
   markStarted,
+  markResumed,
   setApprovalMode,
   setWorkspace,
   resetSession,
@@ -286,6 +287,20 @@ describe('phase-A state additions', () => {
     expect(s2.hasStarted).toBe(true)
   })
 
+  it('markStarted also flips turn to running (关闭 submit→turn.started 竞态窗:提交瞬间即禁切)', () => {
+    expect(initialState.turn).toBe('idle')
+    const s = markStarted(initialState)
+    expect(s.turn).toBe('running')
+    expect(initialState.turn).toBe('idle') // original untouched
+  })
+
+  it('markResumed 翻 hasStarted 但 turn 保持 idle(resume 是静态回放,非 turn 在跑)', () => {
+    // 即便上一态误挂 running,resume 也必须把 turn 落回 idle,避免切换/选会话后按钮被误禁
+    const s = markResumed({ ...initialState, turn: 'running' })
+    expect(s.hasStarted).toBe(true)
+    expect(s.turn).toBe('idle')
+  })
+
   it('setApprovalMode toggles ask/auto immutably', () => {
     const auto = setApprovalMode(initialState, 'auto')
     expect(auto.approvalMode).toBe('auto')
@@ -300,13 +315,14 @@ describe('phase-A state additions', () => {
     expect(initialState.workspace).toBe('')
   })
 
-  it('resetSession clears items+hasStarted+approvalMode, keeps model+connection', () => {
-    let s: TranscriptState = { ...initialState, connection: 'connected', model: 'deepseek', approvalMode: 'auto', hasStarted: true }
+  it('resetSession clears items+hasStarted+approvalMode+turn, keeps model+connection', () => {
+    let s: TranscriptState = { ...initialState, connection: 'connected', model: 'deepseek', approvalMode: 'auto', hasStarted: true, turn: 'running' }
     s = reduce(s, { kind: 'notification', method: 'message.delta', params: { text: 'x' } })
     expect(s.items.length).toBe(1)
     const r = resetSession(s, '/new/dir')
     expect(r.items).toEqual([])
     expect(r.hasStarted).toBe(false)
+    expect(r.turn).toBe('idle') // 兜底清 turn:防切换后上一会话 running 态悬挂
     expect(r.approvalMode).toBe('ask')
     expect(r.pendingApproval).toBeNull()
     expect(r.workspace).toBe('/new/dir')
@@ -315,6 +331,7 @@ describe('phase-A state additions', () => {
     expect(r.connection).toBe('connected') // preserved
     // original untouched
     expect(s.items.length).toBe(1)
+    expect(s.turn).toBe('running')
   })
 })
 

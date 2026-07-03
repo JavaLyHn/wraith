@@ -12,6 +12,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * app-server 的 MCP 生命周期(按工作区复用)+ mcp.* 操作面。
@@ -28,9 +30,20 @@ public final class AppServerMcp implements McpOps {
     private volatile String currentWorkspace;
     private volatile EventStreamRenderer renderer;
 
+    /** 单线程 daemon 执行器:串行化 enable/restart 的异步 offload,防 dispatch 线程被慢启动卡死。 */
+    private volatile ExecutorService mcpControlExecutor = newMcpControlExecutor();
+
     public AppServerMcp() { this(McpServerManager::new); }
 
     AppServerMcp(ManagerFactory factory) { this.factory = factory; }
+
+    private static ExecutorService newMcpControlExecutor() {
+        return Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "wraith-mcp-control");
+            t.setDaemon(true);
+            return t;
+        });
+    }
 
     public synchronized void ensureFor(String workspaceRoot, ToolRegistry registry, EventStreamRenderer renderer) {
         this.renderer = renderer; // 状态通知换绑到当前会话
@@ -43,6 +56,9 @@ public final class AppServerMcp implements McpOps {
             McpServerManager old = manager;
             manager = null;
             if (old != null) {
+                // 换工作区:shutdownNow 取消针对旧 manager 的在途 enable/restart,防止其结果写到新会话
+                mcpControlExecutor.shutdownNow();
+                mcpControlExecutor = newMcpControlExecutor();
                 try { old.close(); } catch (Exception e) { /* fail-open */ }
             }
             currentWorkspace = normalized;
@@ -128,9 +144,35 @@ public final class AppServerMcp implements McpOps {
         return result;
     }
 
-    @Override public void enable(String name) { requireServer(name); requireManager().enable(name); }
-    @Override public void disable(String name) { requireServer(name); requireManager().disable(name); }
-    @Override public void restart(String name) { requireServer(name); requireManager().restart(name); }
+    @Override public void enable(String name) {
+        requireServer(name);                    // 校验同步(快):未知名仍即时抛 NoSuchElementException
+        McpServerManager m = requireManager();
+        mcpControlExecutor.submit(() -> {
+            try { m.enable(name); }
+            catch (RuntimeException e) { /* 结果经 mcp.status(ERROR) 呈现,此处无响应通道 */ }
+        });
+    }
+
+    @Override public void disable(String name) {
+        requireServer(name);                    // 校验同步(快):未知名仍即时抛 NoSuchElementException
+        McpServerManager m = requireManager();
+        // 与 enable/restart 对称:submit 到单线程执行器。慢 enable 持 manager 锁期间,
+        // 同步 disable 会在 dispatch 线程上等锁,卡死全部 RPC;异步 offload 后 disable 即时返回,
+        // 结果经 setStatus(DISABLED) 通知链呈现。
+        mcpControlExecutor.submit(() -> {
+            try { m.disable(name); }
+            catch (RuntimeException e) { /* 结果经 mcp.status(DISABLED) 呈现,此处无响应通道 */ }
+        });
+    }
+
+    @Override public void restart(String name) {
+        requireServer(name);                    // 校验同步(快)
+        McpServerManager m = requireManager();
+        mcpControlExecutor.submit(() -> {
+            try { m.restart(name); }
+            catch (RuntimeException e) { /* 结果经 mcp.status(ERROR) 呈现,此处无响应通道 */ }
+        });
+    }
     @Override public String logs(String name) { requireServer(name); return requireManager().logs(name); }
 
     @Override public List<Map<String, Object>> resources(String nameOrNull) {

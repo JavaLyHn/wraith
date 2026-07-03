@@ -19,9 +19,9 @@ import {
 } from './settings'
 import type { BackendEvent } from '../shared/types'
 import {
-  readTasks as autoReadTasks, upsertTask as autoUpsertTask, removeTask as autoRemoveTask,
+  readTasks as autoReadTasks, removeTask as autoRemoveTask,
   readRuns as autoReadRuns, readLastPanelOpenedAt, writeLastPanelOpenedAt, badgeVisible,
-  sweepNonTerminalRuns,
+  sweepNonTerminalRuns, upsertTaskFromRenderer as autoUpsertTaskFromRenderer,
 } from './automationsStore'
 import { AutomationScheduler } from './automationScheduler'
 import type { AutomationTask, AutomationEvent } from '../shared/types'
@@ -84,7 +84,22 @@ function notifyOS(title: string, body: string): void {
 // Helpers
 // ---------------------------------------------------------------------------
 
+// C1 flake investigation: deterministic trace of notification forwarding.
+// When WRAITH_E2E_DEBUG_LOG is set, append `<ts> FWD <method>` right before we
+// forward each server-push notification to the renderer (synchronous append so
+// nothing is lost to buffering under load).
+const e2eDebugLogPath = process.env['WRAITH_E2E_DEBUG_LOG']
+function e2eDebugLog(method: string): void {
+  if (!e2eDebugLogPath) return
+  try {
+    fs.appendFileSync(e2eDebugLogPath, `${Date.now()} FWD ${method}\n`)
+  } catch {
+    /* ignore */
+  }
+}
+
 function sendEvent(evt: BackendEvent): void {
+  if (evt.kind === 'notification') e2eDebugLog(evt.method)
   mainWindow?.webContents.send('wraith:event', evt)
 }
 
@@ -380,7 +395,7 @@ ipcMain.handle('wraith:rewindSession', async (_e, userOrdinal: number) => {
 
 ipcMain.handle('wraith:automationList', async () => ({ tasks: autoReadTasks(app.getPath('userData')) }))
 ipcMain.handle('wraith:automationUpsert', async (_e, task: AutomationTask) => {
-  autoUpsertTask(app.getPath('userData'), task)
+  autoUpsertTaskFromRenderer(app.getPath('userData'), task)
   return { ok: true }
 })
 ipcMain.handle('wraith:automationRemove', async (_e, id: string) => {

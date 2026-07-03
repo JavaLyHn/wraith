@@ -17,8 +17,9 @@ export default function DiffCard({ filePath, before, after }: DiffCardProps): JS
     <div data-testid="diff-card" className="my-1 overflow-hidden rounded-xl border border-border bg-surface">
       <button
         data-testid="diff-card-toggle"
+        aria-expanded={!collapsed}
         onClick={() => setCollapsed(c => !c)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-black/[0.02]"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-surface/60"
       >
         <span className="font-mono font-semibold text-fg" title={filePath}>📝 {baseName(filePath)}</span>
         {stats && <span className="text-ok">+{stats.added}</span>}

@@ -24,6 +24,20 @@ function record(method, params) {
   }
 }
 
+// Optional: deterministic timing trace for the C1 flake investigation.
+// When MOCK_DEBUG_LOG is set, append `<ts> SEND <method>` for every server-push
+// notification and `<ts> RECV <method>` for every received request, synchronously
+// (appendFileSync) so nothing is lost to buffering when the process is under load.
+const mockDebugLogPath = process.env['MOCK_DEBUG_LOG']
+function debugLog(dir, method) {
+  if (!mockDebugLogPath) return
+  try {
+    fs.appendFileSync(mockDebugLogPath, `${Date.now()} ${dir} ${method}\n`)
+  } catch {
+    /* ignore */
+  }
+}
+
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
@@ -31,7 +45,8 @@ function record(method, params) {
 let sessionCounter = 0
 let lastWorkspaceDir = null
 let sessionId = 'sess_mock_0'
-let turnId = 'turn_1'
+let turnSeq = 0
+let turnId = ''
 let pendingApproval = false
 
 const mockMcp = (() => {
@@ -55,6 +70,7 @@ function reply(id, result) {
 
 /** Server-push notification. */
 function notify(method, params) {
+  debugLog('SEND', method)
   send({ jsonrpc: '2.0', method, params })
 }
 
@@ -202,6 +218,7 @@ async function emitPostApprovalSequence(approved) {
 async function handleRequest(req) {
   const { id, method, params } = req
   record(method, params)
+  debugLog('RECV', method)
 
   switch (method) {
     case 'initialize': {
@@ -237,6 +254,8 @@ async function handleRequest(req) {
     }
 
     case 'turn.submit': {
+      // Assign a fresh turnId for this turn; all notifications in this turn share it
+      turnId = `turn_${++turnSeq}`
       // Immediately reply with turnId + status, then stream notifications
       reply(id, { turnId, status: 'running' })
       // Fire-and-forget async sequence
@@ -298,7 +317,7 @@ async function handleRequest(req) {
     }
 
     case 'mcp.list': {
-      reply(id, { servers: mcpServers })
+      reply(id, { servers: mcpServers, ...(process.env['MOCK_MCP_CONFIG_ERROR'] ? { configError: process.env['MOCK_MCP_CONFIG_ERROR'] } : {}) })
       break
     }
     case 'mcp.enable':

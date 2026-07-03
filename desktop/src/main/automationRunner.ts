@@ -24,10 +24,15 @@ export class AutomationRunner {
   private initTimer: NodeJS.Timeout | null = null   // I-1: 提为字段统一清理
   private sigkillTimer: NodeJS.Timeout | null = null // I-2: SIGKILL 升级 timer
 
+  // B5: 子进程 exit 或 spawn error 时 resolve(幂等;run() 调用后方可使用)
+  private exitedResolve: (() => void) | null = null
+  readonly exited: Promise<void> = new Promise(res => { this.exitedResolve = res })
+
   constructor(
     private readonly env: NodeJS.ProcessEnv,
     private readonly homedir: string,
     private readonly cb: RunnerCallbacks,
+    private readonly taskId?: string,
   ) {}
 
   run(projectPath: string, prompt: string): Promise<RunState> {
@@ -41,13 +46,19 @@ export class AutomationRunner {
       })
       this.client = client
       readline.createInterface({ input: proc.stdout }).on('line', l => client.handleLine(l))
-      proc.stderr.on('data', (c: Buffer) => process.stderr.write(`[automation] ${c}`))
+      proc.stderr.on('data', (c: Buffer) => process.stderr.write(`${this.taskId ? `[automation:${this.taskId}] ` : '[automation] '}${c}`))
       proc.on('exit', () => {
+        // B5: 子进程退净,resolve exited(幂等)
+        this.exitedResolve?.(); this.exitedResolve = null
         // exit 时真实清理升级 timer(进程已终止,SIGKILL 不再需要)
         if (this.sigkillTimer !== null) { clearTimeout(this.sigkillTimer); this.sigkillTimer = null }
         this.dispatch({ type: this.stopping ? 'stopped' : 'child-exit' })
       })
-      proc.on('error', () => this.dispatch({ type: 'child-exit' }))
+      proc.on('error', () => {
+        // B5: spawn 错误时同样 resolve exited(幂等)
+        this.exitedResolve?.(); this.exitedResolve = null
+        this.dispatch({ type: 'child-exit' })
+      })
 
       client.onNotification((method, params) => {
         const p = (params ?? {}) as Record<string, unknown>
@@ -104,6 +115,12 @@ export class AutomationRunner {
     // I-1: 500ms 宽限 timer 加 unref
     const gracefulTimer = setTimeout(() => this.killChild(), 500)
     gracefulTimer.unref()
+  }
+
+  /** A2: will-quit 专用——立即回收(SIGTERM 当场发出+2s SIGKILL 升级),不发 interrupt、不等宽限。 */
+  stopNow(): void {
+    this.stopping = true
+    this.killChild()
   }
 
   respondApproval(approvalId: string, decision: string, opts: { modifiedArgs?: string; allowNetwork?: boolean } | null): void {

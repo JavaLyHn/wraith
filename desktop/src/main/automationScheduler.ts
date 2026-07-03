@@ -52,7 +52,7 @@ export class AutomationScheduler {
     if (this.timer) { clearInterval(this.timer); this.timer = null }
     const cur = this.current
     if (cur) {
-      cur.runner.stop()
+      cur.runner.stopNow()
       this.finishRun(cur.runId, cur.taskId, { phase: 'interrupted' } as RunState)
     }
     this.queue = []
@@ -138,8 +138,10 @@ export class AutomationScheduler {
     try {
       if (!fs.statSync(task.projectPath).isDirectory()) throw new Error()
     } catch {
-      putRun(dir, { runId, taskId: task.id, startedAt, endedAt: startedAt, status: 'failed', summary: '项目目录不存在' })
+      const failedRun: AutomationRun = { runId, taskId: task.id, startedAt, endedAt: startedAt, status: 'failed', summary: '项目目录不存在' }
+      putRun(dir, failedRun)
       this.deps.onRunsChanged()
+      this.deps.onTerminal(failedRun)
       return false
     }
     putRun(dir, { runId, taskId: task.id, startedAt, status: 'running' })
@@ -155,7 +157,7 @@ export class AutomationScheduler {
         this.deps.onRunsChanged()
       },
       onApproval: (_approvalId, payload) => this.deps.onApproval(runId, payload),
-    })
+    }, task.id)
     this.current = { runId, taskId: task.id, runner }
     void runner.run(task.projectPath, task.prompt).then(finalState => {
       this.finishRun(runId, task.id, finalState, startedAt)
@@ -163,8 +165,11 @@ export class AutomationScheduler {
       console.error('[AutomationScheduler] runner.run() threw unexpectedly:', err)
       this.finishRun(runId, task.id, { phase: 'failed', error: String(err) } as RunState, startedAt)
     }).finally(() => {
-      this.current = null
-      this.drainQueue()   // I-3: 统一出队点,逻辑抽为 drainQueue(tick 兜底共用)
+      // B5: 终态(settle)后等子进程真正退净(SIGKILL 升级 ≤2s 兜底),保证任意时刻至多一个自动化子进程
+      void runner.exited.then(() => {
+        this.current = null
+        this.drainQueue()   // I-3: 统一出队点,逻辑抽为 drainQueue(tick 兜底共用)
+      })
     })
     return true
   }

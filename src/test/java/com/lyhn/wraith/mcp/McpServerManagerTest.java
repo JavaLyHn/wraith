@@ -349,6 +349,85 @@ class McpServerManagerTest {
                 "close 后 startAll 不得注册任何工具");
     }
 
+    // ---- Task 8: 在途 READY 注册经锁点读取当前 registry ----
+
+    /**
+     * 时序:
+     *  1. startAll(maxWait=100ms) 启动慢 server(握手 800ms),立即返回
+     *  2. reattach(fresh) 换 registry
+     *  3. 等待 slow server 达到 READY
+     *  4. 断言工具落在 fresh registry,不在原始 registry 的"新增"里
+     */
+    @Test
+    void inflightReadyRegistersIntoNewRegistryAfterReattach() throws Exception {
+        // 慢 server:initialize 立即应答,tools/list 延迟 800ms。
+        // 这让 worker 越过 initialize(握手完成)、卡在 listTools(尚未进锁),
+        // 令 startAll(maxWait=100ms) 返回时 server 处于"已过 initialize、卡在 listTools"窗口,
+        // 对 registry 切换时序的覆盖比"initialize 延迟"更强:reattach 与 finalizeReadyLocked 的竞争更直接。
+        webServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setHeader("Mcp-Session-Id", "session-slow")
+                .setBody("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-03-26\"}}"));
+        // initialized 通知响应
+        webServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(""));
+        // tools/list 延迟 800ms 应答——worker 卡在此处时 reattach 发生,直接覆盖 finalizeReadyLocked 竞态窗
+        webServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[" + toolJson("fast-tool", "A fast tool") + "]}}")
+                .setBodyDelay(800, TimeUnit.MILLISECONDS));
+
+        loadServersFromMap(Map.of("slow", httpConfig(webServer)));
+
+        // 记录旧 registry 基数(startAll 前为 0 个 mcp__slow__ 工具)
+        long oldBaseline = countToolsWithPrefix(registry, "mcp__slow__");
+
+        // startAll 带短超时 → 立即返回,slow server 尚未 READY
+        manager.startAll(null, Duration.ofMillis(100));
+
+        McpServer slowServer = manager.server("slow");
+        assertEquals(McpServerStatus.STARTING, slowServer.status(),
+                "startAll 返回时 slow 应仍在 STARTING");
+
+        // 在途窗口内切换 registry
+        ToolRegistry fresh = newRegistryLikeSetUp();
+        manager.reattach(fresh);
+
+        // 轮询等待 slow server 达到 READY(最多 10s)
+        awaitStatus(slowServer, McpServerStatus.READY, 10_000);
+
+        // 断言:工具落进新 registry
+        assertTrue(registryHasTool(fresh, McpToolDescriptor.namespaced("slow", "fast-tool")),
+                "在途 READY 的工具必须落入 reattach 后的新 registry");
+
+        // 旧 registry 不应有新增的 mcp__slow__ 工具
+        long oldAfter = countToolsWithPrefix(registry, "mcp__slow__");
+        assertEquals(oldBaseline, oldAfter,
+                "旧 registry 不应新增 mcp__slow__ 工具(窗口内已切换 registry)");
+    }
+
+    /** 轮询等待 server 达到目标状态,超时则 fail */
+    private static void awaitStatus(McpServer server, McpServerStatus target, long timeoutMillis)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        while (server.status() != target) {
+            assertTrue(System.currentTimeMillis() < deadline,
+                    "超时:server " + server.name() + " 仍为 " + server.status() + ",期望 " + target);
+            if (server.status() == McpServerStatus.ERROR) {
+                fail("server " + server.name() + " 进入 ERROR: " + server.errorMessage());
+            }
+            Thread.sleep(50);
+        }
+    }
+
+    /** 统计 registry 中前缀匹配的工具数量,通过公共 API getToolDefinitions() */
+    private static long countToolsWithPrefix(ToolRegistry reg, String prefix) {
+        return reg.getToolDefinitions().stream()
+                .filter(t -> t.name().startsWith(prefix))
+                .count();
+    }
+
     // ---- Phase E-1 Task 1 辅助方法 ----
 
     /** 与 disableRemovesToolsFromRegistry 中的断言保持同样 API */

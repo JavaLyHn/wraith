@@ -31,7 +31,11 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
     const unsub = window.wraith.onAutomationEvent(evt => {
       if (evt.kind !== 'runs-changed') return
       if (debounceTimer !== null) clearTimeout(debounceTimer)
-      debounceTimer = setTimeout(() => { debounceTimer = null; void fetchTasks() }, 80)
+      debounceTimer = setTimeout(() => {
+        debounceTimer = null
+        void fetchTasks()
+        void window.wraith.automationPanelOpened()   // A4: 面板可见期间到达的终态即视为已读,红点不重亮
+      }, 80)
     })
     return () => { unsub(); if (debounceTimer !== null) clearTimeout(debounceTimer) }
   }, [fetchTasks])

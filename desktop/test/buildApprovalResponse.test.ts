@@ -56,4 +56,11 @@ describe('validateArgsJson', () => {
     expect(validateArgsJson('{"a":1}')).toBeNull()
     expect(validateArgsJson('{oops')).toBeTypeOf('string')
   })
+  it('空串视为非法 JSON(JSON.parse("") 抛出),返回错误信息字符串而非 null', () => {
+    // 设计语义:editedArgsJson===null 表示"未开启编辑",空串('')表示用户清空了编辑器内容。
+    // JSON.parse('') 抛出 SyntaxError,validateArgsJson 返回错误信息,UI 据此内联展示错误并禁用提交。
+    // 此为有意设计:空串不是合法 JSON,不应被当作"未修改"处理。
+    expect(validateArgsJson('')).toBeTypeOf('string')
+    expect(validateArgsJson('')).not.toBeNull()
+  })
 })

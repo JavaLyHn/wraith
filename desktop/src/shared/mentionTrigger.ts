@@ -45,7 +45,7 @@ export function filterMentionItems(resources: McpResourceView[], query: string):
   const server = query.slice(0, colon)
   const rest = query.slice(colon + 1)
   return resources
-    .filter(r => r.server === server && (r.uri.startsWith(rest) || r.name.startsWith(rest)))
+    .filter(r => r.server === server && r.uri && r.uri.trim() !== '' && (r.uri.startsWith(rest) || r.name.startsWith(rest)))
     .map(r => ({ label: r.uri, insert: `@${r.server}:${r.uri} `, hint: r.description ? `${r.name} — ${r.description}` : r.name }))
 }
 

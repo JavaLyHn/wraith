@@ -158,7 +158,12 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
       WRAITH_E2E_WORKSPACE: startupDir, // startup workspace (getInitialWorkspace)
       WRAITH_E2E_PICK: repickDir, // what the re-pick button resolves to (pickWorkspace)
       WRAITH_E2E_USERDATA: userData,
-      MOCK_SESSIONS_BY_WS: '{}' // repickDir 无历史 → 切换后仍是欢迎态(原断言保持)
+      MOCK_SESSIONS_BY_WS: '{}', // repickDir 无历史 → 切换后仍是欢迎态(原断言保持)
+      // Task 2 根因修复(见下方点击前置等待注释):
+      //   MOCK_SLOW_TURN — turn.started 后停 3s,给 running 态一个可确定性观察的窗口;
+      //   MOCK_NO_APPROVAL — 本轮不挂在审批上,3s 后自行走到 turn.completed → running 稳定清 idle。
+      MOCK_SLOW_TURN: '1',
+      MOCK_NO_APPROVAL: '1'
     }
   })
   const win = await app.firstWindow()
@@ -170,8 +175,28 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
   await input.press('Enter')
   await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 15000 })
 
+  // ── Task 2(清债波 C1)偶发根因修复 ──────────────────────────────────────────
+  // 调查(MOCK_DEBUG_LOG/WRAITH_E2E_DEBUG_LOG 双日志,--repeat-each=60 + yes×4 CPU 负载,
+  // 稳定复现):失败例日志签名恒为「session.start=1(仅启动那次,重选的第二次缺失)」。
+  // 定位=渲染层 running 窗口竞态,非 mock/main 丢事件(SEND==FWD 完全一致):
+  //   • transcript 可见由本地 markStarted 驱动(提交即置,与后端无关,并非 turn 已跑);
+  //   • workspace-switch 钮 disabled={running};running 由 turn.started 通知触发、turn.completed 清除;
+  //     且 handleAddProject 内还有 `if (state.turn === 'running') return` 二重守卫。
+  //   • 旧用例在 transcript 可见后立即 click——此刻 running 仍可能为 idle(turn.submit 回包 ~ turn.started
+  //     通知之间的空窗),看似可点;负载下 turn.started 抢先转发,click 落在 running 窗口,守卫吞掉点击
+  //     → 第二次 session.start 永不发出。注意:光等 toBeEnabled 不够——它会被这段「turn.started 之前」的
+  //     瞬态 idle 满足而提前返回,并未等到 turn 真正跑完。
+  // 修复(brief 分支 3-D:把「transcript 可见」这个错误前置条件换成「turn 确已跑完」的正确前置条件,
+  //   非加长超时、非 sleep):先等 interrupt 钮出现(running 确立,越过瞬态空窗),再等它消失
+  //   (turn.completed → running 稳定清 idle),此时点击必然生效。
+  await expect(win.locator('[data-testid="interrupt"]')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('[data-testid="interrupt"]')).toHaveCount(0, { timeout: 15000 })
+
+  const wsSwitch = win.locator('[data-testid="workspace-switch"]')
+  await expect(wsSwitch).toBeEnabled({ timeout: 10000 })
+
   // re-pick (resolves to repickDir — distinct from startupDir, guard lets it through)
-  await win.locator('[data-testid="workspace-switch"]').click()
+  await wsSwitch.click()
 
   // second session.start carrying repickDir (from WRAITH_E2E_PICK)
   await expect
@@ -184,6 +209,89 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
 
   // Task 6: WelcomeEmptyState exists, welcome heading should return after re-pick
   await expect(win.locator('text=今天做点什么？')).toBeVisible({ timeout: 10000 })
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(startupDir, { recursive: true, force: true })
+  fs.rmSync(repickDir, { recursive: true, force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
+// Test 4b(负向）: 竞态窗口的产品级关闭验证 —— submit 后立刻(turn.started 确立前,
+//   即原 submit→turn.started 竞态窗口内)点击 workspace-switch,不得产生第二次 session.start
+//   且不得重置 transcript。
+//
+// 背景(清债波 Task 2 产品竞态,评审确认):旧行为里 markStarted 只翻 hasStarted、不动 turn,
+//   turn 仅在后端 turn.started 通知到达才置 running。submit→turn.started 之间 turn==='idle',
+//   此空窗内 Composer 的 workspace-switch(disabled={running}) 可点、App 的 running 守卫放行,
+//   会误发第二次 session.start 并把 transcript 重置回欢迎态。真实后端首 token 数百 ms~秒级,用户可踩。
+// 修复(源头关闭):markStarted 提交瞬间即置 turn='running'(按钮即禁 + 守卫即拦),
+//   turnRef 消除守卫的闭包陈旧。本用例用 MOCK_SLOW_TURN 放大窗口(turn.started 后停 3s),
+//   在 running 已确立、turn 远未跑完的窗口内点击,断言点击被彻底吞掉。
+// ---------------------------------------------------------------------------
+
+test('workspace switch 负向:submit 后竞态窗口内点击不产生第二次 session.start 且不重置 transcript', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-race.jsonl`)
+  const startupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-race-startup-'))
+  const repickDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-race-repick-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-race-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_WORKSPACE: startupDir,
+      WRAITH_E2E_PICK: repickDir, // 若守卫失效,click 会走 switchToProject 发出第二次 session.start
+      WRAITH_E2E_USERDATA: userData,
+      MOCK_SESSIONS_BY_WS: '{}',
+      // MOCK_SLOW_TURN:turn.started 后停 3s,放大 submit→turn(running)确立后的窗口;
+      // MOCK_NO_APPROVAL:不挂审批,窗口内 running 稳定为 true,专测「running 中禁切」。
+      MOCK_SLOW_TURN: '1',
+      MOCK_NO_APPROVAL: '1',
+    },
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  // 启动那一次 session.start 已发出;记下基线(应为 1)。
+  const startCount = (): number => {
+    if (!fs.existsSync(recordFile)) return 0
+    return fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean)
+      .map(l => JSON.parse(l)).filter(l => l.method === 'session.start').length
+  }
+  await expect.poll(startCount, { timeout: 10000 }).toBe(1)
+
+  // 提交进入对话态。transcript 可见由本地 markStarted 驱动(提交瞬间,与后端无关)。
+  await input.fill('hi')
+  await input.press('Enter')
+  await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('[data-testid="user-msg"]')).toHaveText('hi', { timeout: 10000 })
+
+  // ★ 竞态窗口就在此刻:transcript 刚由 markStarted 翻出、而后端 turn.started 通知(MOCK_SLOW_TURN
+  //   下更晚)尚未确立。修复前 markStarted 不动 turn,此空窗内 running===false,按钮可点、守卫放行,
+  //   点击会误发第二次 session.start 并把 transcript 重置回欢迎态。修复后 markStarted 提交瞬间即置
+  //   running,此刻按钮已 disabled、handleAddProject/switchToProject 守卫读 turnRef 即拦。
+  //   不等 interrupt/turn.started 确立,直接在窗口内点击;force:true 绕过 actionability 等待,
+  //   把点击打到(修复后应为禁用的)钮上,精确验证「产品在竞态窗口内拒绝切换」。
+  await win.locator('[data-testid="workspace-switch"]').click({ force: true })
+
+  // 断言 1:等 turn 完整跑完(SLOW_TURN 3s 后 turn.completed → running 清 idle),期间给足时间让
+  // 任何误触发的 switchToProject 有机会发出第二次 session.start;跑完后 session.start 计数必须仍为 1。
+  await expect(win.locator('[data-testid="interrupt"]')).toHaveCount(0, { timeout: 15000 })
+  expect(startCount(), '竞态窗口内的点击不得触发第二次 session.start').toBe(1)
+  // 记录里也不应出现指向 repickDir 的 session.start(即从未走进 switchToProject)。
+  const startedWorkspaces = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean)
+    .map(l => JSON.parse(l)).filter(l => l.method === 'session.start').map(l => l.params?.workspaceDir)
+  expect(startedWorkspaces).not.toContain(repickDir)
+
+  // 断言 2:transcript 未被重置——用户气泡仍在,未回退到欢迎态。
+  await expect(win.locator('[data-testid="transcript"]')).toBeVisible()
+  await expect(win.locator('[data-testid="user-msg"]')).toHaveText('hi')
+  await expect(win.locator('text=今天做点什么？')).toHaveCount(0)
 
   await app.close()
   fs.rmSync(recordFile, { force: true })
@@ -650,6 +758,85 @@ test('编辑用户消息 → session.rewind + 新文本重发,气泡更新', asy
 
   await app.close()
   fs.rmSync(recordFile, { force: true })
+})
+
+// ---------------------------------------------------------------------------
+// Test 18b(负向,I-1): 编辑重发路径的 submit→turn.started 竞态窗口关闭验证。
+//   编辑重发走 rewindSession→truncateAtUser→addUserItem→markStarted→submitTurn(与主 submit 对称)。
+//   markStarted 提交瞬间即置 running,竞态窗口内(turn.started 尚未到达,MOCK_SLOW_TURN 放大)
+//   force 点击 workspace-switch 必须被 turnRef 守卫吞掉——session.start 计数不增。
+//   与 Task 2 修掉的 workspace-switch 负向(Test 4b)同尺寸,只是入口换成编辑重发路径。
+// ---------------------------------------------------------------------------
+
+test('编辑重发负向:竞态窗口内点击 workspace-switch 不产生第二次 session.start', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-edit-race.jsonl`)
+  const startupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-edit-race-startup-'))
+  const repickDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-edit-race-repick-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-edit-race-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_WORKSPACE: startupDir,
+      WRAITH_E2E_PICK: repickDir, // 若守卫失效,click 会走 switchToProject 发出第二次 session.start
+      WRAITH_E2E_USERDATA: userData,
+      MOCK_SESSIONS_BY_WS: '{}',
+      // MOCK_SLOW_TURN:turn.started 后停 3s,放大编辑重发 submit→turn(running)确立后的窗口;
+      // MOCK_NO_APPROVAL:不挂审批,首轮秒级完成(经 3s SLOW 延迟后 turn.completed),重发窗口稳定。
+      MOCK_SLOW_TURN: '1',
+      MOCK_NO_APPROVAL: '1',
+    },
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  const startCount = (): number => {
+    if (!fs.existsSync(recordFile)) return 0
+    return fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean)
+      .map(l => JSON.parse(l)).filter(l => l.method === 'session.start').length
+  }
+  await expect.poll(startCount, { timeout: 10000 }).toBe(1)
+
+  // 首轮完整跑完(SLOW 3s 后 turn.completed → running 清 idle;interrupt 钮消失)
+  await input.fill('原始消息')
+  await input.press('Enter')
+  await expect(win.locator('[data-testid="user-msg"]')).toHaveText('原始消息', { timeout: 10000 })
+  await expect(win.locator('[data-testid="interrupt"]')).toHaveCount(0, { timeout: 15000 })
+
+  // hover 出编辑按钮 → 内联编辑 → 保存并重发(进入 handleEditMessage)
+  await win.locator('[data-testid="user-msg"]').first().hover()
+  await win.locator('[data-testid="msg-edit"]').click()
+  const editInput = win.locator('[data-testid="msg-edit-input"]')
+  await expect(editInput).toBeVisible({ timeout: 5000 })
+  await editInput.fill('改后的消息')
+  await win.locator('[data-testid="msg-edit-save"]').click()
+
+  // ★ 竞态窗口:markStarted 已在 submitTurn 前置 running(修复后),但后端 turn.started(SLOW 3s)未到。
+  //   先等气泡翻到改后文本(markStarted+addUserItem 已生效,窗口已开),再 force 点击。
+  //   修复前 markStarted 不动 turn,此空窗内 running===false,守卫放行 → 误发第二次 session.start。
+  await expect(win.locator('[data-testid="user-msg"]').first()).toHaveText('改后的消息', { timeout: 10000 })
+  await win.locator('[data-testid="workspace-switch"]').click({ force: true })
+
+  // 等第二轮完整跑完,期间给足时间让任何误触发的 switchToProject 发出第二次 session.start。
+  await expect(win.locator('[data-testid="interrupt"]')).toHaveCount(0, { timeout: 15000 })
+  expect(startCount(), '编辑重发竞态窗口内的点击不得触发第二次 session.start').toBe(1)
+  const startedWorkspaces = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean)
+    .map(l => JSON.parse(l)).filter(l => l.method === 'session.start').map(l => l.params?.workspaceDir)
+  expect(startedWorkspaces).not.toContain(repickDir)
+
+  // 气泡仍是改后的消息,未被重置回欢迎态
+  await expect(win.locator('[data-testid="user-msg"]')).toHaveText('改后的消息')
+  await expect(win.locator('text=今天做点什么？')).toHaveCount(0)
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(startupDir, { recursive: true, force: true })
+  fs.rmSync(repickDir, { recursive: true, force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
 })
 
 // ---------------------------------------------------------------------------
@@ -1209,5 +1396,43 @@ test('T37 运行历史跳转会话(回放可见)', async () => {
   await win.locator('[data-testid="automation-run-open"]').first().click()
   await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 10000 })
   await expect(win.locator('text=之前问的问题')).toBeVisible({ timeout: 10000 }) // mock resume 回放
+  await app.close(); cleanup()
+})
+
+// ---------------------------------------------------------------------------
+// A4: 面板停留期间跑完一次运行,红点不亮(spec 验收)
+//   createAndRunTask 已打开面板并切到 runs tab。任务在面板可见期间跑到终态。
+//   AutomationsPanel 收到 runs-changed 后(80ms debounce)会重发 automationPanelOpened,
+//   把「面板可见期间到达的终态」即时标为已读 → badge 不重亮。
+//   注意留足余量:80ms debounce + panelOpened IPC 往返,用 expect.poll auto-retry。
+// ---------------------------------------------------------------------------
+
+test('A4 面板停留期间跑完运行 → 红点不亮', async () => {
+  const { app, win, cleanup } = await launchAutoApp()
+  await createAndRunTask(win, '面板内任务')
+  // 面板已打开、已切 runs;等运行到终态成功
+  await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('成功', { timeout: 15000 })
+  // 断言红点不亮:给足 80ms debounce + panelOpened 往返余量,poll 期内 badge 计数应稳定为 0。
+  await expect.poll(
+    async () => win.locator('[data-testid="nav-automations-badge"]').count(),
+    { timeout: 10000 },
+  ).toBe(0)
+  // 再稳一拍:确认不是短暂 0——短窗内复查仍为 0(亮后随事件消也算过,此处直接要求终态不亮)。
+  await expect(win.locator('[data-testid="nav-automations-badge"]')).toHaveCount(0)
+  await app.close(); cleanup()
+})
+
+// ---------------------------------------------------------------------------
+// T39: 插件面板 configError 横幅(MOCK_MCP_CONFIG_ERROR 注入)
+// ---------------------------------------------------------------------------
+
+test('T39 插件面板坏配置横幅:mcp-config-error banner 含错误文本', async () => {
+  const { app, win, cleanup } = await launchMcpApp({
+    MOCK_MCP_CONFIG_ERROR: 'mcp.json 第 3 行解析失败',
+  })
+  await win.locator('[data-testid="nav-plugins"]').click()
+  await expect(
+    win.locator('[data-testid="mcp-config-error"]')
+  ).toContainText('第 3 行', { timeout: 10000 })
   await app.close(); cleanup()
 })

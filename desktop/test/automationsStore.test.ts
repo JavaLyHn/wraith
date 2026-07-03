@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -6,7 +6,7 @@ import {
   readTasks, upsertTask, removeTask,
   readRuns, putRun,
   readLastPanelOpenedAt, writeLastPanelOpenedAt, badgeVisible,
-  sweepNonTerminalRuns,
+  sweepNonTerminalRuns, upsertTaskFromRenderer,
 } from '../src/main/automationsStore'
 import type { AutomationTask, AutomationRun } from '../src/shared/types'
 
@@ -75,8 +75,12 @@ describe('automationsStore', () => {
   it('坏 JSON 按空处理不崩', () => {
     fs.writeFileSync(path.join(dir, 'automations.json'), 'not json', 'utf8')
     fs.writeFileSync(path.join(dir, 'runs.json'), '[broken', 'utf8')
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     expect(readTasks(dir)).toEqual([])
     expect(readRuns(dir)).toEqual([])
+    expect(readLastPanelOpenedAt(dir)).toBe(0)                              // 坏文件按缺省
+    expect(warnSpy.mock.calls.some(c => String(c[0]).includes('[automations]'))).toBe(true)
+    warnSpy.mockRestore()
   })
 
   it('sweepNonTerminalRuns:仅非终态被改为 interrupted,终态原样', () => {
@@ -102,6 +106,15 @@ describe('automationsStore', () => {
     expect(byId.get('r4')!.status).toBe('failed')
     expect(byId.get('r5')!.status).toBe('interrupted')
     expect(byId.get('r5')!.endedAt).toBe(4000)
+  })
+
+  it('upsertTaskFromRenderer 保留已存在任务的 lastFiredAt(锚点归调度器)', () => {
+    upsertTask(dir, task('a', { lastFiredAt: 111 }))
+    upsertTask(dir, task('a', { lastFiredAt: 999 }))          // 调度器推进锚点
+    upsertTaskFromRenderer(dir, task('a', { lastFiredAt: 111 }))  // renderer 陈旧快照回写
+    expect(readTasks(dir).find(t => t.id === 'a')!.lastFiredAt).toBe(999)
+    upsertTaskFromRenderer(dir, task('b', { lastFiredAt: 5 }))    // 新任务原样
+    expect(readTasks(dir).find(t => t.id === 'b')!.lastFiredAt).toBe(5)
   })
 
   it('sweepNonTerminalRuns:无非终态则不改动(全终态原样)', () => {
