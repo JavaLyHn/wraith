@@ -443,13 +443,11 @@ public class McpServerManager implements AutoCloseable {
             registerNotificationHandlers(server, client);
             List<McpToolDescriptor> tools = buildToolList(server, client);
             if (closed) return;
-            // closed 双检 + 工具注册 均在锁点内完成,与 reattach(synchronized) 互斥:
-            // 保证注册时刻读取的是最新 toolRegistry,消除在途 READY 与 reattach 间的竞态窗。
-            registerToolsLocked(server, client, tools);
-            server.client(client);
-            server.tools(tools);
-            server.markStarted();
-            setStatus(server, McpServerStatus.READY);
+            // 注册、tools()、markStarted()、setStatus(READY) 四步纳入同一锁,
+            // 与 reattach(synchronized) 互斥,消除次级竞态窗:
+            // 保证注册时刻读取的是最新 toolRegistry,且 reattach 若在注册后抢锁
+            // 能看到 server 已 READY 且 tools 非空,从而正确搬迁工具。
+            finalizeReadyLocked(server, client, tools);
         } catch (Exception e) {
             server.close();
             server.errorMessage(e.getMessage());
@@ -458,13 +456,34 @@ public class McpServerManager implements AutoCloseable {
     }
 
     /**
-     * 在 synchronized(this) 内读取最新 {@code toolRegistry} 并注册工具。
-     * 与 {@link #reattach(ToolRegistry)} 互斥,确保注册动作始终落进当前 registry。
+     * 在 {@code synchronized(this)} 内原子完成 READY 状态的最后四步:
+     * <ol>
+     *   <li>closed 双检——若 manager 已关闭则直接返回,不做任何状态修改。</li>
+     *   <li>经 volatile {@code this.toolRegistry} 注册工具——与 {@link #reattach} 互斥,
+     *       保证读到的始终是最新 registry。</li>
+     *   <li>{@code server.tools(tools)} + {@code server.client(client)} + {@code server.markStarted()}
+     *       ——reattach 循环依赖 {@code server.tools().isEmpty()} 判据,必须在锁内赋值以保证可见性。</li>
+     *   <li>{@code setStatus(READY)}——在锁内触发 statusListener 链无死锁,前提:listener 实现
+     *       (AppServerMcp.pushStatus → emitMcpStatus → writer.notify) 不回抢 manager 锁。
+     *       若未来 listener 变更引入对 manager 的再入,须在此处重审。</li>
+     * </ol>
+     *
+     * <p>四步原子化后的交错推演:
+     * <ul>
+     *   <li>若 reattach 先获锁:写 fresh → 释放 → worker 获锁,读到 fresh,注册进新 registry,
+     *       置 READY。✓</li>
+     *   <li>若 worker 先获锁:注册进当前 registry(可能是 old),置 READY(含 tools 非空)→ 释放 →
+     *       reattach 获锁,该 server 已 READY 且 tools 非空,覆盖注册进 fresh。✓</li>
+     * </ul>
      */
-    private synchronized void registerToolsLocked(McpServer server, McpClient client, List<McpToolDescriptor> tools) {
+    private synchronized void finalizeReadyLocked(McpServer server, McpClient client, List<McpToolDescriptor> tools) {
         if (closed) return;
         // 重新读取 volatile toolRegistry(与 reattach 同一锁,所见值必然是最新的)
         toolRegistry.replaceMcpToolOutputsForServer(server.name(), tools, invokerFactory(server, client));
+        server.client(client);
+        server.tools(tools);
+        server.markStarted();
+        setStatus(server, McpServerStatus.READY);
     }
 
     private List<McpToolDescriptor> buildToolList(McpServer server, McpClient client) throws IOException {

@@ -360,18 +360,23 @@ class McpServerManagerTest {
      */
     @Test
     void inflightReadyRegistersIntoNewRegistryAfterReattach() throws Exception {
-        // 慢 server:initialize 延迟 800ms 应答
+        // 慢 server:initialize 立即应答,tools/list 延迟 800ms。
+        // 这让 worker 越过 initialize(握手完成)、卡在 listTools(尚未进锁),
+        // 令 startAll(maxWait=100ms) 返回时 server 处于"已过 initialize、卡在 listTools"窗口,
+        // 对 registry 切换时序的覆盖比"initialize 延迟"更强:reattach 与 finalizeReadyLocked 的竞争更直接。
         webServer.enqueue(new MockResponse()
                 .setHeader("Content-Type", "application/json")
                 .setHeader("Mcp-Session-Id", "session-slow")
-                .setBody("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-03-26\"}}")
-                .setBodyDelay(800, TimeUnit.MILLISECONDS));
+                .setBody("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-03-26\"}}"));
         // initialized 通知响应
         webServer.enqueue(new MockResponse()
                 .setHeader("Content-Type", "application/json")
                 .setBody(""));
-        // tools/list 响应
-        enqueueToolsList(toolJson("fast-tool", "A fast tool"));
+        // tools/list 延迟 800ms 应答——worker 卡在此处时 reattach 发生,直接覆盖 finalizeReadyLocked 竞态窗
+        webServer.enqueue(new MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[" + toolJson("fast-tool", "A fast tool") + "]}}")
+                .setBodyDelay(800, TimeUnit.MILLISECONDS));
 
         loadServersFromMap(Map.of("slow", httpConfig(webServer)));
 
@@ -416,18 +421,11 @@ class McpServerManagerTest {
         }
     }
 
-    /** 统计 registry 中前缀匹配的工具数量(通过 hasTool 逐一探测 server.tools()) */
+    /** 统计 registry 中前缀匹配的工具数量,通过公共 API getToolDefinitions() */
     private static long countToolsWithPrefix(ToolRegistry reg, String prefix) {
-        // ToolRegistry 没有直接枚举 API;使用反射读 tools map
-        try {
-            java.lang.reflect.Field f = ToolRegistry.class.getDeclaredField("tools");
-            f.setAccessible(true);
-            @SuppressWarnings("unchecked")
-            Map<String, ?> tools = (Map<String, ?>) f.get(reg);
-            return tools.keySet().stream().filter(k -> k.startsWith(prefix)).count();
-        } catch (Exception e) {
-            throw new RuntimeException("无法读取 ToolRegistry.tools", e);
-        }
+        return reg.getToolDefinitions().stream()
+                .filter(t -> t.name().startsWith(prefix))
+                .count();
     }
 
     // ---- Phase E-1 Task 1 辅助方法 ----
