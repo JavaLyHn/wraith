@@ -45,6 +45,16 @@ describe('filterMentionItems', () => {
   it('空 query 列全部 server', () => {
     expect(filterMentionItems(RES, '').map(i => i.label)).toEqual(['github', 'fs'])
   })
+  it('uri 为空的资源不进入 @ 候选(不可展开)', () => {
+    const items = filterMentionItems([
+      { server: 's', uri: 'file:///a.txt', name: 'a' } as McpResourceView,
+      { server: 's', uri: '', name: 'ghost' } as McpResourceView,
+      { server: 's', uri: '   ', name: 'blank' } as McpResourceView,
+    ], 's:')
+    expect(items).toHaveLength(1)
+    expect(items[0]!.label).toBe('file:///a.txt')
+    expect(items[0]!.hint).toBe('a')
+  })
 })
 
 describe('insertMention', () => {
