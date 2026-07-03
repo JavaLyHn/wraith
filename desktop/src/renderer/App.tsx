@@ -9,6 +9,7 @@ import {
   clearApproval,
   setModel,
   markStarted,
+  markResumed,
   setApprovalMode,
   setWorkspace,
   resetSession,
@@ -38,6 +39,7 @@ type LocalAction =
   | { type: 'clearApproval' }
   | { type: 'setModel'; model: string }
   | { type: 'markStarted' }
+  | { type: 'markResumed' }
   | { type: 'setApprovalMode'; mode: 'ask' | 'auto' }
   | { type: 'setWorkspace'; ws: string }
   | { type: 'resetSession'; ws: string }
@@ -62,6 +64,9 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   }
   if ('type' in action && action.type === 'markStarted') {
     return markStarted(state)
+  }
+  if ('type' in action && action.type === 'markResumed') {
+    return markResumed(state)
   }
   if ('type' in action && action.type === 'setApprovalMode') {
     return setApprovalMode(state, action.mode)
@@ -123,6 +128,13 @@ export default function App(): JSX.Element {
   const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
+  // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
+  // 消除「dispatch(markStarted) → 组件重渲染」之间的闭包陈旧:markStarted 已在提交瞬间置 running,
+  // 但用旧 state.turn 闭包的回调直到下次重渲染前读到的仍是 'idle',守卫会漏放行;改读 ref 即时可见。
+  const turnRef = useRef(state.turn)
+  useEffect(() => {
+    turnRef.current = state.turn
+  }, [state.turn])
 
   // Define fetchMcpResources before onEvent effect so it can be referenced in deps
   const fetchMcpResources = useCallback(async () => {
@@ -226,7 +238,7 @@ export default function App(): JSX.Element {
       const { sessionId, messages } = await window.wraith.resumeSession(id)
       dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
       dispatch({ type: 'setSessionId', sessionId })
-      dispatch({ type: 'markStarted' })
+      dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
       void fetchSessions()
     } catch (err) {
       console.error('[wraith] resumeSession error:', err)
@@ -308,6 +320,10 @@ export default function App(): JSX.Element {
       await window.wraith.submitTurn(text)
     } catch (err) {
       console.error('[wraith] submitTurn error:', err)
+      // 失败路径:markStarted 已提前置 turn='running',但本地 RPC 失败(后端死/拒绝)时
+      // 不会再有 turn.started/turn.completed/turn.failed 通知到达来清 turn,会永久卡 running。
+      // 复用现有 turn.failed reducer 动作把 turn 归 idle(不新造事件类型,与现有风格一致)。
+      dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
     }
   }, [inputValue, state.turn])
 
@@ -443,7 +459,7 @@ export default function App(): JSX.Element {
   // ── project switch(激活 + 自动恢复最近会话)─────────────────────────────
   const switchToProject = useCallback(
     async (projectPath: string): Promise<boolean> => {
-      if (state.turn === 'running') return false
+      if (turnRef.current === 'running') return false // 读即时快照,避免闭包陈旧漏放行
       try {
         const { ok } = await window.wraith.activateProject(projectPath)
         if (!ok) {
@@ -460,7 +476,7 @@ export default function App(): JSX.Element {
           const { sessionId, messages } = await window.wraith.resumeSession(sessions[0]!.id)
           dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
           dispatch({ type: 'setSessionId', sessionId })
-          dispatch({ type: 'markStarted' })
+          dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
         }
         void fetchProjects() // lastUsedAt 刷新 → 浮顶
         void fetchMcp()
@@ -472,12 +488,12 @@ export default function App(): JSX.Element {
         return false
       }
     },
-    [state.turn, fetchProjects, fetchMcp, fetchMcpResources],
+    [fetchProjects, fetchMcp, fetchMcpResources], // running 守卫改读 turnRef,不再依赖 state.turn
   )
 
   // 添加项目(=Composer 重选目录汇流入口):选目录 → 入列表 → 切换
   const handleAddProject = useCallback(async () => {
-    if (state.turn === 'running') return
+    if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
     try {
       const picked = await window.wraith.addProject()
       if (!picked) return
@@ -486,7 +502,7 @@ export default function App(): JSX.Element {
     } catch (err) {
       console.error('[wraith] addProject error:', err)
     }
-  }, [state.turn, state.workspace, fetchProjects, switchToProject])
+  }, [state.workspace, fetchProjects, switchToProject]) // running 守卫改读 turnRef,不再依赖 state.turn
 
   const handleRemoveProject = useCallback(
     async (projectPath: string) => {

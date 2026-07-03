@@ -289,9 +289,28 @@ export function setModel(state: TranscriptState, model: string): TranscriptState
   return { ...state, model }
 }
 
-/** 前门：标记会话已开始（首条消息发出时同步调用）。 */
+/**
+ * 前门：标记会话已开始（首条消息发出时同步调用）。
+ *
+ * 同步置 turn='running'：submit→turn.started 通知之间存在数百 ms~秒级空窗，
+ * 若仅翻 hasStarted 而不动 turn，此空窗内 running 仍为 false，Composer 的
+ * workspace-switch(disabled={running}) 可点、App 的 running 守卫放行，构成
+ * submit→turn.started 竞态窗口。这里在提交瞬间即置 running，从源头关闭该窗口，
+ * 让 UI 全链(禁切按钮 + 守卫)即时生效；后端 turn.started 到达时仍幂等置 running。
+ */
 export function markStarted(state: TranscriptState): TranscriptState {
-  return { ...state, hasStarted: true }
+  return { ...state, hasStarted: true, turn: 'running' }
+}
+
+/**
+ * 进入对话态但不置 running —— resume/切换会话专用。
+ *
+ * 与 markStarted 的区别:markStarted 语义是「一个 turn 正在发起」(提交路径),会置 running;
+ * 而 resume 出来的会话是历史静态回放、并无 turn 在跑,只需翻 hasStarted 展示 transcript,
+ * turn 必须显式保持 idle(否则切换/选会话后按钮被误禁,项目切换器/新建会话点不动)。
+ */
+export function markResumed(state: TranscriptState): TranscriptState {
+  return { ...state, hasStarted: true, turn: 'idle' }
 }
 
 /** 设置审批模式（UI 开关驱动）。 */
@@ -304,13 +323,19 @@ export function setWorkspace(state: TranscriptState, ws: string): TranscriptStat
   return { ...state, workspace: ws }
 }
 
-/** 重选目录后重置为新会话（清空 transcript，回欢迎态，审批归 ask；保留 model/connection）。 */
+/**
+ * 重选目录后重置为新会话（清空 transcript，回欢迎态，审批归 ask；保留 model/connection）。
+ *
+ * 兜底把 turn 归 'idle'：markStarted 现在会在提交瞬间置 running，切换会话/重选目录
+ * 若不清 turn，会把上一会话的 running 态悬挂到新会话（新会话本无 turn 在跑）。
+ */
 export function resetSession(state: TranscriptState, ws: string): TranscriptState {
   return {
     ...state,
     items: [],
     _messageOpen: false,
     hasStarted: false,
+    turn: 'idle',
     approvalMode: 'ask',
     pendingApproval: null,
     workspace: ws,

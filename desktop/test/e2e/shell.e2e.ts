@@ -218,6 +218,89 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
 })
 
 // ---------------------------------------------------------------------------
+// Test 4b(负向）: 竞态窗口的产品级关闭验证 —— submit 后立刻(turn.started 确立前,
+//   即原 submit→turn.started 竞态窗口内)点击 workspace-switch,不得产生第二次 session.start
+//   且不得重置 transcript。
+//
+// 背景(清债波 Task 2 产品竞态,评审确认):旧行为里 markStarted 只翻 hasStarted、不动 turn,
+//   turn 仅在后端 turn.started 通知到达才置 running。submit→turn.started 之间 turn==='idle',
+//   此空窗内 Composer 的 workspace-switch(disabled={running}) 可点、App 的 running 守卫放行,
+//   会误发第二次 session.start 并把 transcript 重置回欢迎态。真实后端首 token 数百 ms~秒级,用户可踩。
+// 修复(源头关闭):markStarted 提交瞬间即置 turn='running'(按钮即禁 + 守卫即拦),
+//   turnRef 消除守卫的闭包陈旧。本用例用 MOCK_SLOW_TURN 放大窗口(turn.started 后停 3s),
+//   在 running 已确立、turn 远未跑完的窗口内点击,断言点击被彻底吞掉。
+// ---------------------------------------------------------------------------
+
+test('workspace switch 负向:submit 后竞态窗口内点击不产生第二次 session.start 且不重置 transcript', async () => {
+  const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-race.jsonl`)
+  const startupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-race-startup-'))
+  const repickDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-race-repick-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-race-'))
+  const app = await electron.launch({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_RECORD: recordFile,
+      WRAITH_E2E_WORKSPACE: startupDir,
+      WRAITH_E2E_PICK: repickDir, // 若守卫失效,click 会走 switchToProject 发出第二次 session.start
+      WRAITH_E2E_USERDATA: userData,
+      MOCK_SESSIONS_BY_WS: '{}',
+      // MOCK_SLOW_TURN:turn.started 后停 3s,放大 submit→turn(running)确立后的窗口;
+      // MOCK_NO_APPROVAL:不挂审批,窗口内 running 稳定为 true,专测「running 中禁切」。
+      MOCK_SLOW_TURN: '1',
+      MOCK_NO_APPROVAL: '1',
+    },
+  })
+  const win = await app.firstWindow()
+  const input = win.locator('[data-testid="input"]')
+  await expect(input).toBeVisible({ timeout: 15000 })
+
+  // 启动那一次 session.start 已发出;记下基线(应为 1)。
+  const startCount = (): number => {
+    if (!fs.existsSync(recordFile)) return 0
+    return fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean)
+      .map(l => JSON.parse(l)).filter(l => l.method === 'session.start').length
+  }
+  await expect.poll(startCount, { timeout: 10000 }).toBe(1)
+
+  // 提交进入对话态。transcript 可见由本地 markStarted 驱动(提交瞬间,与后端无关)。
+  await input.fill('hi')
+  await input.press('Enter')
+  await expect(win.locator('[data-testid="transcript"]')).toBeVisible({ timeout: 15000 })
+  await expect(win.locator('[data-testid="user-msg"]')).toHaveText('hi', { timeout: 10000 })
+
+  // ★ 竞态窗口就在此刻:transcript 刚由 markStarted 翻出、而后端 turn.started 通知(MOCK_SLOW_TURN
+  //   下更晚)尚未确立。修复前 markStarted 不动 turn,此空窗内 running===false,按钮可点、守卫放行,
+  //   点击会误发第二次 session.start 并把 transcript 重置回欢迎态。修复后 markStarted 提交瞬间即置
+  //   running,此刻按钮已 disabled、handleAddProject/switchToProject 守卫读 turnRef 即拦。
+  //   不等 interrupt/turn.started 确立,直接在窗口内点击;force:true 绕过 actionability 等待,
+  //   把点击打到(修复后应为禁用的)钮上,精确验证「产品在竞态窗口内拒绝切换」。
+  await win.locator('[data-testid="workspace-switch"]').click({ force: true })
+
+  // 断言 1:等 turn 完整跑完(SLOW_TURN 3s 后 turn.completed → running 清 idle),期间给足时间让
+  // 任何误触发的 switchToProject 有机会发出第二次 session.start;跑完后 session.start 计数必须仍为 1。
+  await expect(win.locator('[data-testid="interrupt"]')).toHaveCount(0, { timeout: 15000 })
+  expect(startCount(), '竞态窗口内的点击不得触发第二次 session.start').toBe(1)
+  // 记录里也不应出现指向 repickDir 的 session.start(即从未走进 switchToProject)。
+  const startedWorkspaces = fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean)
+    .map(l => JSON.parse(l)).filter(l => l.method === 'session.start').map(l => l.params?.workspaceDir)
+  expect(startedWorkspaces).not.toContain(repickDir)
+
+  // 断言 2:transcript 未被重置——用户气泡仍在,未回退到欢迎态。
+  await expect(win.locator('[data-testid="transcript"]')).toBeVisible()
+  await expect(win.locator('[data-testid="user-msg"]')).toHaveText('hi')
+  await expect(win.locator('text=今天做点什么？')).toHaveCount(0)
+
+  await app.close()
+  fs.rmSync(recordFile, { force: true })
+  fs.rmSync(startupDir, { recursive: true, force: true })
+  fs.rmSync(repickDir, { recursive: true, force: true })
+  fs.rmSync(userData, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
 // Test 5: welcome empty state → submit → transcript transition
 // ---------------------------------------------------------------------------
 
