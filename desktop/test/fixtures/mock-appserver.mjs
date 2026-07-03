@@ -45,7 +45,8 @@ function debugLog(dir, method) {
 let sessionCounter = 0
 let lastWorkspaceDir = null
 let sessionId = 'sess_mock_0'
-let turnId = 'turn_1'
+let turnSeq = 0
+let turnId = ''
 let pendingApproval = false
 
 const mockMcp = (() => {
@@ -253,6 +254,8 @@ async function handleRequest(req) {
     }
 
     case 'turn.submit': {
+      // Assign a fresh turnId for this turn; all notifications in this turn share it
+      turnId = `turn_${++turnSeq}`
       // Immediately reply with turnId + status, then stream notifications
       reply(id, { turnId, status: 'running' })
       // Fire-and-forget async sequence
@@ -314,7 +317,7 @@ async function handleRequest(req) {
     }
 
     case 'mcp.list': {
-      reply(id, { servers: mcpServers })
+      reply(id, { servers: mcpServers, ...(process.env['MOCK_MCP_CONFIG_ERROR'] ? { configError: process.env['MOCK_MCP_CONFIG_ERROR'] } : {}) })
       break
     }
     case 'mcp.enable':

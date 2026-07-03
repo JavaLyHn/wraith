@@ -1319,3 +1319,18 @@ test('T37 运行历史跳转会话(回放可见)', async () => {
   await expect(win.locator('text=之前问的问题')).toBeVisible({ timeout: 10000 }) // mock resume 回放
   await app.close(); cleanup()
 })
+
+// ---------------------------------------------------------------------------
+// T39: 插件面板 configError 横幅(MOCK_MCP_CONFIG_ERROR 注入)
+// ---------------------------------------------------------------------------
+
+test('T39 插件面板坏配置横幅:mcp-config-error banner 含错误文本', async () => {
+  const { app, win, cleanup } = await launchMcpApp({
+    MOCK_MCP_CONFIG_ERROR: 'mcp.json 第 3 行解析失败',
+  })
+  await win.locator('[data-testid="nav-plugins"]').click()
+  await expect(
+    win.locator('[data-testid="mcp-config-error"]')
+  ).toContainText('第 3 行', { timeout: 10000 })
+  await app.close(); cleanup()
+})

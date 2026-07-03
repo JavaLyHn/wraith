@@ -78,7 +78,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
       </div>
 
       {configError && (
-        <div className="border-b border-border bg-danger/10 px-4 py-2 text-xs text-danger">
+        <div data-testid="mcp-config-error" className="border-b border-border bg-danger/10 px-4 py-2 text-xs text-danger">
           配置文件解析失败:{configError}
         </div>
       )}
