@@ -476,12 +476,15 @@ public class McpServerManager implements AutoCloseable {
             server.errorMessage(null);
         }
         // ── 慢初始化:锁外执行(npx/uvx 冷拉期间 reloadFromConfig/reattach 可正常获锁) ──
+        // client 在 try 外声明:若 initialize() 成功但后续步骤(buildToolList 等)抛异常,
+        // catch 块可关闭已建连的本地 client,防止子进程/HTTP 会话泄漏(T5 review 发现的错误路径)。
+        McpClient client = null;
         try {
             // 在单 server 启动路径里展开 ${VAR} 与校验 transport，
             // 单个失败仅标 ERROR，不会阻塞其他 server。
             configLoader.prepare(server.config());
             McpTransport transport = createTransport(server.config());
-            McpClient client = new McpClient(server.name(), transport);
+            client = new McpClient(server.name(), transport);
             client.initialize();
             // closed 再校验(第一道):initialize 期间若 manager 被 close/换工作区,
             // 必须立即关闭已建连的 client 防子进程/HTTP 会话泄漏,然后退出。
@@ -498,7 +501,13 @@ public class McpServerManager implements AutoCloseable {
             // 能看到 server 已 READY 且 tools 非空,从而正确搬迁工具。
             finalizeReadyLocked(server, client, tools);
         } catch (Exception e) {
+            // server.close() 清理 server.client()(若 finalizeReadyLocked 已赋值)。
+            // 但若异常发生在 initialize() 之后、finalizeReadyLocked 之前,
+            // 本地 client 变量从未赋给 server,server.close() 不会关闭它 → 需额外关闭。
+            // McpClient.close() 是幂等的(transport.close() 检查 sessionId 是否空后再发 DELETE),
+            // 即便 server.close() 与 client.close() 操作相同底层连接也安全。
             server.close();
+            if (client != null) { client.close(); }
             server.errorMessage(e.getMessage());
             setStatus(server, McpServerStatus.ERROR);
         }
@@ -733,8 +742,29 @@ public class McpServerManager implements AutoCloseable {
         return (minutes / 60) + "h";
     }
 
+    /**
+     * 关闭所有 server,注销工具并终止子进程/HTTP 会话。
+     *
+     * <h3>锁不变量</h3>
+     * <p>{@code synchronized} 使 {@code close()} 与其他生命周期方法(enable/disable/restart/
+     * reload/reattach/finalizeReadyLocked)锁语义对称。
+     *
+     * <p>当前调用方({@code AppServerMcp.ensureFor},自身 synchronized)在调用前已通过
+     * {@code shutdownNow} 先行串行化,{@code closed} volatile 也在每个入口再校验——
+     * 加锁属防御性硬化,为未来调用方兜底。
+     *
+     * <h3>锁顺序与死锁分析</h3>
+     * <p>持锁期间执行:
+     * <ol>
+     *   <li>{@code unregisterTools}:获取 ToolRegistry monitor(manager-monitor → registry-monitor)。
+     *       此顺序与 disable/finalizeReadyLocked/reattach 相同,无反转。</li>
+     *   <li>{@code server.close()}:best-effort I/O(HTTP DELETE,5s 超时;stdio stdin EOF + 进程销毁)。
+     *       持管理器锁期间进行 I/O 会短暂阻塞其他等待者,但 shutdown 是终态,
+     *       不存在"等待者持有 server 资源并反向等待管理器锁"的场景,故无真死锁。</li>
+     * </ol>
+     */
     @Override
-    public void close() {
+    public synchronized void close() {
         closed = true;
         for (McpServer server : servers.values()) {
             unregisterTools(server);

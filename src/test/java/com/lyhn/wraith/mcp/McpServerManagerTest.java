@@ -773,4 +773,84 @@ class McpServerManagerTest {
         assertFalse(registry.hasTool("mcp__demo__echo2"),
                 "manager.close() 后 list_changed 不应向 registry 写入新工具");
     }
+
+    // ---- Task 7: start() catch 块关闭本地 client(错误路径泄漏修复)红绿测试 ----
+
+    /**
+     * T7 FOLDED 红绿测试:initialize() 成功但 buildToolList(tools/list)失败时,本地 client 被关闭。
+     *
+     * <p>场景:
+     * <ol>
+     *   <li>initialize 正常返回,带 sessionId(使 transport.close() 会发 DELETE)。</li>
+     *   <li>initialized 通知响应正常。</li>
+     *   <li>tools/list 返回 400 → buildToolList 内 client.listTools() 抛 IOException。</li>
+     *   <li>start() 的 catch 块:修复前仅 server.close()(此时 server.client()==null,无 DELETE);
+     *       修复后追加 client.close() → DELETE 被发送。</li>
+     *   <li>断言:MockWebServer 收到 DELETE(client.close() 被调用)。</li>
+     * </ol>
+     *
+     * <p>RED 观察(修复前行为):去掉 catch 中的 {@code if (client != null) \{ client.close(); \}},
+     * 则 DELETE 请求永不发送,awaitDeleteRequest 超时,断言失败。
+     * 实测 RED:去掉修复行后,await 5s 无 DELETE 收到,断言
+     * "buildToolList 失败后 client 应被关闭" 失败。
+     *
+     * <p>GREEN:保留修复行,DELETE 在 5s 内到达,断言通过。
+     */
+    @Test
+    void buildToolListFailureAfterInitializeDoesNotLeakClient() throws Exception {
+        // Dispatcher:initialize 带 sessionId;initialized 通知 200;tools/list 返 400
+        webServer.setDispatcher(new Dispatcher() {
+            private final java.util.concurrent.atomic.AtomicInteger postCount =
+                    new java.util.concurrent.atomic.AtomicInteger(0);
+
+            @Override
+            public MockResponse dispatch(RecordedRequest request) {
+                // DELETE = client.close() best-effort — 返回 200
+                if ("DELETE".equals(request.getMethod())) {
+                    return new MockResponse().setResponseCode(200);
+                }
+                int count = postCount.incrementAndGet();
+                if (count == 1) {
+                    // initialize 响应:带 sessionId,transport 记录后 close() 才发 DELETE
+                    return new MockResponse()
+                            .setHeader("Content-Type", "application/json")
+                            .setHeader("Mcp-Session-Id", "session-buildtool-leak")
+                            .setBody("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-03-26\"}}");
+                }
+                if (count == 2) {
+                    // initialized 通知:200 空响应
+                    return new MockResponse()
+                            .setHeader("Content-Type", "application/json")
+                            .setBody("");
+                }
+                // tools/list(及任何后续请求):400 → buildToolList 抛 IOException → catch 触发
+                return new MockResponse().setResponseCode(400).setBody("bad request");
+            }
+        });
+
+        loadServersFromMap(Map.of("leak2", httpConfig(webServer)));
+
+        // startAll 同步阻塞直到 server 进入 ERROR(400 响应立即返回,不需要后台线程)
+        manager.startAll();
+
+        McpServer server = manager.servers().iterator().next();
+        assertEquals(McpServerStatus.ERROR, server.status(),
+                "tools/list 400 后 server 应为 ERROR,实际: " + server.status()
+                        + (server.errorMessage() == null ? "" : " — " + server.errorMessage()));
+
+        // 修复后:catch 中 client.close() 应发送 DELETE 关闭已建连 session
+        // 等待最多 5s 轮询 DELETE 请求
+        long deadline = System.currentTimeMillis() + 5000;
+        boolean deleteReceived = false;
+        while (System.currentTimeMillis() < deadline) {
+            RecordedRequest req = webServer.takeRequest(100, TimeUnit.MILLISECONDS);
+            if (req != null && "DELETE".equals(req.getMethod())) {
+                deleteReceived = true;
+                break;
+            }
+        }
+        assertTrue(deleteReceived,
+                "buildToolList 失败后 client 应被关闭(期待 DELETE 请求)。" +
+                "RED:去掉 catch 中 client.close() 则不发 DELETE。");
+    }
 }
