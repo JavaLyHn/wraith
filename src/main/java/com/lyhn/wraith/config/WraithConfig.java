@@ -22,6 +22,7 @@ public class WraithConfig {
 
     private String defaultProvider = "glm";
     private Map<String, ProviderConfig> providers = new LinkedHashMap<>();
+    private GatewayConfig gateway;
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ProviderConfig {
@@ -54,10 +55,28 @@ public class WraithConfig {
         public void setMaxTokens(int maxTokens) { this.maxTokens = maxTokens; }
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class GatewayConfig {
+        private GatewayQqConfig qq;
+        public GatewayQqConfig getQq() { return qq; }
+        public void setQq(GatewayQqConfig qq) { this.qq = qq; }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class GatewayQqConfig {
+        private String appId, clientSecret, ownerOpenid, workspace;
+        public String getAppId() { return appId; }               public void setAppId(String v){ appId=v; }
+        public String getClientSecret() { return clientSecret; } public void setClientSecret(String v){ clientSecret=v; }
+        public String getOwnerOpenid() { return ownerOpenid; }   public void setOwnerOpenid(String v){ ownerOpenid=v; }
+        public String getWorkspace() { return workspace; }       public void setWorkspace(String v){ workspace=v; }
+    }
+
     public String getDefaultProvider() { return defaultProvider; }
     public void setDefaultProvider(String defaultProvider) { this.defaultProvider = defaultProvider; }
     public Map<String, ProviderConfig> getProviders() { return providers; }
     public void setProviders(Map<String, ProviderConfig> providers) { this.providers = providers; }
+    public GatewayConfig getGateway() { return gateway; }
+    public void setGateway(GatewayConfig gateway) { this.gateway = gateway; }
 
     public String getApiKey(String provider) {
         ProviderConfig providerConfig = providers.get(provider);
