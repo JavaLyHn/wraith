@@ -2,6 +2,7 @@ package com.lyhn.wraith.runtime.appserver;
 
 import com.lyhn.wraith.mcp.McpServer;
 import com.lyhn.wraith.mcp.McpServerManager;
+import com.lyhn.wraith.mcp.McpServerStatus;
 import com.lyhn.wraith.mcp.config.McpServerConfig;
 import com.lyhn.wraith.tool.ToolRegistry;
 import org.junit.jupiter.api.Test;
@@ -11,6 +12,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -154,5 +156,104 @@ class AppServerMcpTest {
         Map<String, Object> result = mcp.list();
         assertNotNull(result.get("configError"),
                 "坏 JSON 项目级 mcp.json 应令 list() 返回附 configError 字段,实际: " + result);
+    }
+
+    // ── Task 3: enable/restart 异步化 ────────────────────────────────────────
+
+    /**
+     * 慢 Manager:enable/restart 模拟 3s 阻塞(握手前 sleep),用于证明异步化前后行为差异。
+     * servers() 中含一个 "slow" server,status 初始 DISABLED。
+     */
+    static class SlowFakeManager extends FakeManager {
+        private final McpServer slowServer;
+
+        SlowFakeManager(ToolRegistry r, Path p) {
+            super(r, p);
+            McpServerConfig cfg = new McpServerConfig();
+            cfg.setCommand("true");
+            slowServer = new McpServer("slow", cfg);
+            slowServer.status(McpServerStatus.DISABLED);
+        }
+
+        @Override public McpServer server(String name) {
+            return "slow".equals(name) ? slowServer : null;
+        }
+
+        @Override public Collection<McpServer> servers() {
+            List<McpServer> list = new ArrayList<>();
+            list.add(slowServer);
+            return list;
+        }
+
+        @Override public synchronized String enable(String name) {
+            if (!"slow".equals(name)) return "未找到 MCP server: " + name;
+            try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            slowServer.status(McpServerStatus.READY);
+            return "ok";
+        }
+
+        @Override public synchronized String restart(String name) {
+            if (!"slow".equals(name)) return "未找到 MCP server: " + name;
+            try { Thread.sleep(3000); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+            slowServer.status(McpServerStatus.READY);
+            return "ok";
+        }
+    }
+
+    /** 轮询直到 manager.server(name).status() == expected,超时则 fail。 */
+    private static void awaitStatus(AppServerMcp mcp, String name, McpServerStatus expected, long timeoutMs)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        while (System.currentTimeMillis() < deadline) {
+            McpServerManager m = mcp.manager();
+            if (m != null) {
+                McpServer s = m.server(name);
+                if (s != null && s.status() == expected) return;
+            }
+            Thread.sleep(50);
+        }
+        McpServerManager m = mcp.manager();
+        McpServerStatus actual = m != null && m.server(name) != null ? m.server(name).status() : null;
+        fail("awaitStatus 超时: 期望 " + name + " 状态 " + expected + ",实际 " + actual);
+    }
+
+    @Test
+    void enableReturnsBeforeSlowServerReady(@TempDir Path ws) throws Exception {
+        AppServerMcp mcp = new AppServerMcp((reg, dir) -> new SlowFakeManager(reg, dir));
+        mcp.ensureFor(ws.toString(), registry(ws), null);
+
+        long t0 = System.nanoTime();
+        mcp.enable("slow");
+        long elapsedMs = (System.nanoTime() - t0) / 1_000_000;
+
+        assertTrue(elapsedMs < 1000, "enable 阻塞了 " + elapsedMs + "ms,应小于 1000ms");
+        awaitStatus(mcp, "slow", McpServerStatus.READY, 10_000);
+    }
+
+    @Test
+    void restartReturnsBeforeSlowServerReady(@TempDir Path ws) throws Exception {
+        AppServerMcp mcp = new AppServerMcp((reg, dir) -> new SlowFakeManager(reg, dir));
+        mcp.ensureFor(ws.toString(), registry(ws), null);
+
+        long t0 = System.nanoTime();
+        mcp.restart("slow");
+        long elapsedMs = (System.nanoTime() - t0) / 1_000_000;
+
+        assertTrue(elapsedMs < 1000, "restart 阻塞了 " + elapsedMs + "ms,应小于 1000ms");
+        awaitStatus(mcp, "slow", McpServerStatus.READY, 10_000);
+    }
+
+    @Test
+    void slowEnableDoesNotBlockOtherRpc(@TempDir Path ws) throws Exception {
+        AppServerMcp mcp = new AppServerMcp((reg, dir) -> new SlowFakeManager(reg, dir));
+        mcp.ensureFor(ws.toString(), registry(ws), null);
+
+        mcp.enable("slow");                             // 3s 慢启动在途
+
+        long t0 = System.nanoTime();
+        Map<String, Object> r = mcp.list();             // 另一个 MCP 调用应立即完成
+        assertTrue((System.nanoTime() - t0) / 1_000_000 < 1000,
+                "list() 被 enable 阻塞了");
+        assertNotNull(r.get("servers"));
     }
 }
