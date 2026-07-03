@@ -27,6 +27,7 @@ import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
 import DisconnectedBanner from './components/DisconnectedBanner'
 import ModelFallbackBanner from './components/ModelFallbackBanner'
+import SubmitErrorBanner from './components/SubmitErrorBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import Sidebar from './components/Sidebar'
 import PluginsPanel from './components/PluginsPanel'
@@ -129,6 +130,7 @@ export default function App(): JSX.Element {
   const [mcpConfigError, setMcpConfigError] = useState<string | null>(null)
   const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
   const [modelFallbackNotice, setModelFallbackNotice] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
@@ -229,6 +231,7 @@ export default function App(): JSX.Element {
       statusThrottleRef.current?.cancel() // 紧贴 resetSession:消 await 期间 status 尾巴重新入窗
       dispatch({ type: 'resetSession', ws: state.workspace })
       setModelFallbackNotice(false) // 新会话:清除残余回退通知
+      setSubmitError(null) // 新会话:清除残余提交错误横幅
       void fetchSessions()
     } catch (err) {
       console.error('[wraith] newConversation error:', err)
@@ -341,6 +344,7 @@ export default function App(): JSX.Element {
     const text = inputValue.trim()
     if (!text || state.turn === 'running') return
     setInputValue('')
+    setSubmitError(null) // 新提交:清除上次遗留的错误横幅
     const pendingAttachments = attachments
     setAttachments([])
     dispatch({ type: 'markStarted' })
@@ -353,6 +357,10 @@ export default function App(): JSX.Element {
       // 不会再有 turn.started/turn.completed/turn.failed 通知到达来清 turn,会永久卡 running。
       // 复用现有 turn.failed reducer 动作把 turn 归 idle(不新造事件类型,与现有风格一致)。
       dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
+      const reason = err instanceof Error ? err.message : String(err)
+      // 只取 reason 的前 80 字符,避免泄露过长内部路径或 URL;不含 apiKey/secret。
+      const short = reason.replace(/https?:\/\/\S+/g, '').replace(/sk-\S+/g, '').slice(0, 80).trim()
+      setSubmitError(short ? `消息发送失败,请重试(${short})` : '消息发送失败,请重试')
     }
   }, [inputValue, state.turn, attachments])
 
@@ -443,6 +451,7 @@ export default function App(): JSX.Element {
   const handleEditMessage = useCallback(
     async (ordinal: number, newText: string) => {
       if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
+      setSubmitError(null) // 编辑重发:清除上次遗留的错误横幅
       try {
         await window.wraith.rewindSession(ordinal)
         dispatch({ type: 'truncateAtUser', ordinal })
@@ -459,6 +468,9 @@ export default function App(): JSX.Element {
         // turn.started/turn.completed/turn.failed 通知到达来清 turn,会永久卡 running。
         // 复用现有 turn.failed reducer 动作把 turn 归 idle(与 handleSubmit 完全对称)。
         dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
+        const reason = err instanceof Error ? err.message : String(err)
+        const short = reason.replace(/https?:\/\/\S+/g, '').replace(/sk-\S+/g, '').slice(0, 80).trim()
+        setSubmitError(short ? `消息发送失败,请重试(${short})` : '消息发送失败,请重试')
       }
     },
     [fetchSessions], // running 守卫改读 turnRef,不再依赖 state.turn
@@ -647,6 +659,9 @@ export default function App(): JSX.Element {
         )}
         {modelFallbackNotice && (
           <ModelFallbackBanner onDismiss={() => setModelFallbackNotice(false)} />
+        )}
+        {submitError && (
+          <SubmitErrorBanner message={submitError} onDismiss={() => setSubmitError(null)} />
         )}
 
         {view === 'plugins' ? (
