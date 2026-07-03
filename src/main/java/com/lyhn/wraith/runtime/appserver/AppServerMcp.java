@@ -153,7 +153,17 @@ public final class AppServerMcp implements McpOps {
         });
     }
 
-    @Override public void disable(String name) { requireServer(name); requireManager().disable(name); }
+    @Override public void disable(String name) {
+        requireServer(name);                    // 校验同步(快):未知名仍即时抛 NoSuchElementException
+        McpServerManager m = requireManager();
+        // 与 enable/restart 对称:submit 到单线程执行器。慢 enable 持 manager 锁期间,
+        // 同步 disable 会在 dispatch 线程上等锁,卡死全部 RPC;异步 offload 后 disable 即时返回,
+        // 结果经 setStatus(DISABLED) 通知链呈现。
+        mcpControlExecutor.submit(() -> {
+            try { m.disable(name); }
+            catch (RuntimeException e) { /* 结果经 mcp.status(DISABLED) 呈现,此处无响应通道 */ }
+        });
+    }
 
     @Override public void restart(String name) {
         requireServer(name);                    // 校验同步(快)
