@@ -69,7 +69,9 @@ public final class GatewayDaemon {
                         api.sendC2CWithKeyboard(openid, "⚠️ 需要审批（点按钮同意/拒绝）：",
                                 lastMsgId.get(openid), QqApproval.keyboardJson(sessKey));
                     } catch (IOException e) {
-                        System.err.println("[gateway] 审批按钮发送失败: " + e.getClass().getSimpleName());
+                        // message 含 HTTP 状态/QQ 错误体（无密钥）；上抛让 promptApproval fail-closed，不吊死回合。
+                        System.err.println("[gateway] 审批按钮发送失败: " + e.getMessage());
+                        throw new java.io.UncheckedIOException(e);
                     }
                 }));
 

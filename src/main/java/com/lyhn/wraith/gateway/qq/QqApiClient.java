@@ -55,17 +55,21 @@ public final class QqApiClient {
      * <p>body 与 {@link #sendC2C} 同构，额外塞入解析自 {@code keyboardJson} 的
      * {@code "keyboard"} 字段（{@code QqApproval.keyboardJson(sessionKey)} 产出）。
      *
-     * <p>⚠ EYE-VERIFY：QQ keyboard 消息的确切 {@code msg_type} 与 keyboard 对象形状
-     * 只能在真 QQ 联调时确认。此处 {@code msg_type=2}（markdown/keyboard 家族）为合理默认，
-     * 真机可能需调整。
+     * <p>真机已验证：{@code msg_type=2} + {@code markdown} 对象 + {@code keyboard}
+     * 内联按钮在 C2C 单聊返回 HTTP 200（含主动消息）。早期把文案放 {@code content} 纯串
+     * 会 400「无效 markdown content」(code 40034011)——务必用 {@code markdown} 对象。
      *
      * @param keyboardJson {@code {"content":{"rows":[...]}}} 形状的 keyboard 对象 JSON
      */
     public void sendC2CWithKeyboard(String openid, String text, String replyToMsgId, String keyboardJson)
             throws IOException {
         var body = new java.util.LinkedHashMap<String, Object>();
-        body.put("content", text);
-        body.put("msg_type", 2);                                  // keyboard/markdown family (EYE-VERIFY)
+        // msg_type=2 是 markdown+keyboard 家族；QQ 要求 markdown 为对象，塞纯 content 串会 400
+        // 「无效 markdown content」(code 40034011)——真机联调确认。
+        var markdown = new java.util.LinkedHashMap<String, Object>();
+        markdown.put("content", text);
+        body.put("msg_type", 2);
+        body.put("markdown", markdown);
         body.put("msg_seq", QqText.nextMsgSeq(seqCtr));
         if (replyToMsgId != null && !replyToMsgId.isEmpty()) body.put("msg_id", replyToMsgId);
         body.put("keyboard", M.readTree(keyboardJson));
@@ -84,7 +88,11 @@ public final class QqApiClient {
                 .post(RequestBody.create(json, JSON))
                 .header("Authorization", "QQBot " + ensureToken()).header("Accept", "application/json").build();
         try (Response r = http.newCall(req).execute()) {
-            if (!r.isSuccessful()) throw new IOException("QQ send failed: HTTP " + r.code());
+            if (!r.isSuccessful()) {
+                okhttp3.ResponseBody eb = r.body();
+                String detail = eb != null ? eb.string() : "";   // QQ 错误体（code/message，无密钥），便于自诊断
+                throw new IOException("QQ send failed: HTTP " + r.code() + " " + detail);
+            }
         }
     }
 }

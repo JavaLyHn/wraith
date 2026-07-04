@@ -9,7 +9,7 @@ import com.lyhn.wraith.render.StatusInfo;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.*;
 import java.util.function.Consumer;
 
 /**
@@ -36,9 +36,20 @@ public final class GatewayRenderer implements Renderer {
     /** Pending HITL future; volatile so the WS thread sees it promptly. */
     private volatile CompletableFuture<ApprovalResult> pending;
 
+    /** 审批等待上限：QQ 用户可能不在场，超时后 fail-closed 拒绝，避免回合永久阻塞。 */
+    static final long DEFAULT_APPROVAL_TIMEOUT_MS = 300_000; // 5 分钟
+
+    private final long approvalTimeoutMs;
+
     public GatewayRenderer(String sessionKey, Consumer<String> approvalPusher) {
+        this(sessionKey, approvalPusher, DEFAULT_APPROVAL_TIMEOUT_MS);
+    }
+
+    /** 可注入超时时长的构造（供测试与调优）。 */
+    GatewayRenderer(String sessionKey, Consumer<String> approvalPusher, long approvalTimeoutMs) {
         this.sessionKey = sessionKey;
         this.approvalPusher = approvalPusher;
+        this.approvalTimeoutMs = approvalTimeoutMs;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -53,9 +64,18 @@ public final class GatewayRenderer implements Renderer {
     public ApprovalResult promptApproval(ApprovalRequest request) {
         CompletableFuture<ApprovalResult> f = new CompletableFuture<>();
         this.pending = f;
-        approvalPusher.accept(sessionKey); // ImTurnDriver 收到后发按钮
         try {
-            return f.get();
+            approvalPusher.accept(sessionKey); // 触发 QQ 审批按钮推送
+        } catch (RuntimeException e) {
+            // 推送失败（网络/QQ 拒绝）→ fail-closed 默认拒绝，绝不让回合永久阻塞在下面的 get()。
+            this.pending = null;
+            return ApprovalResult.reject("审批推送失败，已默认拒绝");
+        }
+        try {
+            return f.get(approvalTimeoutMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            // 用户一直没点 → fail-closed，避免无限阻塞占用会话线程。
+            return ApprovalResult.reject("审批超时（未在限定时间内点击），已默认拒绝");
         } catch (Exception e) {
             return ApprovalResult.reject("interrupted");
         } finally {
