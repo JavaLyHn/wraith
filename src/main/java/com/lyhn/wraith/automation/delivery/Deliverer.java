@@ -3,6 +3,8 @@ package com.lyhn.wraith.automation.delivery;
 import com.lyhn.wraith.automation.AutomationRunner;
 import com.lyhn.wraith.automation.AutomationTask;
 import com.lyhn.wraith.automation.DeliveryTarget;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.List;
@@ -22,6 +24,7 @@ import java.util.Map;
  */
 public class Deliverer {
 
+    private static final Logger log = LoggerFactory.getLogger(Deliverer.class);
     private final Map<String, DeliveryAdapter> adapters;
 
     /**
@@ -56,8 +59,7 @@ public class Deliverer {
             if (adapter != null) {
                 adapter.deliver(target, task, result);
             } else {
-                System.err.printf("[Deliverer] 未知投递平台 '%s'，跳过 target chatId=%s%n",
-                        target.platform, target.chatId);
+                log.warn("Deliverer: 未知投递平台 '{}',跳过(任务 {})", target.platform, task.name);
             }
         }
     }
