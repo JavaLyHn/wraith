@@ -51,6 +51,9 @@ public final class Scheduler {
     /** 生产用定时触发器（start/stop 管理）。 */
     private ScheduledExecutorService ticker;
 
+    /** start() 幂等守卫：已启动则为 true。 */
+    private boolean started = false;
+
     // ─────────────────────────────────────────────────────────────────────────
     // Constructor
     // ─────────────────────────────────────────────────────────────────────────
@@ -64,7 +67,11 @@ public final class Scheduler {
         this.engine = engine;
         this.onResult = onResult;
         this.clock = clock;
-        this.pool = Executors.newFixedThreadPool(maxConcurrent);
+        this.pool = Executors.newFixedThreadPool(maxConcurrent, r -> {
+            Thread t = new Thread(r, "wraith-automation-worker");
+            t.setDaemon(true);
+            return t;
+        });
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -123,8 +130,11 @@ public final class Scheduler {
 
     /**
      * 启动生产定时器：每 30 秒调用一次 {@link #decideTick()}。
+     * <p>幂等：重复调用不会创建第二个 ticker。
      */
     public void start() {
+        if (started) return;
+        started = true;
         ticker = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "wraith-scheduler-ticker");
             t.setDaemon(true);
@@ -147,6 +157,7 @@ public final class Scheduler {
             ticker.shutdown();
         }
         pool.shutdown();
+        started = false;
     }
 
     /**
