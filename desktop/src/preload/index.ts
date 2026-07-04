@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult } from '../shared/types'
+import type { GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -52,6 +53,18 @@ export interface WraithApi {
   modelList(): Promise<ModelListResult>
   setModel(provider: string): Promise<{ provider: string; model: string }>
   setDefaultProvider(provider: string): Promise<{ ok: boolean }>
+  gatewayGetConfig(): Promise<GatewayConfigView>
+  gatewaySetSecret(secret: string): Promise<{ ok: boolean }>
+  gatewaySetWorkspace(workspace: string): Promise<{ ok: boolean }>
+  gatewayPickWorkspace(): Promise<string | null>
+  gatewayStart(): Promise<{ ok: boolean }>
+  gatewayStop(): Promise<{ ok: boolean }>
+  gatewayRestart(): Promise<{ ok: boolean }>
+  gatewayStatus(): Promise<GatewayStatus>
+  gatewayLogs(): Promise<{ lines: string[] }>
+  gatewayBindStart(): Promise<{ ok: boolean }>
+  gatewayBindCancel(): Promise<{ ok: boolean }>
+  onGatewayEvent(cb: (evt: GatewayEvent) => void): () => void
 }
 
 const wraith: WraithApi = {
@@ -222,6 +235,45 @@ const wraith: WraithApi = {
 
   setDefaultProvider(provider) {
     return ipcRenderer.invoke('wraith:setDefaultProvider', provider) as Promise<{ ok: boolean }>
+  },
+
+  gatewayGetConfig() {
+    return ipcRenderer.invoke('wraith:gatewayGetConfig') as Promise<GatewayConfigView>
+  },
+  gatewaySetSecret(secret) {
+    return ipcRenderer.invoke('wraith:gatewaySetSecret', secret) as Promise<{ ok: boolean }>
+  },
+  gatewaySetWorkspace(workspace) {
+    return ipcRenderer.invoke('wraith:gatewaySetWorkspace', workspace) as Promise<{ ok: boolean }>
+  },
+  gatewayPickWorkspace() {
+    return ipcRenderer.invoke('wraith:gatewayPickWorkspace') as Promise<string | null>
+  },
+  gatewayStart() {
+    return ipcRenderer.invoke('wraith:gatewayStart') as Promise<{ ok: boolean }>
+  },
+  gatewayStop() {
+    return ipcRenderer.invoke('wraith:gatewayStop') as Promise<{ ok: boolean }>
+  },
+  gatewayRestart() {
+    return ipcRenderer.invoke('wraith:gatewayRestart') as Promise<{ ok: boolean }>
+  },
+  gatewayStatus() {
+    return ipcRenderer.invoke('wraith:gatewayStatus') as Promise<GatewayStatus>
+  },
+  gatewayLogs() {
+    return ipcRenderer.invoke('wraith:gatewayLogs') as Promise<{ lines: string[] }>
+  },
+  gatewayBindStart() {
+    return ipcRenderer.invoke('wraith:gatewayBindStart') as Promise<{ ok: boolean }>
+  },
+  gatewayBindCancel() {
+    return ipcRenderer.invoke('wraith:gatewayBindCancel') as Promise<{ ok: boolean }>
+  },
+  onGatewayEvent(cb) {
+    const listener = (_e: Electron.IpcRendererEvent, evt: GatewayEvent) => cb(evt)
+    ipcRenderer.on('wraith:gateway-event', listener)
+    return () => { ipcRenderer.removeListener('wraith:gateway-event', listener) }
   },
 }
 

@@ -1,6 +1,7 @@
 package com.lyhn.wraith.runtime.appserver;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.lyhn.wraith.config.WraithConfig;
 import com.lyhn.wraith.hitl.ApprovalResult;
 
 import java.io.BufferedReader;
@@ -186,6 +187,35 @@ public final class AppServer {
                     writer.error(msg.id(), -32602, e.getMessage());
                 } catch (UnsupportedOperationException e) {
                     writer.error(msg.id(), -32000, e.getMessage());
+                }
+            }
+            case "gateway.config.get" -> {
+                WraithConfig cfg = WraithConfig.load();
+                WraithConfig.GatewayConfig gw = cfg.getGateway();
+                WraithConfig.GatewayQqConfig qq = gw == null ? null : gw.getQq();
+                boolean hasSecret = qq != null && qq.getClientSecret() != null && !qq.getClientSecret().isBlank();
+                Map<String, Object> r = new LinkedHashMap<>();
+                r.put("bound", hasSecret);
+                r.put("hasSecret", hasSecret);
+                r.put("appId", qq == null ? null : qq.getAppId());
+                r.put("ownerOpenid", qq == null ? null : qq.getOwnerOpenid());
+                r.put("workspace", qq == null ? null : qq.getWorkspace());
+                writer.result(msg.id(), r); // 注意:绝不回传 clientSecret 明文，只报 hasSecret
+            }
+            case "gateway.config.set" -> {
+                JsonNode p = msg.params();
+                try {
+                    WraithConfig cfg = WraithConfig.load();
+                    WraithConfig.GatewayConfig gw = cfg.getGateway();
+                    if (gw == null) { gw = new WraithConfig.GatewayConfig(); cfg.setGateway(gw); }
+                    WraithConfig.GatewayQqConfig qq = gw.getQq();
+                    if (qq == null) { qq = new WraithConfig.GatewayQqConfig(); gw.setQq(qq); }
+                    if (p != null && p.hasNonNull("clientSecret")) qq.setClientSecret(p.get("clientSecret").asText());
+                    if (p != null && p.hasNonNull("workspace")) qq.setWorkspace(p.get("workspace").asText());
+                    cfg.save();
+                    ok(msg);
+                } catch (Exception e) {
+                    writer.error(msg.id(), -32000, "gateway 配置写入失败: " + e.getMessage());
                 }
             }
             case "shutdown" -> {

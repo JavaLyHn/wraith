@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Notification, shell } from 'electron'
 import path from 'path'
 import os from 'os'
 import { fileURLToPath } from 'url'
@@ -27,6 +27,8 @@ import { AutomationScheduler } from './automationScheduler'
 import type { AutomationTask, AutomationEvent } from '../shared/types'
 import { resolveInterruptTurnId } from './interruptTurnId'
 import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from './notificationFilter'
+import { GatewayManager } from './gatewayManager'
+import type { GatewayEvent } from '../shared/gateway'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -55,6 +57,13 @@ let currentTurnId: string | null = null
 const defaultJar = defaultJarPath(os.homedir())
 
 let automationScheduler: AutomationScheduler | null = null
+let gatewayManager: GatewayManager | null = null
+
+function pushGateway(evt: GatewayEvent): void {
+  try {
+    mainWindow?.webContents.send('wraith:gateway-event', evt)
+  } catch { /* window destroyed — 静默降级 */ }
+}
 
 function pushAutomation(evt: AutomationEvent): void {
   try {
@@ -486,6 +495,38 @@ ipcMain.handle('wraith:automationPanelOpened', async () => {
 })
 
 // ---------------------------------------------------------------------------
+// IM 网关(QQ)—— Phase F
+// ---------------------------------------------------------------------------
+ipcMain.handle('wraith:gatewayGetConfig', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('gateway.config.get', {})
+})
+ipcMain.handle('wraith:gatewaySetSecret', async (_e, secret: string) => {
+  if (!client) throw new Error('Backend not connected')
+  await client.request('gateway.config.set', { clientSecret: secret })
+  return { ok: true }
+})
+ipcMain.handle('wraith:gatewaySetWorkspace', async (_e, workspace: string) => {
+  if (!client) throw new Error('Backend not connected')
+  await client.request('gateway.config.set', { workspace })
+  return { ok: true }
+})
+ipcMain.handle('wraith:gatewayPickWorkspace', async () => {
+  const res = mainWindow
+    ? await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] })
+    : await dialog.showOpenDialog({ properties: ['openDirectory'] })
+  if (res.canceled || res.filePaths.length === 0) return null
+  return res.filePaths[0]
+})
+ipcMain.handle('wraith:gatewayStart', async () => { gatewayManager?.start(); return { ok: true } })
+ipcMain.handle('wraith:gatewayStop', async () => { gatewayManager?.stop(); return { ok: true } })
+ipcMain.handle('wraith:gatewayRestart', async () => { gatewayManager?.restart(); return { ok: true } })
+ipcMain.handle('wraith:gatewayStatus', async () => gatewayManager?.getStatus() ?? { state: 'stopped' })
+ipcMain.handle('wraith:gatewayLogs', async () => ({ lines: gatewayManager?.getLogs() ?? [] }))
+ipcMain.handle('wraith:gatewayBindStart', async () => { gatewayManager?.bindStart(); return { ok: true } })
+ipcMain.handle('wraith:gatewayBindCancel', async () => { gatewayManager?.cancelBind(); return { ok: true } })
+
+// ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 
@@ -530,6 +571,13 @@ app.whenReady().then(() => {
   })
   automationScheduler.start()
 
+  gatewayManager = new GatewayManager(
+    (evt) => pushGateway(evt),
+    process.env,
+    defaultJar,
+    (url) => { void shell.openExternal(url) }
+  )
+
   createWindow()
   spawnBackend()
 
@@ -558,6 +606,11 @@ app.on('will-quit', () => {
   // stopAll: interrupted 落盘同步完成;子进程信号回收 best-effort(异步,不 await)
   try {
     automationScheduler?.stopAll()
+  } catch {
+    // best-effort
+  }
+  try {
+    gatewayManager?.dispose()
   } catch {
     // best-effort
   }

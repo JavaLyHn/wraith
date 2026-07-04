@@ -22,9 +22,10 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
-  activeNav: 'plugins' | 'automations' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
+  onOpenImGateway: () => void
   automationBadge: boolean
 }
 
@@ -44,6 +45,7 @@ export default function Sidebar({
   activeNav,
   onOpenPlugins,
   onOpenAutomations,
+  onOpenImGateway,
   automationBadge,
 }: SidebarProps): JSX.Element {
   const [searchActive, setSearchActive] = useState(false)
@@ -167,6 +169,16 @@ export default function Sidebar({
                 </span>
               )}
             </span>
+          </button>
+
+          {/* IM 网关 — enabled */}
+          <button
+            data-testid="nav-im-gateway"
+            onClick={onOpenImGateway}
+            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+              (activeNav === 'im-gateway' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+          >
+            IM 网关
           </button>
         </nav>
 
