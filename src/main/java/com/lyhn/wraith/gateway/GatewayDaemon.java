@@ -100,7 +100,9 @@ public final class GatewayDaemon {
                     if (!authz.isAllowed(interaction.openid())) return; // deny-all on QQ-authenticated openid
                     QqApproval.Callback cb = QqApproval.parse(interaction.buttonData());
                     if (cb != null) driver.onApproval(cb.sessionKey(), cb.result());
-                });
+                },
+                // F-4:连接状态 → stdout 机读标记(与 logback 文件日志解耦),桌面端点亮状态灯。
+                state -> System.out.println("WRAITH_GATEWAY_STATUS " + state.wire()));
         // ws.connect(...) 阻塞（跑 QqWsClient 的 reconnect 循环）——start() 在此常驻。
     }
 }

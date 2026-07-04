@@ -29,4 +29,23 @@ class QqWsClientLogicTest {
         assertFalse(QqWsClient.isFatalAuthLoop(new int[]{-1,-1,-1}));        // 纯网络断连 → 不放弃(会恢复)
         assertFalse(QqWsClient.isFatalAuthLoop(new int[]{4004,4004}));       // 不足 3 次
     }
+
+    // --- F-4:结构化连接状态 ---------------------------------------------
+
+    @Test void connStateWireMapping() {
+        assertEquals("connecting",   QqWsClient.ConnState.CONNECTING.wire());
+        assertEquals("connected",    QqWsClient.ConnState.CONNECTED.wire());
+        assertEquals("disconnected", QqWsClient.ConnState.DISCONNECTED.wire());
+        assertEquals("auth-failed",  QqWsClient.ConnState.AUTH_FAILED.wire());
+    }
+
+    @Test void readyFrameEmitsConnected() {
+        // READY = 认证通过、会话建立 → 应发射 CONNECTED(经 handleFrame 包私缝,不起真 socket)。
+        QqWsClient ws = new QqWsClient(null, null);
+        java.util.List<QqWsClient.ConnState> seen = new java.util.ArrayList<>();
+        ws.setStateListener(seen::add);
+        String ready = "{\"op\":0,\"s\":1,\"t\":\"READY\",\"d\":{\"session_id\":\"SID_1\"}}";
+        ws.handleFrame(ready, null, m -> {}, i -> {}, new long[]{0});
+        assertTrue(seen.contains(QqWsClient.ConnState.CONNECTED), "READY 应发射 CONNECTED, got=" + seen);
+    }
 }

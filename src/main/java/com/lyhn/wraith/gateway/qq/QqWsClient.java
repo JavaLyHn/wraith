@@ -40,6 +40,18 @@ public final class QqWsClient {
     /** Intents: C2C_MESSAGE_CREATE (bit 25) + INTERACTION_CREATE (bit 26). */
     public static final int INTENTS_C2C_AND_INTERACTION = (1 << 25) | (1 << 26);
 
+    /**
+     * 连接状态(F-4):经 {@code onState} 回调上报,由守护进程落成 stdout 机读标记
+     * {@code WRAITH_GATEWAY_STATUS <wire>},桌面端据此点亮状态灯。
+     */
+    public enum ConnState {
+        CONNECTING, CONNECTED, DISCONNECTED, AUTH_FAILED;
+        /** 机器可读线格式(桌面端解析):小写 + 下划线转连字符。 */
+        public String wire() {
+            return name().toLowerCase(java.util.Locale.ROOT).replace('_', '-');
+        }
+    }
+
     private static final long[] BACKOFF = {2, 5, 10, 30, 60};
 
     public static String identifyPayload(String token, int intents) {
@@ -84,6 +96,14 @@ public final class QqWsClient {
     private volatile String sessionId;
     private final AtomicLong lastSeq = new AtomicLong(0);
 
+    /** 连接状态监听器(F-4);默认 no-op。经 connect 三参重载或 setStateListener 注入。 */
+    private volatile Consumer<ConnState> onState = s -> {};
+
+    /** 包私:测试注入状态监听器(生产走 connect 三参重载)。 */
+    void setStateListener(Consumer<ConnState> listener) {
+        this.onState = listener;
+    }
+
     private final ScheduledExecutorService heartbeatScheduler =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "qq-heartbeat");
@@ -106,10 +126,23 @@ public final class QqWsClient {
      */
     public void connect(Consumer<InboundMsg> onC2C,
                         Consumer<QqEvents.Interaction> onInteraction) {
+        connect(onC2C, onInteraction, s -> {});
+    }
+
+    /**
+     * 三参重载(F-4):额外接一个连接状态监听器 {@code onState},在
+     * CONNECTING / CONNECTED / DISCONNECTED / AUTH_FAILED 切换时回调。守护进程用它
+     * 往 stdout 打机读标记,桌面端据此点亮真·"已连接"灯。
+     */
+    public void connect(Consumer<InboundMsg> onC2C,
+                        Consumer<QqEvents.Interaction> onInteraction,
+                        Consumer<ConnState> onState) {
+        this.onState = onState;
         int attempt = 0;
         Deque<Integer> recentCloseCodes = new ArrayDeque<>(4);
 
         while (!Thread.currentThread().isInterrupted()) {
+            onState.accept(ConnState.CONNECTING);
             long connectStart = System.currentTimeMillis();
 
             Request req = new Request.Builder().url(QQ_WS_URL).build();
@@ -135,6 +168,7 @@ public final class QqWsClient {
             int[] codes = recentCloseCodes.stream().mapToInt(Integer::intValue).toArray();
             if (isFatalAuthLoop(codes)) {
                 log.error("QqWsClient: 连续 3 次 4004 认证失败 — 凭证可能失效，放弃。请检查 gateway.qq.clientSecret。");
+                onState.accept(ConnState.AUTH_FAILED);
                 return;
             }
 
@@ -219,6 +253,7 @@ public final class QqWsClient {
                             sessionId = sid;
                             log.debug("QqWsClient: READY, session_id={}", sid);
                         }
+                        onState.accept(ConnState.CONNECTED); // 认证通过 + 会话建立 = 真·已连接
                     } else if ("C2C_MESSAGE_CREATE".equals(t)) {
                         try {
                             onC2C.accept(QqEvents.parseC2C(d));
@@ -320,6 +355,7 @@ public final class QqWsClient {
             this.closeCode = code;
             log.info("QqWsClient: WS closed code={} reason={}", code, reason);
             cancelHeartbeat();
+            onState.accept(ConnState.DISCONNECTED);
             closeLatch.countDown();
         }
 
@@ -328,6 +364,7 @@ public final class QqWsClient {
                               Response response) {
             log.warn("QqWsClient: WS failure", t);
             cancelHeartbeat();
+            onState.accept(ConnState.DISCONNECTED);
             closeLatch.countDown();
         }
 

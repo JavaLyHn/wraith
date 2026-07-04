@@ -5,6 +5,7 @@ import {
   parseConnectUrl,
   classifyBindLine,
   classifyGatewayStderr,
+  classifyGatewayStatusLine,
 } from '../src/main/gatewayManager'
 
 describe('resolveGatewayCommand', () => {
@@ -57,5 +58,32 @@ describe('classifyGatewayStderr', () => {
     expect(classifyGatewayStderr('[gateway] 未配置 gateway.qq；请先运行 wraith gateway bind')).toBe('未绑定——请先扫码绑定')
     expect(classifyGatewayStderr('[gateway] 无可用 LLM provider（缺 API key）')).toBe('缺可用 LLM provider(请先配置 provider)')
     expect(classifyGatewayStderr('普通日志行')).toBeNull()
+  })
+})
+
+describe('classifyGatewayStatusLine', () => {
+  it('maps each machine-readable status marker to a GatewayStatus', () => {
+    expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS connecting')).toEqual({
+      state: 'starting',
+      message: '连接 QQ 中…',
+    })
+    expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS connected')).toEqual({ state: 'running' })
+    expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS disconnected')).toEqual({
+      state: 'starting',
+      message: '连接断开,重连中…',
+    })
+    expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS auth-failed')).toEqual({
+      state: 'error',
+      message: '认证失败——凭证可能失效,请检查机器人密钥',
+    })
+  })
+  it('extracts the marker even if a log prefix precedes it', () => {
+    expect(classifyGatewayStatusLine('2026-07-04 12:00 INFO WRAITH_GATEWAY_STATUS connected')).toEqual({
+      state: 'running',
+    })
+  })
+  it('returns null for unrelated lines and unknown states', () => {
+    expect(classifyGatewayStatusLine('普通日志行')).toBeNull()
+    expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS bogus')).toBeNull()
   })
 })

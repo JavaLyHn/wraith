@@ -54,6 +54,29 @@ export function classifyGatewayStderr(line: string): string | null {
   return null
 }
 
+/**
+ * 解析 daemon stdout 上的机读连接状态标记(F-4):
+ * `WRAITH_GATEWAY_STATUS <connecting|connected|disconnected|auth-failed>`。
+ * 命中 → 映射为 GatewayStatus;非状态行 / 未知状态 → null。
+ * 用正则容忍标记前有 logback 前缀。
+ */
+export function classifyGatewayStatusLine(line: string): GatewayStatus | null {
+  const m = line.match(/WRAITH_GATEWAY_STATUS\s+(\S+)/)
+  if (!m) return null
+  switch (m[1]) {
+    case 'connecting':
+      return { state: 'starting', message: '连接 QQ 中…' }
+    case 'connected':
+      return { state: 'running' }
+    case 'disconnected':
+      return { state: 'starting', message: '连接断开,重连中…' }
+    case 'auth-failed':
+      return { state: 'error', message: '认证失败——凭证可能失效,请检查机器人密钥' }
+    default:
+      return null
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // GatewayManager —— 常驻守护进程 + 一次性 bind 的进程管理
 // ─────────────────────────────────────────────────────────────────────────
@@ -118,12 +141,21 @@ export class GatewayManager {
     }
     this.daemon = proc
 
+    // 进程起来 = starting(连接中);真·running 由 WS 的 connected 标记点亮(F-4)。
     proc.on('spawn', () => {
-      if (this.daemon === proc) this.setStatus({ state: 'running' })
+      if (this.daemon === proc) this.setStatus({ state: 'starting' })
     })
 
     let lastErr: string | null = null
-    readline.createInterface({ input: proc.stdout }).on('line', (l) => this.pushLog(l))
+    // stdout:先落日志,再看是否是机读连接状态标记 → 驱动状态灯。
+    readline.createInterface({ input: proc.stdout }).on('line', (l) => {
+      this.pushLog(l)
+      const st = classifyGatewayStatusLine(l)
+      if (st && this.daemon === proc && !this.stopping) {
+        if (st.state === 'error' && st.message) lastErr = st.message // 让退出处理器沿用该文案
+        this.setStatus(st)
+      }
+    })
     readline.createInterface({ input: proc.stderr }).on('line', (l) => {
       this.pushLog(l)
       const known = classifyGatewayStderr(l)
