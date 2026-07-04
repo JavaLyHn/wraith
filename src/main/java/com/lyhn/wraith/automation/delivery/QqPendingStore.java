@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.*;
 import java.util.*;
+import java.util.LinkedHashMap;
 
 /**
  * Persists QQ pending deliveries to ~/.wraith/qq-pending.json so they survive
@@ -59,7 +60,8 @@ public final class QqPendingStore {
     private List<Pending> loadList() {
         try {
             if (!Files.exists(file)) return List.of();
-            Map<?, ?> root = M.readValue(Files.readAllBytes(file), Map.class);
+            Map<String, Object> root = M.readValue(Files.readAllBytes(file),
+                    M.getTypeFactory().constructMapType(LinkedHashMap.class, String.class, Object.class));
             Object raw = root.get(ROOT_KEY);
             if (raw == null) return List.of();
             return M.convertValue(raw,
