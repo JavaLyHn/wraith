@@ -61,12 +61,15 @@ public final class QqWsClient {
     }
 
     /**
-     * Returns {@code true} when ALL elements of {@code recentDurationsMs} are &lt; 5 000 ms
-     * AND there are at least 3 of them — i.e. 3+ consecutive quick disconnects.
+     * Returns {@code true} when there are ≥3 recent close codes AND all are 4004
+     * (WS 认证失败) — i.e. a persistent bad-credential loop where retrying is futile.
+     *
+     * <p>网络断连(close code {@code -1} / 正常关闭)永远不触发本判定，所以守护进程
+     * 会穿过网络抖动持续重连，只在凭证被真正拒绝(连续 4004)时才放弃。
      */
-    public static boolean isFatalQuickDisconnect(long[] recentDurationsMs) {
-        if (recentDurationsMs.length < 3) return false;
-        for (long d : recentDurationsMs) if (d >= 5_000) return false;
+    public static boolean isFatalAuthLoop(int[] recentCloseCodes) {
+        if (recentCloseCodes.length < 3) return false;
+        for (int c : recentCloseCodes) if (c != 4004) return false;
         return true;
     }
 
@@ -104,7 +107,7 @@ public final class QqWsClient {
     public void connect(Consumer<InboundMsg> onC2C,
                         Consumer<QqEvents.Interaction> onInteraction) {
         int attempt = 0;
-        Deque<Long> recentDurations = new ArrayDeque<>(4);
+        Deque<Integer> recentCloseCodes = new ArrayDeque<>(4);
 
         while (!Thread.currentThread().isInterrupted()) {
             long connectStart = System.currentTimeMillis();
@@ -123,18 +126,24 @@ public final class QqWsClient {
             }
 
             long duration = System.currentTimeMillis() - connectStart;
-            if (recentDurations.size() >= 3) recentDurations.poll();
-            recentDurations.addLast(duration);
+            int closeCode = listener.closeCode();
+            if (recentCloseCodes.size() >= 3) recentCloseCodes.poll();
+            recentCloseCodes.addLast(closeCode);
 
-            long[] arr = recentDurations.stream().mapToLong(Long::longValue).toArray();
-            if (isFatalQuickDisconnect(arr)) {
-                log.error("QqWsClient: 3 quick disconnects — giving up");
+            // 仅「连续 3 次 4004 认证失败」才放弃 —— 坏凭证重试无用。
+            // 网络断连(closeCode=-1)不计入：会恢复，绝不因断网退出守护进程。
+            int[] codes = recentCloseCodes.stream().mapToInt(Integer::intValue).toArray();
+            if (isFatalAuthLoop(codes)) {
+                log.error("QqWsClient: 连续 3 次 4004 认证失败 — 凭证可能失效，放弃。请检查 gateway.qq.clientSecret。");
                 return;
             }
 
+            // 健康连接(时长≥60s)后重置 backoff，避免长跑中偶发断连的重连延迟越攒越大(#4)。
+            if (duration >= 60_000) attempt = 0;
+
             long backoff = backoffSeconds(attempt++);
-            log.warn("QqWsClient: disconnected after {}ms, reconnecting in {}s (attempt {})",
-                    duration, backoff, attempt);
+            log.warn("QqWsClient: disconnected after {}ms (code={}), reconnecting in {}s (attempt {})",
+                    duration, closeCode, backoff, attempt);
             try {
                 TimeUnit.SECONDS.sleep(backoff);
             } catch (InterruptedException e) {
@@ -258,6 +267,9 @@ public final class QqWsClient {
         private final java.util.concurrent.CountDownLatch closeLatch =
                 new java.util.concurrent.CountDownLatch(1);
 
+        /** 服务器关闭码(4004=认证失败);经网络失败关闭则保持 -1。 */
+        private volatile int closeCode = -1;
+
         private final long[] heartbeatMs = {30_000};
 
         /** Kept to cancel heartbeat when this WS connection closes. */
@@ -270,6 +282,11 @@ public final class QqWsClient {
 
         void awaitClose() throws InterruptedException {
             closeLatch.await();
+        }
+
+        /** 最近一次关闭码;-1 表示网络失败(非服务器关闭)。 */
+        int closeCode() {
+            return closeCode;
         }
 
         @Override
@@ -293,12 +310,14 @@ public final class QqWsClient {
 
         @Override
         public void onClosing(@NotNull WebSocket webSocket, int code, @NotNull String reason) {
+            this.closeCode = code;
             log.info("QqWsClient: WS closing code={} reason={}", code, reason);
             webSocket.close(code, reason);
         }
 
         @Override
         public void onClosed(@NotNull WebSocket webSocket, int code, @NotNull String reason) {
+            this.closeCode = code;
             log.info("QqWsClient: WS closed code={} reason={}", code, reason);
             cancelHeartbeat();
             closeLatch.countDown();

@@ -23,8 +23,10 @@ class QqWsClientLogicTest {
         assertEquals(60, QqWsClient.backoffSeconds(4));
         assertEquals(60, QqWsClient.backoffSeconds(99));
     }
-    @Test void threeQuickDisconnectsFatal() {
-        assertTrue(QqWsClient.isFatalQuickDisconnect(new long[]{1000,2000,3000}));
-        assertFalse(QqWsClient.isFatalQuickDisconnect(new long[]{1000,9000,1000}));
+    @Test void threeConsecutiveAuthFailsFatal() {
+        assertTrue(QqWsClient.isFatalAuthLoop(new int[]{4004,4004,4004}));   // 连续 3 次认证失败 → 放弃
+        assertFalse(QqWsClient.isFatalAuthLoop(new int[]{4004,-1,4004}));    // 中间夹网络断连 → 不放弃
+        assertFalse(QqWsClient.isFatalAuthLoop(new int[]{-1,-1,-1}));        // 纯网络断连 → 不放弃(会恢复)
+        assertFalse(QqWsClient.isFatalAuthLoop(new int[]{4004,4004}));       // 不足 3 次
     }
 }

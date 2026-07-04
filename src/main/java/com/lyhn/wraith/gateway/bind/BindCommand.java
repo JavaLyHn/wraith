@@ -2,6 +2,7 @@ package com.lyhn.wraith.gateway.bind;
 
 import com.lyhn.wraith.config.WraithConfig;
 import com.lyhn.wraith.gateway.GatewayDaemon;
+import com.lyhn.wraith.gateway.qq.QqApiClient;
 import okhttp3.OkHttpClient;
 
 import java.security.SecureRandom;
@@ -80,6 +81,13 @@ public final class BindCommand {
             String clientSecret = Openclaw.decryptSecret(result[2], aesKey);
             String ownerOpenid = result[3];
 
+            // 落盘前先验证 secret 能换取 access_token —— openclaw 偶发返回失效/错误 secret；
+            // 若直接写盘，后续 `wraith gateway` 只会以不透明的 WS 4004 失败。提前拦截、给清晰提示。
+            boolean secretOk = secretWorks(http, appId, clientSecret);
+            if (!secretOk) {
+                clientSecret = ""; // 不写坏 secret，留空待手填
+            }
+
             // ⚠ 只写入配置文件，绝不打印明文密钥/openid。
             WraithConfig cfg = WraithConfig.load();
             WraithConfig.GatewayConfig gw = cfg.getGateway();
@@ -100,13 +108,31 @@ public final class BindCommand {
             }
             cfg.save();
 
-            System.out.println("✅ 绑定成功，已写入 ~/.wraith/config.json。运行 `wraith gateway` 启动网关。");
+            if (secretOk) {
+                System.out.println("✅ 绑定成功，已写入 ~/.wraith/config.json。运行 `wraith gateway` 启动网关。");
+            } else {
+                System.err.println("⚠ openclaw 返回的 secret 无法换取 access_token（可能已失效）。");
+                System.err.println("  appId/openid 已写入；请到 q.qq.com 后台复制「机器人密钥」填入");
+                System.err.println("  ~/.wraith/config.json 的 gateway.qq.clientSecret，再运行 `wraith gateway`。");
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             System.err.println("[gateway] 绑定被中断");
         } catch (Exception e) {
             // 不打印 e.getMessage()（可能含敏感响应体片段），只报异常类型。
             System.err.println("[gateway] 绑定失败: " + e.getClass().getSimpleName());
+        }
+    }
+
+    /** 用解出的 appId+secret 试换一次 access_token 验证有效性（不打印任何密钥/token）。 */
+    private static boolean secretWorks(OkHttpClient http, String appId, String clientSecret) {
+        try {
+            QqApiClient probe = new QqApiClient(appId, clientSecret,
+                    "https://api.sgroup.qq.com", "https://bots.qq.com/app/getAppAccessToken", http);
+            String token = probe.ensureToken();
+            return token != null && !token.isEmpty();
+        } catch (Exception e) {
+            return false;
         }
     }
 }
