@@ -5,6 +5,7 @@ import com.lyhn.wraith.hitl.ApprovalResult;
 import org.junit.jupiter.api.Test;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -58,6 +59,21 @@ class ScheduledRunRendererTest {
                 (id, req) -> CompletableFuture.completedFuture(ApprovalResult.approve()));
         ApprovalResult result = r.promptApproval(reqFor("write_file"));
         assertEquals(ApprovalResult.Decision.APPROVED, result.decision());
+    }
+
+    @Test
+    void askSurfaceReceivesRunId() {
+        ApprovalPolicy p = new ApprovalPolicy();
+        p.default_ = ApprovalMode.ASK;
+        AtomicReference<String> capturedId = new AtomicReference<>();
+        ScheduledRunRenderer r = new ScheduledRunRenderer(p, 2000, (id, req) -> {
+            capturedId.set(id);
+            return CompletableFuture.completedFuture(ApprovalResult.approve());
+        });
+        r.setRunId("my-run-42");
+        r.promptApproval(reqFor("write_file"));
+        assertEquals("my-run-42", capturedId.get(),
+                "setRunId must propagate the run id into the AskSurface callback");
     }
 
     @Test

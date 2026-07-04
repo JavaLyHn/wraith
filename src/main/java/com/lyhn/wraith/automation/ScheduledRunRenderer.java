@@ -109,8 +109,7 @@ public final class ScheduledRunRenderer implements Renderer {
             case AUTO_APPROVE:
                 return ApprovalResult.approve();
 
-            case ASK:
-            default: {
+            case ASK: {
                 CompletableFuture<ApprovalResult> future;
                 try {
                     future = askSurface.surface(runId, request);
@@ -129,6 +128,11 @@ public final class ScheduledRunRenderer implements Renderer {
                     return ApprovalResult.reject("interrupted");
                 }
             }
+
+            default:
+                // Unknown / future ApprovalMode — fail-closed, never surface
+                deniedTools.add(tool);
+                return ApprovalResult.reject("unknown approval mode: " + mode);
         }
     }
 
@@ -147,10 +151,10 @@ public final class ScheduledRunRenderer implements Renderer {
         return sink;
     }
 
-    /** Closes the discarding sink. */
+    /** No-op — the shared null-output sink requires no cleanup. */
     @Override
     public void close() {
-        sink.close();
+        // discard sink needs no cleanup; do not close the shared sink so stream() stays usable
     }
 
     /** No-op — scheduled runs do not render tool-call labels inline. */
