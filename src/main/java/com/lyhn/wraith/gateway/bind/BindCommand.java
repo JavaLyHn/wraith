@@ -52,7 +52,7 @@ public final class BindCommand {
         try {
             String taskId = openclaw.createBindTask(base64Key);
             System.out.println("请用手机 QQ 扫码完成绑定：");
-            System.out.println("  https://q.qq.com/qrcode/bind?task_id=" + taskId);
+            System.out.println("  https://q.qq.com/qqbot/openclaw/connect.html?task_id=" + taskId + "&_wv=2&source=wraith");
             System.out.println("（等待扫码授权，最长约 " + (MAX_POLLS * POLL_INTERVAL_MS / 1000) + " 秒）...");
 
             String[] result = null;
