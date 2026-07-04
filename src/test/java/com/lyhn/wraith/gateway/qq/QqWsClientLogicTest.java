@@ -18,6 +18,8 @@ class QqWsClientLogicTest {
     @Test void backoffSequenceThenCaps() {
         assertEquals(2, QqWsClient.backoffSeconds(0));
         assertEquals(5, QqWsClient.backoffSeconds(1));
+        assertEquals(10, QqWsClient.backoffSeconds(2));
+        assertEquals(30, QqWsClient.backoffSeconds(3));
         assertEquals(60, QqWsClient.backoffSeconds(4));
         assertEquals(60, QqWsClient.backoffSeconds(99));
     }

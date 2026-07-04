@@ -88,9 +88,6 @@ public final class QqWsClient {
                 return t;
             });
 
-    /** Kept to cancel heartbeat when WS closes. */
-    private volatile ScheduledFuture<?> heartbeatTask;
-
     public QqWsClient(QqApiClient api, OkHttpClient http) {
         this.api = api;
         this.http = http;
@@ -262,6 +259,9 @@ public final class QqWsClient {
                 new java.util.concurrent.CountDownLatch(1);
 
         private final long[] heartbeatMs = {30_000};
+
+        /** Kept to cancel heartbeat when this WS connection closes. */
+        private volatile ScheduledFuture<?> heartbeatTask;
 
         WsListener(Consumer<InboundMsg> onC2C, Consumer<QqEvents.Interaction> onInteraction) {
             this.onC2C = onC2C;
