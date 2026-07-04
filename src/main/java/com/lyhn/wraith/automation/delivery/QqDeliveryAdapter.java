@@ -4,6 +4,8 @@ import com.lyhn.wraith.automation.AutomationRunner;
 import com.lyhn.wraith.automation.AutomationTask;
 import com.lyhn.wraith.automation.DeliveryTarget;
 import com.lyhn.wraith.gateway.qq.QqApiClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.List;
@@ -25,6 +27,8 @@ import java.util.List;
  * QQ's ≤4-replies-per-msg_id limit), and sends via {@code sendC2C}.
  */
 public final class QqDeliveryAdapter implements DeliveryAdapter {
+
+    private static final Logger log = LoggerFactory.getLogger(QqDeliveryAdapter.class);
 
     private final String ownerOpenid;
     private final QqApiClient api;
@@ -85,18 +89,26 @@ public final class QqDeliveryAdapter implements DeliveryAdapter {
      * builds a digest, and sends it as ONE message via {@code sendC2C}.
      * Coalescing into one message respects QQ's ≤4-replies-per-msg_id limit.
      *
+     * <p>If {@code sendC2C} throws (e.g. network down), all drained items are
+     * re-enqueued so they are NOT lost, and {@code null} is returned. Never throws.
+     *
      * @param freshMsgId the msg_id of the triggering inbound DM (passive reply token)
-     * @return the coalesced digest string, or {@code null} if nothing was pending
-     * @throws IOException if the underlying {@code sendC2C} call fails
+     * @return the coalesced digest string, or {@code null} if nothing was pending or send failed
      */
-    public String flush(String freshMsgId) throws IOException {
+    public String flush(String freshMsgId) {
         List<QqPendingStore.Pending> ps = pending.drainAll();
         if (ps.isEmpty()) {
             return null;
         }
         String digest = coalesce(ps);
-        api.sendC2C(ownerOpenid, digest, freshMsgId);
-        return digest;
+        try {
+            api.sendC2C(ownerOpenid, digest, freshMsgId);
+            return digest;
+        } catch (IOException e) {
+            for (QqPendingStore.Pending p : ps) pending.enqueue(p);
+            log.warn("QqDeliveryAdapter: flush 发送失败,已重新入队 {} 条待发", ps.size(), e);
+            return null;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

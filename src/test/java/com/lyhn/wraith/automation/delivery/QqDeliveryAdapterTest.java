@@ -200,6 +200,41 @@ class QqDeliveryAdapterTest {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Case 4: flush fails (HTTP 500) → items re-enqueued, flush returns null
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @Test
+    void flush_sendFailure_reEnqueuesItems_returnsNull() throws Exception {
+        // Token endpoint still 200s; messages endpoint returns 500 to simulate network error
+        server.setDispatcher(new Dispatcher() {
+            @Override
+            public okhttp3.mockwebserver.MockResponse dispatch(RecordedRequest request) {
+                String path = request.getPath();
+                if (path != null && path.contains("getAppAccessToken")) {
+                    return new MockResponse()
+                            .setBody("{\"access_token\":\"tok\",\"expires_in\":7200}")
+                            .addHeader("Content-Type", "application/json");
+                }
+                // messages endpoint fails
+                return new MockResponse().setResponseCode(500);
+            }
+        });
+
+        PassiveWindow window = openid -> null;  // window out → enqueue both
+        QqDeliveryAdapter adapter = new QqDeliveryAdapter(OWNER_OPENID, api, pendingStore, window);
+
+        adapter.deliver(target, makeTask("task-x"), makeResult("Result X"));
+        adapter.deliver(target, makeTask("task-y"), makeResult("Result Y"));
+        assertEquals(2, pendingStore.size(), "should have 2 pending before flush");
+
+        // flush should not throw, and should return null because send failed
+        String result = adapter.flush("FAIL_MSG_ID");
+
+        assertNull(result, "flush should return null when send fails");
+        assertEquals(2, pendingStore.size(), "pending items should be re-enqueued after send failure");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Helpers
     // ─────────────────────────────────────────────────────────────────────────
 
