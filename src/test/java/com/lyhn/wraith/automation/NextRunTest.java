@@ -36,6 +36,27 @@ class NextRunTest {
         assertEquals(wed10, NextRun.computeNextRun(weekly(3,"10:00"), sundayNoon, null, sundayNoon));
     }
 
+    @Test void weeklyAlreadyFiredPushesSevenDays() {
+        // 2026-07-08 周三 10:00 目标时间，lastFiredAt >= 该时间 → 推至次周三 7-15
+        long wed10 = epoch(2026,7,8,10,0);
+        long wed11 = epoch(2026,7,8,11,0);      // 11分钟后
+        long nextWed10 = epoch(2026,7,15,10,0);
+        assertEquals(nextWed10, NextRun.computeNextRun(weekly(3,"10:00"), wed11, wed10, wed10));
+    }
+
+    @Test void weeklyOverdueByondGracePushesSevenDays() {
+        // 周三 10:00 目标，当前时间已超过 90s 宽限 → 推至次周三
+        long wed10 = epoch(2026,7,8,10,0);
+        long wed1035 = wed10 + 120_000;         // 10:02,超宽限
+        long nextWed10 = epoch(2026,7,15,10,0);
+        assertEquals(nextWed10, NextRun.computeNextRun(weekly(3,"10:00"), wed1035, null, wed10-1));
+    }
+
+    @Test void isValidCronNullAndBlank() {
+        assertFalse(NextRun.isValidCron(null));
+        assertFalse(NextRun.isValidCron("   "));
+    }
+
     @Test void cronNextAfterNow() {
         long now = epoch(2026,7,6,8,0);       // 周一 08:00
         long expect = epoch(2026,7,6,9,0);    // 0 9 * * 1-5 → 当天 09:00
