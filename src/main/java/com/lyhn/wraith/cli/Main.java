@@ -226,6 +226,11 @@ public class Main {
             startAppServer();
             return;
         }
+        if (isGatewayCommand(args)) {
+            configureLogging();
+            com.lyhn.wraith.gateway.bind.BindCommand.dispatch(args);
+            return;
+        }
 
         configureLogging();
 
@@ -1099,6 +1104,10 @@ public class Main {
 
     static boolean isAppServerCommand(String[] args) {
         return args != null && args.length >= 1 && "app-server".equalsIgnoreCase(args[0]);
+    }
+
+    static boolean isGatewayCommand(String[] args) {
+        return args != null && args.length >= 1 && "gateway".equalsIgnoreCase(args[0]);
     }
 
     private static void startAppServer() {

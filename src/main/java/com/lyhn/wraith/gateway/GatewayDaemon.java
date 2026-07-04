@@ -1,0 +1,104 @@
+package com.lyhn.wraith.gateway;
+
+import com.lyhn.wraith.config.WraithConfig;
+import com.lyhn.wraith.gateway.qq.Dedup;
+import com.lyhn.wraith.gateway.qq.QqApiClient;
+import com.lyhn.wraith.gateway.qq.QqApproval;
+import com.lyhn.wraith.gateway.qq.QqEvents;
+import com.lyhn.wraith.gateway.qq.QqWsClient;
+import com.lyhn.wraith.llm.LlmClient;
+import com.lyhn.wraith.llm.LlmClientFactory;
+import okhttp3.OkHttpClient;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * 网关守护进程装配：把前置任务的部件（{@link QqApiClient} / {@link QqWsClient} /
+ * {@link SessionRouter} / {@link ImTurnDriver} / {@link Authorizer} / {@link Dedup}）
+ * 接成一个可运行的 QQ 单聊 bot，并连上 WS 阻塞常驻。
+ *
+ * <p>核心装配约定：
+ * <ul>
+ *   <li>{@link LlmClient} 只建一次，经 factory 闭包共享给所有 openid 会话；</li>
+ *   <li>{@link SessionRouter} 只吃 factory（Task 9 起不再持久化 stateFile）；</li>
+ *   <li>{@link ImTurnDriver.Sender} 与审批推送器都是 lambda，内部 try/catch
+ *       {@code sendC2C}/{@code sendC2CWithKeyboard} 抛的 {@link IOException}（接口未声明该异常）；</li>
+ *   <li>交互（按钮回调）按 {@code interaction.openid()}（QQ 认证的真实用户）做 deny-all 鉴权，
+ *       而非按钮携带的 data。</li>
+ * </ul>
+ *
+ * <p>{@link QqWsClient#connect} 阻塞（内部 reconnect 循环），故 {@link #start} 在此常驻。
+ * 真实 WS 循环为 EYE-VERIFY（Task 13 用 mock-WS 驱动 dispatch，真 QQ 确认 socket）。
+ */
+public final class GatewayDaemon {
+
+    private GatewayDaemon() {}
+
+    public static void start(WraithConfig cfg) {
+        WraithConfig.GatewayConfig gw = cfg.getGateway();
+        if (gw == null || gw.getQq() == null) {
+            System.err.println("[gateway] 未配置 gateway.qq；请先运行 wraith gateway bind");
+            return;
+        }
+        WraithConfig.GatewayQqConfig qq = gw.getQq();
+
+        LlmClient client = LlmClientFactory.createFromConfig(cfg);
+        if (client == null) {
+            System.err.println("[gateway] 无可用 LLM provider（缺 API key）");
+            System.exit(1);
+        }
+
+        OkHttpClient http = new OkHttpClient();
+        QqApiClient api = new QqApiClient(qq.getAppId(), qq.getClientSecret(),
+                "https://api.sgroup.qq.com", "https://bots.qq.com/app/getAppAccessToken", http);
+        Authorizer authz = new Authorizer(qq.getOwnerOpenid());
+        Dedup dedup = new Dedup(1000);
+        ExecutorService pool = Executors.newCachedThreadPool();
+
+        // 每条入站更新 openid→msgId，供审批按钮回复引用最近一条消息。
+        Map<String, String> lastMsgId = new ConcurrentHashMap<>();
+
+        // LlmClient 只建一次，经 factory 闭包共享给每个 openid 的会话。
+        SessionRouter router = new SessionRouter(openid ->
+                new GatewaySession(openid, qq.getWorkspace(), client, sessKey -> {
+                    try {
+                        api.sendC2CWithKeyboard(openid, "⚠️ 需要审批（点按钮同意/拒绝）：",
+                                lastMsgId.get(openid), QqApproval.keyboardJson(sessKey));
+                    } catch (IOException e) {
+                        System.err.println("[gateway] 审批按钮发送失败: " + e.getClass().getSimpleName());
+                    }
+                }));
+
+        ImTurnDriver driver = new ImTurnDriver(router, (openid, text, replyTo) -> {
+            try {
+                api.sendC2C(openid, text, replyTo);
+            } catch (IOException e) {
+                System.err.println("[gateway] 回复发送失败: " + e.getClass().getSimpleName());
+            }
+        }, pool);
+
+        QqWsClient ws = new QqWsClient(api, http);
+        ws.connect(
+                inbound -> {
+                    if (authz.isAllowed(inbound.openid()) && !dedup.seen(inbound.msgId())) {
+                        lastMsgId.put(inbound.openid(), inbound.msgId());
+                        driver.onMessage(inbound);
+                    }
+                },
+                interaction -> {
+                    try {
+                        api.ackInteraction(interaction.id());
+                    } catch (IOException ignored) {
+                        // best-effort ack
+                    }
+                    if (!authz.isAllowed(interaction.openid())) return; // deny-all on QQ-authenticated openid
+                    QqApproval.Callback cb = QqApproval.parse(interaction.buttonData());
+                    if (cb != null) driver.onApproval(cb.sessionKey(), cb.result());
+                });
+        // ws.connect(...) 阻塞（跑 QqWsClient 的 reconnect 循环）——start() 在此常驻。
+    }
+}

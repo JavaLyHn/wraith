@@ -49,6 +49,29 @@ public final class QqApiClient {
         }
     }
 
+    /**
+     * 发送一条带 inline keyboard 的 C2C 消息（单条，不分片）——用于 HITL 审批按钮。
+     *
+     * <p>body 与 {@link #sendC2C} 同构，额外塞入解析自 {@code keyboardJson} 的
+     * {@code "keyboard"} 字段（{@code QqApproval.keyboardJson(sessionKey)} 产出）。
+     *
+     * <p>⚠ EYE-VERIFY：QQ keyboard 消息的确切 {@code msg_type} 与 keyboard 对象形状
+     * 只能在真 QQ 联调时确认。此处 {@code msg_type=2}（markdown/keyboard 家族）为合理默认，
+     * 真机可能需调整。
+     *
+     * @param keyboardJson {@code {"content":{"rows":[...]}}} 形状的 keyboard 对象 JSON
+     */
+    public void sendC2CWithKeyboard(String openid, String text, String replyToMsgId, String keyboardJson)
+            throws IOException {
+        var body = new java.util.LinkedHashMap<String, Object>();
+        body.put("content", text);
+        body.put("msg_type", 2);                                  // keyboard/markdown family (EYE-VERIFY)
+        body.put("msg_seq", QqText.nextMsgSeq(seqCtr));
+        if (replyToMsgId != null && !replyToMsgId.isEmpty()) body.put("msg_id", replyToMsgId);
+        body.put("keyboard", M.readTree(keyboardJson));
+        post("/v2/users/" + openid + "/messages", M.writeValueAsString(body));
+    }
+
     public void ackInteraction(String id) throws IOException {
         Request req = new Request.Builder().url(apiBase + "/interactions/" + id)
                 .put(RequestBody.create("{\"code\":0}", JSON))
