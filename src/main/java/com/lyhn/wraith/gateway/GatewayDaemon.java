@@ -1,18 +1,26 @@
 package com.lyhn.wraith.gateway;
 
+import com.lyhn.wraith.automation.AutomationStore;
+import com.lyhn.wraith.automation.AutomationRunner;
+import com.lyhn.wraith.automation.ScheduledRunRenderer;
+import com.lyhn.wraith.automation.Scheduler;
 import com.lyhn.wraith.config.WraithConfig;
 import com.lyhn.wraith.gateway.qq.Dedup;
 import com.lyhn.wraith.gateway.qq.QqApiClient;
 import com.lyhn.wraith.gateway.qq.QqApproval;
 import com.lyhn.wraith.gateway.qq.QqEvents;
 import com.lyhn.wraith.gateway.qq.QqWsClient;
+import com.lyhn.wraith.hitl.ApprovalResult;
 import com.lyhn.wraith.llm.LlmClient;
 import com.lyhn.wraith.llm.LlmClientFactory;
 import okhttp3.OkHttpClient;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -31,26 +39,60 @@ import java.util.concurrent.Executors;
  *       而非按钮携带的 data。</li>
  * </ul>
  *
- * <p>{@link QqWsClient#connect} 阻塞（内部 reconnect 循环），故 {@link #start} 在此常驻。
- * 真实 WS 循环为 EYE-VERIFY（Task 13 用 mock-WS 驱动 dispatch，真 QQ 确认 socket）。
+ * <p>调度器（{@link Scheduler}）在 QQ 之前无条件启动，使 cron 独立于 IM：
+ * <ul>
+ *   <li>QQ 未配置时打印提示，调度器照常运行；JVM 通过 {@link CountDownLatch} 常驻。</li>
+ *   <li>QQ 已配置时 {@link QqWsClient#connect} 阻塞（内部 reconnect 循环），daemon 在此常驻。</li>
+ * </ul>
  */
 public final class GatewayDaemon {
 
     private GatewayDaemon() {}
 
     public static void start(WraithConfig cfg) {
-        WraithConfig.GatewayConfig gw = cfg.getGateway();
-        if (gw == null || gw.getQq() == null) {
-            System.err.println("[gateway] 未配置 gateway.qq；请先运行 wraith gateway bind");
-            return;
-        }
-        WraithConfig.GatewayQqConfig qq = gw.getQq();
-
+        // ── Step 1: LlmClient — 独立于 QQ；调度器和 IM 共享 ─────────────────────
         LlmClient client = LlmClientFactory.createFromConfig(cfg);
         if (client == null) {
             System.err.println("[gateway] 无可用 LLM provider（缺 API key）");
             System.exit(1);
         }
+
+        // ── Step 2: AutomationStore ───────────────────────────────────────────
+        AutomationStore store = new AutomationStore(
+                Path.of(System.getProperty("user.home"), ".wraith"));
+
+        // ── Step 3: TurnEngine — Phase 1 stub: ASK-mode 立即拒（fail-closed） ──
+        ScheduledRunRenderer.AskSurface askSurface =
+                (runId, req) -> CompletableFuture.completedFuture(
+                        ApprovalResult.reject("ask surfacing not wired in phase 1"));
+
+        AutomationRunner.TurnEngine engine =
+                new AutomationRunner.InProcessTurnEngine(client, askSurface, 30);
+
+        // ── Step 4: Scheduler — Phase 1 onResult: 只写日志 ───────────────────
+        Scheduler sch = new Scheduler(store, engine,
+                (task, result) -> System.out.println("[automation] " + task.name + " -> " + result.status()),
+                3,
+                System::currentTimeMillis);
+
+        // ── Step 5: 扫清旧 run，启动调度器 ────────────────────────────────────
+        sch.sweepInterrupted();
+        sch.start();
+
+        // ── Step 6: QQ — 可选 ────────────────────────────────────────────────
+        WraithConfig.GatewayConfig gw = cfg.getGateway();
+        if (gw == null || gw.getQq() == null) {
+            System.err.println("[gateway] 未配置 gateway.qq；仅运行定时任务(cron)，不接 QQ");
+            // 调度器的 ticker/worker 均为 daemon 线程，必须显式阻塞才能防止 JVM 退出。
+            try {
+                new CountDownLatch(1).await();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            return;
+        }
+
+        WraithConfig.GatewayQqConfig qq = gw.getQq();
 
         OkHttpClient http = new OkHttpClient();
         QqApiClient api = new QqApiClient(qq.getAppId(), qq.getClientSecret(),
