@@ -175,19 +175,21 @@ public final class AutomationRunner {
             agent.setRenderer(scheduledRenderer);
             agent.setReturnFinalResponseWhenStreamed(true);
 
-            // ── SessionStore ──────────────────────────────────────────────────
-            SessionStore store = SessionStore.open(
-                    Path.of(System.getProperty("user.home")),
-                    root,
-                    client.getProviderName(),
-                    client.getModelName());
-            store.startNew();
-
-            // ── tail-swap HITL delegate (same order as GatewaySession) ─────────
-            hitl.setDelegate(new RendererHitlHandler(scheduledRenderer, hitl.isEnabled()));
-
-            // ── run turn ──────────────────────────────────────────────────────
+            // ── try covers everything from SessionStore onward so that MCP is
+            //    always closed even if assembly (open/startNew/tail-swap) throws ─
             try {
+                // ── SessionStore ──────────────────────────────────────────────
+                SessionStore store = SessionStore.open(
+                        Path.of(System.getProperty("user.home")),
+                        root,
+                        client.getProviderName(),
+                        client.getModelName());
+                store.startNew();
+
+                // ── tail-swap HITL delegate (same order as GatewaySession) ────
+                hitl.setDelegate(new RendererHitlHandler(scheduledRenderer, hitl.isEnabled()));
+
+                // ── run turn ──────────────────────────────────────────────────
                 String answer = agent.run(task.prompt);
                 store.persist(agent.getConversationHistory());
                 String sessionId = store.currentId();
