@@ -147,7 +147,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
                   onSave={handleSave} onRunNow={handleRunNow} onToggle={handleToggle}
                   onRemove={handleRemove} removeConfirming={removeConfirming} />
               ) : (
-                <AutomationRuns taskId={current!.id} projectPath={current!.projectPath} onOpenSession={onOpenSession} onApprove={onApprove} />
+                <AutomationRuns taskId={current!.id} projectPath={current!.workspace ?? current!.projectPath} onOpenSession={onOpenSession} onApprove={onApprove} />
               )}
             </>
           )}
