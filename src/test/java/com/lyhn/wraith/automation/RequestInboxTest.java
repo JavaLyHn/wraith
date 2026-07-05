@@ -91,8 +91,8 @@ class RequestInboxTest {
         assertEquals(1, results.size(), "only the valid request should be returned");
         assertEquals("v1", results.get(0).id());
 
-        // Both files should be gone (corrupt file either deleted or skipped+deleted)
+        // Both files should be deleted after drain (corrupt file is log + skip + delete)
         assertFalse(Files.exists(dir.resolve("valid.json")), "valid.json should be deleted");
-        // corrupt.json may or may not remain depending on implementation; only valid matters
+        assertFalse(Files.exists(dir.resolve("corrupt.json")), "corrupt.json should be deleted after drain");
     }
 }
