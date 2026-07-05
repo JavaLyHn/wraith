@@ -102,12 +102,13 @@ public final class GatewayDaemon {
         // ── Step 6: QQ 投递组件（仅 QQ 已配置时）────────────────────────────────
         QqApiClient api = null;
         QqDeliveryAdapter qqDeliver = null;
+        OkHttpClient http = null;  // 单个共享 OkHttpClient（api + ws 复用）
 
         if (hasQq) {
             WraithConfig.GatewayQqConfig qq = gw.getQq();
-            OkHttpClient httpForQq = new OkHttpClient();
+            http = new OkHttpClient();
             api = new QqApiClient(qq.getAppId(), qq.getClientSecret(),
-                    "https://api.sgroup.qq.com", "https://bots.qq.com/app/getAppAccessToken", httpForQq);
+                    "https://api.sgroup.qq.com", "https://bots.qq.com/app/getAppAccessToken", http);
 
             QqPendingStore pending = new QqPendingStore(
                     Path.of(System.getProperty("user.home"), ".wraith"));
@@ -181,8 +182,7 @@ public final class GatewayDaemon {
             }
         }, pool);
 
-        OkHttpClient httpForWs = new OkHttpClient();
-        QqWsClient ws = new QqWsClient(apiRef, httpForWs);
+        QqWsClient ws = new QqWsClient(apiRef, http);
         ws.connect(
                 inbound -> {
                     if (authz.isAllowed(inbound.openid()) && !dedup.seen(inbound.msgId())) {
