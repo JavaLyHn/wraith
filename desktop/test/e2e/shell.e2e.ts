@@ -1772,3 +1772,38 @@ test('T47(降级) 会话行 hover 后 star/改名/删除按钮元素可见', asy
   await app.close()
   for (const p of [dirA, userData]) fs.rmSync(p, { recursive: true, force: true })
 })
+
+// ---------------------------------------------------------------------------
+// T48: ProvidersPanel — 点击 nav-providers → 面板可见 + 搜索框 + catalog 行
+// NOTE: mock-appserver 有 model.list handler(返回 providers 列表),但无 config.setProvider /
+//   config.removeProvider handler。面板在 modelList() 失败或返回空时仍渲染全部 catalog(均在
+//   "全部"组)。本测试断言:providers-panel 可见、providers-search 存在、至少一个 provider-config
+//   按钮可见。真实 setProvider 往返需手动验证(mock 无对应 handler)。
+// ---------------------------------------------------------------------------
+
+test('T48 ProvidersPanel:nav-providers → 面板可见 + 搜索框 + catalog 行', async () => {
+  const app = await electron.launch({
+    args: [mainPath],
+    env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
+  })
+  const win = await app.firstWindow()
+
+  // 等待 sidebar 出现
+  await expect(win.locator('[data-testid="sidebar"]')).toBeVisible({ timeout: 15000 })
+
+  // 点击 nav-providers
+  const navProviders = win.locator('[data-testid="nav-providers"]')
+  await expect(navProviders).toBeVisible({ timeout: 10000 })
+  await navProviders.click()
+
+  // providers-panel 面板可见
+  await expect(win.locator('[data-testid="providers-panel"]')).toBeVisible({ timeout: 10000 })
+
+  // 搜索框存在
+  await expect(win.locator('[data-testid="providers-search"]')).toBeVisible({ timeout: 5000 })
+
+  // catalog 中至少一个 provider-config 按钮可见(mock modelList 返回空 providers → 全部在"全部"组)
+  await expect(win.locator('[data-testid="provider-config"]').first()).toBeVisible({ timeout: 5000 })
+
+  await app.close()
+})
