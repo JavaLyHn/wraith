@@ -32,6 +32,7 @@ public class WraithConfig {
         private String loraId;
         private double temperature = 0.7;  // 默认温度
         private int maxTokens = 8192;      // 默认最大 token 数
+        private String protocol;           // "openai" | "anthropic"; null=按缺省(openai)
 
         public ProviderConfig() {}
 
@@ -53,6 +54,8 @@ public class WraithConfig {
         public void setTemperature(double temperature) { this.temperature = temperature; }
         public int getMaxTokens() { return maxTokens; }
         public void setMaxTokens(int maxTokens) { this.maxTokens = maxTokens; }
+        public String getProtocol() { return protocol; }
+        public void setProtocol(String protocol) { this.protocol = protocol; }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -108,6 +111,14 @@ public class WraithConfig {
             return providerConfig.getLoraId();
         }
         return loadLoraIdFromEnv(provider);
+    }
+
+    /** provider 的协议:config 有则用,否则缺省 "openai"。 */
+    public String getProtocol(String provider) {
+        ProviderConfig pc = providers.get(provider);
+        if (pc != null && pc.getProtocol() != null && !pc.getProtocol().isBlank())
+            return pc.getProtocol();
+        return "openai";
     }
 
     public static WraithConfig load() {
