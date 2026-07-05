@@ -46,4 +46,40 @@ class AnthropicClientTest {
         assertEquals(10, r.inputTokens());
         assertEquals(5, r.outputTokens());
     }
+
+    @Test void buildRequestCoalescesConsecutiveToolResultsIntoSingleUserMessage() throws Exception {
+        // 并行工具调用:1 条 assistant 带 2 个 tool_use,紧跟 2 条连续 tool 消息
+        var toolCalls = List.of(
+            new LlmClient.ToolCall("a", new LlmClient.ToolCall.Function("fn_a", "{}")),
+            new LlmClient.ToolCall("b", new LlmClient.ToolCall.Function("fn_b", "{}"))
+        );
+        var msgs = List.of(
+            LlmClient.Message.assistant(null, toolCalls),
+            LlmClient.Message.tool("a", "result-a"),
+            LlmClient.Message.tool("b", "result-b")
+        );
+        ObjectNode body = AnthropicClient.buildRequestBody(M, "claude-x", 8192, msgs, List.of());
+        JsonNode messages = body.get("messages");
+
+        // 应有 2 条消息:1 条 assistant(tool_use) + 1 条 user(tool_result x2)
+        assertEquals(2, messages.size(), "两条连续 tool 消息应合并为一条 user 消息");
+
+        JsonNode userMsg = messages.get(1);
+        assertEquals("user", userMsg.get("role").asText());
+        JsonNode content = userMsg.get("content");
+        assertTrue(content.isArray(), "content 应为数组");
+        assertEquals(2, content.size(), "user 消息的 content 应包含 2 个 tool_result block");
+
+        assertEquals("tool_result", content.get(0).path("type").asText());
+        assertEquals("a", content.get(0).path("tool_use_id").asText());
+        assertEquals("tool_result", content.get(1).path("type").asText());
+        assertEquals("b", content.get(1).path("tool_use_id").asText());
+
+        // 验证没有连续两条 user 消息
+        for (int i = 0; i < messages.size() - 1; i++) {
+            boolean bothUser = "user".equals(messages.get(i).path("role").asText())
+                    && "user".equals(messages.get(i + 1).path("role").asText());
+            assertFalse(bothUser, "不应存在连续两条 role=user 的消息 (index " + i + " 和 " + (i + 1) + ")");
+        }
+    }
 }

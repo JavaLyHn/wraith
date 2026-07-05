@@ -9,7 +9,15 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Anthropic messages 协议客户端。v1:阻塞请求;流式 = 阻塞后一次性吐 content。 */
+/**
+ * Anthropic messages 协议客户端。v1:阻塞请求;流式 = 阻塞后一次性吐 content。
+ *
+ * <p><b>已知 v1 限制(有意为之,非 bug):</b>
+ * <ol>
+ *   <li>多模态 {@code contentParts} 未转发 — 仅发送 {@code content()} 文本;图片退化为文本占位符。</li>
+ *   <li>{@code max_tokens} 硬编码为 8192,不读取 {@code ProviderConfig.maxTokens}。</li>
+ * </ol>
+ */
 public class AnthropicClient implements LlmClient {
     private static final ObjectMapper M = new ObjectMapper();
     private static final MediaType JSON = MediaType.get("application/json");
@@ -65,17 +73,40 @@ public class AnthropicClient implements LlmClient {
                 if (msg.content() != null) { if (sys.length() > 0) sys.append("\n\n"); sys.append(msg.content()); }
                 continue;
             }
-            ObjectNode mm = msgs.addObject();
             if ("tool".equals(msg.role())) {
-                // 工具结果 → user 消息里的 tool_result block
-                mm.put("role", "user");
-                ArrayNode content = mm.putArray("content");
-                ObjectNode tr = content.addObject();
-                tr.put("type", "tool_result");
-                tr.put("tool_use_id", msg.toolCallId() != null ? msg.toolCallId() : "");
-                tr.put("content", msg.content() != null ? msg.content() : "");
+                // 工具结果 → user 消息里的 tool_result block。
+                // 连续多个 tool 消息(并行工具调用)必须合并到同一条 user 消息的 content 数组,
+                // 否则 Anthropic API 会因连续两条 user 消息返回 HTTP 400。
+                int lastIdx = msgs.size() - 1;
+                boolean merged = false;
+                if (lastIdx >= 0) {
+                    JsonNode last = msgs.get(lastIdx);
+                    boolean lastIsToolResultUser = "user".equals(last.path("role").asText())
+                            && last.get("content") != null
+                            && last.get("content").isArray()
+                            && last.get("content").size() > 0
+                            && "tool_result".equals(last.get("content").get(0).path("type").asText());
+                    if (lastIsToolResultUser) {
+                        // 追加到已有的 user 消息,而非新建
+                        ObjectNode tr = ((ArrayNode) last.get("content")).addObject();
+                        tr.put("type", "tool_result");
+                        tr.put("tool_use_id", msg.toolCallId() != null ? msg.toolCallId() : "");
+                        tr.put("content", msg.content() != null ? msg.content() : "");
+                        merged = true;
+                    }
+                }
+                if (!merged) {
+                    ObjectNode mm = msgs.addObject();
+                    mm.put("role", "user");
+                    ArrayNode content = mm.putArray("content");
+                    ObjectNode tr = content.addObject();
+                    tr.put("type", "tool_result");
+                    tr.put("tool_use_id", msg.toolCallId() != null ? msg.toolCallId() : "");
+                    tr.put("content", msg.content() != null ? msg.content() : "");
+                }
                 continue;
             }
+            ObjectNode mm = msgs.addObject();
             mm.put("role", "assistant".equals(msg.role()) ? "assistant" : "user");
             if (msg.toolCalls() != null && !msg.toolCalls().isEmpty()) {
                 // assistant 带工具调用 → text block(可选) + tool_use blocks
