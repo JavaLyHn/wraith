@@ -229,6 +229,8 @@ export interface ProviderView {
   name: string
   model: string
   hasKey: boolean
+  protocol?: string
+  baseUrl?: string
 }
 
 export interface ModelListResult {

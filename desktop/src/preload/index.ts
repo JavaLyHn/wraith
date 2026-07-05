@@ -62,6 +62,8 @@ export interface WraithApi {
   modelList(): Promise<ModelListResult>
   setModel(provider: string): Promise<{ provider: string; model: string }>
   setDefaultProvider(provider: string): Promise<{ ok: boolean }>
+  setProvider(p: { id: string; apiKey: string; model?: string; baseUrl?: string; protocol?: string }): Promise<{ ok: boolean }>
+  removeProvider(id: string): Promise<{ ok: boolean }>
   gatewayGetConfig(): Promise<GatewayConfigView>
   gatewaySetSecret(secret: string): Promise<{ ok: boolean }>
   gatewaySetWorkspace(workspace: string): Promise<{ ok: boolean }>
@@ -273,6 +275,14 @@ const wraith: WraithApi = {
 
   setDefaultProvider(provider) {
     return ipcRenderer.invoke('wraith:setDefaultProvider', provider) as Promise<{ ok: boolean }>
+  },
+
+  setProvider(p) {
+    return ipcRenderer.invoke('wraith:setProvider', p) as Promise<{ ok: boolean }>
+  },
+
+  removeProvider(id) {
+    return ipcRenderer.invoke('wraith:removeProvider', id) as Promise<{ ok: boolean }>
   },
 
   gatewayGetConfig() {

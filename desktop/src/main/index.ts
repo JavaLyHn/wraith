@@ -465,6 +465,16 @@ ipcMain.handle('wraith:setDefaultProvider', async (_e, provider: string) => {
   return client.request('config.setDefaultProvider', { provider })
 })
 
+ipcMain.handle('wraith:setProvider', async (_e, p: { id: string; apiKey: string; model?: string; baseUrl?: string; protocol?: string }) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.setProvider', p)
+})
+
+ipcMain.handle('wraith:removeProvider', async (_e, id: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.removeProvider', { id })
+})
+
 ipcMain.handle('wraith:setApprovalMode', async (_e, auto: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.setApprovalMode', {
