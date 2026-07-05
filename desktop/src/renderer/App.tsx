@@ -178,6 +178,16 @@ export default function App(): JSX.Element {
     }
   }, [fetchMcpResources])
 
+  // ── session list helpers ───────────────────────────────────────────────────
+  const fetchSessions = useCallback(async () => {
+    try {
+      const { sessions } = await window.wraith.listSessions()
+      setSessions(sessions)
+    } catch (err) {
+      console.error('[wraith] listSessions error:', err)
+    }
+  }, [])
+
   // ── automationApprovalRef:缓存最近一次 approval push(唯一弹窗入口是运行历史「处理审批」钮) ──
   const automationApprovalRef = useRef<{ runId: string; payload: Record<string, unknown> } | null>(null)
 
@@ -191,20 +201,10 @@ export default function App(): JSX.Element {
         automationApprovalRef.current = { runId: evt.runId, payload: evt.payload }
       }
       if (evt.kind === 'open-panel') setView('automations')
-      // 'runs-changed' 由面板自身拉取(Task 9),App 层不持 runs 态
+      if (evt.kind === 'runs-changed') void fetchSessions()
     })
     return unsub
-  }, [])
-
-  // ── session list helpers ───────────────────────────────────────────────────
-  const fetchSessions = useCallback(async () => {
-    try {
-      const { sessions } = await window.wraith.listSessions()
-      setSessions(sessions)
-    } catch (err) {
-      console.error('[wraith] listSessions error:', err)
-    }
-  }, [])
+  }, [fetchSessions])
 
   const fetchProjects = useCallback(async () => {
     try {

@@ -671,17 +671,17 @@ async function pollAndNotify(): Promise<void> {
     const runs = res.runs ?? []
 
     let maxEndedAt = notifyPollLastSeen
+    let sawNew = false
 
     for (const run of runs) {
       if (!TERMINAL_STATUSES.has(run.status)) continue
-      if (!run.notifyDesktop) continue
       const endedAt = run.endedAt ?? 0
       if (endedAt <= notifyPollLastSeen) continue
-
-      // New terminal run that desktop should announce
-      const label = run.status === 'success' ? '完成' : run.status === 'failed' ? '失败' : '中断'
-      notifyOS('Wraith 自动化任务' + label, run.summary ?? '')
-
+      sawNew = true
+      if (run.notifyDesktop) {
+        const label = run.status === 'success' ? '完成' : run.status === 'failed' ? '失败' : '中断'
+        notifyOS('Wraith 自动化任务' + label, run.summary ?? '')
+      }
       if (endedAt > maxEndedAt) maxEndedAt = endedAt
     }
 
@@ -690,6 +690,7 @@ async function pollAndNotify(): Promise<void> {
       // Also refresh badge after finding new terminal runs
       pushBadge()
     }
+    if (sawNew) pushAutomation({ kind: 'runs-changed' })   // 触发 renderer 刷新会话/运行历史
   } catch {
     // best-effort: poll failure is silent
   }
