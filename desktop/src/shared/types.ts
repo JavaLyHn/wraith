@@ -295,6 +295,8 @@ export interface AutomationRun {
   sessionId?: string
   summary?: string
   miss?: boolean
+  /** Set by the Java DesktopDeliveryAdapter; desktop polls and pops an OS notification when true. */
+  notifyDesktop?: boolean
 }
 
 export type AutomationEvent =

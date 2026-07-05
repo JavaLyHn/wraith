@@ -19,12 +19,13 @@ import {
 } from './settings'
 import type { BackendEvent } from '../shared/types'
 import {
-  readTasks as autoReadTasks, removeTask as autoRemoveTask,
+  readTasks as autoReadTasks,
   readRuns as autoReadRuns, readLastPanelOpenedAt, writeLastPanelOpenedAt, badgeVisible,
-  sweepNonTerminalRuns, upsertTaskFromRenderer as autoUpsertTaskFromRenderer,
+  sweepNonTerminalRuns,
 } from './automationsStore'
-import { AutomationScheduler } from './automationScheduler'
-import type { AutomationTask, AutomationEvent } from '../shared/types'
+import { mapLegacyTask, needsMigration } from './automationMigration'
+import type { LegacyAutomationTask } from './automationMigration'
+import type { AutomationTask, AutomationRun, AutomationEvent } from '../shared/types'
 import { resolveInterruptTurnId } from './interruptTurnId'
 import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from './notificationFilter'
 import { GatewayManager } from './gatewayManager'
@@ -56,7 +57,10 @@ let currentTurnId: string | null = null
 
 const defaultJar = defaultJarPath(os.homedir())
 
-let automationScheduler: AutomationScheduler | null = null
+/** In-memory high-water mark for desktop-notify polling (Part D). */
+let notifyPollLastSeen = 0
+let notifyPollTimer: ReturnType<typeof setInterval> | null = null
+
 let gatewayManager: GatewayManager | null = null
 
 function pushGateway(evt: GatewayEvent): void {
@@ -72,10 +76,25 @@ function pushAutomation(evt: AutomationEvent): void {
 }
 
 function pushBadge(): void {
-  try {
-    const ud = app.getPath('userData')
-    pushAutomation({ kind: 'badge', show: badgeVisible(autoReadRuns(ud), readLastPanelOpenedAt(ud)) })
-  } catch { /* 降级 */ }
+  // Best-effort: ask daemon for current runs; fall back to local legacy file if client not ready.
+  const ud = app.getPath('userData')
+  const lastPanelOpenedAt = readLastPanelOpenedAt(ud)
+  if (client) {
+    client.request('automations.runs', {}).then((res) => {
+      const r = res as { runs?: AutomationRun[] }
+      const runs = r.runs ?? []
+      pushAutomation({ kind: 'badge', show: badgeVisible(runs, lastPanelOpenedAt) })
+    }).catch(() => {
+      // daemon not ready yet — fall back to local legacy file
+      try {
+        pushAutomation({ kind: 'badge', show: badgeVisible(autoReadRuns(ud), lastPanelOpenedAt) })
+      } catch { /* 降级 */ }
+    })
+  } else {
+    try {
+      pushAutomation({ kind: 'badge', show: badgeVisible(autoReadRuns(ud), lastPanelOpenedAt) })
+    } catch { /* 降级 */ }
+  }
 }
 
 function notifyOS(title: string, body: string): void {
@@ -469,29 +488,74 @@ ipcMain.handle('wraith:rewindSession', async (_e, userOrdinal: number) => {
 })
 
 // ---------------------------------------------------------------------------
-// Automation IPC handlers (Phase E-2)
+// Automation IPC handlers (Task 18: 全部路由到 daemon RPC)
 // ---------------------------------------------------------------------------
+// singular 前缀(automationList/Upsert/Remove/Runs)和 plural 前缀(automationsList/Upsert/Remove/Runs)
+// 均代理到 client.request('automations.*')。renderer 继续调 singular 方法;
+// Task 16 的 preload plural 方法也全部就绪。两套方法合一到同一 RPC 实现,无死代码。
 
-ipcMain.handle('wraith:automationList', async () => ({ tasks: autoReadTasks(app.getPath('userData')) }))
+/** 如果 task 携带旧 projectPath 但无 workspace,补填 workspace 后再发给 daemon。 */
+function ensureWorkspace(task: AutomationTask): AutomationTask {
+  if (!task.workspace && task.projectPath) {
+    return { ...task, workspace: task.projectPath }
+  }
+  return task
+}
+
+// --- singular (renderer-facing, backward-compat) ---
+ipcMain.handle('wraith:automationList', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.list', {})
+})
 ipcMain.handle('wraith:automationUpsert', async (_e, task: AutomationTask) => {
-  autoUpsertTaskFromRenderer(app.getPath('userData'), task)
-  return { ok: true }
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.upsert', ensureWorkspace(task))
 })
 ipcMain.handle('wraith:automationRemove', async (_e, id: string) => {
-  autoRemoveTask(app.getPath('userData'), id)
+  if (!client) throw new Error('Backend not connected')
+  const res = await client.request('automations.remove', { id })
   pushBadge()
-  return { ok: true }
+  return res
 })
-ipcMain.handle('wraith:automationRunNow', async (_e, id: string) => automationScheduler?.runNow(id) ?? { ok: false })
-ipcMain.handle('wraith:automationStop', async (_e, runId: string) => automationScheduler?.stopRun(runId) ?? { ok: false })
-ipcMain.handle('wraith:automationRuns', async () => ({ runs: autoReadRuns(app.getPath('userData')) }))
+ipcMain.handle('wraith:automationRunNow', async (_e, id: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.runNow', { id })
+})
+ipcMain.handle('wraith:automationStop', async (_e, runId: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.stop', { runId })
+})
+ipcMain.handle('wraith:automationRuns', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.runs', {})
+})
 ipcMain.handle('wraith:automationRespondApproval', async (_e, runId: string, approvalId: string, decision: string,
-    opts: { modifiedArgs?: string; allowNetwork?: boolean } | null) =>
-  automationScheduler?.respondApproval(runId, approvalId, decision, opts) ?? { ok: false })
+    opts: { modifiedArgs?: string; allowNetwork?: boolean } | null) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.respondApproval', { runId, approvalId, decision, ...(opts ?? {}) })
+})
 ipcMain.handle('wraith:automationPanelOpened', async () => {
   writeLastPanelOpenedAt(app.getPath('userData'), Date.now())
   pushBadge()
   return { ok: true }
+})
+
+// --- plural (Task 16 preload channels) ---
+ipcMain.handle('wraith:automationsList', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.list', {})
+})
+ipcMain.handle('wraith:automationsUpsert', async (_e, task: AutomationTask) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.upsert', ensureWorkspace(task))
+})
+ipcMain.handle('wraith:automationsRemove', async (_e, id: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.remove', { id })
+})
+ipcMain.handle('wraith:automationsRuns', async (_e, taskId?: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.runs', taskId ? { taskId } : {})
 })
 
 // ---------------------------------------------------------------------------
@@ -527,6 +591,91 @@ ipcMain.handle('wraith:gatewayBindStart', async () => { gatewayManager?.bindStar
 ipcMain.handle('wraith:gatewayBindCancel', async () => { gatewayManager?.cancelBind(); return { ok: true } })
 
 // ---------------------------------------------------------------------------
+// Part C: 启动一次性迁移(legacy automations.json → daemon)
+// ---------------------------------------------------------------------------
+
+/** Marker file path for "migration already done". */
+function migrationFlagPath(ud: string): string {
+  return path.join(ud, 'automations-migrated')
+}
+
+async function runStartupMigration(ud: string): Promise<void> {
+  if (!client) return  // daemon not ready; caller retries are not implemented — skip gracefully
+
+  try {
+    const flagFile = migrationFlagPath(ud)
+    const alreadyMigrated = fs.existsSync(flagFile)
+
+    // Read legacy tasks from the old local store (automations.json in userData)
+    const legacyTasks = autoReadTasks(ud) as LegacyAutomationTask[]
+
+    // Ask daemon for current task list
+    const daemonRes = await client.request('automations.list', {}) as { tasks?: AutomationTask[] }
+    const daemonTasks = daemonRes.tasks ?? []
+
+    if (!needsMigration(daemonTasks, legacyTasks, alreadyMigrated)) return
+
+    // Migrate each legacy task
+    for (const legacy of legacyTasks) {
+      try {
+        await client.request('automations.upsert', mapLegacyTask(legacy))
+      } catch (err) {
+        console.warn('[automations] 迁移任务失败,跳过:', legacy.id, err)
+      }
+    }
+
+    // Set the persistent migration flag (touch the marker file; keep legacy file intact as backup)
+    try {
+      fs.writeFileSync(flagFile, String(Date.now()), 'utf8')
+    } catch (err) {
+      console.warn('[automations] 迁移标志写入失败:', err)
+    }
+
+    console.info('[automations] 一次性迁移完成,已迁移', legacyTasks.length, '条任务')
+  } catch (err) {
+    // best-effort: migration failure must not crash the app
+    console.warn('[automations] 一次性迁移失败(best-effort,不影响启动):', err)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Part D: 桌面通知轮询(每 30s 检查新终态 run 且 notifyDesktop=true)
+// ---------------------------------------------------------------------------
+
+async function pollAndNotify(): Promise<void> {
+  if (!client) return
+
+  try {
+    const res = await client.request('automations.runs', {}) as { runs?: AutomationRun[] }
+    const runs = res.runs ?? []
+    const TERMINAL = new Set<string>(['success', 'failed', 'interrupted'])
+
+    let maxEndedAt = notifyPollLastSeen
+
+    for (const run of runs) {
+      if (!TERMINAL.has(run.status)) continue
+      if (!run.notifyDesktop) continue
+      const endedAt = run.endedAt ?? 0
+      if (endedAt <= notifyPollLastSeen) continue
+
+      // New terminal run that desktop should announce
+      const label = run.status === 'success' ? '完成' : run.status === 'failed' ? '失败' : '中断'
+      notifyOS('Wraith 自动化任务' + label, run.summary ?? '')
+
+      if (endedAt > maxEndedAt) maxEndedAt = endedAt
+    }
+
+    if (maxEndedAt > notifyPollLastSeen) {
+      notifyPollLastSeen = maxEndedAt
+      // Also refresh badge after finding new terminal runs
+      pushBadge()
+    }
+  } catch {
+    // best-effort: poll failure is silent
+  }
+}
+
+// ---------------------------------------------------------------------------
 // App lifecycle
 // ---------------------------------------------------------------------------
 
@@ -539,37 +688,10 @@ app.whenReady().then(() => {
   } else {
     seedProjectsIfEmpty(ud, Date.now())
   }
-  // I-1: 崩溃/退出残留的非终态 run 启动即清扫为 interrupted(scheduler 实例化之前;best-effort)
+  // I-1: 崩溃/退出残留的非终态 run 清扫(本地 legacy 文件,best-effort)
   try {
     sweepNonTerminalRuns(app.getPath('userData'))
   } catch { /* best-effort:清扫失败不阻塞启动 */ }
-  automationScheduler = new AutomationScheduler({
-    userDataDir: app.getPath('userData'),
-    env: process.env,
-    homedir: os.homedir(),
-    onRunsChanged: () => {
-      try {
-        pushAutomation({ kind: 'runs-changed' })
-        pushBadge()
-      } catch { /* window destroyed — 静默降级 */ }
-    },
-    onApproval: (runId, payload) => {
-      try {
-        pushAutomation({ kind: 'approval', runId, payload })
-        pushBadge()
-        notifyOS('Wraith 自动化等待审批', '有任务挂起等待你的审批')
-      } catch { /* 降级 */ }
-    },
-    onTerminal: run => {
-      // runs-changed 与 badge 已由 finishRun 先行调用的 onRunsChanged 推送,
-      // 此处只负责系统通知——依赖调度器 finishRun 内 onRunsChanged→onTerminal 的调用顺序
-      try {
-        const label = run.status === 'success' ? '完成' : run.status === 'failed' ? '失败' : '中断'
-        notifyOS('Wraith 自动化任务' + label, run.summary ?? '')
-      } catch { /* 降级 */ }
-    },
-  })
-  automationScheduler.start()
 
   gatewayManager = new GatewayManager(
     (evt) => pushGateway(evt),
@@ -580,6 +702,14 @@ app.whenReady().then(() => {
 
   createWindow()
   spawnBackend()
+
+  // Part C: 启动一次性迁移(daemon 就绪后执行,defer 500ms 等 RPC 握手完成)
+  if (process.env['WRAITH_E2E'] !== '1') {
+    setTimeout(() => { void runStartupMigration(app.getPath('userData')) }, 500)
+  }
+
+  // Part D: 桌面通知轮询(30s,检查新终态 run 且 notifyDesktop=true)
+  notifyPollTimer = setInterval(() => { void pollAndNotify() }, 30_000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -603,9 +733,8 @@ app.on('will-quit', () => {
   } catch {
     // ignore — child may already be gone
   }
-  // stopAll: interrupted 落盘同步完成;子进程信号回收 best-effort(异步,不 await)
   try {
-    automationScheduler?.stopAll()
+    if (notifyPollTimer !== null) clearInterval(notifyPollTimer)
   } catch {
     // best-effort
   }
