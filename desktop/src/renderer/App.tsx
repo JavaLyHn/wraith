@@ -257,6 +257,22 @@ export default function App(): JSX.Element {
     }
   }, [fetchSessions]) // running 守卫改读 turnRef,不再依赖 state.turn
 
+  const handleToggleStar = useCallback(async (id: string, starred: boolean) => {
+    await window.wraith.setSessionStarred(id, starred)
+    void fetchSessions()
+  }, [fetchSessions])
+
+  const handleRenameSession = useCallback(async (id: string, name: string) => {
+    await window.wraith.renameSession(id, name)
+    void fetchSessions()
+  }, [fetchSessions])
+
+  const handleDeleteSession = useCallback(async (id: string) => {
+    await window.wraith.deleteSession(id)
+    if (id === state.sessionId) await window.wraith.startSession(state.workspace || null)
+    void fetchSessions()
+  }, [fetchSessions, state.sessionId, state.workspace])
+
   // ── startup flow (runs once) ───────────────────────────────────────────────
   useEffect(() => {
     if (startedRef.current) return
@@ -639,6 +655,9 @@ export default function App(): JSX.Element {
         activeSessionId={state.sessionId}
         onNewConversation={handleNewConversation}
         onSelectSession={handleSelectSession}
+        onToggleStar={handleToggleStar}
+        onRenameSession={handleRenameSession}
+        onDeleteSession={handleDeleteSession}
         onActivateProject={switchToProject}
         onAddProject={handleAddProject}
         onRemoveProject={handleRemoveProject}

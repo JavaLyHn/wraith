@@ -7,7 +7,41 @@ import {
 } from './ui/tooltip'
 import ProjectSwitcher from './ProjectSwitcher'
 import { filterSidebar } from '../lib/sidebarSearch'
+import { sessionDisplayName, partitionStarred } from '../lib/sessionView'
 import type { SessionMeta, ProjectView } from '../../shared/types'
+
+function SessionRow({ s, active, onSelect, onToggleStar, onRename, onDelete }: {
+  s: SessionMeta; active: boolean
+  onSelect: (id: string) => void
+  onToggleStar: (id: string, starred: boolean) => void
+  onRename: (id: string, name: string) => void
+  onDelete: (id: string) => void
+}): JSX.Element {
+  const [confirmDel, setConfirmDel] = useState(false)
+  return (
+    <div className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 ' +
+      (active ? 'bg-surface' : 'hover:bg-surface/60')}>
+      <button data-testid="conversation-item" onClick={() => onSelect(s.id)}
+        className={'flex-1 truncate px-2 py-2 text-left text-xs ' + (active ? 'text-fg' : 'text-fg-muted')}
+        title={sessionDisplayName(s)}>
+        {sessionDisplayName(s)}
+      </button>
+      <button data-testid="session-star" title={s.starred ? '取消重点' : '标记重点'}
+        onClick={() => onToggleStar(s.id, !s.starred)}
+        className={'shrink-0 px-1 text-xs ' + (s.starred ? 'text-warning' : 'text-fg-subtle opacity-0 group-hover:opacity-100')}>
+        {s.starred ? '★' : '☆'}
+      </button>
+      <button data-testid="session-rename" title="改名"
+        onClick={() => { const n = window.prompt('会话名', sessionDisplayName(s)); if (n !== null) onRename(s.id, n) }}
+        className="shrink-0 px-1 text-xs text-fg-subtle opacity-0 group-hover:opacity-100">✎</button>
+      <button data-testid="session-delete" title={confirmDel ? '确认删除?' : '删除'}
+        onClick={() => { if (!confirmDel) { setConfirmDel(true); return } onDelete(s.id) }}
+        className={'shrink-0 px-1 text-xs opacity-0 group-hover:opacity-100 ' + (confirmDel ? 'text-danger opacity-100' : 'text-fg-subtle')}>
+        {confirmDel ? '✓' : '🗑'}
+      </button>
+    </div>
+  )
+}
 
 interface SidebarProps {
   workspace: string
@@ -17,6 +51,9 @@ interface SidebarProps {
   activeSessionId: string
   onNewConversation: () => void
   onSelectSession: (id: string) => void
+  onToggleStar: (id: string, starred: boolean) => void
+  onRenameSession: (id: string, name: string) => void
+  onDeleteSession: (id: string) => void
   onActivateProject: (path: string) => void
   onAddProject: () => void
   onRemoveProject: (path: string) => void
@@ -37,6 +74,9 @@ export default function Sidebar({
   activeSessionId,
   onNewConversation,
   onSelectSession,
+  onToggleStar,
+  onRenameSession,
+  onDeleteSession,
   onActivateProject,
   onAddProject,
   onRemoveProject,
@@ -234,29 +274,29 @@ export default function Sidebar({
               </div>
             </>
           ) : (
-            /* 非激活态:原会话列表 */
+            /* 非激活态:⭐重点分区 + 对话分区 */
             <>
-              <div className="mt-4 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">对话</div>
-              <div className="px-3">
-                {sessions.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>
-                ) : (
-                  sessions.map(s => (
-                    <button
-                      key={s.id}
-                      data-testid="conversation-item"
-                      onClick={() => onSelectSession(s.id)}
-                      className={
-                        'mb-0.5 block w-full truncate rounded-lg px-3 py-2 text-left text-xs ' +
-                        (s.id === activeSessionId ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')
-                      }
-                      title={s.title}
-                    >
-                      {s.title || '(未命名)'}
-                    </button>
-                  ))
-                )}
-              </div>
+              {(() => { const { starred, rest } = partitionStarred(sessions); return (
+                <>
+                  {sessions.length === 0 && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
+                  {starred.length > 0 && <>
+                    <div className="mt-4 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">⭐ 重点</div>
+                    <div className="px-2">{starred.map(s => (
+                      <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
+                        onSelect={onSelectSession} onToggleStar={onToggleStar}
+                        onRename={onRenameSession} onDelete={onDeleteSession} />
+                    ))}</div>
+                  </>}
+                  {rest.length > 0 && <>
+                    <div className="mt-4 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">对话</div>
+                    <div className="px-2">{rest.map(s => (
+                      <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
+                        onSelect={onSelectSession} onToggleStar={onToggleStar}
+                        onRename={onRenameSession} onDelete={onDeleteSession} />
+                    ))}</div>
+                  </>}
+                </>
+              )})()}
             </>
           )}
         </div>
