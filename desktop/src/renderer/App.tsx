@@ -391,15 +391,16 @@ export default function App(): JSX.Element {
   }, [state.pendingApproval])
 
   // ── automation approval handler ────────────────────────────────────────────
-  const handleAutomationApprovalRespond = useCallback(async (payload: ApprovalResponsePayload) => {
+  const handleAutomationApprovalRespond = useCallback(async (_payload: ApprovalResponsePayload) => {
     const cur = automationApproval
     if (!cur) return
     setAutomationApproval(null)
     automationApprovalRef.current = null
     try {
+      // daemon contract: only the exact lowercase string "approve" approves; map all approve variants.
       await window.wraith.automationRespondApproval(
         String(cur.payload['approvalId']),
-        payload.decision,
+        'approve',
       )
     } catch (err) { console.error('[wraith] automation respond error:', err) }
   }, [automationApproval])
@@ -410,7 +411,7 @@ export default function App(): JSX.Element {
     setAutomationApproval(null)
     automationApprovalRef.current = null
     try {
-      await window.wraith.automationRespondApproval(String(cur.payload['approvalId']), 'REJECTED')
+      await window.wraith.automationRespondApproval(String(cur.payload['approvalId']), 'reject')
     } catch (err) { console.error('[wraith] automation reject error:', err) }
   }, [automationApproval])
 
