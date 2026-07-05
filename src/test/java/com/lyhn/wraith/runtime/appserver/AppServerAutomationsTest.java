@@ -168,6 +168,30 @@ class AppServerAutomationsTest {
     }
 
     // -------------------------------------------------------------------------
+    // Test 7: 桌面完整线格式 upsert(带 projectPath/lastFiredAt 等 TS-only 字段)不得报错
+    //   —— 回归锁:此前所有 upsert 测试都用 Java 形状(无 projectPath),漏掉了真实桌面 payload,
+    //   导致 "Unrecognized field projectPath" 到活体才暴露。
+    // -------------------------------------------------------------------------
+    @Test
+    void upsertAcceptsDesktopShapedPayload() throws Exception {
+        String desktopTask = "{\"id\":\"task-9\",\"name\":\"D\",\"prompt\":\"p\","
+                + "\"projectPath\":\"/proj\",\"workspace\":\"/proj\","
+                + "\"schedule\":{\"kind\":\"interval\",\"everyMinutes\":10},"
+                + "\"enabled\":true,\"createdAt\":1,\"enabledAt\":1,\"lastFiredAt\":null,"
+                + "\"deliverTo\":[{\"platform\":\"qq\"}],\"approval\":{\"default\":\"deny\"}}";
+        List<JsonNode> replies = run(
+                "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"automations.upsert\",\"params\":" + desktopTask + "}",
+                "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"automations.list\",\"params\":{}}"
+        );
+        JsonNode upsertReply = byId(replies, 2);
+        assertNull(upsertReply.get("error"), "桌面形状 payload 不应报未知字段错误: " + upsertReply.path("error").path("message").asText());
+        assertTrue(upsertReply.path("result").path("ok").asBoolean(), "upsert 应返回 {ok:true}");
+        JsonNode tasks = byId(replies, 3).get("result").get("tasks");
+        assertEquals(1, tasks.size());
+        assertEquals("/proj", tasks.get(0).path("workspace").asText(), "workspace 应被保留");
+    }
+
+    // -------------------------------------------------------------------------
     // Test 6: runs filtered by taskId
     // -------------------------------------------------------------------------
     @Test
