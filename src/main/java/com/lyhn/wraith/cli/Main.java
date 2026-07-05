@@ -1265,6 +1265,29 @@ public class Main {
                         config.save();
                         return java.util.Map.of("ok", true);
                     }
+                    public java.util.Map<String, Object> configSetProvider(String id, String apiKey, String model, String baseUrl, String protocol) {
+                        com.lyhn.wraith.config.WraithConfig.ProviderConfig pc =
+                            config.getProviders().getOrDefault(id, new com.lyhn.wraith.config.WraithConfig.ProviderConfig());
+                        if (apiKey != null && !apiKey.isBlank()) pc.setApiKey(apiKey);   // 空=不改现有 key
+                        if (model != null) pc.setModel(model);
+                        if (baseUrl != null) pc.setBaseUrl(baseUrl);
+                        if (protocol != null) pc.setProtocol(protocol);
+                        config.getProviders().put(id, pc);
+                        config.save();
+                        return java.util.Map.of("ok", true);
+                    }
+                    public java.util.Map<String, Object> configRemoveProvider(String id) {
+                        config.getProviders().remove(id);
+                        if (id.equals(config.getDefaultProvider())) {
+                            // 回落到下一个有 key 的 provider(否则保留原值)
+                            for (java.util.Map.Entry<String, com.lyhn.wraith.config.WraithConfig.ProviderConfig> e : config.getProviders().entrySet())
+                                if (e.getValue() != null && e.getValue().getApiKey() != null && !e.getValue().getApiKey().isBlank()) {
+                                    config.setDefaultProvider(e.getKey()); break;
+                                }
+                        }
+                        config.save();
+                        return java.util.Map.of("ok", true);
+                    }
                     public boolean setSessionStarred(String id, boolean starred) {
                         return sessionStore.setStarred(id, starred);
                     }

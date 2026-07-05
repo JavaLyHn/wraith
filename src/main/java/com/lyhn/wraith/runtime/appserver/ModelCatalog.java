@@ -12,11 +12,14 @@ public final class ModelCatalog {
 
     /**
      * Build the providers list from config.
+     * Reports KNOWN_PROVIDERS ∪ config.getProviders().keySet() (KNOWN first, deduped).
      * NEVER includes apiKey or baseUrl values — only hasKey boolean.
      */
     public static List<Map<String, Object>> providers(WraithConfig config) {
+        java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>(java.util.Arrays.asList(KNOWN_PROVIDERS));
+        ids.addAll(config.getProviders().keySet());
         List<Map<String, Object>> list = new ArrayList<>();
-        for (String p : KNOWN_PROVIDERS) {
+        for (String p : ids) {
             String apiKey = config.getApiKey(p);
             boolean hasKey = apiKey != null && !apiKey.isBlank();
             String modelName = config.getModel(p);

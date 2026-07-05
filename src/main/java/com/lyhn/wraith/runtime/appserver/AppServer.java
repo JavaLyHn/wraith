@@ -74,6 +74,22 @@ public final class AppServer {
         default java.util.Map<String, Object> configSetDefaultProvider(String provider) {
             throw new UnsupportedOperationException("configSetDefaultProvider not implemented");
         }
+        /**
+         * 新增或更新一个 provider 配置(写 config.json)。
+         * apiKey 为空/null 时保留已有 key(不覆写)。
+         * 默认抛出。
+         */
+        default java.util.Map<String, Object> configSetProvider(String id, String apiKey, String model, String baseUrl, String protocol) {
+            throw new UnsupportedOperationException("configSetProvider not implemented");
+        }
+        /**
+         * 删除一个 provider 配置(写 config.json)。
+         * 若删除的是默认 provider 则回落到下一个有 key 的 provider。
+         * 默认抛出。
+         */
+        default java.util.Map<String, Object> configRemoveProvider(String id) {
+            throw new UnsupportedOperationException("configRemoveProvider not implemented");
+        }
     }
 
     private final BufferedReader in;
@@ -194,6 +210,26 @@ public final class AppServer {
                 } catch (UnsupportedOperationException e) {
                     writer.error(msg.id(), -32000, e.getMessage());
                 }
+            }
+            case "config.setProvider" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String id = textParam(p, "id");
+                if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                String apiKey = p != null && p.hasNonNull("apiKey") ? p.get("apiKey").asText() : null;
+                String model = p != null && p.hasNonNull("model") ? p.get("model").asText() : null;
+                String baseUrl = p != null && p.hasNonNull("baseUrl") ? p.get("baseUrl").asText() : null;
+                String protocol = p != null && p.hasNonNull("protocol") ? p.get("protocol").asText() : null;
+                try { writer.result(msg.id(), session.configSetProvider(id, apiKey, model, baseUrl, protocol)); }
+                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.removeProvider" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String id = textParam(msg.params(), "id");
+                if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                try { writer.result(msg.id(), session.configRemoveProvider(id)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "gateway.config.get" -> {
                 WraithConfig cfg = WraithConfig.load();
