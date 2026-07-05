@@ -59,7 +59,7 @@ class AppServerAutomationsTest {
     /** 最小合法 CRON 任务 JSON，id=task-1。 */
     private static String cronTaskJson(String expr) {
         return "{\"id\":\"task-1\",\"name\":\"Morning\",\"prompt\":\"summarize\","
-                + "\"schedule\":{\"kind\":\"CRON\",\"expr\":\"" + expr + "\"},"
+                + "\"schedule\":{\"kind\":\"cron\",\"expr\":\"" + expr + "\"},"
                 + "\"enabled\":true,\"createdAt\":0,\"enabledAt\":0}";
     }
 
@@ -155,7 +155,7 @@ class AppServerAutomationsTest {
     void upsertPreservesOtherTasks() throws Exception {
         String task1 = cronTaskJson("0 9 * * 1-5");
         String task2 = "{\"id\":\"task-2\",\"name\":\"Evening\",\"prompt\":\"check\","
-                + "\"schedule\":{\"kind\":\"INTERVAL\",\"everyMinutes\":60},"
+                + "\"schedule\":{\"kind\":\"interval\",\"everyMinutes\":60},"
                 + "\"enabled\":true,\"createdAt\":0,\"enabledAt\":0}";
         List<JsonNode> replies = run(
                 "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"automations.upsert\",\"params\":" + task1 + "}",

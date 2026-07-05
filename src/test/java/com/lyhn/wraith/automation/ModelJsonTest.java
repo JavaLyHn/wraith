@@ -22,7 +22,7 @@ class ModelJsonTest {
         t.createdAt = 1L; t.enabledAt = 1L;
 
         String json = M.writeValueAsString(t);
-        assertTrue(json.contains("\"kind\":\"CRON\""));
+        assertTrue(json.contains("\"kind\":\"cron\""));
         assertTrue(json.contains("\"default\":\"ask\""), json);       // ApprovalMode @JsonValue
         AutomationTask back = M.readValue(json, AutomationTask.class);
         assertEquals(ScheduleKind.CRON, back.schedule.kind);

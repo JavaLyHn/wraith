@@ -17,7 +17,7 @@ class SchedulerTest {
     @Test void firesDueTaskRunsAndRecords() throws Exception {
         // interval 1 分钟,enabledAt=0 → 下次触发=60_000;clock=60_000 到点。
         writeTasks(dir, "{\"tasks\":[{\"id\":\"t1\",\"name\":\"x\",\"prompt\":\"ping\",\"workspace\":\"/w\","
-                + "\"schedule\":{\"kind\":\"INTERVAL\",\"everyMinutes\":1},\"enabled\":true,"
+                + "\"schedule\":{\"kind\":\"interval\",\"everyMinutes\":1},\"enabled\":true,"
                 + "\"deliverTo\":[],\"approval\":{\"default\":\"deny\"},\"createdAt\":0,\"enabledAt\":0}]}");
         AutomationStore store = new AutomationStore(dir);
         CountDownLatch delivered = new CountDownLatch(1);
@@ -36,7 +36,7 @@ class SchedulerTest {
 
     @Test void notDueTaskDoesNotFire() throws Exception {
         writeTasks(dir, "{\"tasks\":[{\"id\":\"t1\",\"name\":\"x\",\"prompt\":\"p\",\"workspace\":\"/w\","
-                + "\"schedule\":{\"kind\":\"INTERVAL\",\"everyMinutes\":10},\"enabled\":true,"
+                + "\"schedule\":{\"kind\":\"interval\",\"everyMinutes\":10},\"enabled\":true,"
                 + "\"deliverTo\":[],\"approval\":{\"default\":\"deny\"},\"createdAt\":0,\"enabledAt\":0}]}");
         AutomationStore store = new AutomationStore(dir);
         boolean[] fired = {false};
@@ -49,7 +49,7 @@ class SchedulerTest {
 
     @Test void disabledTaskSkipped() throws Exception {
         writeTasks(dir, "{\"tasks\":[{\"id\":\"t1\",\"name\":\"x\",\"prompt\":\"p\",\"workspace\":\"/w\","
-                + "\"schedule\":{\"kind\":\"INTERVAL\",\"everyMinutes\":1},\"enabled\":false,"
+                + "\"schedule\":{\"kind\":\"interval\",\"everyMinutes\":1},\"enabled\":false,"
                 + "\"deliverTo\":[],\"approval\":{\"default\":\"deny\"},\"createdAt\":0,\"enabledAt\":0}]}");
         boolean[] fired = {false};
         new Scheduler(new AutomationStore(dir), t -> { fired[0]=true; return null; },
