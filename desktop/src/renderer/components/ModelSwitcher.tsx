@@ -104,12 +104,12 @@ export default function ModelSwitcher({ initialModel, running }: ModelSwitcherPr
                 title={p.hasKey ? label : `${label} — 未配置 API Key`}
                 onClick={() => { if (p.hasKey) handleSelect(p.name) }}
                 className={
-                  'flex flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs disabled:cursor-not-allowed disabled:opacity-40 ' +
+                  'flex min-w-0 flex-1 items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1.5 text-left text-xs disabled:cursor-not-allowed disabled:opacity-40 ' +
                   (isCurrent ? 'bg-surface text-fg' : 'text-fg-muted enabled:hover:bg-surface/60')
                 }
               >
-                <span className="font-medium">{label}</span>
-                <span className="text-fg-subtle">{p.model}</span>
+                <span className="shrink-0 font-medium">{label}</span>
+                <span className="min-w-0 flex-1 truncate text-fg-subtle">{p.model}</span>
                 {isCurrent && <span className="ml-auto shrink-0">✓</span>}
                 {isDefault && !isCurrent && <span className="ml-auto shrink-0 text-fg-subtle text-[10px]">默认</span>}
                 {isDefault && isCurrent && <span className="ml-1 shrink-0 text-fg-subtle text-[10px]">默认</span>}
