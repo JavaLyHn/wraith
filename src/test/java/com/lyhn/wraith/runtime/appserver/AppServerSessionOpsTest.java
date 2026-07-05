@@ -90,4 +90,18 @@ class AppServerSessionOpsTest {
         assertNotNull(byId(r, 2).get("error"));
         assertEquals(-32602, byId(r, 2).path("error").path("code").asInt());
     }
+
+    @Test void missingSessionIdInRenameIsParamError() throws Exception {
+        List<JsonNode> r = run(
+                "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"session.rename\",\"params\":{\"name\":\"x\"}}");
+        assertNotNull(byId(r, 2).get("error"));
+        assertEquals(-32602, byId(r, 2).path("error").path("code").asInt());
+    }
+
+    @Test void missingSessionIdInDeleteIsParamError() throws Exception {
+        List<JsonNode> r = run(
+                "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"session.delete\",\"params\":{}}");
+        assertNotNull(byId(r, 2).get("error"));
+        assertEquals(-32602, byId(r, 2).path("error").path("code").asInt());
+    }
 }

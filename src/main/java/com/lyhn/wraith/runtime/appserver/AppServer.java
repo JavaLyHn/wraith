@@ -501,6 +501,8 @@ public final class AppServer {
         writer.result(msg.id(), Map.of("ok", true));
     }
 
+    // Idempotency asymmetry: setStarred/rename return -32000 when session no longer exists (operation cannot apply),
+    // but delete is idempotent (missing id still returns ok — "gone is gone").
     private void handleSessionDelete(JsonRpc.Incoming msg) {
         if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
         JsonNode p = msg.params();
