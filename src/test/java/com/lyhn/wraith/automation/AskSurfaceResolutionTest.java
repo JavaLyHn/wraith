@@ -182,6 +182,63 @@ class AskSurfaceResolutionTest {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // Eviction: pendingApprovals entry is removed after timeout (whenComplete hook)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Verifies the Task-14 fix: after a renderer ASK-timeout the {@code pendingApprovals} map
+     * entry for the approvalId is evicted.
+     *
+     * <p>Mechanism: {@code buildAskSurfaceWithEviction} mirrors the fixed GatewayDaemon Step 7
+     * which adds {@code f.whenComplete((r, e) -> pendingApprovals.remove(approvalId))};
+     * {@code ScheduledRunRenderer} completes the future on timeout so the hook fires.
+     */
+    @Test
+    void askTimeout_evictsEntryFromPendingApprovals() throws Exception {
+        Map<String, CompletableFuture<ApprovalResult>> pendingApprovals = new ConcurrentHashMap<>();
+        AtomicLong counter = new AtomicLong(0);
+
+        // Build AskSurface with the whenComplete eviction hook (mirrors fixed GatewayDaemon).
+        ScheduledRunRenderer.AskSurface askSurface = (runId, req) -> {
+            String approvalId = runId + "#" + counter.incrementAndGet();
+            CompletableFuture<ApprovalResult> f = new CompletableFuture<>();
+            pendingApprovals.put(approvalId, f);
+            f.whenComplete((r, e) -> pendingApprovals.remove(approvalId));
+            return f;
+        };
+
+        ApprovalPolicy policy = new ApprovalPolicy();
+        policy.default_ = ApprovalMode.ASK;
+        // Short timeout so the test completes quickly.
+        ScheduledRunRenderer renderer = new ScheduledRunRenderer(policy, 150, askSurface);
+        renderer.setRunId("run-evict");
+
+        // Run promptApproval on a worker thread (it blocks until timeout).
+        ExecutorService worker = Executors.newSingleThreadExecutor();
+        Future<ApprovalResult> rendererFuture = worker.submit(
+                () -> renderer.promptApproval(reqFor("write_file")));
+
+        // Wait for the renderer to return (timeout path).
+        ApprovalResult result = rendererFuture.get(3, TimeUnit.SECONDS);
+
+        // (a) Renderer must return REJECTED after timeout.
+        assertEquals(ApprovalResult.Decision.REJECTED, result.decision(),
+                "renderer must return REJECTED after ask timeout");
+
+        // (b) pendingApprovals must be empty after eviction — poll briefly to allow whenComplete to run.
+        // whenComplete fires on the thread that completes the future (renderer's worker thread),
+        // so it should already be done by the time rendererFuture.get() returns.
+        long deadline = System.currentTimeMillis() + 500;
+        while (!pendingApprovals.isEmpty() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(10);
+        }
+        assertTrue(pendingApprovals.isEmpty(),
+                "pendingApprovals must be empty after timeout-eviction; remaining: " + pendingApprovals.keySet());
+
+        worker.shutdownNow();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Desktop resolve — via RequestInbox
     // ─────────────────────────────────────────────────────────────────────────
 

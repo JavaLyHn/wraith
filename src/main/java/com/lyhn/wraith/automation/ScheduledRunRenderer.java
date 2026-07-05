@@ -121,9 +121,13 @@ public final class ScheduledRunRenderer implements Renderer {
                 try {
                     return future.get(askTimeoutMs, TimeUnit.MILLISECONDS);
                 } catch (TimeoutException e) {
+                    // Complete the future so the whenComplete eviction hook fires.
+                    // complete() is idempotent — if a real tap already completed it, this is a no-op.
+                    future.complete(ApprovalResult.reject("scheduled ask timeout"));
                     deniedTools.add(tool);
                     return ApprovalResult.reject("scheduled ask timeout");
                 } catch (Exception e) {
+                    future.complete(ApprovalResult.reject("interrupted"));
                     deniedTools.add(tool);
                     return ApprovalResult.reject("interrupted");
                 }

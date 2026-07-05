@@ -149,6 +149,7 @@ public final class GatewayDaemon {
             String approvalId = runId + "#" + approvalCounter.incrementAndGet();
             CompletableFuture<ApprovalResult> f = new CompletableFuture<>();
             pendingApprovals.put(approvalId, f);
+            f.whenComplete((r, e) -> pendingApprovals.remove(approvalId));
 
             // Surface via QQ pending queue (next inbound DM will flush keyboard message)
             if (hasQq && qqPendingRef != null) {
