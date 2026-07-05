@@ -46,6 +46,9 @@ public final class AppServer {
         default String persistTurn() { return null; }
         /** 真回溯:丢弃从第 userOrdinal 条 user 消息(1-based,含)起的全部历史。false=拒绝(超界等)。 */
         default boolean rewind(int userOrdinal) { return false; }
+        default boolean setSessionStarred(String sessionId, boolean starred) { return false; }
+        default boolean renameSession(String sessionId, String name) { return false; }
+        default boolean deleteSession(String sessionId) { return false; }
         /** MCP 操作面。实现可返回 null(表示 mcp 不可用)。默认 null。 */
         default McpOps mcp() { return null; }
         /**
@@ -124,6 +127,9 @@ public final class AppServer {
             case "session.list" -> handleSessionList(msg);
             case "session.resume" -> handleSessionResume(msg);
             case "session.rewind" -> handleSessionRewind(msg);
+            case "session.setStarred" -> handleSessionSetStarred(msg);
+            case "session.rename" -> handleSessionRename(msg);
+            case "session.delete" -> handleSessionDelete(msg);
             case "mcp.list" -> handleMcp(msg, ops -> writer.result(msg.id(), ops.list()));
             case "mcp.enable" -> handleMcpNamed(msg, (ops, name) -> { ops.enable(name); ok(msg); });
             case "mcp.disable" -> handleMcpNamed(msg, (ops, name) -> { ops.disable(name); ok(msg); });
@@ -472,6 +478,35 @@ public final class AppServer {
         int ordinal = p == null ? 0 : p.path("userOrdinal").asInt(0);
         if (ordinal < 1) { writer.error(msg.id(), -32602, "missing userOrdinal"); return; }
         if (!session.rewind(ordinal)) { writer.error(msg.id(), -32000, "rewind failed"); return; }
+        writer.result(msg.id(), Map.of("ok", true));
+    }
+
+    private void handleSessionSetStarred(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        String id = (p != null && p.hasNonNull("sessionId")) ? p.get("sessionId").asText() : "";
+        if (id.isBlank()) { writer.error(msg.id(), -32602, "missing sessionId"); return; }
+        boolean starred = p.path("starred").asBoolean(false);
+        if (!session.setSessionStarred(id, starred)) { writer.error(msg.id(), -32000, "setStarred failed"); return; }
+        writer.result(msg.id(), Map.of("ok", true));
+    }
+
+    private void handleSessionRename(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        String id = (p != null && p.hasNonNull("sessionId")) ? p.get("sessionId").asText() : "";
+        if (id.isBlank()) { writer.error(msg.id(), -32602, "missing sessionId"); return; }
+        String name = p.hasNonNull("name") ? p.get("name").asText() : null;
+        if (!session.renameSession(id, name)) { writer.error(msg.id(), -32000, "rename failed"); return; }
+        writer.result(msg.id(), Map.of("ok", true));
+    }
+
+    private void handleSessionDelete(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        String id = (p != null && p.hasNonNull("sessionId")) ? p.get("sessionId").asText() : "";
+        if (id.isBlank()) { writer.error(msg.id(), -32602, "missing sessionId"); return; }
+        session.deleteSession(id);   // 幂等:文件不存在也算删成功(前端只需知道"没了")
         writer.result(msg.id(), Map.of("ok", true));
     }
 

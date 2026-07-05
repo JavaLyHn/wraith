@@ -1265,6 +1265,15 @@ public class Main {
                         config.save();
                         return java.util.Map.of("ok", true);
                     }
+                    public boolean setSessionStarred(String id, boolean starred) {
+                        return sessionStore.setStarred(id, starred);
+                    }
+                    public boolean renameSession(String id, String name) {
+                        return sessionStore.rename(id, name);
+                    }
+                    public boolean deleteSession(String id) {
+                        return sessionStore.deleteById(id);
+                    }
                 };
             }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
 
