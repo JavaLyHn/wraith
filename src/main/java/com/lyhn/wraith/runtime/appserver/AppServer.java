@@ -229,6 +229,7 @@ public final class AppServer {
                 String id = textParam(msg.params(), "id");
                 if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
                 try { writer.result(msg.id(), session.configRemoveProvider(id)); }
+                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "gateway.config.get" -> {

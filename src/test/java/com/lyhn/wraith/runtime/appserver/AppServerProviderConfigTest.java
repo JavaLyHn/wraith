@@ -54,6 +54,18 @@ class AppServerProviderConfigTest {
         String all = r.toString();
         assertTrue(all.contains("openai"));
         assertFalse(all.contains("sk-secret"), "回包绝不能含 apiKey 明文");
+        // 验证 model.list 响应的 providers 数组中 openai 条目的 hasKey == true
+        JsonNode modelListReply = byId(r, 3);
+        JsonNode providersArray = modelListReply.path("result").path("providers");
+        JsonNode openaiEntry = null;
+        for (JsonNode entry : providersArray) {
+            if ("openai".equals(entry.path("name").asText())) {
+                openaiEntry = entry;
+                break;
+            }
+        }
+        assertNotNull(openaiEntry, "providers 中找不到 openai 条目");
+        assertTrue(openaiEntry.path("hasKey").asBoolean(), "openai 的 hasKey 应该是 true");
     }
     @Test void removeProviderDropsIt() throws Exception {
         WraithConfig cfg = new WraithConfig();
@@ -66,6 +78,11 @@ class AppServerProviderConfigTest {
     @Test void missingIdIsParamError() throws Exception {
         List<JsonNode> r = run(new WraithConfig(),
             "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"config.setProvider\",\"params\":{\"apiKey\":\"k\"}}");
+        assertEquals(-32602, byId(r,2).path("error").path("code").asInt());
+    }
+    @Test void removeProviderMissingIdIsParamError() throws Exception {
+        List<JsonNode> r = run(new WraithConfig(),
+            "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"config.removeProvider\",\"params\":{}}");
         assertEquals(-32602, byId(r,2).path("error").path("code").asInt());
     }
 }
