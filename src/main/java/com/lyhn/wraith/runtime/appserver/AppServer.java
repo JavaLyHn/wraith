@@ -79,7 +79,7 @@ public final class AppServer {
          * apiKey 为空/null 时保留已有 key(不覆写)。
          * 默认抛出。
          */
-        default java.util.Map<String, Object> configSetProvider(String id, String apiKey, String model, String baseUrl, String protocol) {
+        default java.util.Map<String, Object> configSetProvider(String id, String apiKey, String model, String baseUrl, String protocol, String label) {
             throw new UnsupportedOperationException("configSetProvider not implemented");
         }
         /**
@@ -228,7 +228,8 @@ public final class AppServer {
                 String model = p != null && p.hasNonNull("model") ? p.get("model").asText() : null;
                 String baseUrl = p != null && p.hasNonNull("baseUrl") ? p.get("baseUrl").asText() : null;
                 String protocol = p != null && p.hasNonNull("protocol") ? p.get("protocol").asText() : null;
-                try { writer.result(msg.id(), session.configSetProvider(id, apiKey, model, baseUrl, protocol)); }
+                String label = p != null && p.hasNonNull("label") ? p.get("label").asText() : null;
+                try { writer.result(msg.id(), session.configSetProvider(id, apiKey, model, baseUrl, protocol, label)); }
                 catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

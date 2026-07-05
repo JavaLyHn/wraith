@@ -16,12 +16,13 @@ class AppServerProviderConfigTest {
             public Map<String,Object> modelList() {
                 return ModelCatalog.result(cfg, "deepseek", "m", false);
             }
-            public Map<String,Object> configSetProvider(String id, String apiKey, String model, String baseUrl, String protocol) {
+            public Map<String,Object> configSetProvider(String id, String apiKey, String model, String baseUrl, String protocol, String label) {
                 WraithConfig.ProviderConfig pc = cfg.getProviders().getOrDefault(id, new WraithConfig.ProviderConfig());
                 if (apiKey != null && !apiKey.isBlank()) pc.setApiKey(apiKey);
                 if (model != null) pc.setModel(model);
                 if (baseUrl != null) pc.setBaseUrl(baseUrl);
                 if (protocol != null) pc.setProtocol(protocol);
+                if (label != null) pc.setLabel(label);
                 cfg.getProviders().put(id, pc);
                 return Map.of("ok", true);
             }
