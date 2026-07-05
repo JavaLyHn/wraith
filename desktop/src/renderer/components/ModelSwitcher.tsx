@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover'
 import type { ModelListResult } from '../../shared/types'
+import { configuredProviders } from '../lib/modelSwitcher'
 
 interface ModelSwitcherProps {
   /** 初始显示值(session 携带的 model 字符串,切换后以内部 state 为准)。 */
@@ -85,7 +86,10 @@ export default function ModelSwitcher({ initialModel, running }: ModelSwitcherPr
         {!data && !error && (
           <div className="px-2 py-1.5 text-xs text-fg-subtle">加载中…</div>
         )}
-        {data && data.providers.map(p => {
+        {data && !error && configuredProviders(data.providers).length === 0 && (
+          <div className="px-2 py-1.5 text-xs text-fg-subtle">未配置任何 provider,请到「Provider 配置」添加</div>
+        )}
+        {data && configuredProviders(data.providers).map(p => {
           const isCurrent = data.current.provider === p.name
           const isDefault = data.default === p.name
           return (
