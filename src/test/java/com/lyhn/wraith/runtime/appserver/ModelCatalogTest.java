@@ -11,9 +11,10 @@ import static org.junit.jupiter.api.Assertions.*;
 
 /**
  * Unit tests for ModelCatalog — pure function tests that verify:
- * 1. API key and baseUrl values are NEVER included in output (key-leakage prevention)
- * 2. hasKey boolean IS correctly set based on config
- * 3. result structure is well-formed
+ * 1. API key value is NEVER included in output (key-leakage prevention)
+ * 2. baseUrl/protocol/label ARE included (non-secret, required for edit prefill)
+ * 3. hasKey boolean IS correctly set based on config
+ * 4. result structure is well-formed
  */
 class ModelCatalogTest {
 
@@ -27,10 +28,10 @@ class ModelCatalogTest {
         return config;
     }
 
-    // ── Test: API key value never leaks into providers() output ─────────────
+    // ── Test: API key value never leaks; baseUrl IS reported ────────────────
 
     @Test
-    void providersNeverExposesApiKeyValue() throws Exception {
+    void providersExposesBaseUrlButNeverApiKey() throws Exception {
         String canaryKey = "FAKE-LEAK-CANARY-APIKEY-9999";
         String canaryBaseUrl = "https://CANARY-BASEURL.example.invalid";
         WraithConfig config = configWithCanary("deepseek", canaryKey, canaryBaseUrl);
@@ -40,8 +41,8 @@ class ModelCatalogTest {
 
         assertFalse(json.contains(canaryKey),
                 "providers() 序列化结果不应含 canary apiKey 值: " + canaryKey);
-        assertFalse(json.contains(canaryBaseUrl),
-                "providers() 序列化结果不应含 canary baseUrl 值: " + canaryBaseUrl);
+        assertTrue(json.contains(canaryBaseUrl),
+                "providers() 现在应回报 baseUrl(非密钥,回填所需): " + canaryBaseUrl);
     }
 
     // ── Test: hasKey=true is set correctly when key present ─────────────────
@@ -83,7 +84,7 @@ class ModelCatalogTest {
     // ── Test: result() full shape with canary injection ──────────────────────
 
     @Test
-    void resultNeverExposesApiKeyOrBaseUrl() throws Exception {
+    void resultExposesBaseUrlButNeverApiKey() throws Exception {
         String canaryKey = "FAKE-LEAK-CANARY-APIKEY-9999";
         String canaryBaseUrl = "https://CANARY-BASEURL.example.invalid";
         WraithConfig config = configWithCanary("glm", canaryKey, canaryBaseUrl);
@@ -94,8 +95,8 @@ class ModelCatalogTest {
 
         assertFalse(json.contains(canaryKey),
                 "result() 序列化结果不应含 canary apiKey 值: " + canaryKey);
-        assertFalse(json.contains(canaryBaseUrl),
-                "result() 序列化结果不应含 canary baseUrl 值: " + canaryBaseUrl);
+        assertTrue(json.contains(canaryBaseUrl),
+                "result() 现在应回报 baseUrl(非密钥): " + canaryBaseUrl);
     }
 
     // ── Test: result() structure is well-formed ──────────────────────────────
@@ -129,6 +130,28 @@ class ModelCatalogTest {
 
         assertTrue(result.containsKey("modelFallback"), "fallback=true 时应含 modelFallback");
         assertEquals(Boolean.TRUE, result.get("modelFallback"));
+    }
+
+    // ── Test: baseUrl/protocol/label are reported ────────────────────────────
+
+    @Test
+    void providersReportBaseUrlProtocolLabel() {
+        WraithConfig config = new WraithConfig();
+        WraithConfig.ProviderConfig pc =
+                new WraithConfig.ProviderConfig("k", "https://x.example/v1", "m");
+        pc.setProtocol("anthropic");
+        pc.setLabel("工作号");
+        config.getProviders().put("minimax", pc);
+
+        Map<String, Object> entry = ModelCatalog.providers(config).stream()
+                .filter(e -> "minimax".equals(e.get("name")))
+                .findFirst().orElseThrow();
+
+        assertEquals("https://x.example/v1", entry.get("baseUrl"));
+        assertEquals("anthropic", entry.get("protocol"));
+        assertEquals("工作号", entry.get("label"));
+        assertTrue((Boolean) entry.get("hasKey"));
+        assertFalse(entry.containsKey("apiKey"), "entry 绝不含 apiKey 字段");
     }
 
     // ── Test: all KNOWN_PROVIDERS appear in providers list ───────────────────

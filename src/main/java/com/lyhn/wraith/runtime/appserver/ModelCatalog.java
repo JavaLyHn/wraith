@@ -13,7 +13,8 @@ public final class ModelCatalog {
     /**
      * Build the providers list from config.
      * Reports KNOWN_PROVIDERS ∪ config.getProviders().keySet() (KNOWN first, deduped).
-     * NEVER includes apiKey or baseUrl values — only hasKey boolean.
+     * 每条含 name/model/hasKey/baseUrl/protocol/label。
+     * 红线:NEVER includes apiKey value(只报 hasKey);baseUrl/protocol/label 非密钥,回报用于编辑回填与多实例显示。
      */
     public static List<Map<String, Object>> providers(WraithConfig config) {
         java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>(java.util.Arrays.asList(KNOWN_PROVIDERS));
@@ -23,10 +24,16 @@ public final class ModelCatalog {
             String apiKey = config.getApiKey(p);
             boolean hasKey = apiKey != null && !apiKey.isBlank();
             String modelName = config.getModel(p);
+            String baseUrl = config.getBaseUrl(p);
+            WraithConfig.ProviderConfig pc = config.getProviders().get(p);
+            String label = pc != null ? pc.getLabel() : null;
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", p);
             entry.put("model", modelName != null ? modelName : "");
             entry.put("hasKey", hasKey);
+            entry.put("baseUrl", baseUrl != null ? baseUrl : "");
+            entry.put("protocol", config.getProtocol(p));
+            entry.put("label", label != null ? label : "");
             list.add(entry);
         }
         return list;
