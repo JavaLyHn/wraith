@@ -22,6 +22,7 @@ export interface ProviderCatalogEntry {
   consoleUrl?: string
   aliases?: string[]
   builtin?: boolean
+  repeatable?: boolean
   lobeIcon?: string
 }
 
@@ -280,6 +281,7 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     defaultBaseUrl: 'https://api.free-llm.top/v1',
     suggestedModels: ['auto'],
     builtin: true,
+    repeatable: true,
   },
   {
     id: 'xfyun',
@@ -300,4 +302,29 @@ for (const e of PROVIDER_CATALOG) {
 
 export function findCatalogEntry(idOrAlias: string): ProviderCatalogEntry | undefined {
   return BY_KEY.get(idOrAlias)
+}
+
+/** 去掉实例 id 末尾的 `-<数字>`(freellmapi-2 → freellmapi);非数字后缀(baidu-cloud)保持不变。 */
+export function baseProviderId(id: string): string {
+  return id.replace(/-\d+$/, '')
+}
+
+/** 为可重复 provider 铸造下一个实例 id:base 未占用→base;否则 base-N,N 从 2 起最小未占用。 */
+export function nextInstanceId(baseId: string, configuredIds: Set<string>): string {
+  if (!configuredIds.has(baseId)) return baseId
+  let n = 2
+  while (configuredIds.has(`${baseId}-${n}`)) n++
+  return `${baseId}-${n}`
+}
+
+/** 实例显示名:label 优先 → `名称 · label`;否则 base → 名称、`-N` → `名称 #N`;entry 缺省回落 id。 */
+export function instanceDisplayName(
+  id: string,
+  label: string | undefined,
+  entry: ProviderCatalogEntry | undefined,
+): string {
+  const base = entry?.displayName ?? id
+  if (label && label.trim()) return `${base} · ${label.trim()}`
+  const m = id.match(/-(\d+)$/)
+  return m ? `${base} #${m[1]}` : base
 }
