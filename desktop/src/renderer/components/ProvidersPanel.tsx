@@ -29,15 +29,30 @@ export default function ProvidersPanel({ onBack }: { onBack: () => void }): JSX.
       setEditing(null); void refresh()
     } catch (err) { setError((err as Error).message) }
   }
-  const remove = async (id: string): Promise<void> => { await window.wraith.removeProvider(id); void refresh() }
-  const setDefault = async (id: string): Promise<void> => { await window.wraith.setDefaultProvider(id); void refresh() }
+  const remove = async (id: string): Promise<void> => {
+    try {
+      await window.wraith.removeProvider(id)
+      setEditing(null)
+      void refresh()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
+  const setDefault = async (id: string): Promise<void> => {
+    try {
+      await window.wraith.setDefaultProvider(id)
+      void refresh()
+    } catch (err) {
+      setError((err as Error).message)
+    }
+  }
 
   const list = PROVIDER_CATALOG.filter(e =>
     !q || e.displayName.toLowerCase().includes(q.toLowerCase()) || e.id.includes(q.toLowerCase()))
   const done = list.filter(e => configured.get(e.id)?.hasKey)
   const rest = list.filter(e => !configured.get(e.id)?.hasKey)
 
-  const Row = (e: typeof PROVIDER_CATALOG[number]): JSX.Element => (
+  const renderRow = (e: typeof PROVIDER_CATALOG[number]): JSX.Element => (
     <div key={e.id} className="mb-0.5 flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-surface/60">
       <ProviderIcon id={e.id} />
       <div className="min-w-0 flex-1">
@@ -58,9 +73,9 @@ export default function ProvidersPanel({ onBack }: { onBack: () => void }): JSX.
           className="flex-1 rounded-lg border border-border bg-bg px-3 py-1.5 text-xs outline-none focus:border-accent" />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {done.length > 0 && <><div className="mt-2 px-2 text-[10px] uppercase tracking-wider text-fg-subtle">已配置</div>{done.map(Row)}</>}
+        {done.length > 0 && <><div className="mt-2 px-2 text-[10px] uppercase tracking-wider text-fg-subtle">已配置</div>{done.map(renderRow)}</>}
         <div className="mt-3 px-2 text-[10px] uppercase tracking-wider text-fg-subtle">全部</div>
-        {rest.map(Row)}
+        {rest.map(renderRow)}
       </div>
       {editing && (() => { const e = findCatalogEntry(editing); return (
         <div className="mt-2 rounded-lg border border-border p-3">
