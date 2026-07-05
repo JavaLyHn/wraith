@@ -145,11 +145,28 @@ public final class GatewayDaemon {
         // ── Step 7: Real AskSurface (replaces Phase-1 stub) ──────────────────
         // Needs pendingApprovals + (if hasQq) qqPending before the engine.
         final QqPendingStore qqPendingRef = qqPending;
+        final AutomationStore storeRef = store;
         ScheduledRunRenderer.AskSurface askSurface = (runId, req) -> {
             String approvalId = runId + "#" + approvalCounter.incrementAndGet();
             CompletableFuture<ApprovalResult> f = new CompletableFuture<>();
             pendingApprovals.put(approvalId, f);
             f.whenComplete((r, e) -> pendingApprovals.remove(approvalId));
+
+            // Mark the active run as waiting_approval so automations.runs surfaces it to desktop.
+            // runId == task.id (set by InProcessTurnEngine); find the non-terminal run for this taskId.
+            try {
+                storeRef.nonTerminalRuns().stream()
+                        .filter(r -> runId.equals(r.taskId))
+                        .findFirst()
+                        .ifPresent(r -> {
+                            r.status = "waiting_approval";
+                            r.approvalId = approvalId;
+                            r.approvalTool = req.toolName();
+                            storeRef.putRun(r);
+                        });
+            } catch (Exception e) {
+                System.err.println("[gateway] AskSurface: run 标记 waiting_approval 失败(不影响审批流): " + e.getMessage());
+            }
 
             // Surface via QQ pending queue (next inbound DM will flush keyboard message)
             if (hasQq && qqPendingRef != null) {

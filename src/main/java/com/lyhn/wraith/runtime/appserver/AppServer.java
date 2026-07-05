@@ -275,6 +275,40 @@ public final class AppServer {
                 }
                 writer.result(msg.id(), Map.of("runs", runs));
             }
+            case "automations.runNow" -> {
+                JsonNode p = msg.params();
+                // Desktop sends { id: taskId }
+                String taskId = textParam(p, "id");
+                if (taskId == null) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                try {
+                    java.nio.file.Path reqDir = automationRequestsDir();
+                    com.lyhn.wraith.automation.RequestInbox inbox =
+                            new com.lyhn.wraith.automation.RequestInbox(reqDir);
+                    inbox.write(new com.lyhn.wraith.automation.RequestInbox.Request("run-now", taskId, null));
+                    ok(msg);
+                } catch (java.io.IOException e) {
+                    writer.error(msg.id(), -32000, "写入 run-now 请求失败: " + e.getMessage());
+                }
+            }
+            case "automations.respondApproval" -> {
+                JsonNode p = msg.params();
+                // Desktop sends { runId, approvalId, decision, ...opts }
+                // The inbox consumer keys on approvalId; accept both approvalId and id param names.
+                String approvalId = textParam(p, "approvalId");
+                if (approvalId == null) approvalId = textParam(p, "id");
+                String decision = (p != null && p.hasNonNull("decision")) ? p.get("decision").asText() : null;
+                if (approvalId == null) { writer.error(msg.id(), -32602, "缺 approvalId"); return true; }
+                if (decision == null || decision.isBlank()) { writer.error(msg.id(), -32602, "缺 decision"); return true; }
+                try {
+                    java.nio.file.Path reqDir = automationRequestsDir();
+                    com.lyhn.wraith.automation.RequestInbox inbox =
+                            new com.lyhn.wraith.automation.RequestInbox(reqDir);
+                    inbox.write(new com.lyhn.wraith.automation.RequestInbox.Request("approval", approvalId, decision));
+                    ok(msg);
+                } catch (java.io.IOException e) {
+                    writer.error(msg.id(), -32000, "写入 approval 请求失败: " + e.getMessage());
+                }
+            }
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
                 return false;
@@ -399,6 +433,17 @@ public final class AppServer {
                 ? java.nio.file.Path.of(prop)
                 : java.nio.file.Path.of(System.getProperty("user.home"), ".wraith");
         return new com.lyhn.wraith.automation.AutomationStore(dir);
+    }
+
+    /**
+     * 解析 automation-requests 目录（与 automationStore() 同基目录下的 automation-requests 子目录）。
+     */
+    private static java.nio.file.Path automationRequestsDir() {
+        String prop = System.getProperty("wraith.automation.dir");
+        java.nio.file.Path base = (prop != null && !prop.isBlank())
+                ? java.nio.file.Path.of(prop)
+                : java.nio.file.Path.of(System.getProperty("user.home"), ".wraith");
+        return base.resolve("automation-requests");
     }
 
     private void handleMcp(JsonRpc.Incoming msg, java.util.function.Consumer<McpOps> action) {

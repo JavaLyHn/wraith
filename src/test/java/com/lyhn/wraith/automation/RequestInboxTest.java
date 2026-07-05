@@ -95,4 +95,66 @@ class RequestInboxTest {
         assertFalse(Files.exists(dir.resolve("valid.json")), "valid.json should be deleted");
         assertFalse(Files.exists(dir.resolve("corrupt.json")), "corrupt.json should be deleted after drain");
     }
+
+    // -----------------------------------------------------------------------
+    // Test 4: write → drain round-trip (producer side)
+    // -----------------------------------------------------------------------
+    @Test
+    void write_thenDrain_roundTrips() throws IOException {
+        RequestInbox inbox = new RequestInbox(dir);
+
+        // write a run-now request
+        inbox.write(new RequestInbox.Request("run-now", "task-xyz", null));
+        // write an approval request
+        inbox.write(new RequestInbox.Request("approval", "appr-1", "approve"));
+
+        List<RequestInbox.Request> results = inbox.drain();
+        assertEquals(2, results.size(), "drain should return both written requests");
+
+        RequestInbox.Request runNow = results.stream()
+                .filter(r -> "task-xyz".equals(r.id())).findFirst()
+                .orElseThrow(() -> new AssertionError("run-now request not found"));
+        assertEquals("run-now", runNow.type());
+        assertNull(runNow.payload());
+
+        RequestInbox.Request approval = results.stream()
+                .filter(r -> "appr-1".equals(r.id())).findFirst()
+                .orElseThrow(() -> new AssertionError("approval request not found"));
+        assertEquals("approval", approval.type());
+        assertEquals("approve", approval.payload());
+
+        // After drain, directory should be empty of .json files
+        List<RequestInbox.Request> second = inbox.drain();
+        assertTrue(second.isEmpty(), "second drain should be empty after files consumed");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 5: write creates the directory if missing
+    // -----------------------------------------------------------------------
+    @Test
+    void write_createsDirectoryIfMissing() throws IOException {
+        Path inboxDir = dir.resolve("new-inbox");
+        assertFalse(Files.exists(inboxDir), "precondition: directory must not exist");
+        RequestInbox inbox = new RequestInbox(inboxDir);
+        inbox.write(new RequestInbox.Request("run-now", "t1", null));
+        assertTrue(Files.exists(inboxDir), "write() must create the directory");
+        List<RequestInbox.Request> results = inbox.drain();
+        assertEquals(1, results.size());
+        assertEquals("t1", results.get(0).id());
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 6: each write produces a uniquely-named file (no collision)
+    // -----------------------------------------------------------------------
+    @Test
+    void write_producesUniqueFilenames() throws IOException {
+        RequestInbox inbox = new RequestInbox(dir);
+        inbox.write(new RequestInbox.Request("run-now", "a", null));
+        inbox.write(new RequestInbox.Request("run-now", "b", null));
+        inbox.write(new RequestInbox.Request("run-now", "c", null));
+        try (java.util.stream.Stream<Path> s = Files.list(dir)) {
+            long count = s.filter(p -> p.getFileName().toString().endsWith(".json")).count();
+            assertEquals(3, count, "each write should produce a distinct file");
+        }
+    }
 }

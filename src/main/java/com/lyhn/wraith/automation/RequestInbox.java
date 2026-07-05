@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -86,6 +87,22 @@ public final class RequestInbox {
         }
 
         return List.copyOf(collected);
+    }
+
+    /**
+     * Writes a single request as a uniquely-named JSON file into the requests directory.
+     *
+     * <p>The file name is {@code <type>-<UUID>.json}. The directory is created if it
+     * does not already exist. The written JSON is round-trippable by {@link #drain()}.
+     *
+     * @param request the request to persist; must not be null
+     * @throws IOException if the directory cannot be created or the file cannot be written
+     */
+    public void write(Request request) throws IOException {
+        Files.createDirectories(requestsDir);
+        String filename = request.type() + "-" + UUID.randomUUID() + ".json";
+        Path file = requestsDir.resolve(filename);
+        Files.write(file, M.writeValueAsBytes(request));
     }
 
     // ---- internal ----------------------------------------------------------
