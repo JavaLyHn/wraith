@@ -23,6 +23,22 @@ export function isValidCronShape(expr: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// 保存失败原因透出(把 daemon 权威错误 message 清洗成人话)
+// ---------------------------------------------------------------------------
+
+/**
+ * 从保存(upsert)抛出的异常里提取可读原因,拼成「保存失败:<原因>」。
+ * 会剥掉 Electron `ipcRenderer.invoke` 包的 "Error invoking remote method
+ * '...': Error: " 前缀,只留 daemon/主进程给的权威消息(如「非法 cron 表达式: ...」
+ * 「Backend not connected」)。消息为空时兜底为「保存失败」。
+ */
+export function saveErrorText(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  const reason = raw.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '').trim()
+  return reason ? `保存失败:${reason}` : '保存失败'
+}
+
+// ---------------------------------------------------------------------------
 // ApprovalMode label 纯函数
 // ---------------------------------------------------------------------------
 

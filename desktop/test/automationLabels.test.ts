@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeNextRunLabel, pendingApprovalRuns } from '../src/renderer/lib/automationLabels'
+import { computeNextRunLabel, pendingApprovalRuns, saveErrorText } from '../src/renderer/lib/automationLabels'
 import type { AutomationTask, AutomationRun } from '../src/shared/types'
 
 function task(over: Partial<AutomationTask> = {}): AutomationTask {
@@ -42,6 +42,31 @@ describe('pendingApprovalRuns', () => {
     const running = run({ runId: 'r-running', status: 'running' })
     const noId = run({ runId: 'r-noid', approvalId: undefined })
     expect(pendingApprovalRuns([pending, running, noId])).toEqual([pending])
+  })
+})
+
+describe('saveErrorText', () => {
+  it('剥掉 Electron 远程调用前缀,保留 daemon 权威原因', () => {
+    const err = new Error(
+      "Error invoking remote method 'wraith:automationUpsert': Error: 非法 cron 表达式: 99 99 99 99 99",
+    )
+    expect(saveErrorText(err)).toBe('保存失败:非法 cron 表达式: 99 99 99 99 99')
+  })
+
+  it('无前缀的普通错误原样透出', () => {
+    expect(saveErrorText(new Error('非法 cron 表达式: x'))).toBe('保存失败:非法 cron 表达式: x')
+  })
+
+  it('后端断连原因透出', () => {
+    expect(saveErrorText(new Error('Backend not connected'))).toBe('保存失败:Backend not connected')
+  })
+
+  it('空消息兜底为「保存失败」', () => {
+    expect(saveErrorText(new Error(''))).toBe('保存失败')
+  })
+
+  it('非 Error 值也能给出字符串', () => {
+    expect(saveErrorText('炸了')).toBe('保存失败:炸了')
   })
 })
 

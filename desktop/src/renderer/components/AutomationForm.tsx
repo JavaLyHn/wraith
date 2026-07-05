@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import type { AutomationTask, AutomationSchedule, ProjectView, ApprovalMode, ApprovalPolicy } from '../../shared/types'
-import { isValidCronShape, approvalModeLabel, parseDeliverTo, buildDeliverTo, parseApproval } from '../lib/automationLabels'
+import { isValidCronShape, approvalModeLabel, parseDeliverTo, buildDeliverTo, parseApproval, saveErrorText } from '../lib/automationLabels'
 
 /** 覆盖行含稳定 UI-only id,不写入 AutomationTask */
 interface ToolOverrideRow { id: string; tool: string; mode: ApprovalMode }
@@ -13,8 +13,9 @@ function seedOverrides(rows: Array<{ tool: string; mode: ApprovalMode }>): ToolO
 interface AutomationFormProps {
   initial: AutomationTask | null            // null = 新建
   projects: ProjectView[]
-  onSave: (t: AutomationTask) => Promise<boolean>
+  onSave: (t: AutomationTask) => Promise<void>   // 失败时抛;表单 catch 后透出权威原因
   onRunNow: (t: AutomationTask) => Promise<void>   // 先保存再跑(spec §6.2)
+  onToggle: (t: AutomationTask) => Promise<void>   // 暂停/启用(翻转 enabled);仅编辑态出现
   onRemove: (id: string) => void                    // 仅编辑态出现;确认逻辑在面板层
   removeConfirming: boolean
 }
@@ -22,10 +23,11 @@ interface AutomationFormProps {
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const APPROVAL_MODES: ApprovalMode[] = ['deny', 'auto-approve', 'ask']
 
-export default function AutomationForm({ initial, projects, onSave, onRunNow, onRemove, removeConfirming }: AutomationFormProps): JSX.Element {
+export default function AutomationForm({ initial, projects, onSave, onRunNow, onToggle, onRemove, removeConfirming }: AutomationFormProps): JSX.Element {
   const [name, setName] = useState(initial?.name ?? '')
   const [prompt, setPrompt] = useState(initial?.prompt ?? '')
-  const [projectPath, setProjectPath] = useState(initial?.projectPath ?? projects[0]?.path ?? '')
+  // workspace 为规范字段(daemon 存的即此);projectPath 是旧别名,列表回来的任务已无它 —— 优先读 workspace 以在编辑时回显正确项目
+  const [projectPath, setProjectPath] = useState(initial?.workspace ?? initial?.projectPath ?? projects[0]?.path ?? '')
   const [kind, setKind] = useState<AutomationSchedule['kind']>(initial?.schedule.kind ?? 'daily')
   const [minutes, setMinutes] = useState(initial?.schedule.kind === 'interval' ? String(initial.schedule.everyMinutes) : '60')
   const [time, setTime] = useState(
@@ -69,7 +71,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
     let schedule: AutomationSchedule
     if (kind === 'interval') {
       const m = Number(minutes)
-      if (!Number.isFinite(m) || m < 5) { setError('间隔最少 5 分钟'); return null }
+      if (!Number.isFinite(m) || m < 1) { setError('间隔最少 1 分钟'); return null }
       schedule = { kind: 'interval', everyMinutes: Math.floor(m) }
     } else if (kind === 'daily') {
       if (!/^\d{2}:\d{2}$/.test(time)) { setError('时间格式错误'); return null }
@@ -119,8 +121,9 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
     if (!t) return
     setSaving(true); setError(null)
     try {
-      const ok = await onSave(t)
-      if (!ok) setError('保存失败')
+      await onSave(t)
+    } catch (err) {
+      setError(saveErrorText(err))
     } finally {
       setSaving(false)
     }
@@ -132,10 +135,9 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
     if (!t) return null
     setSaving(true); setError(null)
     try {
-      const ok = await onSave(t)
-      if (!ok) { setError('保存失败'); setSaving(false); return null }
+      await onSave(t)
       return t
-    } catch (err) { console.error('[wraith] saveForRun error:', err); setError('保存失败'); setSaving(false); return null }
+    } catch (err) { setError(saveErrorText(err)); setSaving(false); return null }
   }
 
   const handleRunNow = async (): Promise<void> => {
@@ -301,8 +303,16 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
           立即运行
         </button>
         {initial && (
-          <button data-testid="automation-remove" onClick={() => onRemove(initial.id)}
+          <button data-testid="automation-toggle-form" title={initial.enabled ? '暂停后不再按时触发' : '启用后从现在起重新计时'}
+            onClick={() => void onToggle(initial)}
             className={'ml-auto rounded-lg border px-4 py-2 text-xs ' +
+              (initial.enabled ? 'border-border text-fg-muted hover:text-accent' : 'border-success text-success')}>
+            {initial.enabled ? '⏸ 暂停' : '▶ 启用'}
+          </button>
+        )}
+        {initial && (
+          <button data-testid="automation-remove" onClick={() => onRemove(initial.id)}
+            className={'rounded-lg border px-4 py-2 text-xs ' +
               (removeConfirming ? 'border-danger text-danger' : 'border-border text-fg-muted hover:text-danger')}>
             {removeConfirming ? '确认删除?' : '删除任务'}
           </button>

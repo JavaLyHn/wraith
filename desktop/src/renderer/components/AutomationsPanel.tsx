@@ -51,9 +51,10 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
 
   const current = creating ? null : tasks.find(t => t.id === selectedId) ?? tasks[0] ?? null
 
-  const handleSave = useCallback(async (t: AutomationTask): Promise<boolean> => {
-    try { await window.wraith.automationUpsert(t); await fetchTasks(); setCreating(false); setSelectedId(t.id); return true }
-    catch (err) { console.error('[wraith] automationUpsert error:', err); return false }
+  const handleSave = useCallback(async (t: AutomationTask): Promise<void> => {
+    // upsert 失败(如非法 cron、后端断连)直接抛 —— 由 AutomationForm catch 后透出权威原因,不在此吞成布尔
+    await window.wraith.automationUpsert(t)
+    await fetchTasks(); setCreating(false); setSelectedId(t.id)
   }, [fetchTasks])
 
   const handleRunNow = useCallback(async (t: AutomationTask) => {
@@ -104,12 +105,13 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
                   className={'flex-1 truncate rounded-lg px-2 py-2 text-left text-xs ' +
                     (current?.id === t.id && !creating ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>
                   <div className="truncate">{t.name}</div>
-                  <div className="text-[10px] text-fg-subtle">{t.enabled ? computeNextRunLabel(t) : '已停用'}</div>
+                  <div className="text-[10px] text-fg-subtle">{t.enabled ? computeNextRunLabel(t) : '已暂停'}</div>
                 </button>
-                <button data-testid="automation-toggle" title={t.enabled ? '停用' : '启用'}
+                <button data-testid="automation-toggle" title={t.enabled ? '点击暂停' : '点击启用'}
                   onClick={() => void handleToggle(t)}
-                  className={'shrink-0 rounded px-1.5 py-1 text-xs ' + (t.enabled ? 'text-success' : 'text-fg-subtle')}>
-                  {t.enabled ? '●' : '○'}
+                  className={'shrink-0 rounded px-1.5 py-1 text-[10px] whitespace-nowrap ' +
+                    (t.enabled ? 'text-success hover:bg-surface/60' : 'text-fg-subtle hover:bg-surface/60')}>
+                  {t.enabled ? '● 运行中' : '⏸ 已暂停'}
                 </button>
               </div>
             ))}
@@ -142,7 +144,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
                 <AutomationForm key={creating ? 'new' : current!.id}
                   initial={creating ? null : current}
                   projects={projects}
-                  onSave={handleSave} onRunNow={handleRunNow}
+                  onSave={handleSave} onRunNow={handleRunNow} onToggle={handleToggle}
                   onRemove={handleRemove} removeConfirming={removeConfirming} />
               ) : (
                 <AutomationRuns taskId={current!.id} projectPath={current!.projectPath} onOpenSession={onOpenSession} onApprove={onApprove} />
