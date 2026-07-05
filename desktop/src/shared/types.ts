@@ -128,7 +128,9 @@ export interface SessionMeta {
   provider: string
   model: string
   title: string
-  turns: number
+  turns: number           // count of user turns
+  starred?: boolean        // 用户标记的重点会话
+  name?: string            // 用户自定义名;显示优先于 title
 }
 
 /** A tool call inside a resumed assistant message (mirrors SessionMessageCodec). */

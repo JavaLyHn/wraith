@@ -11,6 +11,8 @@ package com.lyhn.wraith.session;
  * @param model     模型名
  * @param title     首条用户消息摘要(列表展示用)
  * @param turns     用户轮数
+ * @param starred   用户标记的重点会话
+ * @param name      用户自定义名;显示优先于 title
  */
 public record SessionMeta(
         String id,
@@ -20,5 +22,7 @@ public record SessionMeta(
         String provider,
         String model,
         String title,
-        int turns) {
+        int turns,
+        boolean starred,
+        String name) {
 }

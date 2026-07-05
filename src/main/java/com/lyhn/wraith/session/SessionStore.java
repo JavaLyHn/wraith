@@ -49,6 +49,8 @@ public final class SessionStore {
     private String currentId;
     private String createdAt;
     private String title;
+    private boolean starred;
+    private String name;
 
     private SessionStore(Path dir, String cwd, String provider, String model) {
         this.dir = dir;
@@ -69,6 +71,8 @@ public final class SessionStore {
         currentId = null;
         createdAt = null;
         title = null;
+        starred = false;
+        name = null;
     }
 
     /**
@@ -109,7 +113,7 @@ public final class SessionStore {
             }
         }
         try {
-            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, turns), convo);
+            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, turns, starred, name), convo);
         } catch (IOException e) {
             // 持久化失败不致命:本轮不写,下轮再试
         }
@@ -132,6 +136,38 @@ public final class SessionStore {
         startNew();
     }
 
+    /** 给指定会话加/去星。找不到该会话返回 false。 */
+    public synchronized boolean setStarred(String id, boolean starredFlag) {
+        return rewriteMeta(id, m -> new SessionMeta(m.id(), m.cwd(), m.createdAt(), m.updatedAt(),
+                m.provider(), m.model(), m.title(), m.turns(), starredFlag, m.name()));
+    }
+
+    /** 给指定会话设自定义名;name 为 null/空白 → 清除(回落 title)。找不到返回 false。 */
+    public synchronized boolean rename(String id, String newName) {
+        String nm = (newName == null || newName.isBlank()) ? null : newName.strip();
+        return rewriteMeta(id, m -> new SessionMeta(m.id(), m.cwd(), m.createdAt(), m.updatedAt(),
+                m.provider(), m.model(), m.title(), m.turns(), m.starred(), nm));
+    }
+
+    /** 读该会话整文件 → 变换 meta 首行 → 原子写回。若是当前会话,同步内存态。 */
+    private boolean rewriteMeta(String id, java.util.function.UnaryOperator<SessionMeta> mutator) {
+        SessionRecord rec = read(id);
+        if (rec == null) {
+            return false;
+        }
+        SessionMeta updated = mutator.apply(rec.meta());
+        try {
+            write(updated, rec.messages());
+        } catch (IOException e) {
+            return false;
+        }
+        if (updated.id().equals(currentId)) {
+            this.starred = updated.starred();
+            this.name = updated.name();
+        }
+        return true;
+    }
+
     /** 续接指定会话:载入历史消息,并把后续 persist 指向该文件。找不到返回空列表。 */
     public synchronized List<LlmClient.Message> resume(String id) {
         SessionRecord rec = read(id);
@@ -141,6 +177,8 @@ public final class SessionStore {
         currentId = rec.meta().id();
         createdAt = rec.meta().createdAt();
         title = rec.meta().title();
+        starred = rec.meta().starred();
+        name = rec.meta().name();
         return rec.messages();
     }
 
@@ -199,7 +237,9 @@ public final class SessionStore {
             return new SessionMeta(
                     text(n, "id"), text(n, "cwd"), text(n, "createdAt"), text(n, "updatedAt"),
                     text(n, "provider"), text(n, "model"), text(n, "title"),
-                    n.has("turns") ? n.get("turns").asInt() : 0);
+                    n.has("turns") ? n.get("turns").asInt() : 0,
+                    n.has("starred") && n.get("starred").asBoolean(),
+                    text(n, "name"));
         } catch (Exception e) {
             return null;
         }
@@ -267,6 +307,10 @@ public final class SessionStore {
         n.put("model", m.model());
         n.put("title", m.title());
         n.put("turns", m.turns());
+        n.put("starred", m.starred());
+        if (m.name() != null) {
+            n.put("name", m.name());
+        }
         return mapper.writeValueAsString(n);
     }
 
