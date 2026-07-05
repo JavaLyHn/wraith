@@ -18,7 +18,11 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
   const [projectPath, setProjectPath] = useState(initial?.projectPath ?? projects[0]?.path ?? '')
   const [kind, setKind] = useState<AutomationSchedule['kind']>(initial?.schedule.kind ?? 'daily')
   const [minutes, setMinutes] = useState(initial?.schedule.kind === 'interval' ? String(initial.schedule.everyMinutes) : '60')
-  const [time, setTime] = useState(initial?.schedule.kind !== 'interval' && initial ? initial.schedule.time : '09:00')
+  const [time, setTime] = useState(
+    initial && (initial.schedule.kind === 'daily' || initial.schedule.kind === 'weekly')
+      ? initial.schedule.time
+      : '09:00'
+  )
   const [weekday, setWeekday] = useState(initial?.schedule.kind === 'weekly' ? initial.schedule.weekday : 1)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)

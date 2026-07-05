@@ -50,6 +50,12 @@ export interface WraithApi {
     opts?: { modifiedArgs?: string; allowNetwork?: boolean }): Promise<{ ok: boolean }>
   automationPanelOpened(): Promise<{ ok: boolean }>
   onAutomationEvent(cb: (evt: AutomationEvent) => void): () => void
+  /** Task 16: 守护进程路由的 CRUD(plural 前缀,channel 对应 wraith:automations*) */
+  automationsList(): Promise<{ tasks: AutomationTask[] }>
+  automationsUpsert(task: AutomationTask): Promise<{ ok: boolean }>
+  automationsRemove(id: string): Promise<{ ok: boolean }>
+  automationsRuns(taskId?: string): Promise<{ runs: AutomationRun[] }>
+
   modelList(): Promise<ModelListResult>
   setModel(provider: string): Promise<{ provider: string; model: string }>
   setDefaultProvider(provider: string): Promise<{ ok: boolean }>
@@ -223,6 +229,23 @@ const wraith: WraithApi = {
     const listener = (_e: Electron.IpcRendererEvent, evt: AutomationEvent) => cb(evt)
     ipcRenderer.on('wraith:automation-event', listener)
     return () => { ipcRenderer.removeListener('wraith:automation-event', listener) }
+  },
+
+  // Task 16: 守护进程路由的 CRUD(plural 前缀,main-process handlers 在 Task 18 接线)
+  automationsList() {
+    return ipcRenderer.invoke('wraith:automationsList') as Promise<{ tasks: AutomationTask[] }>
+  },
+
+  automationsUpsert(task) {
+    return ipcRenderer.invoke('wraith:automationsUpsert', task) as Promise<{ ok: boolean }>
+  },
+
+  automationsRemove(id) {
+    return ipcRenderer.invoke('wraith:automationsRemove', id) as Promise<{ ok: boolean }>
+  },
+
+  automationsRuns(taskId?) {
+    return ipcRenderer.invoke('wraith:automationsRuns', taskId) as Promise<{ runs: AutomationRun[] }>
   },
 
   modelList() {

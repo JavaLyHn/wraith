@@ -25,6 +25,10 @@ export function computeNextRun(
   if (schedule.kind === 'interval') {
     return (lastFiredAt ?? enabledAt) + schedule.everyMinutes * 60_000
   }
+  // cron 种类由守护进程端调度,桌面端调度器不处理;返回遥远未来使其永不本地触发。
+  if (schedule.kind === 'cron') {
+    return now + 365 * 24 * 3_600_000
+  }
   const [h, mi] = schedule.time.split(':').map(Number) as [number, number]
   const base = new Date(now)
   const at = (d: Date): number => new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, mi).getTime()
