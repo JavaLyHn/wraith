@@ -6,6 +6,7 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import ProjectSwitcher from './ProjectSwitcher'
+import logo from '../assets/logo.jpg'
 import { filterSidebar } from '../lib/sidebarSearch'
 import { sessionDisplayName, partitionStarred } from '../lib/sessionView'
 import type { SessionMeta, ProjectView } from '../../shared/types'
@@ -161,7 +162,7 @@ export default function Sidebar({
         className="sidebar-gradient flex h-full w-60 flex-col border-r border-border"
       >
         <div className="flex items-center gap-2 px-4 py-4">
-          <span className="text-accent">✦</span>
+          <img src={logo} alt="Wraith" className="h-7 w-7 rounded-md object-cover" />
           <span className="text-sm font-bold tracking-wide text-fg">WRAITH</span>
         </div>
 
