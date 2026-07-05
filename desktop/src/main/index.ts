@@ -488,6 +488,21 @@ ipcMain.handle('wraith:rewindSession', async (_e, userOrdinal: number) => {
   return client.request('session.rewind', { sessionId: currentSessionId, userOrdinal })
 })
 
+ipcMain.handle('wraith:setSessionStarred', async (_e, sessionId: string, starred: boolean) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.setStarred', { sessionId, starred })
+})
+
+ipcMain.handle('wraith:renameSession', async (_e, sessionId: string, name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.rename', { sessionId, name })
+})
+
+ipcMain.handle('wraith:deleteSession', async (_e, sessionId: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.delete', { sessionId })
+})
+
 // ---------------------------------------------------------------------------
 // Automation IPC handlers (Task 18: 全部路由到 daemon RPC)
 // ---------------------------------------------------------------------------

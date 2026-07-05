@@ -30,6 +30,9 @@ export interface WraithApi {
   listSessions(): Promise<{ sessions: SessionMeta[] }>
   resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[]; provider?: string; model?: string; modelFallback?: boolean }>
   rewindSession(userOrdinal: number): Promise<{ ok: boolean }>
+  setSessionStarred(sessionId: string, starred: boolean): Promise<{ ok: boolean }>
+  renameSession(sessionId: string, name: string): Promise<{ ok: boolean }>
+  deleteSession(sessionId: string): Promise<{ ok: boolean }>
   mcpList(): Promise<McpListResult>
   mcpEnable(name: string): Promise<{ ok: boolean }>
   mcpDisable(name: string): Promise<{ ok: boolean }>
@@ -146,6 +149,18 @@ const wraith: WraithApi = {
 
   rewindSession(userOrdinal) {
     return ipcRenderer.invoke('wraith:rewindSession', userOrdinal) as Promise<{ ok: boolean }>
+  },
+
+  setSessionStarred(sessionId, starred) {
+    return ipcRenderer.invoke('wraith:setSessionStarred', sessionId, starred) as Promise<{ ok: boolean }>
+  },
+
+  renameSession(sessionId, name) {
+    return ipcRenderer.invoke('wraith:renameSession', sessionId, name) as Promise<{ ok: boolean }>
+  },
+
+  deleteSession(sessionId) {
+    return ipcRenderer.invoke('wraith:deleteSession', sessionId) as Promise<{ ok: boolean }>
   },
 
   mcpList() {
