@@ -20,7 +20,8 @@ function SessionRow({ s, active, onSelect, onToggleStar, onRename, onDelete }: {
   const [confirmDel, setConfirmDel] = useState(false)
   return (
     <div className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 ' +
-      (active ? 'bg-surface' : 'hover:bg-surface/60')}>
+      (active ? 'bg-surface' : 'hover:bg-surface/60')}
+      onMouseLeave={() => setConfirmDel(false)}>
       <button data-testid="conversation-item" onClick={() => onSelect(s.id)}
         className={'flex-1 truncate px-2 py-2 text-left text-xs ' + (active ? 'text-fg' : 'text-fg-muted')}
         title={sessionDisplayName(s)}>

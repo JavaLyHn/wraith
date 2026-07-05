@@ -269,9 +269,14 @@ export default function App(): JSX.Element {
 
   const handleDeleteSession = useCallback(async (id: string) => {
     await window.wraith.deleteSession(id)
-    if (id === state.sessionId) await window.wraith.startSession(state.workspace || null)
-    void fetchSessions()
-  }, [fetchSessions, state.sessionId, state.workspace])
+    if (id === state.sessionId) {
+      // 删除的是当前会话:复用 handleNewConversation 做完整状态重置
+      // (startSession + statusThrottle.cancel + resetSession + 清横幅 + fetchSessions)
+      await handleNewConversation()
+    } else {
+      void fetchSessions()
+    }
+  }, [fetchSessions, state.sessionId, handleNewConversation])
 
   // ── startup flow (runs once) ───────────────────────────────────────────────
   useEffect(() => {
