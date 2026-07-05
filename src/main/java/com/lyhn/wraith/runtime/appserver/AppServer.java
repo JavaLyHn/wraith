@@ -218,6 +218,63 @@ public final class AppServer {
                     writer.error(msg.id(), -32000, "gateway 配置写入失败: " + e.getMessage());
                 }
             }
+            case "automations.list" -> {
+                com.lyhn.wraith.automation.AutomationStore aStore = automationStore();
+                writer.result(msg.id(), Map.of("tasks", aStore.loadTasks()));
+            }
+            case "automations.upsert" -> {
+                JsonNode p = msg.params();
+                if (p == null) { writer.error(msg.id(), -32602, "缺 task 参数"); return true; }
+                com.lyhn.wraith.automation.AutomationTask task;
+                try {
+                    task = JsonRpc.MAPPER.treeToValue(p, com.lyhn.wraith.automation.AutomationTask.class);
+                } catch (Exception e) {
+                    writer.error(msg.id(), -32602, "task 解析失败: " + e.getMessage());
+                    return true;
+                }
+                if (task.id == null || task.id.isBlank()) {
+                    writer.error(msg.id(), -32602, "task 缺 id");
+                    return true;
+                }
+                if (task.schedule != null
+                        && task.schedule.kind == com.lyhn.wraith.automation.ScheduleKind.CRON
+                        && !com.lyhn.wraith.automation.NextRun.isValidCron(task.schedule.expr)) {
+                    writer.error(msg.id(), -32602, "非法 cron 表达式: " + task.schedule.expr);
+                    return true;
+                }
+                com.lyhn.wraith.automation.AutomationStore st = automationStore();
+                List<com.lyhn.wraith.automation.AutomationTask> existing = new ArrayList<>(st.loadTasks());
+                existing.removeIf(t -> t.id.equals(task.id));
+                existing.add(task);
+                st.saveTasks(existing);
+                ok(msg);
+            }
+            case "automations.remove" -> {
+                JsonNode p = msg.params();
+                String taskId = textParam(p, "id");
+                if (taskId == null) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                com.lyhn.wraith.automation.AutomationStore st = automationStore();
+                List<com.lyhn.wraith.automation.AutomationTask> remaining = new ArrayList<>(st.loadTasks());
+                remaining.removeIf(t -> t.id.equals(taskId));
+                st.saveTasks(remaining);
+                // Note: automation-runs.json and automation-state.json are daemon-owned single-writer files.
+                // The app-server must NOT write them to avoid racing the daemon. Orphaned runs age out via
+                // RUNS_PER_TASK; the desktop can filter by existing task ids. This intentionally supersedes
+                // the "remove its runs" phrasing in the spec which conflicts with §4 single-writer discipline.
+                ok(msg);
+            }
+            case "automations.runs" -> {
+                JsonNode p = msg.params();
+                String filterTaskId = (p != null && p.hasNonNull("taskId") && !p.get("taskId").asText().isBlank())
+                        ? p.get("taskId").asText() : null;
+                com.lyhn.wraith.automation.AutomationStore st = automationStore();
+                List<com.lyhn.wraith.automation.AutomationRun> runs = st.loadRuns();
+                if (filterTaskId != null) {
+                    final String fid = filterTaskId;
+                    runs = runs.stream().filter(r -> fid.equals(r.taskId)).collect(java.util.stream.Collectors.toList());
+                }
+                writer.result(msg.id(), Map.of("runs", runs));
+            }
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
                 return false;
@@ -329,6 +386,19 @@ public final class AppServer {
 
     private static String textParam(JsonNode p, String field) {
         return p != null && p.hasNonNull(field) && !p.get(field).asText().isBlank() ? p.get(field).asText() : null;
+    }
+
+    /**
+     * 解析 AutomationStore 基目录:
+     * 1. 系统属性 wraith.automation.dir(测试可注入 TempDir)
+     * 2. 否则 ~/.wraith
+     */
+    private static com.lyhn.wraith.automation.AutomationStore automationStore() {
+        String prop = System.getProperty("wraith.automation.dir");
+        java.nio.file.Path dir = (prop != null && !prop.isBlank())
+                ? java.nio.file.Path.of(prop)
+                : java.nio.file.Path.of(System.getProperty("user.home"), ".wraith");
+        return new com.lyhn.wraith.automation.AutomationStore(dir);
     }
 
     private void handleMcp(JsonRpc.Incoming msg, java.util.function.Consumer<McpOps> action) {

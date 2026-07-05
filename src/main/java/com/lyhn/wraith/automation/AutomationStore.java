@@ -18,13 +18,20 @@ public final class AutomationStore {
         this.runs = dir.resolve("automation-runs.json");
     }
 
-    // --- 定义(只读) ---
+    // --- 定义(读写,app-server 单写者) ---
     public List<AutomationTask> loadTasks() {
         Map<String,Object> root = readMap(defs);
         Object tasks = root.get("tasks");
         if (tasks == null) return List.of();
         return M.convertValue(tasks, M.getTypeFactory()
                 .constructCollectionType(List.class, AutomationTask.class));
+    }
+
+    /** 原子写全量任务定义列表到 automations.json。app-server 是 automations.json 的单一写者。 */
+    public void saveTasks(List<AutomationTask> tasks) {
+        Map<String,Object> root = new LinkedHashMap<>();
+        root.put("tasks", tasks);
+        writeAtomic(defs, root);
     }
 
     // --- 状态(读写,加锁) ---
