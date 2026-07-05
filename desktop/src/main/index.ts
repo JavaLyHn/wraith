@@ -58,7 +58,8 @@ let currentTurnId: string | null = null
 const defaultJar = defaultJarPath(os.homedir())
 
 /** In-memory high-water mark for desktop-notify polling (Part D). */
-let notifyPollLastSeen = 0
+// only notify runs that complete after app-open; avoids re-notifying历史 runs on cold start
+let notifyPollLastSeen = Date.now()
 let notifyPollTimer: ReturnType<typeof setInterval> | null = null
 
 let gatewayManager: GatewayManager | null = null
@@ -551,7 +552,9 @@ ipcMain.handle('wraith:automationsUpsert', async (_e, task: AutomationTask) => {
 })
 ipcMain.handle('wraith:automationsRemove', async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('automations.remove', { id })
+  const res = await client.request('automations.remove', { id })
+  pushBadge()
+  return res
 })
 ipcMain.handle('wraith:automationsRuns', async (_e, taskId?: string) => {
   if (!client) throw new Error('Backend not connected')
@@ -642,18 +645,19 @@ async function runStartupMigration(ud: string): Promise<void> {
 // Part D: 桌面通知轮询(每 30s 检查新终态 run 且 notifyDesktop=true)
 // ---------------------------------------------------------------------------
 
+const TERMINAL_STATUSES = new Set<string>(['success', 'failed', 'interrupted'])
+
 async function pollAndNotify(): Promise<void> {
   if (!client) return
 
   try {
     const res = await client.request('automations.runs', {}) as { runs?: AutomationRun[] }
     const runs = res.runs ?? []
-    const TERMINAL = new Set<string>(['success', 'failed', 'interrupted'])
 
     let maxEndedAt = notifyPollLastSeen
 
     for (const run of runs) {
-      if (!TERMINAL.has(run.status)) continue
+      if (!TERMINAL_STATUSES.has(run.status)) continue
       if (!run.notifyDesktop) continue
       const endedAt = run.endedAt ?? 0
       if (endedAt <= notifyPollLastSeen) continue
