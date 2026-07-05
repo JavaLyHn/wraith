@@ -76,4 +76,13 @@ class SessionStarNameTest {
         assertNull(m.name());
         assertEquals("旧会话", m.title());
     }
+
+    @Test void deleteByIdRemovesFileAndIsIdempotent() {
+        SessionStore s = openStore();
+        String id = seedOneTurn(s);
+        assertNotNull(s.meta(id));
+        assertTrue(s.deleteById(id), "首次删除应返回 true");
+        assertNull(s.meta(id), "删除后 meta 应为 null");
+        assertFalse(s.deleteById(id), "再次删除不存在的文件返回 false");
+    }
 }

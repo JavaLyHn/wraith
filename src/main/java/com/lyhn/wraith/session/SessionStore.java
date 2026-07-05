@@ -136,6 +136,22 @@ public final class SessionStore {
         startNew();
     }
 
+    /** 按 id 删除会话文件;成功=true,文件不存在=false。非法 id 安全返回 false。 */
+    public synchronized boolean deleteById(String id) {
+        if (id == null || id.isBlank()) {
+            return false;
+        }
+        try {
+            boolean removed = Files.deleteIfExists(dir.resolve(safeId(id) + ".jsonl"));
+            if (removed && id.equals(currentId)) {
+                startNew();   // 删掉的是当前会话 → 重置内存态
+            }
+            return removed;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     /** 给指定会话加/去星。找不到该会话返回 false。 */
     public synchronized boolean setStarred(String id, boolean starredFlag) {
         return rewriteMeta(id, m -> new SessionMeta(m.id(), m.cwd(), m.createdAt(), m.updatedAt(),
