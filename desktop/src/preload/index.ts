@@ -44,10 +44,11 @@ export interface WraithApi {
   automationUpsert(task: AutomationTask): Promise<{ ok: boolean }>
   automationRemove(id: string): Promise<{ ok: boolean }>
   automationRunNow(id: string): Promise<{ ok: boolean }>
+  // v1: 定时任务为进程内回合,不可中断 — UI 层不再暴露 STOP 按钮;此方法仅保留为存根。
   automationStop(runId: string): Promise<{ ok: boolean }>
   automationRuns(): Promise<{ runs: AutomationRun[] }>
-  automationRespondApproval(runId: string, approvalId: string, decision: string,
-    opts?: { modifiedArgs?: string; allowNetwork?: boolean }): Promise<{ ok: boolean }>
+  /** Fix-B: aligned to Fix-A contract — forwards { approvalId, decision } */
+  automationRespondApproval(approvalId: string, decision: string): Promise<{ ok: boolean }>
   automationPanelOpened(): Promise<{ ok: boolean }>
   onAutomationEvent(cb: (evt: AutomationEvent) => void): () => void
   /** Task 16: 守护进程路由的 CRUD(plural 前缀,channel 对应 wraith:automations*) */
@@ -55,6 +56,9 @@ export interface WraithApi {
   automationsUpsert(task: AutomationTask): Promise<{ ok: boolean }>
   automationsRemove(id: string): Promise<{ ok: boolean }>
   automationsRuns(taskId?: string): Promise<{ runs: AutomationRun[] }>
+  // v1: 定时任务为进程内回合,不可中断 — UI 层不再暴露 STOP 按钮;此方法仅保留为存根。
+  automationsStop(runId: string): Promise<{ ok: boolean }>
+  automationsRespondApproval(approvalId: string, decision: string): Promise<{ ok: boolean }>
 
   modelList(): Promise<ModelListResult>
   setModel(provider: string): Promise<{ provider: string; model: string }>
@@ -217,8 +221,8 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:automationRuns') as Promise<{ runs: AutomationRun[] }>
   },
 
-  automationRespondApproval(runId, approvalId, decision, opts) {
-    return ipcRenderer.invoke('wraith:automationRespondApproval', runId, approvalId, decision, opts ?? null) as Promise<{ ok: boolean }>
+  automationRespondApproval(approvalId, decision) {
+    return ipcRenderer.invoke('wraith:automationRespondApproval', approvalId, decision) as Promise<{ ok: boolean }>
   },
 
   automationPanelOpened() {
@@ -246,6 +250,15 @@ const wraith: WraithApi = {
 
   automationsRuns(taskId?) {
     return ipcRenderer.invoke('wraith:automationsRuns', taskId) as Promise<{ runs: AutomationRun[] }>
+  },
+
+  // v1: 定时任务为进程内回合,不可中断 — UI 层不再暴露 STOP 按钮;此方法仅保留为存根。
+  automationsStop(runId) {
+    return ipcRenderer.invoke('wraith:automationsStop', runId) as Promise<{ ok: boolean }>
+  },
+
+  automationsRespondApproval(approvalId, decision) {
+    return ipcRenderer.invoke('wraith:automationsRespondApproval', approvalId, decision) as Promise<{ ok: boolean }>
   },
 
   modelList() {

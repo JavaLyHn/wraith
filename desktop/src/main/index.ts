@@ -522,6 +522,7 @@ ipcMain.handle('wraith:automationRunNow', async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.runNow', { id })
 })
+// v1: 定时任务为进程内回合,不可中断 — UI 层不再暴露 STOP 按钮;此 handler 仅保留为存根。
 ipcMain.handle('wraith:automationStop', async (_e, runId: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.stop', { runId })
@@ -530,10 +531,19 @@ ipcMain.handle('wraith:automationRuns', async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.runs', {})
 })
-ipcMain.handle('wraith:automationRespondApproval', async (_e, runId: string, approvalId: string, decision: string,
-    opts: { modifiedArgs?: string; allowNetwork?: boolean } | null) => {
+// Fix-B: param contract aligned to Fix-A — forwards { approvalId, decision } to daemon.
+ipcMain.handle('wraith:automationRespondApproval', async (_e, approvalId: string, decision: string) => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('automations.respondApproval', { runId, approvalId, decision, ...(opts ?? {}) })
+  return client.request('automations.respondApproval', { approvalId, decision })
+})
+// v1: 定时任务为进程内回合,不可中断 — UI 层不再暴露 STOP 按钮;此 handler 仅保留为存根。
+ipcMain.handle('wraith:automationsStop', async (_e, runId: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.stop', { runId })
+})
+ipcMain.handle('wraith:automationsRespondApproval', async (_e, approvalId: string, decision: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.respondApproval', { approvalId, decision })
 })
 ipcMain.handle('wraith:automationPanelOpened', async () => {
   writeLastPanelOpenedAt(app.getPath('userData'), Date.now())

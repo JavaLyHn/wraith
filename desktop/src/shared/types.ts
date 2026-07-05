@@ -297,6 +297,10 @@ export interface AutomationRun {
   miss?: boolean
   /** Set by the Java DesktopDeliveryAdapter; desktop polls and pops an OS notification when true. */
   notifyDesktop?: boolean
+  /** Approval request id (format: taskId#counter); set when status=waiting_approval. */
+  approvalId?: string
+  /** Name of the tool awaiting approval; set when status=waiting_approval. */
+  approvalTool?: string
 }
 
 export type AutomationEvent =

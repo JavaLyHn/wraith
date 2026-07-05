@@ -398,13 +398,8 @@ export default function App(): JSX.Element {
     automationApprovalRef.current = null
     try {
       await window.wraith.automationRespondApproval(
-        cur.runId,
         String(cur.payload['approvalId']),
         payload.decision,
-        {
-          ...(payload.modifiedArgs ? { modifiedArgs: payload.modifiedArgs } : {}),
-          ...(payload.allowNetwork ? { allowNetwork: true } : {}),
-        },
       )
     } catch (err) { console.error('[wraith] automation respond error:', err) }
   }, [automationApproval])
@@ -415,7 +410,7 @@ export default function App(): JSX.Element {
     setAutomationApproval(null)
     automationApprovalRef.current = null
     try {
-      await window.wraith.automationRespondApproval(cur.runId, String(cur.payload['approvalId']), 'REJECTED')
+      await window.wraith.automationRespondApproval(String(cur.payload['approvalId']), 'REJECTED')
     } catch (err) { console.error('[wraith] automation reject error:', err) }
   }, [automationApproval])
 

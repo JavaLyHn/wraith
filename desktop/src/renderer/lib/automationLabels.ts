@@ -1,4 +1,4 @@
-import type { AutomationTask, ApprovalMode, ApprovalPolicy, DeliveryTarget } from '../../shared/types'
+import type { AutomationTask, AutomationRun, ApprovalMode, ApprovalPolicy, DeliveryTarget } from '../../shared/types'
 import { computeNextRun } from '../../main/automationSchedule'
 
 /** 「下次 MM-DD HH:mm」标签;renderer 直接复用 main 的纯函数(无 Node 依赖)。 */
@@ -70,6 +70,18 @@ export function buildDeliverTo(desktop: boolean, qq: boolean): DeliveryTarget[] 
   if (desktop) targets.push({ platform: 'desktop' })
   if (qq) targets.push({ platform: 'qq' })
   return targets
+}
+
+// ---------------------------------------------------------------------------
+// Approval filter helper (pure, unit-tested)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns runs that are waiting for approval and have a valid approvalId.
+ * Runs without approvalId are excluded — no button can be rendered for them.
+ */
+export function pendingApprovalRuns(runs: AutomationRun[]): AutomationRun[] {
+  return runs.filter(r => r.status === 'waiting_approval' && Boolean(r.approvalId))
 }
 
 /** 解析 initial.approval;新建任务默认 {default:'deny'} */
