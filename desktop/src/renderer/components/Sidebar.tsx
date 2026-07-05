@@ -18,6 +18,39 @@ function SessionRow({ s, active, onSelect, onToggleStar, onRename, onDelete }: {
   onDelete: (id: string) => void
 }): JSX.Element {
   const [confirmDel, setConfirmDel] = useState(false)
+  // 行内改名:Electron 渲染进程不支持 window.prompt,故用就地输入框
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const editRef = useRef<HTMLInputElement>(null)
+  const doneRef = useRef(false)   // 防 Escape 后 onBlur 二次提交
+
+  useEffect(() => {
+    if (editing) { doneRef.current = false; editRef.current?.focus(); editRef.current?.select() }
+  }, [editing])
+
+  const startEdit = (): void => { setDraft(s.name ?? s.title ?? ''); setEditing(true) }
+  const finishEdit = (save: boolean): void => {
+    if (doneRef.current) return
+    doneRef.current = true
+    setEditing(false)
+    if (save) onRename(s.id, draft)
+  }
+
+  if (editing) {
+    return (
+      <div className="mb-0.5 flex items-center rounded-lg bg-surface px-1">
+        <input ref={editRef} data-testid="session-rename-input" value={draft}
+          onChange={e => setDraft(e.target.value)}
+          onBlur={() => finishEdit(true)}
+          onKeyDown={e => {
+            if (e.key === 'Enter') finishEdit(true)
+            else if (e.key === 'Escape') finishEdit(false)
+          }}
+          className="w-full rounded border border-accent bg-bg px-2 py-1.5 text-xs text-fg outline-none" />
+      </div>
+    )
+  }
+
   return (
     <div className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 ' +
       (active ? 'bg-surface' : 'hover:bg-surface/60')}
@@ -33,7 +66,7 @@ function SessionRow({ s, active, onSelect, onToggleStar, onRename, onDelete }: {
         {s.starred ? '★' : '☆'}
       </button>
       <button data-testid="session-rename" title="改名"
-        onClick={() => { const n = window.prompt('会话名', sessionDisplayName(s)); if (n !== null) onRename(s.id, n) }}
+        onClick={startEdit}
         className="shrink-0 px-1 text-xs text-fg-subtle opacity-0 group-hover:opacity-100">✎</button>
       <button data-testid="session-delete" title={confirmDel ? '确认删除?' : '删除'}
         onClick={() => { if (!confirmDel) { setConfirmDel(true); return } onDelete(s.id) }}
