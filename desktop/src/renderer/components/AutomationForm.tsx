@@ -1,6 +1,14 @@
-import { useState } from 'react'
-import type { AutomationTask, AutomationSchedule, ProjectView, ApprovalMode, ApprovalPolicy, DeliveryTarget } from '../../shared/types'
-import { isValidCronShape, approvalModeLabel } from '../lib/automationLabels'
+import { useState, useRef } from 'react'
+import type { AutomationTask, AutomationSchedule, ProjectView, ApprovalMode, ApprovalPolicy } from '../../shared/types'
+import { isValidCronShape, approvalModeLabel, parseDeliverTo, buildDeliverTo, parseApproval } from '../lib/automationLabels'
+
+/** 覆盖行含稳定 UI-only id,不写入 AutomationTask */
+interface ToolOverrideRow { id: string; tool: string; mode: ApprovalMode }
+
+/** 将 parseApproval 的结果附上稳定 id(从 1 开始顺序生成) */
+function seedOverrides(rows: Array<{ tool: string; mode: ApprovalMode }>): ToolOverrideRow[] {
+  return rows.map((r, i) => ({ ...r, id: String(i + 1) }))
+}
 
 interface AutomationFormProps {
   initial: AutomationTask | null            // null = 新建
@@ -13,42 +21,6 @@ interface AutomationFormProps {
 
 const WEEKDAYS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
 const APPROVAL_MODES: ApprovalMode[] = ['deny', 'auto-approve', 'ask']
-
-/** 解析 initial.deliverTo → desktop/qq 布尔值;新建任务默认 desktop=true */
-function parseDeliverTo(initial: AutomationTask | null): { desktop: boolean; qq: boolean } {
-  if (!initial || !initial.deliverTo || initial.deliverTo.length === 0) {
-    return { desktop: true, qq: false }
-  }
-  return {
-    desktop: initial.deliverTo.some(d => d.platform === 'desktop'),
-    qq: initial.deliverTo.some(d => d.platform === 'qq'),
-  }
-}
-
-/** 构建 DeliveryTarget[] */
-function buildDeliverTo(desktop: boolean, qq: boolean): DeliveryTarget[] {
-  const targets: DeliveryTarget[] = []
-  if (desktop) targets.push({ platform: 'desktop' })
-  if (qq) targets.push({ platform: 'qq' })
-  return targets
-}
-
-/** 解析 initial.approval;新建任务默认 {default:'deny'} */
-function parseApproval(initial: AutomationTask | null): {
-  defaultMode: ApprovalMode
-  toolOverrides: Array<{ tool: string; mode: ApprovalMode }>
-  askTimeoutMinutes: string
-} {
-  const ap = initial?.approval
-  if (!ap) return { defaultMode: 'deny', toolOverrides: [], askTimeoutMinutes: '' }
-  return {
-    defaultMode: ap.default,
-    toolOverrides: ap.tools
-      ? Object.entries(ap.tools).map(([tool, mode]) => ({ tool, mode }))
-      : [],
-    askTimeoutMinutes: ap.askTimeoutMinutes !== undefined ? String(ap.askTimeoutMinutes) : '',
-  }
-}
 
 export default function AutomationForm({ initial, projects, onSave, onRunNow, onRemove, removeConfirming }: AutomationFormProps): JSX.Element {
   const [name, setName] = useState(initial?.name ?? '')
@@ -72,17 +44,21 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
   // approval state
   const initialApproval = parseApproval(initial)
   const [approvalDefault, setApprovalDefault] = useState<ApprovalMode>(initialApproval.defaultMode)
-  const [toolOverrides, setToolOverrides] = useState<Array<{ tool: string; mode: ApprovalMode }>>(initialApproval.toolOverrides)
+  const [toolOverrides, setToolOverrides] = useState<ToolOverrideRow[]>(() => seedOverrides(initialApproval.toolOverrides))
   const [askTimeoutMinutes, setAskTimeoutMinutes] = useState(initialApproval.askTimeoutMinutes)
+  const nextIdRef = useRef(initialApproval.toolOverrides.length + 1)
 
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   // tool overrides helpers
-  const addToolOverride = (): void => setToolOverrides(prev => [...prev, { tool: '', mode: 'deny' }])
-  const removeToolOverride = (idx: number): void => setToolOverrides(prev => prev.filter((_, i) => i !== idx))
-  const updateToolOverride = (idx: number, field: 'tool' | 'mode', value: string): void => {
-    setToolOverrides(prev => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
+  const addToolOverride = (): void => {
+    const id = String(nextIdRef.current++)
+    setToolOverrides(prev => [...prev, { id, tool: '', mode: 'deny' }])
+  }
+  const removeToolOverride = (id: string): void => setToolOverrides(prev => prev.filter(r => r.id !== id))
+  const updateToolOverride = (id: string, field: 'tool' | 'mode', value: string): void => {
+    setToolOverrides(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r))
   }
 
   const hasAnyAsk = approvalDefault === 'ask' || toolOverrides.some(r => r.mode === 'ask')
@@ -110,7 +86,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
     // deliverTo — empty allowed (run-only)
     const deliverTo = buildDeliverTo(deliverDesktop, deliverQq)
 
-    // approval policy
+    // approval policy (strip UI-only id)
     const tools: Record<string, ApprovalMode> = {}
     for (const row of toolOverrides) {
       const t = row.tool.trim()
@@ -277,20 +253,20 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
           <div className="flex flex-col gap-1">
             <div className="text-[10px] text-fg-subtle">按工具覆盖</div>
             {toolOverrides.map((row, idx) => (
-              <div key={idx} className="flex items-center gap-1">
+              <div key={row.id} className="flex items-center gap-1">
                 <input data-testid={`automation-form-tool-override-name-${idx}`}
-                  value={row.tool} onChange={e => updateToolOverride(idx, 'tool', e.target.value)}
+                  value={row.tool} onChange={e => updateToolOverride(row.id, 'tool', e.target.value)}
                   placeholder="工具名"
                   className="flex-1 rounded-lg border border-border bg-bg px-2 py-1.5 text-xs text-fg outline-none focus:border-accent" />
                 <select data-testid={`automation-form-tool-override-mode-${idx}`}
-                  value={row.mode} onChange={e => updateToolOverride(idx, 'mode', e.target.value)}
+                  value={row.mode} onChange={e => updateToolOverride(row.id, 'mode', e.target.value)}
                   className="rounded-lg border border-border bg-bg px-2 py-1.5 text-xs text-fg outline-none">
                   {APPROVAL_MODES.map(m => (
                     <option key={m} value={m}>{approvalModeLabel(m)}</option>
                   ))}
                 </select>
                 <button data-testid={`automation-form-tool-override-remove-${idx}`}
-                  type="button" onClick={() => removeToolOverride(idx)}
+                  type="button" onClick={() => removeToolOverride(row.id)}
                   className="rounded px-1.5 py-1 text-xs text-fg-muted hover:text-danger">×</button>
               </div>
             ))}

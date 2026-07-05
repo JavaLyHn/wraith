@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { isValidCronShape, approvalModeLabel, deliveryTargetsToLabels } from '../src/renderer/lib/automationLabels'
-import type { DeliveryTarget } from '../src/shared/types'
+import { isValidCronShape, approvalModeLabel, deliveryTargetsToLabels, parseDeliverTo, buildDeliverTo, parseApproval } from '../src/renderer/lib/automationLabels'
+import type { DeliveryTarget, AutomationTask } from '../src/shared/types'
+
+function task(over: Partial<AutomationTask> = {}): AutomationTask {
+  return {
+    id: 't1', name: 'test', prompt: 'p', projectPath: '/proj',
+    enabled: true, schedule: { kind: 'interval', everyMinutes: 10 },
+    createdAt: 1000, enabledAt: 1000, lastFiredAt: null,
+    ...over,
+  }
+}
 
 describe('isValidCronShape', () => {
   it('接受标准 5 段 cron 表达式', () => {
@@ -59,5 +68,82 @@ describe('deliveryTargetsToLabels', () => {
   it('未知平台返回 platform 字符串本身', () => {
     const targets: DeliveryTarget[] = [{ platform: 'telegram' }]
     expect(deliveryTargetsToLabels(targets)).toEqual(['telegram'])
+  })
+})
+
+describe('parseDeliverTo', () => {
+  it('null(新建) → desktop=true, qq=false', () => {
+    expect(parseDeliverTo(null)).toEqual({ desktop: true, qq: false })
+  })
+
+  it('deliverTo 为空数组 → desktop=true, qq=false', () => {
+    expect(parseDeliverTo(task({ deliverTo: [] }))).toEqual({ desktop: true, qq: false })
+  })
+
+  it('编辑态 desktop-only backfill', () => {
+    expect(parseDeliverTo(task({ deliverTo: [{ platform: 'desktop' }] }))).toEqual({ desktop: true, qq: false })
+  })
+
+  it('编辑态 qq-only backfill(QQ target)', () => {
+    expect(parseDeliverTo(task({ deliverTo: [{ platform: 'qq' }] }))).toEqual({ desktop: false, qq: true })
+  })
+
+  it('编辑态 desktop+qq', () => {
+    expect(parseDeliverTo(task({ deliverTo: [{ platform: 'desktop' }, { platform: 'qq' }] }))).toEqual({ desktop: true, qq: true })
+  })
+})
+
+describe('buildDeliverTo', () => {
+  it('desktop-only → [{platform:"desktop"}]', () => {
+    expect(buildDeliverTo(true, false)).toEqual([{ platform: 'desktop' }])
+  })
+
+  it('qq-only → [{platform:"qq"}]', () => {
+    expect(buildDeliverTo(false, true)).toEqual([{ platform: 'qq' }])
+  })
+
+  it('both → desktop first, qq second', () => {
+    expect(buildDeliverTo(true, true)).toEqual([{ platform: 'desktop' }, { platform: 'qq' }])
+  })
+
+  it('none → []', () => {
+    expect(buildDeliverTo(false, false)).toEqual([])
+  })
+})
+
+describe('parseApproval', () => {
+  it('null(新建) → {defaultMode:"deny", toolOverrides:[], askTimeoutMinutes:""}', () => {
+    expect(parseApproval(null)).toEqual({ defaultMode: 'deny', toolOverrides: [], askTimeoutMinutes: '' })
+  })
+
+  it('approval undefined(absent) → deny 默认', () => {
+    expect(parseApproval(task({ approval: undefined }))).toEqual({ defaultMode: 'deny', toolOverrides: [], askTimeoutMinutes: '' })
+  })
+
+  it('tools backfill — per-tool override rows via Object.entries', () => {
+    const result = parseApproval(task({
+      approval: { default: 'auto-approve', tools: { Bash: 'ask', Read: 'deny' } }
+    }))
+    expect(result.defaultMode).toBe('auto-approve')
+    expect(result.toolOverrides).toEqual(
+      expect.arrayContaining([
+        { tool: 'Bash', mode: 'ask' },
+        { tool: 'Read', mode: 'deny' },
+      ])
+    )
+    expect(result.toolOverrides).toHaveLength(2)
+  })
+
+  it('askTimeoutMinutes roundtrip', () => {
+    const result = parseApproval(task({
+      approval: { default: 'ask', askTimeoutMinutes: 30 }
+    }))
+    expect(result.askTimeoutMinutes).toBe('30')
+    expect(result.toolOverrides).toEqual([])
+  })
+
+  it('askTimeoutMinutes absent → 空字符串', () => {
+    const result = parseApproval(task({ approval: { default: 'ask' } }))
+    expect(result.askTimeoutMinutes).toBe('')
   })
 })

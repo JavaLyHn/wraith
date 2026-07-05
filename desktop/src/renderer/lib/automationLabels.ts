@@ -1,4 +1,4 @@
-import type { AutomationTask, ApprovalMode, DeliveryTarget } from '../../shared/types'
+import type { AutomationTask, ApprovalMode, ApprovalPolicy, DeliveryTarget } from '../../shared/types'
 import { computeNextRun } from '../../main/automationSchedule'
 
 /** 「下次 MM-DD HH:mm」标签;renderer 直接复用 main 的纯函数(无 Node 依赖)。 */
@@ -26,12 +26,13 @@ export function isValidCronShape(expr: string): boolean {
 // ApprovalMode label 纯函数
 // ---------------------------------------------------------------------------
 
-/** 审批模式中文标签。 */
+/** 审批模式中文标签。未知/未来模式返回 mode 字符串本身。 */
 export function approvalModeLabel(mode: ApprovalMode): string {
   switch (mode) {
     case 'deny': return '拒绝(安全默认)'
     case 'auto-approve': return '自动批准'
     case 'ask': return '每次询问'
+    default: return mode
   }
 }
 
@@ -46,4 +47,44 @@ export function deliveryTargetsToLabels(targets: DeliveryTarget[]): string[] {
     if (t.platform === 'qq') return 'QQ 消息'
     return t.platform
   })
+}
+
+// ---------------------------------------------------------------------------
+// AutomationForm parse/build helpers(从 AutomationForm.tsx 提取,纯函数)
+// ---------------------------------------------------------------------------
+
+/** 解析 initial.deliverTo → desktop/qq 布尔值;新建任务默认 desktop=true */
+export function parseDeliverTo(initial: AutomationTask | null): { desktop: boolean; qq: boolean } {
+  if (!initial || !initial.deliverTo || initial.deliverTo.length === 0) {
+    return { desktop: true, qq: false }
+  }
+  return {
+    desktop: initial.deliverTo.some(d => d.platform === 'desktop'),
+    qq: initial.deliverTo.some(d => d.platform === 'qq'),
+  }
+}
+
+/** 构建 DeliveryTarget[] */
+export function buildDeliverTo(desktop: boolean, qq: boolean): DeliveryTarget[] {
+  const targets: DeliveryTarget[] = []
+  if (desktop) targets.push({ platform: 'desktop' })
+  if (qq) targets.push({ platform: 'qq' })
+  return targets
+}
+
+/** 解析 initial.approval;新建任务默认 {default:'deny'} */
+export function parseApproval(initial: AutomationTask | null): {
+  defaultMode: ApprovalMode
+  toolOverrides: Array<{ tool: string; mode: ApprovalMode }>
+  askTimeoutMinutes: string
+} {
+  const ap: ApprovalPolicy | undefined = initial?.approval
+  if (!ap) return { defaultMode: 'deny', toolOverrides: [], askTimeoutMinutes: '' }
+  return {
+    defaultMode: ap.default,
+    toolOverrides: ap.tools
+      ? Object.entries(ap.tools).map(([tool, mode]) => ({ tool, mode }))
+      : [],
+    askTimeoutMinutes: ap.askTimeoutMinutes !== undefined ? String(ap.askTimeoutMinutes) : '',
+  }
 }
