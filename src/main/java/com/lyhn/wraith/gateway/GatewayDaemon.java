@@ -2,6 +2,7 @@ package com.lyhn.wraith.gateway;
 
 import com.lyhn.wraith.automation.AutomationStore;
 import com.lyhn.wraith.automation.AutomationRunner;
+import com.lyhn.wraith.automation.RequestInbox;
 import com.lyhn.wraith.automation.ScheduledRunRenderer;
 import com.lyhn.wraith.automation.Scheduler;
 import com.lyhn.wraith.automation.delivery.Deliverer;
@@ -31,6 +32,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 网关守护进程装配：把前置任务的部件（{@link QqApiClient} / {@link QqWsClient} /
@@ -64,6 +68,21 @@ import java.util.concurrent.Executors;
  *       {@code driver.onMessage} 外，新增 {@code lastInboundAt.put} 和
  *       {@code qqDeliver.flush(inbound.msgId())} 以用新鲜 msg_id 冲刷待发队列。</li>
  * </ul>
+ *
+ * <p>Task-14 接线（ask 审批 surfacing）：
+ * <ul>
+ *   <li>{@code pendingApprovals}：{@code Map<String, CompletableFuture<ApprovalResult>>}（ConcurrentHashMap），
+ *       key = {@code runId + "#" + counter.incrementAndGet()}（AtomicLong，无随机数）。</li>
+ *   <li>真实 {@link ScheduledRunRenderer.AskSurface}：注册 future → （hasQq 时）入队一个 approval-pending
+ *       {@link QqPendingStore.Pending}（approvalId 非 null），使下次入站时
+ *       {@link QqDeliveryAdapter#flush} 以独立 keyboard 消息发出审批按钮 → 返回 future。</li>
+ *   <li>{@code onInteraction}：authz/ack 通过后先看 key 是否在 {@code pendingApprovals}；是则
+ *       complete + remove，RETURN，不再路由到 {@code driver.onApproval}（定时审批与 IM-session
+ *       审批共存）。</li>
+ *   <li>{@link RequestInbox} poller：2-3 s 间隔 daemon 线程，drain 后处理
+ *       {@code run-now}（→ {@code sch.requestRunNow}）和 {@code approval}（→ complete future）；
+ *       poll body 整体 try/catch，防止单条坏请求杀死 poller。</li>
+ * </ul>
  */
 public final class GatewayDaemon {
 
@@ -78,16 +97,13 @@ public final class GatewayDaemon {
         }
 
         // ── Step 2: AutomationStore ───────────────────────────────────────────
-        AutomationStore store = new AutomationStore(
-                Path.of(System.getProperty("user.home"), ".wraith"));
+        String home = System.getProperty("user.home");
+        AutomationStore store = new AutomationStore(Path.of(home, ".wraith"));
 
-        // ── Step 3: TurnEngine — Phase 1 stub: ASK-mode 立即拒（fail-closed） ──
-        ScheduledRunRenderer.AskSurface askSurface =
-                (runId, req) -> CompletableFuture.completedFuture(
-                        ApprovalResult.reject("ask surfacing not wired in phase 1"));
-
-        AutomationRunner.TurnEngine engine =
-                new AutomationRunner.InProcessTurnEngine(client, askSurface, 30);
+        // ── Step 3: pendingApprovals registry (needed by askSurface + onInteraction + inbox poller) ──
+        // Key: approvalId = runId + "#" + counter.incrementAndGet()
+        Map<String, CompletableFuture<ApprovalResult>> pendingApprovals = new ConcurrentHashMap<>();
+        AtomicLong approvalCounter = new AtomicLong(0);
 
         // ── Step 4: QQ 配置探测 ───────────────────────────────────────────────
         WraithConfig.GatewayConfig gw = cfg.getGateway();
@@ -102,6 +118,7 @@ public final class GatewayDaemon {
         // ── Step 6: QQ 投递组件（仅 QQ 已配置时）────────────────────────────────
         QqApiClient api = null;
         QqDeliveryAdapter qqDeliver = null;
+        QqPendingStore qqPending = null;
         OkHttpClient http = null;  // 单个共享 OkHttpClient（api + ws 复用）
 
         if (hasQq) {
@@ -110,10 +127,10 @@ public final class GatewayDaemon {
             api = new QqApiClient(qq.getAppId(), qq.getClientSecret(),
                     "https://api.sgroup.qq.com", "https://bots.qq.com/app/getAppAccessToken", http);
 
-            QqPendingStore pending = new QqPendingStore(
-                    Path.of(System.getProperty("user.home"), ".wraith"));
+            qqPending = new QqPendingStore(Path.of(home, ".wraith"));
 
             // PassiveWindow 实现：复用 lastMsgId + lastInboundAt，60 分钟窗口。
+            final QqPendingStore pendingRef = qqPending;
             PassiveWindow window = openid -> {
                 Long t = lastInboundAt.get(openid);
                 String mid = lastMsgId.get(openid);
@@ -122,10 +139,37 @@ public final class GatewayDaemon {
                         ? mid : null;
             };
 
-            qqDeliver = new QqDeliveryAdapter(qq.getOwnerOpenid(), api, pending, window);
+            qqDeliver = new QqDeliveryAdapter(qq.getOwnerOpenid(), api, qqPending, window);
         }
 
-        // ── Step 7: Deliverer = DesktopDeliveryAdapter 总是 + QqDeliveryAdapter 若有 QQ ──
+        // ── Step 7: Real AskSurface (replaces Phase-1 stub) ──────────────────
+        // Needs pendingApprovals + (if hasQq) qqPending before the engine.
+        final QqPendingStore qqPendingRef = qqPending;
+        ScheduledRunRenderer.AskSurface askSurface = (runId, req) -> {
+            String approvalId = runId + "#" + approvalCounter.incrementAndGet();
+            CompletableFuture<ApprovalResult> f = new CompletableFuture<>();
+            pendingApprovals.put(approvalId, f);
+
+            // Surface via QQ pending queue (next inbound DM will flush keyboard message)
+            if (hasQq && qqPendingRef != null) {
+                QqPendingStore.Pending ap = new QqPendingStore.Pending();
+                ap.taskName = req.toolName();
+                ap.answer = req.suggestion() != null ? req.suggestion() : "定时任务审批";
+                ap.ts = System.currentTimeMillis();
+                ap.approvalId = approvalId;
+                qqPendingRef.enqueue(ap);
+            }
+            // Desktop path: the future is also resolvable via RequestInbox (approval type)
+            // regardless of hasQq — the inbox poller below handles it.
+
+            return f;
+        };
+
+        // ── Step 8: TurnEngine (needs askSurface) ────────────────────────────
+        AutomationRunner.TurnEngine engine =
+                new AutomationRunner.InProcessTurnEngine(client, askSurface, 30);
+
+        // ── Step 9: Deliverer = DesktopDeliveryAdapter 总是 + QqDeliveryAdapter 若有 QQ ──
         List<DeliveryAdapter> adapterList = new ArrayList<>();
         adapterList.add(new DesktopDeliveryAdapter(store));
         if (qqDeliver != null) {
@@ -133,14 +177,45 @@ public final class GatewayDaemon {
         }
         Deliverer deliverer = new Deliverer(adapterList);
 
-        // ── Step 8: Scheduler — onResult 换成 deliverer::deliver（Phase-1 stub 已去除） ──
+        // ── Step 10: Scheduler — onResult 换成 deliverer::deliver ───────────
         Scheduler sch = new Scheduler(store, engine, deliverer::deliver, 3, System::currentTimeMillis);
 
-        // ── Step 9: 扫清旧 run，启动调度器 ─────────────────────────────────────
+        // ── Step 11: RequestInbox poller — run-now + approval, 2-3s cadence ─
+        RequestInbox inbox = new RequestInbox(
+                Path.of(home, ".wraith", "automation-requests"));
+        ScheduledExecutorService inboxPoller = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "wraith-inbox-poller");
+            t.setDaemon(true);
+            return t;
+        });
+        inboxPoller.scheduleAtFixedRate(() -> {
+            try {
+                for (RequestInbox.Request r : inbox.drain()) {
+                    try {
+                        if ("run-now".equals(r.type())) {
+                            sch.requestRunNow(r.id());
+                        } else if ("approval".equals(r.type())) {
+                            CompletableFuture<ApprovalResult> f = pendingApprovals.remove(r.id());
+                            if (f != null) {
+                                f.complete("approve".equals(r.payload())
+                                        ? ApprovalResult.approve()
+                                        : ApprovalResult.reject("desktop rejected"));
+                            }
+                        }
+                    } catch (Exception e) {
+                        System.err.println("[gateway] inbox 处理单条请求失败: " + e.getMessage());
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("[gateway] inbox poll 失败: " + e.getMessage());
+            }
+        }, 2, 3, TimeUnit.SECONDS);
+
+        // ── Step 12: 扫清旧 run，启动调度器 ──────────────────────────────────
         sch.sweepInterrupted();
         sch.start();
 
-        // ── Step 10: QQ — 可选 ───────────────────────────────────────────────
+        // ── Step 13: QQ — 可选 ──────────────────────────────────────────────
         if (!hasQq) {
             System.err.println("[gateway] 未配置 gateway.qq；仅运行定时任务(cron)，不接 QQ");
             // 调度器的 ticker/worker 均为 daemon 线程，必须显式阻塞才能防止 JVM 退出。
@@ -152,7 +227,7 @@ public final class GatewayDaemon {
             return;
         }
 
-        // ── Step 11: QQ WS 接线（复用 Step 6 已建的 api + qqDeliver） ────────────
+        // ── Step 14: QQ WS 接线（复用 Step 6 已建的 api + qqDeliver） ─────────
         WraithConfig.GatewayQqConfig qq = gw.getQq();
         final QqApiClient apiRef = api;
         final QqDeliveryAdapter qqDeliverRef = qqDeliver;
@@ -200,7 +275,24 @@ public final class GatewayDaemon {
                     }
                     if (!authz.isAllowed(interaction.openid())) return; // deny-all on QQ-authenticated openid
                     QqApproval.Callback cb = QqApproval.parse(interaction.buttonData());
-                    if (cb != null) driver.onApproval(cb.sessionKey(), cb.result());
+                    if (cb != null) {
+                        // Task-14: scheduled-ask approvals are keyed in pendingApprovals by approvalId.
+                        // Try to resolve as a scheduled approval FIRST; fall through to IM-session routing
+                        // if the key is not found (it belongs to an IM-session HITL approval instead).
+                        boolean isScheduledApproval = pendingApprovals.containsKey(cb.sessionKey());
+                        if (isScheduledApproval) {
+                            CompletableFuture<ApprovalResult> f = pendingApprovals.remove(cb.sessionKey());
+                            if (f != null) {
+                                boolean approved = cb.result().isApproved();
+                                f.complete(approved
+                                        ? ApprovalResult.approve()
+                                        : ApprovalResult.reject("qq rejected"));
+                            }
+                            return; // do not also route to IM-session driver
+                        }
+                        // Not a scheduled approval — route to IM-session HITL as before
+                        driver.onApproval(cb.sessionKey(), cb.result());
+                    }
                 },
                 // F-4:连接状态 → stdout 机读标记(与 logback 文件日志解耦),桌面端点亮状态灯。
                 state -> System.out.println("WRAITH_GATEWAY_STATUS " + state.wire()));

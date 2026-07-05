@@ -22,6 +22,12 @@ public final class QqPendingStore {
         public String taskName;
         public String answer;
         public long ts;
+        /**
+         * Non-null for approval-pending items: the approvalId that the QQ inline
+         * keyboard buttons must carry so the daemon can resolve the future in
+         * {@code pendingApprovals}.  Null for plain delivery items.
+         */
+        public String approvalId;
     }
 
     private static final ObjectMapper M = new ObjectMapper();

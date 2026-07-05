@@ -4,10 +4,12 @@ import com.lyhn.wraith.automation.AutomationRunner;
 import com.lyhn.wraith.automation.AutomationTask;
 import com.lyhn.wraith.automation.DeliveryTarget;
 import com.lyhn.wraith.gateway.qq.QqApiClient;
+import com.lyhn.wraith.gateway.qq.QqApproval;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -83,30 +85,67 @@ public final class QqDeliveryAdapter implements DeliveryAdapter {
     }
 
     /**
-     * Flushes all pending deliveries as a single coalesced message.
+     * Flushes all pending deliveries.
      *
      * <p>Called by the daemon on the next inbound DM. Drains {@link QqPendingStore},
-     * builds a digest, and sends it as ONE message via {@code sendC2C}.
-     * Coalescing into one message respects QQ's ≤4-replies-per-msg_id limit.
+     * then:
+     * <ul>
+     *   <li>Plain delivery items (approvalId == null) are coalesced into ONE
+     *       {@code sendC2C} message (respecting QQ's ≤4-replies-per-msg_id limit).</li>
+     *   <li>Approval-pending items (approvalId != null) are each sent as a
+     *       SEPARATE keyboard message via {@code sendC2CWithKeyboard}, so the user
+     *       can tap approve/reject for each one.</li>
+     * </ul>
      *
-     * <p>If {@code sendC2C} throws (e.g. network down), all drained items are
-     * re-enqueued so they are NOT lost, and {@code null} is returned. Never throws.
+     * <p>On send failure all affected items are re-enqueued so they are NOT lost,
+     * and the method returns null. Never throws.
      *
      * @param freshMsgId the msg_id of the triggering inbound DM (passive reply token)
-     * @return the coalesced digest string, or {@code null} if nothing was pending or send failed
+     * @return the coalesced digest string (plain items), or {@code null} if nothing
+     *         was pending or all sends failed
      */
     public String flush(String freshMsgId) {
         List<QqPendingStore.Pending> ps = pending.drainAll();
         if (ps.isEmpty()) {
             return null;
         }
-        String digest = coalesce(ps);
+
+        // Partition into plain deliveries and approval-pending items
+        List<QqPendingStore.Pending> plain = new ArrayList<>();
+        List<QqPendingStore.Pending> approvals = new ArrayList<>();
+        for (QqPendingStore.Pending p : ps) {
+            if (p.approvalId != null) {
+                approvals.add(p);
+            } else {
+                plain.add(p);
+            }
+        }
+
+        // Send each approval item as its own keyboard message
+        for (QqPendingStore.Pending ap : approvals) {
+            try {
+                api.sendC2CWithKeyboard(ownerOpenid,
+                        "⚠️ 定时任务需审批(点按钮同意/拒绝):",
+                        freshMsgId,
+                        QqApproval.keyboardJson(ap.approvalId));
+            } catch (IOException e) {
+                // Re-enqueue on failure so it is retried on the next inbound DM
+                pending.enqueue(ap);
+                log.warn("QqDeliveryAdapter: flush 审批消息发送失败,已重新入队 approvalId={}", ap.approvalId, e);
+            }
+        }
+
+        // Coalesce and send plain delivery items
+        if (plain.isEmpty()) {
+            return null;
+        }
+        String digest = coalesce(plain);
         try {
             api.sendC2C(ownerOpenid, digest, freshMsgId);
             return digest;
         } catch (IOException e) {
-            for (QqPendingStore.Pending p : ps) pending.enqueue(p);
-            log.warn("QqDeliveryAdapter: flush 发送失败,已重新入队 {} 条待发", ps.size(), e);
+            for (QqPendingStore.Pending p : plain) pending.enqueue(p);
+            log.warn("QqDeliveryAdapter: flush 发送失败,已重新入队 {} 条待发", plain.size(), e);
             return null;
         }
     }
