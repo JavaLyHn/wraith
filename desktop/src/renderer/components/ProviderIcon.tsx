@@ -5,6 +5,9 @@
  * (e.g. `@lobehub/icons/es/OpenAI/components/Mono`) to avoid pulling in
  * `Avatar` → `features/IconAvatar` → `@lobehub/ui` (not installed).
  * We prefer the `Color` variant when it exists, otherwise fall back to `Mono`.
+ *
+ * Pinned to @lobehub/icons@5.10.1 internal es/<Brand>/components/{Mono,Color} layout (not public API);
+ * upgrading requires re-verifying these paths.
  */
 import React from 'react'
 // — Mono-only icons (no Color component) —
