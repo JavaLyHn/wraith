@@ -33,6 +33,7 @@ public class WraithConfig {
         private double temperature = 0.7;  // 默认温度
         private int maxTokens = 8192;      // 默认最大 token 数
         private String protocol;           // "openai" | "anthropic"; null=按缺省(openai)
+        private String label;              // 用户自定义显示名(非密钥;多实例区分用);可空
 
         public ProviderConfig() {}
 
@@ -56,6 +57,8 @@ public class WraithConfig {
         public void setMaxTokens(int maxTokens) { this.maxTokens = maxTokens; }
         public String getProtocol() { return protocol; }
         public void setProtocol(String protocol) { this.protocol = protocol; }
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
