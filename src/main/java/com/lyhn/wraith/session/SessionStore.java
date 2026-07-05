@@ -142,8 +142,9 @@ public final class SessionStore {
             return false;
         }
         try {
-            boolean removed = Files.deleteIfExists(dir.resolve(safeId(id) + ".jsonl"));
-            if (removed && id.equals(currentId)) {
+            String sid = safeId(id);
+            boolean removed = Files.deleteIfExists(dir.resolve(sid + ".jsonl"));
+            if (removed && sid.equals(currentId)) {
                 startNew();   // 删掉的是当前会话 → 重置内存态
             }
             return removed;

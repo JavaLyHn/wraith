@@ -82,6 +82,7 @@ class SessionStarNameTest {
         String id = seedOneTurn(s);
         assertNotNull(s.meta(id));
         assertTrue(s.deleteById(id), "首次删除应返回 true");
+        assertNull(s.currentId(), "删除当前会话后 currentId 应被重置为 null");
         assertNull(s.meta(id), "删除后 meta 应为 null");
         assertFalse(s.deleteById(id), "再次删除不存在的文件返回 false");
     }
