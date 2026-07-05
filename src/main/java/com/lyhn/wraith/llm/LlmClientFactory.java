@@ -33,7 +33,13 @@ public class LlmClientFactory {
             case "kimi" -> new KimiClient(apiKey, model, baseUrl);
             case "freellmapi" -> new FreeLlmApiClient(apiKey, model, baseUrl);
             case "xfyun" -> new XfyunMaaSClient(apiKey, model, baseUrl, loraId);
-            default -> null;
+            default -> {
+                String protocol = config.getProtocol(configuredProvider);
+                if ("anthropic".equalsIgnoreCase(protocol)) {
+                    yield new AnthropicClient(apiKey, model, baseUrl);
+                }
+                yield new GenericOpenAiClient(apiKey, model, baseUrl, configuredProvider);
+            }
         };
     }
 
