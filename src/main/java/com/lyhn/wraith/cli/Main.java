@@ -1288,6 +1288,39 @@ public class Main {
                         config.save();
                         return java.util.Map.of("ok", true);
                     }
+                    public java.util.Map<String, Object> configTestProvider(String id, String apiKey, String model, String baseUrl, String protocol) {
+                        // 用表单值构造临时 config:先继承已存条目,再按传入非空值覆写(apiKey 空=沿用已存)
+                        com.lyhn.wraith.config.WraithConfig tmp = new com.lyhn.wraith.config.WraithConfig();
+                        com.lyhn.wraith.config.WraithConfig.ProviderConfig existing = config.getProviders().get(id);
+                        com.lyhn.wraith.config.WraithConfig.ProviderConfig pc =
+                            new com.lyhn.wraith.config.WraithConfig.ProviderConfig();
+                        if (existing != null) {
+                            pc.setApiKey(existing.getApiKey());
+                            pc.setModel(existing.getModel());
+                            pc.setBaseUrl(existing.getBaseUrl());
+                            pc.setProtocol(existing.getProtocol());
+                            pc.setLoraId(existing.getLoraId());
+                        }
+                        if (apiKey != null && !apiKey.isBlank()) pc.setApiKey(apiKey);
+                        if (model != null && !model.isBlank()) pc.setModel(model);
+                        if (baseUrl != null && !baseUrl.isBlank()) pc.setBaseUrl(baseUrl);
+                        if (protocol != null && !protocol.isBlank()) pc.setProtocol(protocol);
+                        tmp.getProviders().put(id, pc);
+                        com.lyhn.wraith.llm.LlmClient probe =
+                            com.lyhn.wraith.llm.LlmClientFactory.create(id, tmp);
+                        if (probe == null) return java.util.Map.of("ok", false, "error", "缺少 API Key");
+                        long t0 = System.nanoTime();
+                        try {
+                            probe.chat(java.util.List.of(com.lyhn.wraith.llm.LlmClient.Message.user("ping")),
+                                       java.util.List.of());
+                            long ms = (System.nanoTime() - t0) / 1_000_000L;
+                            return java.util.Map.of("ok", true, "model", probe.getModelName(), "latencyMs", ms);
+                        } catch (Exception e) {
+                            String em = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                            if (em.length() > 300) em = em.substring(0, 300);
+                            return java.util.Map.of("ok", false, "error", em);
+                        }
+                    }
                     public boolean setSessionStarred(String id, boolean starred) {
                         return sessionStore.setStarred(id, starred);
                     }

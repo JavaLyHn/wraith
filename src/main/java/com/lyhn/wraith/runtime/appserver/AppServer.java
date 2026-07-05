@@ -90,6 +90,14 @@ public final class AppServer {
         default java.util.Map<String, Object> configRemoveProvider(String id) {
             throw new UnsupportedOperationException("configRemoveProvider not implemented");
         }
+        /**
+         * 用给定(表单)参数走真实客户端发一条极小对话探连通。
+         * apiKey 为空/null → 沿用已存 key。回包只含 {ok, model?, latencyMs?, error?},绝不含 apiKey。
+         * 默认抛出。
+         */
+        default java.util.Map<String, Object> configTestProvider(String id, String apiKey, String model, String baseUrl, String protocol) {
+            throw new UnsupportedOperationException("configTestProvider not implemented");
+        }
     }
 
     private final BufferedReader in;
@@ -229,6 +237,19 @@ public final class AppServer {
                 String id = textParam(msg.params(), "id");
                 if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
                 try { writer.result(msg.id(), session.configRemoveProvider(id)); }
+                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.testProvider" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String id = textParam(p, "id");
+                if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                String apiKey = p != null && p.hasNonNull("apiKey") ? p.get("apiKey").asText() : null;
+                String model = p != null && p.hasNonNull("model") ? p.get("model").asText() : null;
+                String baseUrl = p != null && p.hasNonNull("baseUrl") ? p.get("baseUrl").asText() : null;
+                String protocol = p != null && p.hasNonNull("protocol") ? p.get("protocol").asText() : null;
+                try { writer.result(msg.id(), session.configTestProvider(id, apiKey, model, baseUrl, protocol)); }
                 catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

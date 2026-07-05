@@ -28,6 +28,11 @@ class AppServerProviderConfigTest {
             public Map<String,Object> configRemoveProvider(String id) {
                 cfg.getProviders().remove(id); return Map.of("ok", true);
             }
+            public Map<String,Object> configTestProvider(String id, String apiKey, String model, String baseUrl, String protocol) {
+                if (apiKey == null || apiKey.isBlank()) return Map.of("ok", false, "error", "缺少 API Key");
+                // 模拟连通成功;绝不回显 key
+                return Map.of("ok", true, "model", model == null ? "" : model, "latencyMs", 5L);
+            }
         };
         List<String> lines = new ArrayList<>();
         lines.add("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{}}");
@@ -83,6 +88,26 @@ class AppServerProviderConfigTest {
     @Test void removeProviderMissingIdIsParamError() throws Exception {
         List<JsonNode> r = run(new WraithConfig(),
             "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"config.removeProvider\",\"params\":{}}");
+        assertEquals(-32602, byId(r,2).path("error").path("code").asInt());
+    }
+    @Test void testProviderEchoesResultWithoutKey() throws Exception {
+        List<JsonNode> r = run(new WraithConfig(),
+            "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"config.testProvider\",\"params\":{\"id\":\"openai\",\"apiKey\":\"sk-canary-test\",\"model\":\"gpt-4o\"}}");
+        JsonNode res = byId(r,2).path("result");
+        assertTrue(res.path("ok").asBoolean(), "有 key 时应回 ok:true");
+        assertEquals("gpt-4o", res.path("model").asText());
+        assertFalse(r.toString().contains("sk-canary-test"), "回包绝不能含 apiKey 明文");
+    }
+    @Test void testProviderBlankKeyReturnsNotOk() throws Exception {
+        List<JsonNode> r = run(new WraithConfig(),
+            "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"config.testProvider\",\"params\":{\"id\":\"openai\",\"apiKey\":\"\"}}");
+        JsonNode res = byId(r,2).path("result");
+        assertFalse(res.path("ok").asBoolean());
+        assertTrue(res.path("error").asText().contains("API Key"));
+    }
+    @Test void testProviderMissingIdIsParamError() throws Exception {
+        List<JsonNode> r = run(new WraithConfig(),
+            "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"config.testProvider\",\"params\":{\"apiKey\":\"k\"}}");
         assertEquals(-32602, byId(r,2).path("error").path("code").asInt());
     }
 }
