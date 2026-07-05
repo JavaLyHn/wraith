@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover'
 import type { ModelListResult } from '../../shared/types'
-import { configuredProviders } from '../lib/modelSwitcher'
+import { configuredProviders, providerOptionLabel } from '../lib/modelSwitcher'
 
 interface ModelSwitcherProps {
   /** 初始显示值(session 携带的 model 字符串,切换后以内部 state 为准)。 */
@@ -92,6 +92,7 @@ export default function ModelSwitcher({ initialModel, running }: ModelSwitcherPr
         {data && configuredProviders(data.providers).map(p => {
           const isCurrent = data.current.provider === p.name
           const isDefault = data.default === p.name
+          const label = providerOptionLabel(p)
           return (
             <div
               key={p.name}
@@ -100,14 +101,14 @@ export default function ModelSwitcher({ initialModel, running }: ModelSwitcherPr
               <button
                 data-testid="model-option"
                 disabled={!p.hasKey}
-                title={p.hasKey ? p.name : `${p.name} — 未配置 API Key`}
+                title={p.hasKey ? label : `${label} — 未配置 API Key`}
                 onClick={() => { if (p.hasKey) handleSelect(p.name) }}
                 className={
                   'flex flex-1 items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-xs disabled:cursor-not-allowed disabled:opacity-40 ' +
                   (isCurrent ? 'bg-surface text-fg' : 'text-fg-muted enabled:hover:bg-surface/60')
                 }
               >
-                <span className="font-medium">{p.name}</span>
+                <span className="font-medium">{label}</span>
                 <span className="text-fg-subtle">{p.model}</span>
                 {isCurrent && <span className="ml-auto shrink-0">✓</span>}
                 {isDefault && !isCurrent && <span className="ml-auto shrink-0 text-fg-subtle text-[10px]">默认</span>}
