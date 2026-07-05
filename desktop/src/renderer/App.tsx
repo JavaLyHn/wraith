@@ -241,6 +241,7 @@ export default function App(): JSX.Element {
 
   const handleSelectSession = useCallback(async (id: string) => {
     if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
+    setView('chat') // 点侧边栏会话:无论当前在哪个面板,都切回聊天界面
     try {
       const { sessionId, messages, model, modelFallback } = await window.wraith.resumeSession(id)
       statusThrottleRef.current?.cancel() // 紧贴 resumeSession dispatch:消 await 期间 status 尾巴重新入窗
