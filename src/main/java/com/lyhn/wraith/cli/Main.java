@@ -1317,6 +1317,7 @@ public class Main {
                             return java.util.Map.of("ok", true, "model", probe.getModelName(), "latencyMs", ms);
                         } catch (Exception e) {
                             String em = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                            em = redactKey(em, pc.getApiKey());
                             if (em.length() > 300) em = em.substring(0, 300);
                             return java.util.Map.of("ok", false, "error", em);
                         }
@@ -1768,6 +1769,13 @@ public class Main {
         }
         String redacted = SENSITIVE_FLAG_VALUE.matcher(input).replaceAll("$1***");
         return SENSITIVE_ASSIGNMENT.matcher(redacted).replaceAll("$1***");
+    }
+
+    /** 从异常消息里抹掉可能被底层客户端带进来的 apiKey(防御性;红线:回包绝不含 key)。null 安全。 */
+    static String redactKey(String message, String apiKey) {
+        if (message == null) return null;
+        if (apiKey == null || apiKey.isBlank()) return message;
+        return message.contains(apiKey) ? message.replace(apiKey, "[redacted]") : message;
     }
 
     private static int terminalColumns() {
