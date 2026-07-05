@@ -93,10 +93,11 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
+  onOpenProviders: () => void
   automationBadge: boolean
 }
 
@@ -120,6 +121,7 @@ export default function Sidebar({
   onOpenPlugins,
   onOpenAutomations,
   onOpenImGateway,
+  onOpenProviders,
   automationBadge,
 }: SidebarProps): JSX.Element {
   const [searchActive, setSearchActive] = useState(false)
@@ -253,6 +255,16 @@ export default function Sidebar({
               (activeNav === 'im-gateway' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
             IM 网关
+          </button>
+
+          {/* Provider 配置 — enabled */}
+          <button
+            data-testid="nav-providers"
+            onClick={onOpenProviders}
+            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+              (activeNav === 'providers' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+          >
+            Provider 配置
           </button>
         </nav>
 
