@@ -101,7 +101,7 @@ export default function ModelSwitcher({ initialModel, running }: ModelSwitcherPr
               <button
                 data-testid="model-option"
                 disabled={!p.hasKey}
-                title={p.hasKey ? label : `${label} — 未配置 API Key`}
+                title={p.hasKey ? `${label} · ${p.model}` : `${label} — 未配置 API Key`}
                 onClick={() => { if (p.hasKey) handleSelect(p.name) }}
                 className={
                   'flex min-w-0 flex-1 items-center gap-1.5 whitespace-nowrap rounded-md px-2 py-1.5 text-left text-xs disabled:cursor-not-allowed disabled:opacity-40 ' +
