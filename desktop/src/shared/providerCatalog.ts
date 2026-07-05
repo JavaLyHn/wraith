@@ -328,3 +328,16 @@ export function instanceDisplayName(
   const m = id.match(/-(\d+)$/)
   return m ? `${base} #${m[1]}` : base
 }
+
+/** 编辑/新增表单的字段回填:已保存值优先,catalog 默认兜底(apiKey 从不回填,单独处理)。 */
+export function prefillForm(
+  saved: { model?: string; baseUrl?: string; protocol?: string; label?: string } | undefined,
+  entry: ProviderCatalogEntry | undefined,
+): { model: string; baseUrl: string; protocol: 'openai' | 'anthropic'; label: string } {
+  return {
+    model: saved?.model || entry?.suggestedModels[0] || '',
+    baseUrl: saved?.baseUrl || entry?.defaultBaseUrl || '',
+    protocol: (saved?.protocol as 'openai' | 'anthropic') || entry?.protocol || 'openai',
+    label: saved?.label || '',
+  }
+}

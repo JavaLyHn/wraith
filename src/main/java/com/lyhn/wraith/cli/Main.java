@@ -1318,7 +1318,7 @@ public class Main {
                             return java.util.Map.of("ok", true, "model", probe.getModelName(), "latencyMs", ms);
                         } catch (Exception e) {
                             String em = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-                            em = redactKey(em, pc.getApiKey());
+                            em = redactKey(em, tmp.getApiKey(id));
                             if (em.length() > 300) em = em.substring(0, 300);
                             return java.util.Map.of("ok", false, "error", em);
                         }

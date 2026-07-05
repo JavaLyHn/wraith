@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   PROVIDER_CATALOG, findCatalogEntry,
-  baseProviderId, nextInstanceId, instanceDisplayName,
+  baseProviderId, nextInstanceId, instanceDisplayName, prefillForm,
 } from '../../shared/providerCatalog'
 import ProviderIcon from './ProviderIcon'
 import type { ModelListResult, ProviderView } from '../../shared/types'
@@ -30,13 +30,7 @@ export default function ProvidersPanel({ onBack }: { onBack: () => void }): JSX.
   const openEdit = (id: string): void => {
     const c = configured.get(id)
     const e = findCatalogEntry(baseProviderId(id))
-    setForm({
-      apiKey: '',
-      model: c?.model || e?.suggestedModels[0] || '',
-      baseUrl: c?.baseUrl || e?.defaultBaseUrl || '',
-      protocol: (c?.protocol as 'openai' | 'anthropic') || e?.protocol || 'openai',
-      label: c?.label || '',
-    })
+    setForm({ apiKey: '', ...prefillForm(c, e) })
     setError(null); setTest({ status: 'idle' }); setEditing(id)
   }
 
@@ -44,13 +38,7 @@ export default function ProvidersPanel({ onBack }: { onBack: () => void }): JSX.
   const openNew = (baseId: string): void => {
     const id = nextInstanceId(baseId, configuredIds)
     const e = findCatalogEntry(baseId)
-    setForm({
-      apiKey: '',
-      model: e?.suggestedModels[0] || '',
-      baseUrl: e?.defaultBaseUrl || '',
-      protocol: e?.protocol || 'openai',
-      label: '',
-    })
+    setForm({ apiKey: '', ...prefillForm(undefined, e) })
     setError(null); setTest({ status: 'idle' }); setEditing(id)
   }
 

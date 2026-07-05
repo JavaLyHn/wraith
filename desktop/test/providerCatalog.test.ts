@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PROVIDER_CATALOG, findCatalogEntry, baseProviderId, nextInstanceId, instanceDisplayName } from '../src/shared/providerCatalog'
+import { PROVIDER_CATALOG, findCatalogEntry, baseProviderId, nextInstanceId, instanceDisplayName, prefillForm } from '../src/shared/providerCatalog'
 
 describe('PROVIDER_CATALOG', () => {
   it('每条 id 唯一,defaultBaseUrl 非空,protocol 合法', () => {
@@ -52,5 +52,28 @@ describe('provider instance helpers', () => {
     expect(instanceDisplayName('freellmapi-2', undefined, e)).toBe('FreeLLMAPI #2')
     expect(instanceDisplayName('freellmapi-2', '备用', e)).toBe('FreeLLMAPI · 备用')
     expect(instanceDisplayName('unknown-x', undefined, undefined)).toBe('unknown-x')
+  })
+})
+
+describe('prefillForm', () => {
+  it('已保存值优先于 catalog 默认', () => {
+    const e = findCatalogEntry('openai')!
+    const saved = { model: 'my-model', baseUrl: 'https://saved.example/v1', protocol: 'openai', label: '' }
+    const f = prefillForm(saved, e)
+    expect(f.model).toBe('my-model')
+    expect(f.baseUrl).toBe('https://saved.example/v1')
+  })
+  it('无保存值时回落 catalog 默认', () => {
+    const e = findCatalogEntry('openai')!
+    const f = prefillForm(undefined, e)
+    expect(f.model).toBe(e.suggestedModels[0])
+    expect(f.baseUrl).toBe(e.defaultBaseUrl)
+    expect(f.protocol).toBe('openai')
+    expect(f.label).toBe('')
+  })
+  it('已保存 baseUrl 为空串时仍回落 catalog 默认', () => {
+    const e = findCatalogEntry('openai')!
+    const f = prefillForm({ baseUrl: '' }, e)
+    expect(f.baseUrl).toBe(e.defaultBaseUrl)
   })
 })
