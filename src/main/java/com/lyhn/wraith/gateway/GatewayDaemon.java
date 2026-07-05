@@ -21,6 +21,8 @@ import com.lyhn.wraith.hitl.ApprovalResult;
 import com.lyhn.wraith.llm.LlmClient;
 import com.lyhn.wraith.llm.LlmClientFactory;
 import okhttp3.OkHttpClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -85,6 +87,8 @@ import java.util.concurrent.atomic.AtomicLong;
  * </ul>
  */
 public final class GatewayDaemon {
+
+    private static final Logger log = LoggerFactory.getLogger(GatewayDaemon.class);
 
     private GatewayDaemon() {}
 
@@ -165,7 +169,7 @@ public final class GatewayDaemon {
                             storeRef.putRun(r);
                         });
             } catch (Exception e) {
-                System.err.println("[gateway] AskSurface: run 标记 waiting_approval 失败(不影响审批流): " + e.getMessage());
+                log.warn("[gateway] AskSurface: run 标记 waiting_approval 失败(不影响审批流): {}", e.getMessage());
             }
 
             // Surface via QQ pending queue (next inbound DM will flush keyboard message)
