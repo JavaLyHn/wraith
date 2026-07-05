@@ -116,10 +116,9 @@ class LlmClientFactoryTest {
     }
 
     @Test
-    void returnsNullForUnknownProvider() {
+    void returnsNullForUnknownProviderWithoutKey() {
         WraithConfig config = new WraithConfig();
-        config.getProviders().put("unknown", new WraithConfig.ProviderConfig("test-key", null, "unknown-model"));
-
+        // 未配置任何 provider(无 key)→ create 在 switch 前的 key 检查处返 null
         assertNull(LlmClientFactory.create("unknown", config));
     }
 
