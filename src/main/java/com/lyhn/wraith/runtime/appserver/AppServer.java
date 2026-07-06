@@ -98,6 +98,14 @@ public final class AppServer {
         default java.util.Map<String, Object> configTestProvider(String id, String apiKey, String model, String baseUrl, String protocol) {
             throw new UnsupportedOperationException("configTestProvider not implemented");
         }
+        /** 列出全部技能(含 source 与 enabled)。默认抛出。 */
+        default java.util.Map<String, Object> skillsList() {
+            throw new UnsupportedOperationException("skillsList not implemented");
+        }
+        /** 启用/禁用一个技能(写 SkillStateStore + reload)。默认抛出。 */
+        default java.util.Map<String, Object> skillsSetEnabled(String name, boolean enabled) {
+            throw new UnsupportedOperationException("skillsSetEnabled not implemented");
+        }
     }
 
     private final BufferedReader in;
@@ -251,6 +259,21 @@ public final class AppServer {
                 String baseUrl = p != null && p.hasNonNull("baseUrl") ? p.get("baseUrl").asText() : null;
                 String protocol = p != null && p.hasNonNull("protocol") ? p.get("protocol").asText() : null;
                 try { writer.result(msg.id(), session.configTestProvider(id, apiKey, model, baseUrl, protocol)); }
+                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "skills.list" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.skillsList()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "skills.setEnabled" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String name = textParam(p, "name");
+                if (name == null || name.isBlank()) { writer.error(msg.id(), -32602, "缺 name"); return true; }
+                boolean enabled = p != null && p.hasNonNull("enabled") ? p.get("enabled").asBoolean() : true;
+                try { writer.result(msg.id(), session.skillsSetEnabled(name, enabled)); }
                 catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
