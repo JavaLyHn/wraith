@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { SkillView } from '../../shared/types'
+import type { SkillView, SkillDetail } from '../../shared/types'
 import { groupSkillsBySource } from '../lib/skillsView'
+import SkillEditor from './SkillEditor'
 
 const SOURCE_BADGE: Record<SkillView['source'], string> = { builtin: '内置', user: '用户', project: '项目' }
 const EMPTY_HINT: Record<SkillView['source'], string> = {
@@ -9,10 +10,13 @@ const EMPTY_HINT: Record<SkillView['source'], string> = {
   project: '把 SKILL.md 放到 <项目>/.wraith/skills/<名>/ 即可被加载',
 }
 
+type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; detail: SkillDetail }
+
 export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Element {
   const [skills, setSkills] = useState<SkillView[]>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [mode, setMode] = useState<Mode>({ kind: 'list' })
 
   const refresh = useCallback(async (): Promise<void> => {
     setBusy(true)
@@ -29,6 +33,36 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
     catch (err) { setError((err as Error).message); void refresh() }
   }, [refresh])
 
+  const openEdit = useCallback(async (name: string): Promise<void> => {
+    try { const detail = await window.wraith.getSkill(name); setMode({ kind: 'edit', detail }) }
+    catch (err) { setError((err as Error).message) }
+  }, [])
+
+  const doDelete = useCallback(async (s: SkillView): Promise<void> => {
+    if (s.source === 'builtin') return
+    if (!window.confirm(`删除技能「${s.name}」?此操作不可撤销。`)) return
+    try { await window.wraith.deleteSkill(s.source, s.name); void refresh() }
+    catch (err) { setError((err as Error).message) }
+  }, [refresh])
+
+  const doFork = useCallback(async (s: SkillView): Promise<void> => {
+    const exists = skills.some(x => x.source === 'user' && x.name === s.name)
+    if (exists && !window.confirm(`用户技能「${s.name}」已存在,覆盖?`)) return
+    try { await window.wraith.forkSkill(s.name); void refresh() }
+    catch (err) { setError((err as Error).message) }
+  }, [refresh, skills])
+
+  if (mode.kind === 'new') {
+    return <SkillEditor lockName={false} lockScope={false}
+      onSaved={() => { setMode({ kind: 'list' }); void refresh() }}
+      onCancel={() => setMode({ kind: 'list' })} />
+  }
+  if (mode.kind === 'edit') {
+    return <SkillEditor initial={mode.detail} lockName lockScope
+      onSaved={() => { setMode({ kind: 'list' }); void refresh() }}
+      onCancel={() => setMode({ kind: 'list' })} />
+  }
+
   const groups = groupSkillsBySource(skills)
 
   return (
@@ -38,16 +72,20 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
           className="rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface/60">← 返回对话</button>
         <span className="text-sm font-bold text-fg">技能</span>
         <span className="text-xs text-fg-subtle">SKILL.md 决策手册 · load_skill 注入</span>
-        <button data-testid="skills-refresh" onClick={() => void refresh()} disabled={busy}
-          className="ml-auto rounded-lg border border-border px-3 py-1.5 text-xs text-fg-muted hover:border-accent disabled:opacity-60">
-          {busy ? '扫描中…' : '⟳ 重新扫描'}
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button data-testid="skills-new" onClick={() => setMode({ kind: 'new' })}
+            className="rounded-lg border border-accent px-3 py-1.5 text-xs text-accent hover:bg-accent/10">＋ 新建技能</button>
+          <button data-testid="skills-refresh" onClick={() => void refresh()} disabled={busy}
+            className="rounded-lg border border-border px-3 py-1.5 text-xs text-fg-muted hover:border-accent disabled:opacity-60">
+            {busy ? '扫描中…' : '⟳ 重新扫描'}
+          </button>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
         {error && <div data-testid="skills-error" className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{error}</div>}
         {skills.length === 0 && !busy && !error && (
-          <div className="text-xs text-fg-subtle">还没有技能。把 SKILL.md 放到 ~/.wraith/skills/&lt;名&gt;/ 试试。</div>
+          <div className="text-xs text-fg-subtle">还没有技能。点「＋ 新建技能」或把 SKILL.md 放到 ~/.wraith/skills/&lt;名&gt;/。</div>
         )}
         {groups.map(g => (
           <section key={g.source} className="mb-4">
@@ -62,10 +100,23 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
                     {(s.version || s.author) && (
                       <span className="shrink-0 text-[10px] text-fg-subtle">{[s.version, s.author].filter(Boolean).join(' · ')}</span>
                     )}
-                    <button data-testid="skill-toggle" onClick={() => void toggle(s.name, !s.enabled)}
-                      className="ml-auto shrink-0 rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent">
-                      {s.enabled ? '停用' : '启用'}
-                    </button>
+                    <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                      {s.source === 'builtin' ? (
+                        <button data-testid="skill-fork" onClick={() => void doFork(s)}
+                          className="rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent">复制为用户技能</button>
+                      ) : (
+                        <>
+                          <button data-testid="skill-edit" onClick={() => void openEdit(s.name)}
+                            className="rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent">编辑</button>
+                          <button data-testid="skill-delete" onClick={() => void doDelete(s)}
+                            className="rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-danger hover:text-danger">删除</button>
+                        </>
+                      )}
+                      <button data-testid="skill-toggle" onClick={() => void toggle(s.name, !s.enabled)}
+                        className="rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent">
+                        {s.enabled ? '停用' : '启用'}
+                      </button>
+                    </div>
                   </div>
                   {s.description && <div className="mt-1 line-clamp-3 text-[11px] text-fg-muted">{s.description}</div>}
                   {s.tags.length > 0 && (
