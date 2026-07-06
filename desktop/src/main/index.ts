@@ -26,6 +26,7 @@ import {
 import { mapLegacyTask, needsMigration } from './automationMigration'
 import type { LegacyAutomationTask } from './automationMigration'
 import type { AutomationTask, AutomationRun, AutomationEvent } from '../shared/types'
+import type { SkillUpsertPayload } from '../shared/types'
 import { resolveInterruptTurnId } from './interruptTurnId'
 import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from './notificationFilter'
 import { GatewayManager } from './gatewayManager'
@@ -488,6 +489,26 @@ ipcMain.handle('wraith:skillsList', async () => {
 ipcMain.handle('wraith:setSkillEnabled', async (_e, name: string, enabled: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.setEnabled', { name, enabled })
+})
+
+ipcMain.handle('wraith:getSkill', async (_e, name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('skills.get', { name })
+})
+
+ipcMain.handle('wraith:upsertSkill', async (_e, payload: SkillUpsertPayload) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('skills.upsert', payload)
+})
+
+ipcMain.handle('wraith:deleteSkill', async (_e, scope: 'user' | 'project', name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('skills.delete', { scope, name })
+})
+
+ipcMain.handle('wraith:forkSkill', async (_e, name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('skills.fork', { name })
 })
 
 ipcMain.handle('wraith:setApprovalMode', async (_e, auto: boolean) => {

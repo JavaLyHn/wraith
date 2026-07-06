@@ -254,6 +254,20 @@ export interface SkillListResult {
   skills: SkillView[]
 }
 
+export interface SkillDetail extends SkillView {
+  body: string
+}
+
+export interface SkillUpsertPayload {
+  scope: 'user' | 'project'
+  name: string
+  description: string
+  version: string
+  author: string
+  tags: string[]
+  body: string
+}
+
 // ---------------------------------------------------------------------------
 // Phase E-2: 定时自动化
 // ---------------------------------------------------------------------------

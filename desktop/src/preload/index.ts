@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload } from '../shared/types'
 import type { GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -67,6 +67,10 @@ export interface WraithApi {
   testProvider(p: { id: string; apiKey?: string; model?: string; baseUrl?: string; protocol?: string }): Promise<{ ok: boolean; model?: string; latencyMs?: number; error?: string }>
   skillsList(): Promise<SkillListResult>
   setSkillEnabled(name: string, enabled: boolean): Promise<{ ok: boolean }>
+  getSkill(name: string): Promise<SkillDetail>
+  upsertSkill(payload: SkillUpsertPayload): Promise<{ ok: boolean }>
+  deleteSkill(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
+  forkSkill(name: string): Promise<{ ok: boolean; name: string }>
   gatewayGetConfig(): Promise<GatewayConfigView>
   gatewaySetSecret(secret: string): Promise<{ ok: boolean }>
   gatewaySetWorkspace(workspace: string): Promise<{ ok: boolean }>
@@ -297,6 +301,19 @@ const wraith: WraithApi = {
 
   setSkillEnabled(name, enabled) {
     return ipcRenderer.invoke('wraith:setSkillEnabled', name, enabled) as Promise<{ ok: boolean }>
+  },
+
+  getSkill(name) {
+    return ipcRenderer.invoke('wraith:getSkill', name) as Promise<SkillDetail>
+  },
+  upsertSkill(payload) {
+    return ipcRenderer.invoke('wraith:upsertSkill', payload) as Promise<{ ok: boolean }>
+  },
+  deleteSkill(scope, name) {
+    return ipcRenderer.invoke('wraith:deleteSkill', scope, name) as Promise<{ ok: boolean }>
+  },
+  forkSkill(name) {
+    return ipcRenderer.invoke('wraith:forkSkill', name) as Promise<{ ok: boolean; name: string }>
   },
 
   gatewayGetConfig() {
