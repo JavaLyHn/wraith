@@ -207,7 +207,7 @@ export default function Sidebar({
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="搜索会话/项目"
+                placeholder="搜索会话"
                 className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-subtle"
               />
               <button
@@ -272,7 +272,7 @@ export default function Sidebar({
         {/* conversations list */}
         <div className="flex-1 overflow-y-auto">
           {searchActive ? (
-            /* 激活态:两分区 */
+            /* 激活态:仅会话(项目切换在顶部,不再重复列) */
             <>
               {/* 会话分区 */}
               <div className="mt-4 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">会话</div>
@@ -294,29 +294,6 @@ export default function Sidebar({
                       {s.title || '(未命名)'}
                     </button>
                   ))
-                )}
-              </div>
-
-              {/* 项目分区 */}
-              <div className="mt-3 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">项目</div>
-              <div className="px-3">
-                {filtered.projects.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-fg-subtle">无匹配</div>
-                ) : (
-                  filtered.projects.map(p => {
-                    const displayName = p.name || p.path.split('/').filter(Boolean).pop() || p.path
-                    return (
-                      <button
-                        key={p.path}
-                        data-testid="search-project-item"
-                        onClick={() => onActivateProject(p.path)}
-                        className="mb-0.5 block w-full truncate rounded-lg px-3 py-2 text-left text-xs text-fg-muted hover:bg-surface/60"
-                        title={p.path}
-                      >
-                        {displayName}
-                      </button>
-                    )
-                  })
                 )}
               </div>
             </>
