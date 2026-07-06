@@ -16,8 +16,8 @@ import java.util.stream.Collectors;
  *
  * 三层目录扫描顺序（后者整体覆盖前者同名 skill）：
  *   1. builtin（jar 内置，由 SkillBuiltinExtractor 解压到 cacheRoot）
- *   2. user：~/.wraith/skills/&lt;name&gt;/SKILL.md
- *   3. project：&lt;projectDir&gt;/.wraith/skills/&lt;name&gt;/SKILL.md
+ *   2. project：&lt;projectDir&gt;/.wraith/skills/&lt;name&gt;/SKILL.md
+ *   3. user：~/.wraith/skills/&lt;name&gt;/SKILL.md（用户 fork/定制 > project > builtin）
  *
  * 启用状态由 SkillStateStore 提供 disabled 列表过滤。
  */
@@ -43,8 +43,8 @@ public final class SkillRegistry {
         warnings.clear();
 
         loadDirectory(builtinCacheRoot, Skill.Source.BUILTIN);
-        loadDirectory(userSkillsDir, Skill.Source.USER);
         loadDirectory(projectSkillsDir, Skill.Source.PROJECT);
+        loadDirectory(userSkillsDir, Skill.Source.USER);
     }
 
     public synchronized List<Skill> allSkills() {

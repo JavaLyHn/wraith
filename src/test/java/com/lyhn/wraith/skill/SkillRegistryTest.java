@@ -34,7 +34,7 @@ class SkillRegistryTest {
     }
 
     @Test
-    void projectOverridesUserOverridesBuiltin(@TempDir Path tempDir) throws IOException {
+    void userOverridesProjectOverridesBuiltin(@TempDir Path tempDir) throws IOException {
         Path builtin = tempDir.resolve("builtin");
         Path user = tempDir.resolve("user");
         Path project = tempDir.resolve("project");
@@ -49,8 +49,9 @@ class SkillRegistryTest {
         List<Skill> all = registry.allSkills();
         assertEquals(1, all.size());
         Skill skill = all.get(0);
-        assertEquals("v-project", skill.version());
-        assertEquals(Skill.Source.PROJECT, skill.source());
+        // user > project > builtin: user fork/customization takes top priority
+        assertEquals("v-user", skill.version());
+        assertEquals(Skill.Source.USER, skill.source());
     }
 
     @Test

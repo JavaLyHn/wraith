@@ -1175,6 +1175,8 @@ public class Main {
                 com.lyhn.wraith.skill.SkillRegistry skillRegistry = new com.lyhn.wraith.skill.SkillRegistry(
                         skCacheDir, skUserDir, skProjectDir, skillStateStore);
                 skillRegistry.reload();
+                com.lyhn.wraith.skill.SkillStore skillStore =
+                        new com.lyhn.wraith.skill.SkillStore(skUserDir, skProjectDir);
                 com.lyhn.wraith.skill.SkillContextBuffer skillContextBuffer =
                         new com.lyhn.wraith.skill.SkillContextBuffer();
                 registry.setSkillRegistry(skillRegistry);
@@ -1375,6 +1377,41 @@ public class Main {
                         else skillRegistry.stateStore().disable(name);
                         skillRegistry.reload();
                         return java.util.Map.of("ok", true);
+                    }
+                    public java.util.Map<String,Object> skillsGet(String name) {
+                        com.lyhn.wraith.skill.Skill s = skillRegistry.findAnySkill(name);
+                        if (s == null) throw new IllegalArgumentException("技能不存在: " + name);
+                        java.util.Map<String,Object> v = new java.util.LinkedHashMap<>();
+                        v.put("name", s.name());
+                        v.put("description", s.description());
+                        v.put("version", s.version() != null ? s.version() : "");
+                        v.put("author", s.author() != null ? s.author() : "");
+                        v.put("tags", s.tags());
+                        v.put("source", s.displaySource());
+                        v.put("enabled", !skillRegistry.stateStore().disabled().contains(s.name()));
+                        v.put("body", s.body());
+                        return v;
+                    }
+                    public java.util.Map<String,Object> skillsUpsert(String scope, String name, String description,
+                            String version, String author, java.util.List<String> tags, String body) {
+                        try { skillStore.upsert(scope, name, description, version, author, tags, body); }
+                        catch (java.io.IOException e) { throw new RuntimeException("写入技能失败: " + e.getMessage(), e); }
+                        skillRegistry.reload();
+                        return java.util.Map.of("ok", true);
+                    }
+                    public java.util.Map<String,Object> skillsDelete(String scope, String name) {
+                        try { skillStore.delete(scope, name); }
+                        catch (java.io.IOException e) { throw new RuntimeException("删除技能失败: " + e.getMessage(), e); }
+                        skillRegistry.reload();
+                        return java.util.Map.of("ok", true);
+                    }
+                    public java.util.Map<String,Object> skillsFork(String name) {
+                        com.lyhn.wraith.skill.Skill s = skillRegistry.findAnySkill(name);
+                        if (s == null) throw new IllegalArgumentException("技能不存在: " + name);
+                        try { skillStore.upsert("user", s.name(), s.description(), s.version(), s.author(), s.tags(), s.body()); }
+                        catch (java.io.IOException e) { throw new RuntimeException("复制技能失败: " + e.getMessage(), e); }
+                        skillRegistry.reload();
+                        return java.util.Map.of("ok", true, "name", s.name());
                     }
                 };
             }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));

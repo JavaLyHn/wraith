@@ -106,6 +106,23 @@ public final class AppServer {
         default java.util.Map<String, Object> skillsSetEnabled(String name, boolean enabled) {
             throw new UnsupportedOperationException("skillsSetEnabled not implemented");
         }
+        /** 取单个技能全字段(含 body,供编辑回填)。默认抛出。 */
+        default java.util.Map<String, Object> skillsGet(String name) {
+            throw new UnsupportedOperationException("skillsGet not implemented");
+        }
+        /** 建/改一个用户或项目技能。默认抛出。 */
+        default java.util.Map<String, Object> skillsUpsert(String scope, String name, String description,
+                String version, String author, java.util.List<String> tags, String body) {
+            throw new UnsupportedOperationException("skillsUpsert not implemented");
+        }
+        /** 删除一个用户或项目技能。默认抛出。 */
+        default java.util.Map<String, Object> skillsDelete(String scope, String name) {
+            throw new UnsupportedOperationException("skillsDelete not implemented");
+        }
+        /** 复制任意技能为用户技能(内置定制)。默认抛出。 */
+        default java.util.Map<String, Object> skillsFork(String name) {
+            throw new UnsupportedOperationException("skillsFork not implemented");
+        }
     }
 
     private final BufferedReader in;
@@ -274,6 +291,54 @@ public final class AppServer {
                 if (name == null || name.isBlank()) { writer.error(msg.id(), -32602, "缺 name"); return true; }
                 boolean enabled = p != null && p.hasNonNull("enabled") ? p.get("enabled").asBoolean() : true;
                 try { writer.result(msg.id(), session.skillsSetEnabled(name, enabled)); }
+                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "skills.get" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String name = textParam(p, "name");
+                if (name == null || name.isBlank()) { writer.error(msg.id(), -32602, "缺 name"); return true; }
+                try { writer.result(msg.id(), session.skillsGet(name)); }
+                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "skills.upsert" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String scope = textParam(p, "scope");
+                String name = textParam(p, "name");
+                if (scope == null || scope.isBlank()) { writer.error(msg.id(), -32602, "缺 scope"); return true; }
+                if (name == null || name.isBlank()) { writer.error(msg.id(), -32602, "缺 name"); return true; }
+                String description = p != null && p.hasNonNull("description") ? p.get("description").asText() : "";
+                String version = p != null && p.hasNonNull("version") ? p.get("version").asText() : "";
+                String author = p != null && p.hasNonNull("author") ? p.get("author").asText() : "";
+                String body = p != null && p.hasNonNull("body") ? p.get("body").asText() : "";
+                java.util.List<String> tags = new java.util.ArrayList<>();
+                if (p != null && p.has("tags") && p.get("tags").isArray()) {
+                    p.get("tags").forEach(n -> { if (n.isTextual()) tags.add(n.asText()); });
+                }
+                try { writer.result(msg.id(), session.skillsUpsert(scope, name, description, version, author, tags, body)); }
+                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "skills.delete" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String scope = textParam(p, "scope");
+                String name = textParam(p, "name");
+                if (scope == null || scope.isBlank()) { writer.error(msg.id(), -32602, "缺 scope"); return true; }
+                if (name == null || name.isBlank()) { writer.error(msg.id(), -32602, "缺 name"); return true; }
+                try { writer.result(msg.id(), session.skillsDelete(scope, name)); }
+                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "skills.fork" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String name = textParam(p, "name");
+                if (name == null || name.isBlank()) { writer.error(msg.id(), -32602, "缺 name"); return true; }
+                try { writer.result(msg.id(), session.skillsFork(name)); }
                 catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
