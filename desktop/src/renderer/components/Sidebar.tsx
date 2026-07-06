@@ -227,7 +227,7 @@ export default function Sidebar({
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
               (activeNav === 'plugins' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
-            插件
+            🧩 插件
           </button>
 
           {/* automations — enabled */}
@@ -238,7 +238,7 @@ export default function Sidebar({
               (activeNav === 'automations' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
             <span className="flex items-center">
-              自动化
+              ⏰ 自动化
               {automationBadge && (
                 <span data-testid="nav-automations-badge" className="relative ml-auto flex h-2 w-2 shrink-0">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75 motion-reduce:hidden" />
@@ -255,7 +255,7 @@ export default function Sidebar({
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
               (activeNav === 'im-gateway' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
-            IM 网关
+            💬 IM 网关
           </button>
 
           {/* Provider 配置 — enabled */}
@@ -265,7 +265,7 @@ export default function Sidebar({
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
               (activeNav === 'providers' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
-            Provider 配置
+            🔌 Provider 配置
           </button>
         </nav>
 
