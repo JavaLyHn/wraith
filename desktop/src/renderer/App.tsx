@@ -228,6 +228,7 @@ export default function App(): JSX.Element {
 
   const handleNewConversation = useCallback(async () => {
     if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
+    setView('chat') // 点新对话:无论当前在哪个面板,都切回聊天界面
     try {
       await window.wraith.startSession(state.workspace || null)
       statusThrottleRef.current?.cancel() // 紧贴 resetSession:消 await 期间 status 尾巴重新入窗
