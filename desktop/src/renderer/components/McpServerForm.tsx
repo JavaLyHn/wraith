@@ -4,20 +4,31 @@ import { buildFormValue, envRowsFromKeys, type EnvRow, type McpFormValue } from 
 
 export type { McpFormValue } from '../../shared/mcpFormValue'
 
+/** add 模式下的预填值(推荐 MCP 一键添加用);edit 模式用 initial。 */
+export interface McpPrefill {
+  name?: string
+  command?: string
+  args?: string[]
+  envKeys?: string[]
+}
+
 interface McpServerFormProps {
   mode: 'add' | 'edit'
   initial: McpServerView | null
+  prefill?: McpPrefill | null
   busy: boolean
   onCancel: () => void
   onSubmit: (v: McpFormValue) => Promise<boolean>
 }
 
-export default function McpServerForm({ mode, initial, busy, onCancel, onSubmit }: McpServerFormProps): JSX.Element {
-  const [name, setName] = useState(initial?.name ?? '')
-  const [command, setCommand] = useState(initial?.command ?? '')
-  const [argsText, setArgsText] = useState(initial?.args?.join('\n') ?? '')
+export default function McpServerForm({ mode, initial, prefill, busy, onCancel, onSubmit }: McpServerFormProps): JSX.Element {
+  const [name, setName] = useState(initial?.name ?? prefill?.name ?? '')
+  const [command, setCommand] = useState(initial?.command ?? prefill?.command ?? '')
+  const [argsText, setArgsText] = useState((initial?.args ?? prefill?.args)?.join('\n') ?? '')
   const [scope, setScope] = useState<'user' | 'project'>(initial && initial.scope !== 'builtin' ? initial.scope : 'user')
-  const [envRows, setEnvRows] = useState<EnvRow[]>(initial ? envRowsFromKeys(initial.envKeys) : [])
+  const [envRows, setEnvRows] = useState<EnvRow[]>(
+    initial ? envRowsFromKeys(initial.envKeys) : prefill?.envKeys ? envRowsFromKeys(prefill.envKeys) : [],
+  )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

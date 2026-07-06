@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { McpServerView, McpResourceView } from '../../shared/types'
-import McpServerForm, { type McpFormValue } from './McpServerForm'
+import McpServerForm, { type McpFormValue, type McpPrefill } from './McpServerForm'
+import { BUILTIN_CAPABILITIES, RECOMMENDED_MCP } from '../lib/pluginShowcase'
 
 interface PluginsPanelProps {
   servers: McpServerView[]
@@ -28,11 +29,15 @@ const SCOPE_LABEL: Record<string, string> = { user: '用户', project: '本项�
 
 type Tab = 'tools' | 'resources' | 'prompts' | 'logs'
 
+/** 左列顶部「能力概览」的哨兵选中值(非某个 server)。 */
+const OVERVIEW = '__overview__'
+
 export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
   const { servers, configError, busy, onBack, onRefresh } = props
-  const [selected, setSelected] = useState<string | null>(null)
+  const [selected, setSelected] = useState<string>(OVERVIEW)   // 默认落在能力概览
   const [tab, setTab] = useState<Tab>('tools')
   const [formMode, setFormMode] = useState<'hidden' | 'add' | 'edit'>('hidden')
+  const [addPrefill, setAddPrefill] = useState<McpPrefill | null>(null)  // 推荐 MCP 一键添加的预填
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [tabContent, setTabContent] = useState<{ resources: McpResourceView[]; prompts: string; logs: string }>({
     resources: [], prompts: '', logs: '',
@@ -41,7 +46,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
   // 进入面板拉全量(spec §5.2)
   useEffect(() => { onRefresh() }, [onRefresh])
 
-  const current = servers.find(s => s.name === selected) ?? servers[0] ?? null
+  const current = selected !== OVERVIEW ? (servers.find(s => s.name === selected) ?? null) : null
 
   // 选中/换 tab 时拉取动态内容(工具列表在 servers 里,静态)
   useEffect(() => {
@@ -87,6 +92,14 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
         {/* 左列 */}
         <div className="flex w-56 shrink-0 flex-col border-r border-border">
           <div className="flex-1 overflow-y-auto p-2">
+            <button data-testid="mcp-overview-item"
+              onClick={() => { setSelected(OVERVIEW); setFormMode('hidden') }}
+              className={'mb-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs ' +
+                (selected === OVERVIEW ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>
+              <span className="shrink-0 text-accent">✨</span>
+              <span className="truncate">能力概览</span>
+            </button>
+            <div className="my-1 h-px bg-border" />
             {servers.length === 0 && (
               <div className="px-2 py-3 text-xs text-fg-subtle">还没有 MCP server</div>
             )}
@@ -94,7 +107,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
               <button key={s.name} data-testid="mcp-server-item"
                 onClick={() => { setSelected(s.name); setTab('tools') }}
                 className={'mb-0.5 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs ' +
-                  (current?.name === s.name ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>
+                  (selected === s.name ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>
                 <span className={'h-2 w-2 shrink-0 rounded-full ' + (STATE_DOT[s.state] ?? 'bg-fg-subtle')} />
                 <span className="truncate">{s.name}</span>
                 <span className="ml-auto shrink-0 text-[10px] text-fg-subtle">
@@ -105,7 +118,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
           </div>
           <div className="border-t border-border p-2">
             <button data-testid="mcp-add" disabled={busy}
-              onClick={() => { setFormMode('add'); setConfirmingRemove(false) }}
+              onClick={() => { setAddPrefill(null); setFormMode('add'); setConfirmingRemove(false) }}
               className="w-full rounded-lg px-2 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60 disabled:opacity-60">
               ＋ 添加 server…
             </button>
@@ -118,12 +131,54 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
             <McpServerForm
               mode={formMode}
               initial={formMode === 'edit' && current ? current : null}
+              prefill={formMode === 'add' ? addPrefill : null}
               busy={busy}
               onCancel={() => setFormMode('hidden')}
               onSubmit={async v => { const ok = await props.onSubmitForm(v); if (ok) setFormMode('hidden'); return ok }}
             />
           ) : !current ? (
-            <div className="text-xs text-fg-subtle">选择左侧 server 查看详情</div>
+            <div data-testid="mcp-overview" className="flex flex-col gap-5">
+              <section>
+                <div className="mb-1 text-sm font-bold text-fg">内置能力 · 开箱即用</div>
+                <div className="mb-3 text-[11px] text-fg-subtle">Wraith 自带的能力,无需配置即可在对话中调用。</div>
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+                  {BUILTIN_CAPABILITIES.map(c => (
+                    <div key={c.id} title={c.tools.join(' · ')}
+                      className="rounded-lg border border-border bg-surface/40 p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base leading-none">{c.icon}</span>
+                        <span className="truncate text-xs font-medium text-fg">{c.name}</span>
+                        <span className="ml-auto shrink-0 rounded bg-surface px-1.5 py-0.5 text-[9px] text-fg-subtle">已内置</span>
+                      </div>
+                      <div className="mt-1 text-[11px] text-fg-muted">{c.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+              <section>
+                <div className="mb-1 text-sm font-bold text-fg">推荐 MCP · 一键添加</div>
+                <div className="mb-3 text-[11px] text-fg-subtle">选一个 → 自动预填命令,补好路径 / 密钥再保存。</div>
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+                  {RECOMMENDED_MCP.map(m => (
+                    <div key={m.id} className="flex flex-col rounded-lg border border-border p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base leading-none">{m.icon}</span>
+                        <span className="truncate text-xs font-medium text-fg">{m.name}</span>
+                      </div>
+                      <div className="mt-1 flex-1 text-[11px] text-fg-muted">{m.desc}</div>
+                      <button data-testid={`mcp-rec-add-${m.id}`} disabled={busy}
+                        onClick={() => {
+                          setAddPrefill({ name: m.id, command: m.command, args: m.args, envKeys: m.envKeys })
+                          setConfirmingRemove(false); setFormMode('add')
+                        }}
+                        className="mt-2 self-start rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent disabled:opacity-60">
+                        ＋ 添加
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
           ) : (
             <>
               <div className="mb-3 flex items-center gap-3">
