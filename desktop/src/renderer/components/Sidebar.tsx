@@ -94,11 +94,12 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
   onOpenProviders: () => void
+  onOpenSkills: () => void
   automationBadge: boolean
 }
 
@@ -123,6 +124,7 @@ export default function Sidebar({
   onOpenAutomations,
   onOpenImGateway,
   onOpenProviders,
+  onOpenSkills,
   automationBadge,
 }: SidebarProps): JSX.Element {
   const [searchActive, setSearchActive] = useState(false)
@@ -275,6 +277,16 @@ export default function Sidebar({
               (activeNav === 'providers' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
             🔌 Provider 配置
+          </button>
+
+          {/* skills — enabled */}
+          <button
+            data-testid="nav-skills"
+            onClick={onOpenSkills}
+            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+              (activeNav === 'skills' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+          >
+            📚 技能
           </button>
         </nav>
 
