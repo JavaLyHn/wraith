@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { GatewayBindPhase, GatewayConfigView, GatewayState, GatewayStatus } from '../../shared/gateway'
 import { maskId, bindPhaseLabel } from '../lib/gatewayLabels'
+import { IM_PLATFORMS } from '../lib/imPlatforms'
 
 interface ImGatewayPanelProps {
   onBack: () => void
@@ -106,10 +107,43 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         <button data-testid="im-back" onClick={onBack}
           className="rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface/60">← 返回对话</button>
         <span className="text-sm font-bold text-fg">IM 网关</span>
-        <span className="text-xs text-fg-subtle">QQ 单聊 bot</span>
+        <span className="text-xs text-fg-subtle">对话式 IM 接入</span>
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+        {/* 接入平台:QQ 可用,其余参照 hermes 平台清单标「即将支持」占位 */}
+        <section>
+          <div className="mb-2 text-xs font-bold text-fg">接入平台</div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+            {IM_PLATFORMS.map(p => {
+              const isAvailable = p.status === 'available'
+              const statusText = isAvailable ? (bound ? '✓ 已配置' : '未配置') : '即将支持'
+              return (
+                <div
+                  key={p.id}
+                  data-testid={`im-platform-${p.id}`}
+                  title={isAvailable ? `${p.name}${p.note ? ' · ' + p.note : ''}` : `${p.name} — 即将支持`}
+                  className={
+                    'flex flex-col items-center gap-1 rounded-lg border p-3 text-center ' +
+                    (isAvailable ? 'border-accent bg-surface/60' : 'cursor-not-allowed border-border opacity-50')
+                  }
+                >
+                  <span className="text-xl leading-none">{p.icon}</span>
+                  <span className="max-w-full truncate text-[11px] text-fg">{p.name}</span>
+                  <span className={'text-[10px] ' + (isAvailable && bound ? 'text-success' : 'text-fg-subtle')}>{statusText}</span>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+
+        {/* 当前平台配置分隔 */}
+        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-fg-subtle">
+          <span className="h-px flex-1 bg-border" />
+          QQ · 单聊
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
         {/* 绑定状态卡 */}
         <section className="rounded-lg border border-border p-4">
           <div className="mb-2 text-xs font-bold text-fg">绑定状态</div>
