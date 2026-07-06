@@ -8,7 +8,7 @@ import {
 import ProjectSwitcher from './ProjectSwitcher'
 import logo from '../assets/logo.jpg'
 import { filterSidebar } from '../lib/sidebarSearch'
-import { sessionDisplayName, partitionStarred } from '../lib/sessionView'
+import { sessionDisplayName, partitionStarred, groupSessionsByTime } from '../lib/sessionView'
 import type { SessionMeta, ProjectView } from '../../shared/types'
 
 function SessionRow({ s, active, onSelect, onToggleStar, onRename, onDelete }: {
@@ -127,6 +127,15 @@ export default function Sidebar({
 }: SidebarProps): JSX.Element {
   const [searchActive, setSearchActive] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  // 会话列表分组模式:recent=最新平铺(默认)/ time=按时间分组;记忆在 localStorage
+  const [groupMode, setGroupMode] = useState<'recent' | 'time'>(() => {
+    try { return localStorage.getItem('wraith.sidebar.sessionGroupMode') === 'time' ? 'time' : 'recent' } catch { return 'recent' }
+  })
+  const toggleGroupMode = (): void => setGroupMode(m => {
+    const next = m === 'time' ? 'recent' : 'time'
+    try { localStorage.setItem('wraith.sidebar.sessionGroupMode', next) } catch { /* ignore */ }
+    return next
+  })
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -300,27 +309,48 @@ export default function Sidebar({
           ) : (
             /* 非激活态:⭐重点分区 + 对话分区 */
             <>
-              {(() => { const { starred, rest } = partitionStarred(sessions); return (
-                <>
-                  {sessions.length === 0 && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
-                  {starred.length > 0 && <>
-                    <div className="mt-4 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">⭐ 重点</div>
-                    <div className="px-2">{starred.map(s => (
-                      <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
-                        onSelect={onSelectSession} onToggleStar={onToggleStar}
-                        onRename={onRenameSession} onDelete={onDeleteSession} />
-                    ))}</div>
-                  </>}
-                  {rest.length > 0 && <>
-                    <div className="mt-4 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">对话</div>
-                    <div className="px-2">{rest.map(s => (
-                      <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
-                        onSelect={onSelectSession} onToggleStar={onToggleStar}
-                        onRename={onRenameSession} onDelete={onDeleteSession} />
-                    ))}</div>
-                  </>}
-                </>
-              )})()}
+              {(() => {
+                const { starred, rest } = partitionStarred(sessions)
+                const renderRows = (list: SessionMeta[]): JSX.Element[] => list.map(s => (
+                  <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
+                    onSelect={onSelectSession} onToggleStar={onToggleStar}
+                    onRename={onRenameSession} onDelete={onDeleteSession} />
+                ))
+                // sticky 表头:滚动时标题不动,内容从下方滑过(半透明 + 模糊)
+                const headerCls = 'sticky top-0 z-20 mt-4 bg-bg/90 px-3 py-1 text-[10px] uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
+                const groupLabelCls = 'sticky top-7 z-10 bg-bg/90 px-3 py-1 text-[10px] uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
+                return (
+                  <>
+                    {sessions.length === 0 && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
+                    {starred.length > 0 && <>
+                      <div className={headerCls}>⭐ 重点</div>
+                      <div className="px-2">{renderRows(starred)}</div>
+                    </>}
+                    {rest.length > 0 && <>
+                      <div className={headerCls + ' flex items-center'}>
+                        <span>对话</span>
+                        <button
+                          data-testid="session-group-toggle"
+                          onClick={toggleGroupMode}
+                          title={groupMode === 'time' ? '切换为最新平铺' : '切换为按时间分组'}
+                          aria-label={groupMode === 'time' ? '切换为最新平铺' : '切换为按时间分组'}
+                          className="ml-auto rounded px-1 text-xs leading-none text-fg-muted transition-colors hover:text-accent"
+                        >
+                          {groupMode === 'time' ? '🗂' : '≡'}
+                        </button>
+                      </div>
+                      {groupMode === 'time'
+                        ? groupSessionsByTime(rest, Date.now()).map(g => (
+                          <div key={g.label}>
+                            <div className={groupLabelCls}>{g.label}</div>
+                            <div className="px-2">{renderRows(g.sessions)}</div>
+                          </div>
+                        ))
+                        : <div className="px-2">{renderRows(rest)}</div>}
+                    </>}
+                  </>
+                )
+              })()}
             </>
           )}
         </div>
