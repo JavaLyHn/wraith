@@ -64,4 +64,9 @@ class SkillStoreTest {
         store.upsert("project", "p", "d", null, null, List.of(), "b");
         assertTrue(Files.exists(tmp.resolve("project").resolve("p").resolve("SKILL.md")));
     }
+
+    @Test void deleteRejectsUnsafeName(@TempDir Path tmp) {
+        SkillStore store = new SkillStore(tmp.resolve("user"), tmp.resolve("project"));
+        assertThrows(IllegalArgumentException.class, () -> store.delete("user", ".."));
+    }
 }

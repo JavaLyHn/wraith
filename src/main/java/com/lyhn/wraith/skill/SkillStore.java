@@ -36,9 +36,14 @@ public final class SkillStore {
         Path tmp = skillDir.resolve("SKILL.md.tmp");
         Files.writeString(tmp, content);
         try {
-            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (java.nio.file.AtomicMoveNotSupportedException e) {
-            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            try {
+                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (IOException e) {
+            Files.deleteIfExists(tmp);
+            throw e;
         }
     }
 
@@ -53,6 +58,8 @@ public final class SkillStore {
         List<Path> paths;
         try (var walk = Files.walk(skillDir)) {
             paths = walk.sorted(Comparator.reverseOrder()).toList();
+        } catch (java.nio.file.NoSuchFileException e) {
+            return; // 目录在 exists 检查后消失,视为已删,幂等
         }
         for (Path p : paths) {
             Files.deleteIfExists(p);
