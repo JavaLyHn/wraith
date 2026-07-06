@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult } from '../shared/types'
 import type { GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -65,6 +65,8 @@ export interface WraithApi {
   setProvider(p: { id: string; apiKey: string; model?: string; baseUrl?: string; protocol?: string; label?: string }): Promise<{ ok: boolean }>
   removeProvider(id: string): Promise<{ ok: boolean }>
   testProvider(p: { id: string; apiKey?: string; model?: string; baseUrl?: string; protocol?: string }): Promise<{ ok: boolean; model?: string; latencyMs?: number; error?: string }>
+  skillsList(): Promise<SkillListResult>
+  setSkillEnabled(name: string, enabled: boolean): Promise<{ ok: boolean }>
   gatewayGetConfig(): Promise<GatewayConfigView>
   gatewaySetSecret(secret: string): Promise<{ ok: boolean }>
   gatewaySetWorkspace(workspace: string): Promise<{ ok: boolean }>
@@ -287,6 +289,14 @@ const wraith: WraithApi = {
   },
   testProvider(p) {
     return ipcRenderer.invoke('wraith:testProvider', p) as Promise<{ ok: boolean; model?: string; latencyMs?: number; error?: string }>
+  },
+
+  skillsList() {
+    return ipcRenderer.invoke('wraith:skillsList') as Promise<SkillListResult>
+  },
+
+  setSkillEnabled(name, enabled) {
+    return ipcRenderer.invoke('wraith:setSkillEnabled', name, enabled) as Promise<{ ok: boolean }>
   },
 
   gatewayGetConfig() {

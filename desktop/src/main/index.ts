@@ -480,6 +480,16 @@ ipcMain.handle('wraith:testProvider', async (_e, p: { id: string; apiKey?: strin
   return client.request('config.testProvider', p)
 })
 
+ipcMain.handle('wraith:skillsList', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('skills.list', {})
+})
+
+ipcMain.handle('wraith:setSkillEnabled', async (_e, name: string, enabled: boolean) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('skills.setEnabled', { name, enabled })
+})
+
 ipcMain.handle('wraith:setApprovalMode', async (_e, auto: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.setApprovalMode', {

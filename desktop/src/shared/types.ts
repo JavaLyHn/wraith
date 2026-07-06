@@ -240,6 +240,20 @@ export interface ModelListResult {
   providers: ProviderView[]
 }
 
+export interface SkillView {
+  name: string
+  description: string
+  version: string
+  author: string
+  tags: string[]
+  source: 'builtin' | 'user' | 'project'
+  enabled: boolean
+}
+
+export interface SkillListResult {
+  skills: SkillView[]
+}
+
 // ---------------------------------------------------------------------------
 // Phase E-2: 定时自动化
 // ---------------------------------------------------------------------------
