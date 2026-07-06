@@ -1160,6 +1160,28 @@ public class Main {
                 com.lyhn.wraith.agent.Agent agent = new com.lyhn.wraith.agent.Agent(currentClient[0], registry);
                 agent.setRenderer(renderer);
 
+                // ── Skill 系统接线(复刻交互路径:让 load_skill 可用 + 技能索引进系统提示)──
+                java.nio.file.Path skHome = java.nio.file.Path.of(System.getProperty("user.home"));
+                java.nio.file.Path skCacheDir = skHome.resolve(".wraith/skills-cache");
+                java.nio.file.Path skUserDir = skHome.resolve(".wraith/skills");
+                java.nio.file.Path skProjectDir = java.nio.file.Path.of(root).resolve(".wraith/skills");
+                try {
+                    new com.lyhn.wraith.skill.SkillBuiltinExtractor(skCacheDir).extractAll();
+                } catch (Exception ex) {
+                    System.err.println("内置 skill 解压失败: " + ex.getMessage());
+                }
+                com.lyhn.wraith.skill.SkillStateStore skillStateStore =
+                        new com.lyhn.wraith.skill.SkillStateStore(skHome.resolve(".wraith/skills.json"));
+                com.lyhn.wraith.skill.SkillRegistry skillRegistry = new com.lyhn.wraith.skill.SkillRegistry(
+                        skCacheDir, skUserDir, skProjectDir, skillStateStore);
+                skillRegistry.reload();
+                com.lyhn.wraith.skill.SkillContextBuffer skillContextBuffer =
+                        new com.lyhn.wraith.skill.SkillContextBuffer();
+                registry.setSkillRegistry(skillRegistry);
+                registry.setSkillContextBuffer(skillContextBuffer);
+                agent.setSkillRegistry(skillRegistry);
+                agent.setSkillContextBuffer(skillContextBuffer);
+
                 com.lyhn.wraith.session.SessionStore sessionStore =
                         com.lyhn.wraith.session.SessionStore.open(
                                 java.nio.file.Path.of(System.getProperty("user.home")),
@@ -1331,6 +1353,28 @@ public class Main {
                     }
                     public boolean deleteSession(String id) {
                         return sessionStore.deleteById(id);
+                    }
+                    public java.util.Map<String, Object> skillsList() {
+                        java.util.List<java.util.Map<String, Object>> list = new java.util.ArrayList<>();
+                        java.util.Set<String> disabled = skillRegistry.stateStore().disabled();
+                        for (com.lyhn.wraith.skill.Skill s : skillRegistry.allSkills()) {
+                            java.util.Map<String, Object> v = new java.util.LinkedHashMap<>();
+                            v.put("name", s.name());
+                            v.put("description", s.description());
+                            v.put("version", s.version() != null ? s.version() : "");
+                            v.put("author", s.author() != null ? s.author() : "");
+                            v.put("tags", s.tags());
+                            v.put("source", s.displaySource());
+                            v.put("enabled", !disabled.contains(s.name()));
+                            list.add(v);
+                        }
+                        return java.util.Map.of("skills", list);
+                    }
+                    public java.util.Map<String, Object> skillsSetEnabled(String name, boolean enabled) {
+                        if (enabled) skillRegistry.stateStore().enable(name);
+                        else skillRegistry.stateStore().disable(name);
+                        skillRegistry.reload();
+                        return java.util.Map.of("ok", true);
                     }
                 };
             }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
