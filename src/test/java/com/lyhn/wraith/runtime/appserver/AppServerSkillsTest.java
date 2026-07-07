@@ -108,6 +108,9 @@ class AppServerSkillsTest {
                 registry.reload();
                 return Map.of("ok", true, "name", s.name());
             }
+            public Map<String,Object> skillsExistsInScope(String scope, String name) {
+                return Map.of("exists", store.existsInScope(scope, name));
+            }
         };
         List<String> lines = new ArrayList<>();
         lines.add("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{}}");
@@ -185,6 +188,20 @@ class AppServerSkillsTest {
 
     @Test void deleteMissingNameIsParamError() throws Exception {
         List<JsonNode> r = run("{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"skills.delete\",\"params\":{\"scope\":\"user\"}}");
+        assertEquals(-32602, byId(r, 2).path("error").path("code").asInt());
+    }
+
+    @Test void existsInScopeTrueForPresentPerScope(@TempDir Path tmp) throws Exception {
+        List<JsonNode> r = runWithStore(tmp,
+            "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"skills.upsert\",\"params\":{\"scope\":\"user\",\"name\":\"mine\",\"body\":\"B\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"skills.existsInScope\",\"params\":{\"scope\":\"user\",\"name\":\"mine\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"skills.existsInScope\",\"params\":{\"scope\":\"project\",\"name\":\"mine\"}}");
+        assertTrue(byId(r, 3).path("result").path("exists").asBoolean());
+        assertFalse(byId(r, 4).path("result").path("exists").asBoolean());
+    }
+
+    @Test void existsInScopeMissingNameIsParamError() throws Exception {
+        List<JsonNode> r = run("{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"skills.existsInScope\",\"params\":{\"scope\":\"user\"}}");
         assertEquals(-32602, byId(r, 2).path("error").path("code").asInt());
     }
 }
