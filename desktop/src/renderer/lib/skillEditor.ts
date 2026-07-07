@@ -41,3 +41,12 @@ export function toUpsertPayload(form: SkillFormState): SkillUpsertPayload {
     body: form.body,
   }
 }
+
+/** 移动作用域后需删除的旧 scope;未移动/新建/builtin 源→null(无需删)。 */
+export function scopeToCleanup(
+  initialSource: 'builtin' | 'user' | 'project' | undefined,
+  formScope: 'user' | 'project',
+): 'user' | 'project' | null {
+  if (initialSource !== 'user' && initialSource !== 'project') return null
+  return initialSource === formScope ? null : initialSource
+}
