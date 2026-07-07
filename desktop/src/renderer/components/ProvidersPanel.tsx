@@ -83,6 +83,8 @@ export default function ProvidersPanel({ onBack }: { onBack: () => void }): JSX.
   // 全部组:catalog 条目中 (未配置 或 repeatable) 的
   const restCatalog = PROVIDER_CATALOG.filter(e =>
     (!configured.get(e.id)?.hasKey || e.repeatable) && matchQ(e.id, e.displayName))
+  const normalCatalog = restCatalog.filter(e => !e.codingPlan)
+  const codingCatalog = restCatalog.filter(e => e.codingPlan)
 
   const renderDoneRow = (p: ProviderView): JSX.Element => {
     const e = findCatalogEntry(baseProviderId(p.name))
@@ -129,8 +131,8 @@ export default function ProvidersPanel({ onBack }: { onBack: () => void }): JSX.
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {doneRows.length > 0 && <><div className="mt-2 px-2 text-3xs uppercase tracking-wider text-fg-subtle">已配置</div>{doneRows.map(renderDoneRow)}</>}
-        <div className="mt-3 px-2 text-3xs uppercase tracking-wider text-fg-subtle">全部</div>
-        {restCatalog.map(renderCatalogRow)}
+        {normalCatalog.length > 0 && <><div className="mt-3 px-2 text-3xs uppercase tracking-wider text-fg-subtle">普通 API</div>{normalCatalog.map(renderCatalogRow)}</>}
+        {codingCatalog.length > 0 && <><div className="mt-3 px-2 text-3xs uppercase tracking-wider text-fg-subtle">Coding Plan</div>{codingCatalog.map(renderCatalogRow)}</>}
       </div>
       {editing && (() => { const e = editBase; return (
         <div className="mt-2 rounded-lg border border-border p-3">
