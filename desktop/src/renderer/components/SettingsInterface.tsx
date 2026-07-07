@@ -13,7 +13,7 @@ const FAMILY_OPTS: { key: FontFamily; label: string }[] = [{ key: 'system', labe
 export default function SettingsInterface(): JSX.Element {
   const { prefs, setUi } = useSettings()
   const ui = prefs.ui
-  const lbl = 'mb-2 text-[10px] uppercase tracking-wider text-fg-subtle'
+  const lbl = 'mb-2 text-3xs uppercase tracking-wider text-fg-subtle'
   const seg = 'inline-flex overflow-hidden rounded-lg border border-border'
   const segItem = (on: boolean): string =>
     'px-3 py-1.5 text-xs ' + (on ? 'bg-accent/15 font-semibold text-accent' : 'text-fg-muted hover:bg-surface')
@@ -27,7 +27,7 @@ export default function SettingsInterface(): JSX.Element {
             <button key={t.key} data-testid={`theme-${t.key}`} onClick={() => setUi({ theme: t.key })}
               className={'w-24 overflow-hidden rounded-lg border text-center ' + (ui.theme === t.key ? 'border-accent' : 'border-border')}>
               <div style={{ height: 34, background: t.prev }} />
-              <div className="py-1 text-[11px] text-fg-muted">{t.label}</div>
+              <div className="py-1 text-2xs text-fg-muted">{t.label}</div>
             </button>
           ))}
         </div>

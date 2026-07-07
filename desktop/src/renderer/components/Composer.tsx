@@ -119,7 +119,7 @@ export default function Composer({
                 }}
                 className={'flex w-full flex-col rounded-md px-2 py-1.5 text-left ' + (i === mentionIndex ? 'bg-bg' : 'hover:bg-bg/60')}>
                 <span className="font-mono text-xs text-fg">{it.label}</span>
-                <span className="text-[11px] text-fg-subtle">{it.hint}</span>
+                <span className="text-2xs text-fg-subtle">{it.hint}</span>
               </button>
             ))}
           </div>

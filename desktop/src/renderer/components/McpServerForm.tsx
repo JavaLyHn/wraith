@@ -80,7 +80,7 @@ export default function McpServerForm({ mode, initial, prefill, busy, onCancel, 
           </div>
         ))}
         <button data-testid="mcp-form-env-add" onClick={() => setEnvRows(rows => [...rows, { key: '', value: '' }])}
-          className="mt-1 rounded px-2 py-1 text-[11px] text-fg-subtle hover:text-accent">＋ 加一行</button>
+          className="mt-1 rounded px-2 py-1 text-2xs text-fg-subtle hover:text-accent">＋ 加一行</button>
       </div>
 
       <div className="flex items-center gap-4 text-xs text-fg-muted">

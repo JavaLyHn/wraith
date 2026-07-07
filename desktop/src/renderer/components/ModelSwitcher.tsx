@@ -111,8 +111,8 @@ export default function ModelSwitcher({ initialModel, running }: ModelSwitcherPr
                 <span className="shrink-0 font-medium">{label}</span>
                 <span className="min-w-0 flex-1 truncate text-fg-subtle">{p.model}</span>
                 {isCurrent && <span className="ml-auto shrink-0">✓</span>}
-                {isDefault && !isCurrent && <span className="ml-auto shrink-0 text-fg-subtle text-[10px]">默认</span>}
-                {isDefault && isCurrent && <span className="ml-1 shrink-0 text-fg-subtle text-[10px]">默认</span>}
+                {isDefault && !isCurrent && <span className="ml-auto shrink-0 text-fg-subtle text-3xs">默认</span>}
+                {isDefault && isCurrent && <span className="ml-1 shrink-0 text-fg-subtle text-3xs">默认</span>}
               </button>
               {p.hasKey && !isDefault && (
                 <button
@@ -120,7 +120,7 @@ export default function ModelSwitcher({ initialModel, running }: ModelSwitcherPr
                   disabled={settingDefault}
                   title="设为默认"
                   onClick={(e) => handleSetDefault(p.name, e)}
-                  className="hidden shrink-0 rounded p-1 text-[10px] text-fg-subtle hover:text-accent disabled:opacity-40 group-hover:block"
+                  className="hidden shrink-0 rounded p-1 text-3xs text-fg-subtle hover:text-accent disabled:opacity-40 group-hover:block"
                 >
                   默认
                 </button>

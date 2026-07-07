@@ -20,6 +20,11 @@ export default {
         sans: ['var(--font-sans)'],
         mono: ['var(--font-mono)'],
       },
+      fontSize: {
+        '2xs': '0.6875rem',
+        '3xs': '0.625rem',
+        '4xs': '0.5625rem',
+      },
     },
   },
   plugins: [],

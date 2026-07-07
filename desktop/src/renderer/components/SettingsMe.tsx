@@ -12,7 +12,7 @@ export default function SettingsMe({ onOpenProviders }: { onOpenProviders: () =>
     void window.wraith.modelList().then((r) => setModel(r.current?.model || '—')).catch(() => {})
   }, [])
 
-  const lbl = 'mb-2 text-[10px] uppercase tracking-wider text-fg-subtle'
+  const lbl = 'mb-2 text-3xs uppercase tracking-wider text-fg-subtle'
   const input = 'w-full rounded-lg border border-border bg-surface/40 px-2.5 py-1.5 text-xs text-fg outline-none focus:border-accent'
   const row = 'flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-xs'
 
@@ -42,7 +42,7 @@ export default function SettingsMe({ onOpenProviders }: { onOpenProviders: () =>
             <span className="flex items-center gap-2">
               <span className="truncate text-fg-subtle">{dataDir}</span>
               <button data-testid="me-open-dir" onClick={() => void window.wraith.openPath(dataDir)}
-                className="shrink-0 rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent">打开</button>
+                className="shrink-0 rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent">打开</button>
             </span>
           </div>
           <button data-testid="me-manage-providers" onClick={onOpenProviders}

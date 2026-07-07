@@ -66,7 +66,7 @@ export default function UserMessage({ text, ordinal, busy, onEdit, onDelete }: U
             data-testid="msg-edit"
             onClick={() => { setDraft(text); setEditing(true); setConfirming(false) }}
             title="编辑并从此处重发(丢弃之后的内容)"
-            className="rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent"
+            className="rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent"
           >
             ✏️ 编辑
           </button>
@@ -76,7 +76,7 @@ export default function UserMessage({ text, ordinal, busy, onEdit, onDelete }: U
             onBlur={() => setConfirming(false)}
             title="删除此消息及之后的全部内容"
             className={
-              'rounded-lg border px-2 py-1 text-[11px] ' +
+              'rounded-lg border px-2 py-1 text-2xs ' +
               (confirming
                 ? 'border-danger bg-danger/10 font-semibold text-danger'
                 : 'border-border text-fg-muted hover:border-danger hover:text-danger')
@@ -89,7 +89,7 @@ export default function UserMessage({ text, ordinal, busy, onEdit, onDelete }: U
       <div data-testid="user-msg" className="rounded-2xl bg-accent/10 px-3 py-2 text-sm text-fg">
         {text}
       </div>
-      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-[12px] font-medium text-fg" aria-hidden>{glyph}</div>
+      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-xs font-medium text-fg" aria-hidden>{glyph}</div>
     </div>
   )
 }

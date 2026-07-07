@@ -105,11 +105,11 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
                   className={'flex-1 truncate rounded-lg px-2 py-2 text-left text-xs ' +
                     (current?.id === t.id && !creating ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>
                   <div className="truncate">{t.name}</div>
-                  <div className="text-[10px] text-fg-subtle">{t.enabled ? computeNextRunLabel(t) : '已暂停'}</div>
+                  <div className="text-3xs text-fg-subtle">{t.enabled ? computeNextRunLabel(t) : '已暂停'}</div>
                 </button>
                 <button data-testid="automation-toggle" title={t.enabled ? '点击暂停' : '点击启用'}
                   onClick={() => void handleToggle(t)}
-                  className={'shrink-0 rounded px-1.5 py-1 text-[10px] whitespace-nowrap ' +
+                  className={'shrink-0 rounded px-1.5 py-1 text-3xs whitespace-nowrap ' +
                     (t.enabled ? 'text-success hover:bg-surface/60' : 'text-fg-subtle hover:bg-surface/60')}>
                   {t.enabled ? '● 运行中' : '⏸ 已暂停'}
                 </button>

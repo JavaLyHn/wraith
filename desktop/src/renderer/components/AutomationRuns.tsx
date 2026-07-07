@@ -69,27 +69,27 @@ export default function AutomationRuns({ taskId, projectPath, onOpenSession, onA
             <span className="ml-auto flex gap-2">
               {r.sessionId && r.endedAt !== undefined && (
                 <button data-testid="automation-run-open" onClick={() => onOpenSession(projectPath, r.sessionId!)}
-                  className="rounded border border-border px-2 py-0.5 text-[11px] text-fg-muted hover:text-accent">查看会话</button>
+                  className="rounded border border-border px-2 py-0.5 text-2xs text-fg-muted hover:text-accent">查看会话</button>
               )}
               {/* v1: 定时任务为进程内回合,不可中断 — STOP 按钮已移除,不暴露无效的终止操作 */}
             </span>
           </div>
           {r.status === 'waiting_approval' && r.approvalId && (
             <div data-testid="automation-run-approval" className="mt-2 rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1.5">
-              <div className="mb-1 text-[11px] text-amber-700 dark:text-amber-400">
+              <div className="mb-1 text-2xs text-amber-700 dark:text-amber-400">
                 等待审批工具调用{r.approvalTool ? <span className="ml-1 font-mono font-semibold">{r.approvalTool}</span> : null}
               </div>
               <div className="flex gap-1.5">
                 <button
                   data-testid="automation-run-approve"
                   onClick={() => void handleRespondApproval(r.approvalId!, 'approve', fetchRuns)}
-                  className="rounded border border-success/60 bg-success/10 px-2 py-0.5 text-[11px] text-success hover:bg-success/20">
+                  className="rounded border border-success/60 bg-success/10 px-2 py-0.5 text-2xs text-success hover:bg-success/20">
                   批准
                 </button>
                 <button
                   data-testid="automation-run-reject"
                   onClick={() => void handleRespondApproval(r.approvalId!, 'reject', fetchRuns)}
-                  className="rounded border border-danger/60 bg-danger/10 px-2 py-0.5 text-[11px] text-danger hover:bg-danger/20">
+                  className="rounded border border-danger/60 bg-danger/10 px-2 py-0.5 text-2xs text-danger hover:bg-danger/20">
                   拒绝
                 </button>
               </div>

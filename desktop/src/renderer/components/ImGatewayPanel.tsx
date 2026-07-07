@@ -129,8 +129,8 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
                   }
                 >
                   <span className="text-xl leading-none">{p.icon}</span>
-                  <span className="max-w-full truncate text-[11px] text-fg">{p.name}</span>
-                  <span className={'text-[10px] ' + (isAvailable && bound ? 'text-success' : 'text-fg-subtle')}>{statusText}</span>
+                  <span className="max-w-full truncate text-2xs text-fg">{p.name}</span>
+                  <span className={'text-3xs ' + (isAvailable && bound ? 'text-success' : 'text-fg-subtle')}>{statusText}</span>
                 </div>
               )
             })}
@@ -138,7 +138,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         </section>
 
         {/* 当前平台配置分隔 */}
-        <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider text-fg-subtle">
+        <div className="flex items-center gap-2 text-3xs uppercase tracking-wider text-fg-subtle">
           <span className="h-px flex-1 bg-border" />
           QQ · 单聊
           <span className="h-px flex-1 bg-border" />
@@ -177,7 +177,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         {/* 机器人密钥手填(openclaw 给的失效时的兜底) */}
         <section className="rounded-lg border border-border p-4">
           <div className="mb-1 text-xs font-bold text-fg">机器人密钥（手填兜底）</div>
-          <div className="text-[11px] text-fg-subtle">openclaw 偶发返回失效密钥;可到 q.qq.com 后台复制「机器人密钥」直接填入。</div>
+          <div className="text-2xs text-fg-subtle">openclaw 偶发返回失效密钥;可到 q.qq.com 后台复制「机器人密钥」直接填入。</div>
           <label className="mt-2 block text-xs text-fg-muted">
             AppSecret
             <input data-testid="im-secret" type="password" value={secretInput}
@@ -209,10 +209,10 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
               {showLogs ? '隐藏日志' : '查看日志'}
             </button>
           </div>
-          {!bound && <div className="mt-2 text-[11px] text-fg-subtle">先完成绑定再启动网关。</div>}
+          {!bound && <div className="mt-2 text-2xs text-fg-subtle">先完成绑定再启动网关。</div>}
           {showLogs && (
             <pre data-testid="im-logs"
-              className="mt-3 max-h-48 overflow-auto rounded-lg border border-border bg-bg p-2 text-[10px] text-fg-muted">
+              className="mt-3 max-h-48 overflow-auto rounded-lg border border-border bg-bg p-2 text-3xs text-fg-muted">
               {logs.length ? logs.join('\n') : '(暂无日志)'}
             </pre>
           )}

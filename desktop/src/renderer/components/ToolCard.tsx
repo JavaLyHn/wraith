@@ -21,7 +21,7 @@ export default function ToolCard({ card }: ToolCardProps): JSX.Element {
         <span className="font-semibold text-accent">{card.name}</span>
         <span className="flex-1 truncate text-fg-muted">{card.argsJson}</span>
         <span
-          className={`shrink-0 rounded px-1.5 py-0.5 text-[11px] ${card.done ? 'font-semibold' : ''} ${badgeClass}`}
+          className={`shrink-0 rounded px-1.5 py-0.5 text-2xs ${card.done ? 'font-semibold' : ''} ${badgeClass}`}
         >
           {toolBadgeLabel(card)}
         </span>

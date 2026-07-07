@@ -110,7 +110,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                   (selected === s.name ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>
                 <span className={'h-2 w-2 shrink-0 rounded-full ' + (STATE_DOT[s.state] ?? 'bg-fg-subtle')} />
                 <span className="truncate">{s.name}</span>
-                <span className="ml-auto shrink-0 text-[10px] text-fg-subtle">
+                <span className="ml-auto shrink-0 text-3xs text-fg-subtle">
                   {SCOPE_LABEL[s.scope]}{s.shadowed ? '·覆盖' : ''}
                 </span>
               </button>
@@ -140,7 +140,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
             <div data-testid="mcp-overview" className="flex flex-col gap-5">
               <section>
                 <div className="mb-1 text-sm font-bold text-fg">内置能力 · 开箱即用</div>
-                <div className="mb-3 text-[11px] text-fg-subtle">Wraith 自带的能力,无需配置即可在对话中调用。</div>
+                <div className="mb-3 text-2xs text-fg-subtle">Wraith 自带的能力,无需配置即可在对话中调用。</div>
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
                   {BUILTIN_CAPABILITIES.map(c => (
                     <div key={c.id} title={c.tools.join(' · ')}
@@ -148,16 +148,16 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                       <div className="flex items-center gap-2">
                         <span className="text-base leading-none">{c.icon}</span>
                         <span className="truncate text-xs font-medium text-fg">{c.name}</span>
-                        <span className="ml-auto shrink-0 rounded bg-surface px-1.5 py-0.5 text-[9px] text-fg-subtle">已内置</span>
+                        <span className="ml-auto shrink-0 rounded bg-surface px-1.5 py-0.5 text-4xs text-fg-subtle">已内置</span>
                       </div>
-                      <div className="mt-1 text-[11px] text-fg-muted">{c.desc}</div>
+                      <div className="mt-1 text-2xs text-fg-muted">{c.desc}</div>
                     </div>
                   ))}
                 </div>
               </section>
               <section>
                 <div className="mb-1 text-sm font-bold text-fg">推荐 MCP · 一键添加</div>
-                <div className="mb-3 text-[11px] text-fg-subtle">选一个 → 自动预填命令,补好路径 / 密钥再保存。</div>
+                <div className="mb-3 text-2xs text-fg-subtle">选一个 → 自动预填命令,补好路径 / 密钥再保存。</div>
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
                   {RECOMMENDED_MCP.map(m => (
                     <div key={m.id} className="flex flex-col rounded-lg border border-border p-3">
@@ -165,13 +165,13 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                         <span className="text-base leading-none">{m.icon}</span>
                         <span className="truncate text-xs font-medium text-fg">{m.name}</span>
                       </div>
-                      <div className="mt-1 flex-1 text-[11px] text-fg-muted">{m.desc}</div>
+                      <div className="mt-1 flex-1 text-2xs text-fg-muted">{m.desc}</div>
                       <button data-testid={`mcp-rec-add-${m.id}`} disabled={busy}
                         onClick={() => {
                           setAddPrefill({ name: m.id, command: m.command, args: m.args, envKeys: m.envKeys })
                           setConfirmingRemove(false); setFormMode('add')
                         }}
-                        className="mt-2 self-start rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent disabled:opacity-60">
+                        className="mt-2 self-start rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent disabled:opacity-60">
                         ＋ 添加
                       </button>
                     </div>
@@ -262,7 +262,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                 <>
                   <button
                     data-testid="mcp-logs-refresh"
-                    className="mb-1 self-start rounded px-2 py-1 text-[11px] text-fg-subtle hover:text-accent"
+                    className="mb-1 self-start rounded px-2 py-1 text-2xs text-fg-subtle hover:text-accent"
                     onClick={async () => {
                       try {
                         const { lines } = await window.wraith.mcpLogs(current.name)
@@ -273,7 +273,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                     }}>
                     ⟳ 刷新
                   </button>
-                  <pre className="whitespace-pre-wrap rounded-lg bg-black/[0.04] p-3 font-mono text-[11px] text-fg-muted">{tabContent.logs || '(空)'}</pre>
+                  <pre className="whitespace-pre-wrap rounded-lg bg-black/[0.04] p-3 font-mono text-2xs text-fg-muted">{tabContent.logs || '(空)'}</pre>
                 </>
               )}
             </>

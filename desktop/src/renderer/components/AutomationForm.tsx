@@ -208,7 +208,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
               placeholder="如: 0 9 * * 1"
               className="mt-1 w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs text-fg font-mono outline-none focus:border-accent" />
           </label>
-          <div className="text-[10px] text-fg-subtle">
+          <div className="text-3xs text-fg-subtle">
             5 段空格分隔: 分 时 日 月 周 (如 <code className="font-mono">0 9 * * 1</code> = 每周一 09:00)。守护进程做权威校验。
           </div>
         </div>
@@ -232,7 +232,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
           </label>
         </div>
         {!deliverDesktop && !deliverQq && (
-          <div className="mt-1 text-[10px] text-fg-subtle">未选则仅执行,不推送结果</div>
+          <div className="mt-1 text-3xs text-fg-subtle">未选则仅执行,不推送结果</div>
         )}
       </div>
 
@@ -253,7 +253,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
         {/* per-tool overrides */}
         {toolOverrides.length > 0 && (
           <div className="flex flex-col gap-1">
-            <div className="text-[10px] text-fg-subtle">按工具覆盖</div>
+            <div className="text-3xs text-fg-subtle">按工具覆盖</div>
             {toolOverrides.map((row, idx) => (
               <div key={row.id} className="flex items-center gap-1">
                 <input data-testid={`automation-form-tool-override-name-${idx}`}

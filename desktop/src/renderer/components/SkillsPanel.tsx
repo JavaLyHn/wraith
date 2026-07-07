@@ -89,39 +89,39 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
         )}
         {groups.map(g => (
           <section key={g.source} className="mb-4">
-            <div className="mb-1 text-[10px] uppercase tracking-wider text-fg-subtle">{g.label}</div>
+            <div className="mb-1 text-3xs uppercase tracking-wider text-fg-subtle">{g.label}</div>
             <div className="flex flex-col gap-1.5">
               {g.skills.map(s => (
                 <div key={s.name} data-testid="skill-row"
                   className={'rounded-lg border border-border p-3 ' + (s.enabled ? '' : 'opacity-50')}>
                   <div className="flex items-center gap-2">
                     <span className="truncate text-xs font-medium text-fg">{s.name}</span>
-                    <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-[9px] text-fg-subtle">{SOURCE_BADGE[s.source]}</span>
+                    <span className="shrink-0 rounded bg-surface px-1.5 py-0.5 text-4xs text-fg-subtle">{SOURCE_BADGE[s.source]}</span>
                     {(s.version || s.author) && (
-                      <span className="shrink-0 text-[10px] text-fg-subtle">{[s.version, s.author].filter(Boolean).join(' · ')}</span>
+                      <span className="shrink-0 text-3xs text-fg-subtle">{[s.version, s.author].filter(Boolean).join(' · ')}</span>
                     )}
                     <div className="ml-auto flex shrink-0 items-center gap-1.5">
                       {s.source === 'builtin' ? (
                         <button data-testid="skill-fork" onClick={() => void doFork(s)}
-                          className="rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent">复制为用户技能</button>
+                          className="rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent">复制为用户技能</button>
                       ) : (
                         <>
                           <button data-testid="skill-edit" onClick={() => void openEdit(s.name)}
-                            className="rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent">编辑</button>
+                            className="rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent">编辑</button>
                           <button data-testid="skill-delete" onClick={() => void doDelete(s)}
-                            className="rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-danger hover:text-danger">删除</button>
+                            className="rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-danger hover:text-danger">删除</button>
                         </>
                       )}
                       <button data-testid="skill-toggle" onClick={() => void toggle(s.name, !s.enabled)}
-                        className="rounded-lg border border-border px-2 py-1 text-[11px] text-fg-muted hover:border-accent hover:text-accent">
+                        className="rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent">
                         {s.enabled ? '停用' : '启用'}
                       </button>
                     </div>
                   </div>
-                  {s.description && <div className="mt-1 line-clamp-3 text-[11px] text-fg-muted">{s.description}</div>}
+                  {s.description && <div className="mt-1 line-clamp-3 text-2xs text-fg-muted">{s.description}</div>}
                   {s.tags.length > 0 && (
                     <div className="mt-1 flex flex-wrap gap-1">
-                      {s.tags.map(t => <span key={t} className="rounded bg-surface/60 px-1.5 py-0.5 text-[10px] text-fg-subtle">{t}</span>)}
+                      {s.tags.map(t => <span key={t} className="rounded bg-surface/60 px-1.5 py-0.5 text-3xs text-fg-subtle">{t}</span>)}
                     </div>
                   )}
                 </div>
@@ -131,7 +131,7 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
         ))}
         {skills.length > 0 && (['user', 'project'] as const).map(src =>
           groups.some(g => g.source === src) ? null : (
-            <div key={src} className="mb-2 text-[11px] text-fg-subtle">{SOURCE_BADGE[src]}:{EMPTY_HINT[src]}</div>
+            <div key={src} className="mb-2 text-2xs text-fg-subtle">{SOURCE_BADGE[src]}:{EMPTY_HINT[src]}</div>
           ),
         )}
       </div>

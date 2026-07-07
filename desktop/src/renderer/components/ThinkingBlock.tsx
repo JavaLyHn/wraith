@@ -27,11 +27,11 @@ export default function ThinkingBlock({ label, text, done }: ThinkingBlockProps)
           onClick={e => { e.stopPropagation(); toggle() }}
           aria-expanded={open}
           aria-label="Toggle thinking block"
-          className="p-0 text-[10px] leading-none text-fg-subtle"
+          className="p-0 text-3xs leading-none text-fg-subtle"
         >
           {open ? '▼' : '▶'}
         </button>
-        <span className="text-[11px] tracking-wide text-accent">
+        <span className="text-2xs tracking-wide text-accent">
           {done ? '✓ 思考过程' : '⟳ 思考中…'}
         </span>
       </div>

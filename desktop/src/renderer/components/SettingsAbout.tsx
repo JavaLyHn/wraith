@@ -17,7 +17,7 @@ export default function SettingsAbout(): JSX.Element {
     finally { setChecking(false) }
   }
 
-  const lbl = 'mb-2 text-[10px] uppercase tracking-wider text-fg-subtle'
+  const lbl = 'mb-2 text-3xs uppercase tracking-wider text-fg-subtle'
   const row = 'flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-xs'
   const toggle = (on: boolean): string =>
     'relative h-5 w-9 rounded-full transition-colors ' + (on ? 'bg-accent' : 'bg-border')

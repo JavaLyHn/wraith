@@ -54,13 +54,13 @@ export default function SkillEditor({ initial, lockName, lockScope, onSaved, onC
         {error && <div data-testid="skill-editor-error" className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{error}</div>}
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-fg-subtle">名称(目录名,字母/数字/_/-)</span>
+            <span className="text-2xs text-fg-subtle">名称(目录名,字母/数字/_/-)</span>
             <input className={inputCls} value={form.name} disabled={lockName}
               onChange={e => set('name', e.target.value)} placeholder="my-skill" />
-            {!lockName && form.name.length > 0 && nameError && <span className="text-[10px] text-danger">{nameError}</span>}
+            {!lockName && form.name.length > 0 && nameError && <span className="text-3xs text-danger">{nameError}</span>}
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-fg-subtle">来源</span>
+            <span className="text-2xs text-fg-subtle">来源</span>
             <select className={inputCls} value={form.scope} disabled={lockScope}
               onChange={e => set('scope', e.target.value as 'user' | 'project')}>
               <option value="user">用户(~/.wraith/skills)</option>
@@ -68,26 +68,26 @@ export default function SkillEditor({ initial, lockName, lockScope, onSaved, onC
             </select>
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-fg-subtle">描述</span>
+            <span className="text-2xs text-fg-subtle">描述</span>
             <textarea className={inputCls} rows={2} value={form.description}
               onChange={e => set('description', e.target.value)} placeholder="一句话说明这个技能做什么" />
           </label>
           <div className="flex gap-3">
             <label className="flex flex-1 flex-col gap-1">
-              <span className="text-[11px] text-fg-subtle">版本</span>
+              <span className="text-2xs text-fg-subtle">版本</span>
               <input className={inputCls} value={form.version} onChange={e => set('version', e.target.value)} placeholder="1.0.0" />
             </label>
             <label className="flex flex-1 flex-col gap-1">
-              <span className="text-[11px] text-fg-subtle">作者</span>
+              <span className="text-2xs text-fg-subtle">作者</span>
               <input className={inputCls} value={form.author} onChange={e => set('author', e.target.value)} placeholder="me" />
             </label>
           </div>
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-fg-subtle">标签(逗号分隔)</span>
+            <span className="text-2xs text-fg-subtle">标签(逗号分隔)</span>
             <input className={inputCls} value={form.tagsInput} onChange={e => set('tagsInput', e.target.value)} placeholder="web, browser" />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-[11px] text-fg-subtle">正文(load_skill 注入的内容)</span>
+            <span className="text-2xs text-fg-subtle">正文(load_skill 注入的内容)</span>
             <textarea className={inputCls + ' font-mono'} rows={14} value={form.body}
               onChange={e => set('body', e.target.value)} placeholder="# 技能正文…" />
           </label>

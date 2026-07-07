@@ -298,7 +298,7 @@ export default function Sidebar({
             /* 激活态:仅会话(项目切换在顶部,不再重复列) */
             <>
               {/* 会话分区 */}
-              <div className="mt-4 px-3 text-[10px] uppercase tracking-wider text-fg-subtle">会话</div>
+              <div className="mt-4 px-3 text-3xs uppercase tracking-wider text-fg-subtle">会话</div>
               <div className="px-3">
                 {filtered.sessions.length === 0 ? (
                   <div className="px-3 py-2 text-xs text-fg-subtle">无匹配</div>
@@ -331,8 +331,8 @@ export default function Sidebar({
                     onRename={onRenameSession} onDelete={onDeleteSession} />
                 ))
                 // sticky 表头:滚动时标题不动,内容从下方滑过(半透明 + 模糊)
-                const headerCls = 'sticky top-0 z-20 mt-4 bg-bg/90 px-3 py-1 text-[10px] uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
-                const groupLabelCls = 'sticky top-7 z-10 bg-bg/90 px-3 py-1 text-[10px] uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
+                const headerCls = 'sticky top-0 z-20 mt-4 bg-bg/90 px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
+                const groupLabelCls = 'sticky top-7 z-10 bg-bg/90 px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
                 return (
                   <>
                     {sessions.length === 0 && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
@@ -381,7 +381,7 @@ export default function Sidebar({
           <div
             data-testid="sandbox-badge"
             className={
-              'mt-2 truncate text-[11px] ' +
+              'mt-2 truncate text-2xs ' +
               (sandbox === 'none' ? 'text-danger' : 'text-fg-subtle')
             }
             title={sandbox === 'none' ? '命令未在沙箱内执行' : sandbox === 'macos-seatbelt' ? '命令在 Seatbelt 沙箱内执行' : '沙箱状态未知'}

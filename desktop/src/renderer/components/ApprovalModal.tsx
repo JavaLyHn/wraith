@@ -96,7 +96,7 @@ export default function ApprovalModal({
         {/* 主体:按工具分派 */}
         {isCommand ? (
           <div className="mb-3">
-            <label className="mb-1 block text-[11px] text-fg-subtle">命令(可编辑)</label>
+            <label className="mb-1 block text-2xs text-fg-subtle">命令(可编辑)</label>
             <input
               data-testid="command-edit"
               value={editedCommand ?? originalCommand}
@@ -106,12 +106,12 @@ export default function ApprovalModal({
             <label className="mt-2 flex select-none items-center gap-1.5 text-xs text-fg-muted">
               本次放行网络
               <Switch data-testid="allow-network" checked={allowNetwork} onCheckedChange={setAllowNetwork} />
-              <span className="text-[11px] text-fg-subtle">(仅本条命令,其余沙箱限制不变)</span>
+              <span className="text-2xs text-fg-subtle">(仅本条命令,其余沙箱限制不变)</span>
             </label>
           </div>
         ) : isWrite ? (
           <div className="mb-3">
-            <div className="mb-1 font-mono text-[11px] text-fg-subtle" title={writePath}>
+            <div className="mb-1 font-mono text-2xs text-fg-subtle" title={writePath}>
               {writePath}{beforeContent === null ? ' — 新文件(或无预览:文件过大/不可读)' : ''}
             </div>
             <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
@@ -134,13 +134,13 @@ export default function ApprovalModal({
                   rows={6}
                   className="mt-2 w-full rounded-lg border border-border bg-black/[0.03] px-3 py-2 font-mono text-xs text-fg outline-none focus:border-accent"
                 />
-                {jsonError && <div className="mt-1 text-[11px] text-danger">JSON 非法: {jsonError}</div>}
+                {jsonError && <div className="mt-1 text-2xs text-danger">JSON 非法: {jsonError}</div>}
               </>
             ) : (
               <button
                 data-testid="json-edit-open"
                 onClick={() => setJsonOpen(true)}
-                className="mt-2 text-[11px] text-accent hover:underline"
+                className="mt-2 text-2xs text-accent hover:underline"
               >
                 编辑参数
               </button>
@@ -149,7 +149,7 @@ export default function ApprovalModal({
         )}
 
         <div className="mb-4">
-          <span className={`mb-2 inline-block rounded px-2 py-0.5 text-[11px] font-bold text-white ${dangerBg}`}>
+          <span className={`mb-2 inline-block rounded px-2 py-0.5 text-2xs font-bold text-white ${dangerBg}`}>
             {dangerLevel}
           </span>
           <DialogDescription className="leading-relaxed">{riskDescription}</DialogDescription>

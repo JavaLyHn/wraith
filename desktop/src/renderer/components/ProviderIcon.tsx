@@ -110,7 +110,7 @@ export default function ProviderIcon({
   return (
     <span
       style={{ width: size, height: size }}
-      className="inline-flex items-center justify-center rounded-full bg-surface text-[10px] text-fg-muted"
+      className="inline-flex items-center justify-center rounded-full bg-surface text-3xs text-fg-muted"
     >
       {letter}
     </span>
