@@ -12,10 +12,12 @@ interface TranscriptProps {
   busy: boolean
   onEditMessage: (ordinal: number, newText: string) => void
   onDeleteMessage: (ordinal: number) => void
+  onResendMessage: (ordinal: number, text: string) => void
 }
 
-export default function Transcript({ items, busy, onEditMessage, onDeleteMessage }: TranscriptProps): JSX.Element {
+export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage }: TranscriptProps): JSX.Element {
   let userOrdinal = 0 // 渲染期为 user 气泡计数(1-based),rewind 用
+  const totalUsers = items.filter(i => i.type === 'user').length
   const containerRef = useRef<HTMLDivElement>(null)
   // 贴底跟随:初始 true(载入历史直接落底);用户上翻(离底 >80px)即停跟,不打断阅读
   const stickRef = useRef(true)
@@ -51,9 +53,11 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
               key={idx}
               text={item.text}
               ordinal={userOrdinal}
+              isLastUser={userOrdinal === totalUsers}
               busy={busy}
               onEdit={onEditMessage}
               onDelete={onDeleteMessage}
+              onResend={onResendMessage}
             />
           )
         }
