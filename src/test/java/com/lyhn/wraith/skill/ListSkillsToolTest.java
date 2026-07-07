@@ -59,6 +59,18 @@ class ListSkillsToolTest {
     }
 
     @Test
+    void toolDescriptionUrgesFreshCall() {
+        // 启用状态动态,工具描述须要求每次被问重新调用、不复用旧结果(防模型沿用历史脏快照)。
+        ToolRegistry tools = new ToolRegistry();
+        String desc = tools.getToolDefinitions().stream()
+                .filter(t -> t.name().equals("list_skills"))
+                .map(t -> t.description())
+                .findFirst().orElse("");
+        assertTrue(desc.contains("重新调用"), "工具描述应要求每次被问都重新调用: " + desc);
+        assertTrue(desc.contains("复用"), "工具描述应告诫不要复用旧结果: " + desc);
+    }
+
+    @Test
     void failsWhenRegistryNull() {
         ToolRegistry tools = new ToolRegistry();
         // 不注入 skillRegistry

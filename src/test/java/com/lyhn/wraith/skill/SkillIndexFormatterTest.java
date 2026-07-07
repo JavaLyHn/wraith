@@ -33,6 +33,14 @@ class SkillIndexFormatterTest {
     }
 
     @Test
+    void includesFreshnessDirective() {
+        // 启用状态是动态的(用户可随时停用),提示须要求模型每次重新调用 list_skills、不复用旧结果。
+        String out = SkillIndexFormatter.format(List.of(mockSkill("web-access", "联网", Skill.Source.BUILTIN)));
+        assertTrue(out.contains("重新调用"), "应要求每次重新调用 list_skills");
+        assertTrue(out.contains("复用"), "应告诫不要复用旧清单/旧回答");
+    }
+
+    @Test
     void truncatesLongDescriptionByCodepoint() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 600; i++) sb.append("中");
