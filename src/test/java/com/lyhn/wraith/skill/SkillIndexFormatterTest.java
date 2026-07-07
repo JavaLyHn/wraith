@@ -25,6 +25,14 @@ class SkillIndexFormatterTest {
     }
 
     @Test
+    void includesUserFacingListingInstruction() {
+        // 当用户问"有哪些技能"时,模型应据索引直接枚举,而非回避/让用户看系统提示。
+        String out = SkillIndexFormatter.format(List.of(mockSkill("web-access", "联网", Skill.Source.BUILTIN)));
+        assertTrue(out.contains("用户询问"), "应含面向用户的枚举指令(用户询问技能时列出)");
+        assertTrue(out.contains("名称与简介"), "应指示列出各 skill 的名称与简介");
+    }
+
+    @Test
     void truncatesLongDescriptionByCodepoint() {
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < 600; i++) sb.append("中");

@@ -48,6 +48,8 @@ public final class SkillIndexFormatter {
         sb.append("判断准则：当任务描述匹配某个 skill 的触发场景时，调用 load_skill(name) 加载完整指引；")
                 .append("已加载的 skill 会在下一轮以 \"## 已加载 Skill\" 段落出现在你的 user message 中。")
                 .append("不要重复加载同一 skill；同一会话内一次足够。\n");
+        sb.append("当用户询问你有哪些技能 / 会做什么 / 让你列出技能时，直接依据上面的清单向用户列出每个 skill 的")
+                .append("名称与简介，不要回避、也不要让用户自己去看系统提示。\n");
 
         if (sb.length() > MAX_INDEX_BYTES) {
             String truncated = sb.substring(0, MAX_INDEX_BYTES) + "\n...(skill 索引段被截断)\n";
