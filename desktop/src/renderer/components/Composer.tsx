@@ -100,7 +100,7 @@ export default function Composer({
     <TooltipProvider delayDuration={200}>
       <div
         className={
-          'relative w-full rounded-2xl border border-border bg-surface shadow-sm ' +
+          'relative w-full rounded-2xl border border-fg-subtle/40 bg-surface shadow-md transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25 ' +
           (centered ? 'max-w-2xl mx-auto' : '')
         }
       >
