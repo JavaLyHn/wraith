@@ -66,6 +66,13 @@ public final class SkillStore {
         }
     }
 
+    /** 目标作用域下是否已存在该技能(&lt;scopeDir&gt;/&lt;name&gt;/SKILL.md)。scope/name 非法抛 IllegalArgumentException。 */
+    public boolean existsInScope(String scope, String name) {
+        Path dir = resolveScopeDir(scope);
+        String safe = requireSafeName(name);
+        return Files.isRegularFile(dir.resolve(safe).resolve("SKILL.md"));
+    }
+
     private Path resolveScopeDir(String scope) {
         return switch (scope == null ? "" : scope) {
             case "user" -> userSkillsDir;

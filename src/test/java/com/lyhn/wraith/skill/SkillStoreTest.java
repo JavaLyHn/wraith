@@ -69,4 +69,20 @@ class SkillStoreTest {
         SkillStore store = new SkillStore(tmp.resolve("user"), tmp.resolve("project"));
         assertThrows(IllegalArgumentException.class, () -> store.delete("user", ".."));
     }
+
+    @Test
+    void existsInScopeDetectsPresencePerScope(@TempDir Path tmp) throws Exception {
+        SkillStore store = new SkillStore(tmp.resolve("user"), tmp.resolve("project"));
+        assertFalse(store.existsInScope("user", "foo"));
+        store.upsert("user", "foo", "d", "", "", java.util.List.of(), "b");
+        assertTrue(store.existsInScope("user", "foo"));
+        assertFalse(store.existsInScope("project", "foo"), "user 有不代表 project 有");
+    }
+
+    @Test
+    void existsInScopeRejectsBadScopeOrName(@TempDir Path tmp) {
+        SkillStore store = new SkillStore(tmp.resolve("u"), tmp.resolve("p"));
+        assertThrows(IllegalArgumentException.class, () -> store.existsInScope("builtin", "foo"));
+        assertThrows(IllegalArgumentException.class, () -> store.existsInScope("user", "../evil"));
+    }
 }
