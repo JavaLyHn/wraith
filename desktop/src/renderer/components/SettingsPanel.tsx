@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import SettingsInterface from './SettingsInterface'
 import SettingsMe from './SettingsMe'
+import SettingsAbout from './SettingsAbout'
 
 type Section = 'me' | 'interface' | 'about'
 const NAV: { key: Section; label: string }[] = [
@@ -32,7 +33,7 @@ export default function SettingsPanel({ onBack, onOpenProviders }: { onBack: () 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {active === 'interface' && <SettingsInterface />}
           {active === 'me' && <SettingsMe onOpenProviders={onOpenProviders} />}
-          {active === 'about' && <div className="text-xs text-fg-subtle">(关于 — Task 8)</div>}
+          {active === 'about' && <SettingsAbout />}
         </div>
       </div>
     </div>

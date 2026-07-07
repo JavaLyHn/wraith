@@ -36,6 +36,7 @@ import ImGatewayPanel from './components/ImGatewayPanel'
 import ProvidersPanel from './components/ProvidersPanel'
 import SkillsPanel from './components/SkillsPanel'
 import SettingsPanel from './components/SettingsPanel'
+import { useSettings } from './settings/SettingsContext'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -135,6 +136,8 @@ export default function App(): JSX.Element {
   const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
   const [modelFallbackNotice, setModelFallbackNotice] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const { prefs: appPrefs } = useSettings()
+  const [updateNotice, setUpdateNotice] = useState<{ latest: string; url: string } | null>(null)
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
@@ -308,6 +311,13 @@ export default function App(): JSX.Element {
       }
     })()
   }, [fetchSessions, fetchProjects, fetchMcp, fetchMcpResources])
+
+  useEffect(() => {
+    if (!appPrefs.update.autoCheck) return
+    void window.wraith.checkUpdate(appPrefs.update.beta)
+      .then((r) => { if (r.hasUpdate && r.latest && r.url) setUpdateNotice({ latest: r.latest, url: r.url }) })
+      .catch(() => {})
+  }, [])  // 仅启动一次
 
   // ── reconnect effect (fires on disconnected→connected, skips first connect) ──
   const reconnectRef = useRef(false)
@@ -692,6 +702,13 @@ export default function App(): JSX.Element {
         )}
         {submitError && (
           <SubmitErrorBanner message={submitError} onDismiss={() => setSubmitError(null)} />
+        )}
+        {updateNotice && (
+          <div data-testid="update-banner" className="flex items-center gap-3 border-b border-border bg-accent/10 px-4 py-2 text-xs text-fg">
+            <span>有新版 v{updateNotice.latest}</span>
+            <button className="text-accent" onClick={() => void window.wraith.openExternal(updateNotice.url)}>打开下载 ↗</button>
+            <button className="ml-auto text-fg-subtle hover:text-fg" onClick={() => setUpdateNotice(null)}>✕</button>
+          </div>
         )}
 
         {view === 'plugins' ? (
