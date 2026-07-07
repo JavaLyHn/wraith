@@ -24,6 +24,7 @@ export interface ProviderCatalogEntry {
   builtin?: boolean
   repeatable?: boolean
   lobeIcon?: string
+  codingPlan?: boolean
 }
 
 export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
@@ -227,6 +228,7 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     protocol: 'openai',
     defaultBaseUrl: 'https://cloud.infini-ai.com/maas/v1',
     suggestedModels: ['deepseek-r1', 'deepseek-v3-0324'],
+    lobeIcon: 'Infinigence',
   },
   {
     id: 'mimo',
@@ -234,6 +236,7 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     protocol: 'openai',
     defaultBaseUrl: 'https://api.xiaomimimo.com/v1',
     suggestedModels: ['mimo-v2.5-pro', 'mimo-v2.5', 'mimo-v2-pro', 'mimo-v2-flash'],
+    lobeIcon: 'XiaomiMiMo',
   },
   {
     id: 'agnes',
@@ -250,6 +253,8 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     protocol: 'openai',
     defaultBaseUrl: 'https://coding.dashscope.aliyuncs.com/v1',
     suggestedModels: ['qwen3-coder-plus', 'qwen3-coder-next', 'qwen3-coder-flash'],
+    lobeIcon: 'Qwen',
+    codingPlan: true,
   },
   {
     id: 'zhipu-coding',
@@ -257,6 +262,8 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     protocol: 'openai',
     defaultBaseUrl: 'https://api.z.ai/api/coding/paas/v4',
     suggestedModels: ['glm-5.2', 'glm-5-turbo', 'glm-4.7', 'glm-4.5-air'],
+    lobeIcon: 'Zhipu',
+    codingPlan: true,
   },
   {
     id: 'kimi-coding',
@@ -264,6 +271,8 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     protocol: 'openai',
     defaultBaseUrl: 'https://api.kimi.com/coding/v1',
     suggestedModels: ['kimi-for-coding'],
+    lobeIcon: 'Moonshot',
+    codingPlan: true,
   },
   {
     id: 'volcengine-coding',
@@ -271,6 +280,8 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     protocol: 'openai',
     defaultBaseUrl: 'https://ark.cn-beijing.volces.com/api/coding/v3',
     suggestedModels: ['doubao-seed-code'],
+    lobeIcon: 'Volcengine',
+    codingPlan: true,
   },
 
   // ── Wraith-only builtins ──────────────────────────────────────────────────
@@ -290,6 +301,7 @@ export const PROVIDER_CATALOG: ProviderCatalogEntry[] = [
     defaultBaseUrl: 'https://maas-api.cn-huabei-1.xf-yun.com/v1',
     suggestedModels: ['Qwen3.6-35B-A3B'],
     builtin: true,
+    lobeIcon: 'Spark',
   },
 ]
 

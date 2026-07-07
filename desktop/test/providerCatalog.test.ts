@@ -23,6 +23,12 @@ describe('PROVIDER_CATALOG', () => {
     expect(findCatalogEntry('anthropic')).toBeTruthy()
     expect(PROVIDER_CATALOG.some(e => e.builtin && e.id === 'xfyun')).toBe(true)
   })
+  it('*-coding 条目标记 codingPlan,普通条目不标记', () => {
+    for (const id of ['dashscope-coding', 'zhipu-coding', 'kimi-coding', 'volcengine-coding'])
+      expect(findCatalogEntry(id)?.codingPlan).toBe(true)
+    expect(findCatalogEntry('openai')?.codingPlan).toBeFalsy()
+    expect(findCatalogEntry('glm')?.codingPlan).toBeFalsy()
+  })
 })
 
 describe('provider instance helpers', () => {

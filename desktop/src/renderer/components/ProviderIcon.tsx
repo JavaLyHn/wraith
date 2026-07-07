@@ -34,6 +34,9 @@ import StepfunColor from '@lobehub/icons/es/Stepfun/components/Color'
 import SiliconCloudColor from '@lobehub/icons/es/SiliconCloud/components/Color'
 import VolcengineColor from '@lobehub/icons/es/Volcengine/components/Color'
 import ModelScopeColor from '@lobehub/icons/es/ModelScope/components/Color'
+import InfinigenceColor from '@lobehub/icons/es/Infinigence/components/Color'
+import XiaomiMiMoMono from '@lobehub/icons/es/XiaomiMiMo/components/Mono'
+import SparkColor from '@lobehub/icons/es/Spark/components/Color'
 import { findCatalogEntry } from '../../shared/providerCatalog'
 
 type LobeIconComp = React.ComponentType<{ size?: number | string }>
@@ -63,6 +66,9 @@ const LOBE_ICONS: Record<string, LobeIconComp> = {
   SiliconCloud: SiliconCloudColor as unknown as LobeIconComp,
   Volcengine: VolcengineColor as unknown as LobeIconComp,
   ModelScope: ModelScopeColor as unknown as LobeIconComp,
+  Infinigence: InfinigenceColor as unknown as LobeIconComp,
+  XiaomiMiMo: XiaomiMiMoMono as unknown as LobeIconComp,
+  Spark: SparkColor as unknown as LobeIconComp,
 }
 
 export type IconKind = { kind: 'lobe'; name: string } | { kind: 'fallback'; letter: string }
@@ -70,10 +76,21 @@ export type IconKind = { kind: 'lobe'; name: string } | { kind: 'fallback'; lett
 /**
  * 决定用 lobehub 图标还是回落首字母(纯函数,可测)。
  * - 如果 catalog 有 lobeIcon 且在 LOBE_ICONS 映射中 → lobe
+ * - Coding Plan (-coding 后缀): 若自己没 lobeIcon,剥离后缀查上游 provider(zhipu-coding → zhipu → glm)
  * - 否则 → fallback,letter 取 displayName/id 的第一个 Unicode 字符
  */
 export function resolveIconKind(id: string): IconKind {
-  const e = findCatalogEntry(id)
+  let e = findCatalogEntry(id)
+
+  // Coding Plan: reuse parent provider's icon if this entry has no lobeIcon
+  if (!e?.lobeIcon && id.endsWith('-coding')) {
+    const baseId = id.slice(0, -'-coding'.length)
+    const baseEntry = findCatalogEntry(baseId)
+    if (baseEntry?.lobeIcon && baseEntry.lobeIcon in LOBE_ICONS) {
+      return { kind: 'lobe', name: baseEntry.lobeIcon }
+    }
+  }
+
   if (e?.lobeIcon && e.lobeIcon in LOBE_ICONS) {
     return { kind: 'lobe', name: e.lobeIcon }
   }
