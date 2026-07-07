@@ -5,6 +5,7 @@ import {
 } from './ui/tooltip'
 import { baseName } from '../lib/paths'
 import { blobToBase64, insertAtCursor } from '../lib/dictation'
+import VoiceBars from './VoiceBars'
 import { shouldSendOnEnter } from '../../shared/composerKeys'
 import StatusChip from './StatusChip'
 import ModelSwitcher from './ModelSwitcher'
@@ -67,9 +68,14 @@ export default function Composer({
   const chunksRef = useRef<Blob[]>([])
   const cancelledRef = useRef(false)
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => () => {
-    if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
-    streamRef.current?.getTracks().forEach(t => t.stop())
+  const mountedRef = useRef(true)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
+      streamRef.current?.getTracks().forEach(t => t.stop())
+    }
   }, [])
 
   const items = mention.active ? filterMentionItems(resources, mention.query) : []
@@ -126,6 +132,7 @@ export default function Composer({
     let stream: MediaStream | null = null
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return }   // #1: 授权期间已卸载→释放
       streamRef.current = stream
       const mr = new MediaRecorder(stream)
       chunksRef.current = []
@@ -140,7 +147,10 @@ export default function Composer({
           const mime = mr.mimeType || 'audio/webm'
           const blob = new Blob(chunksRef.current, { type: mime })
           const b64 = await blobToBase64(blob)
-          const { text } = await window.wraith.transcribe(b64, mime)
+          const { text } = await Promise.race([                                        // #2: 渲染层超时兜底
+            window.wraith.transcribe(b64, mime),
+            new Promise<{ text: string }>((_, rej) => setTimeout(() => rej(new Error('转写超时,请重试')), 30_000)),
+          ])
           const ta = textareaRef.current
           const cur = ta?.value ?? value
           const s = ta?.selectionStart ?? cur.length
@@ -261,14 +271,14 @@ export default function Composer({
               onClick={() => void startRec()}
               className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
             >
-              🎙
+              <VoiceBars active={false} streamRef={streamRef} />
             </button>
           )}
           {recording && (
             <div className="flex items-center gap-1">
               <button data-testid="stt-stop" onClick={stopRec} aria-label="停止并转写"
-                className="flex h-7 items-center gap-1 rounded-lg bg-danger/10 px-2 text-xs text-danger">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-danger" /> 录音中·停止
+                className="flex h-7 items-center gap-1.5 rounded-lg bg-danger/10 px-2 text-xs text-danger">
+                <VoiceBars active streamRef={streamRef} /> 停止
               </button>
               <button data-testid="stt-cancel" onClick={cancelRec} aria-label="取消"
                 className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle hover:text-fg">×</button>
