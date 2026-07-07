@@ -46,8 +46,8 @@ interface SelectProps {
 }
 ```
 - 内部 `useState(open)`，`<Popover open onOpenChange>`。
-- **触发器**：`<PopoverTrigger asChild><button data-testid={testId} disabled … className=…>` 显示 `selectedLabel(options,value) ?? placeholder` + 右侧 chevron `▾`。样式走 token：`rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-fg hover:border-accent disabled:opacity-50`（与 inputCls/ModelSwitcher 一致，深浅色自适应）。
-- **选项列表**：`<PopoverContent>` 内 `options.map` 成 `<button>`：`onClick={() => { onChange(o.value); setOpen(false) }}`，选中项(`o.value===value`)加 `bg-surface`+尾部 `✓`，其余 `hover:bg-surface/60`；`text-xs`、圆角、padding 与 ModelSwitcher 对齐。选项按钮带 `data-testid={testId + '-option'}`（多选项用 value 区分：`role="option"` + `data-value`）。
+- **触发器**：`<PopoverTrigger asChild><button role="combobox" aria-haspopup="listbox" aria-expanded={open} data-testid={testId} disabled … className=…>` 显示 `selectedLabel(options,value) ?? placeholder` + 右侧 chevron `▾`。样式走 token：`rounded-lg border border-border bg-surface px-2.5 py-1.5 text-xs text-fg hover:border-accent disabled:opacity-50`（与 inputCls/ModelSwitcher 一致，深浅色自适应）。
+- **选项列表**：`<PopoverContent role="listbox">` 内 `options.map` 成 `<button role="option" aria-selected={active} data-value={o.value}>`：`onClick={() => { onChange(o.value); setOpen(false) }}`，选中项(`o.value===value`)加 `bg-surface`+尾部 `✓`，其余 `hover:bg-surface/60`；`text-xs`、圆角、padding 与 ModelSwitcher 对齐。选项以 `[role=option][data-value=…]` 定位（不再单独加 `-option` testid；触发器保留 `testId`）。
 - 空 options：弹层显示 `无可选项`（`text-fg-subtle`）。
 
 ### 2. 纯函数（可测）

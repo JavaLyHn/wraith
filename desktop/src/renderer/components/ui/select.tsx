@@ -31,6 +31,9 @@ export default function Select({
       <PopoverTrigger asChild>
         <button
           type="button"
+          role="combobox"
+          aria-haspopup="listbox"
+          aria-expanded={open}
           data-testid={testId}
           disabled={disabled}
           className={
@@ -44,7 +47,7 @@ export default function Select({
           <span className="shrink-0 text-fg-subtle">▾</span>
         </button>
       </PopoverTrigger>
-      <PopoverContent className={'min-w-[8rem] ' + contentClassName}>
+      <PopoverContent role="listbox" className={'min-w-[8rem] ' + contentClassName}>
         {options.length === 0 && (
           <div className="px-2 py-1.5 text-xs text-fg-subtle">无可选项</div>
         )}
@@ -55,6 +58,7 @@ export default function Select({
               key={o.value}
               type="button"
               role="option"
+              aria-selected={active}
               data-value={o.value}
               onClick={() => { onChange(o.value); setOpen(false) }}
               className={
