@@ -68,7 +68,7 @@ export default function UserMessage({ text, ordinal, isLastUser, busy, onEdit, o
         <span className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             data-testid="msg-edit"
-            onClick={() => { setDraft(text); setEditing(true); setConfirming(false) }}
+            onClick={() => { setDraft(text); setEditing(true); setConfirming(false); setResendConfirming(false) }}
             title="编辑并从此处重发(丢弃之后的内容)"
             className="rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent"
           >
@@ -77,8 +77,12 @@ export default function UserMessage({ text, ordinal, isLastUser, busy, onEdit, o
           <button
             data-testid="msg-resend"
             onClick={() => {
-              if (isLastUser || resendConfirming) onResend(ordinal, text)
-              else setResendConfirming(true)
+              if (isLastUser || resendConfirming) {
+                setResendConfirming(false)
+                onResend(ordinal, text)
+              } else {
+                setResendConfirming(true)
+              }
             }}
             onBlur={() => setResendConfirming(false)}
             title={isLastUser ? '以原文本重新发送(重新生成回复)' : '丢弃此条之后的全部内容并以原文本重发'}
