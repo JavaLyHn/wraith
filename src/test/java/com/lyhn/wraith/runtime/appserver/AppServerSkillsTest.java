@@ -23,6 +23,9 @@ class AppServerSkillsTest {
             public Map<String,Object> skillsSetEnabled(String name, boolean enabled) {
                 return Map.of("ok", true);
             }
+            public Map<String,Object> sttTranscribe(String audioBase64, String mime) {
+                return Map.of("text", "你好 world");
+            }
         };
         List<String> lines = new ArrayList<>();
         lines.add("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{}}");
@@ -202,6 +205,15 @@ class AppServerSkillsTest {
 
     @Test void existsInScopeMissingNameIsParamError() throws Exception {
         List<JsonNode> r = run("{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"skills.existsInScope\",\"params\":{\"scope\":\"user\"}}");
+        assertEquals(-32602, byId(r, 2).path("error").path("code").asInt());
+    }
+
+    @Test void sttTranscribeReturnsText() throws Exception {
+        List<JsonNode> r = run("{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"stt.transcribe\",\"params\":{\"audioBase64\":\"YWJj\",\"mime\":\"audio/webm\"}}");
+        assertEquals("你好 world", byId(r, 2).path("result").path("text").asText());
+    }
+    @Test void sttTranscribeMissingAudioIsParamError() throws Exception {
+        List<JsonNode> r = run("{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"stt.transcribe\",\"params\":{\"mime\":\"audio/webm\"}}");
         assertEquals(-32602, byId(r, 2).path("error").path("code").asInt());
     }
 }

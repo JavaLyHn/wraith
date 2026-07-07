@@ -127,6 +127,10 @@ public final class AppServer {
         default java.util.Map<String, Object> skillsExistsInScope(String scope, String name) {
             throw new UnsupportedOperationException("skillsExistsInScope not implemented");
         }
+        /** 云端语音转写:audioBase64=录音字节的 base64,mime=音频 MIME。默认抛出。 */
+        default java.util.Map<String, Object> sttTranscribe(String audioBase64, String mime) {
+            throw new UnsupportedOperationException("sttTranscribe not implemented");
+        }
     }
 
     private final BufferedReader in;
@@ -356,6 +360,17 @@ public final class AppServer {
                 try { writer.result(msg.id(), session.skillsFork(name)); }
                 catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "stt.transcribe" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String audioBase64 = textParam(p, "audioBase64");
+                String mime = textParam(p, "mime");
+                if (audioBase64 == null || audioBase64.isBlank()) { writer.error(msg.id(), -32602, "缺 audioBase64"); return true; }
+                try { writer.result(msg.id(), session.sttTranscribe(audioBase64, mime)); }
+                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "gateway.config.get" -> {
                 WraithConfig cfg = WraithConfig.load();

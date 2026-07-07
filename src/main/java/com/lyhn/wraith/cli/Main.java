@@ -1416,6 +1416,28 @@ public class Main {
                         skillRegistry.reload();
                         return java.util.Map.of("ok", true, "name", s.name());
                     }
+                    public java.util.Map<String, Object> sttTranscribe(String audioBase64, String mime) {
+                        String pid = config.getSttProviderId();
+                        String apiKey = config.getApiKey(pid);
+                        if (apiKey == null || apiKey.isBlank())
+                            throw new IllegalArgumentException("STT 未配置:请先在 Provider 配置里为 " + pid + " 填好 API Key");
+                        String baseUrl = config.getBaseUrl(pid);
+                        if (baseUrl == null || baseUrl.isBlank()) baseUrl = "https://api.siliconflow.cn/v1";
+                        String model = config.getSttModel();
+                        byte[] audio = java.util.Base64.getDecoder().decode(audioBase64);
+                        try {
+                            String text = new com.lyhn.wraith.stt.SttClient()
+                                    .transcribe(audio, mime, apiKey, baseUrl, model);
+                            return java.util.Map.of("text", text);
+                        } catch (IllegalArgumentException e) {
+                            throw e;
+                        } catch (Exception e) {
+                            String em = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                            em = redactKey(em, apiKey);
+                            if (em.length() > 300) em = em.substring(0, 300);
+                            throw new RuntimeException(em);
+                        }
+                    }
                 };
             }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
 
