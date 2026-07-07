@@ -48,3 +48,10 @@ body {
 .sidebar-gradient {
   background: linear-gradient(180deg, var(--bg-sidebar-from), var(--bg-sidebar-to));
 }
+
+/* 主题感知 logo 切换:与颜色 token 同一套 [data-theme] 机制(不依赖 Tailwind dark: 变体) */
+/* brand-logo-dark = 深色墨 logo(浅色主题显);brand-logo-light = 浅色 logo(深色主题显) */
+.brand-logo-dark { display: block; }
+.brand-logo-light { display: none; }
+[data-theme="dark"] .brand-logo-dark { display: none; }
+[data-theme="dark"] .brand-logo-light { display: block; }
