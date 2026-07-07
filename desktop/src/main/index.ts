@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Notification, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Notification, shell, session } from 'electron'
 import path from 'path'
 import os from 'os'
 import { fileURLToPath } from 'url'
@@ -512,6 +512,11 @@ ipcMain.handle('wraith:skillExistsInScope', async (_e, scope: 'user' | 'project'
   return client.request('skills.existsInScope', { scope, name })
 })
 
+ipcMain.handle('wraith:transcribe', async (_e, audioBase64: string, mime: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('stt.transcribe', { audioBase64, mime })
+})
+
 ipcMain.handle('wraith:forkSkill', async (_e, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.fork', { name })
@@ -795,6 +800,11 @@ app.whenReady().then(() => {
     defaultJar,
     (url) => { void shell.openExternal(url) }
   )
+
+  // 仅放行麦克风(媒体)权限,供语音听写用
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === 'media')
+  })
 
   createWindow()
   spawnBackend()
