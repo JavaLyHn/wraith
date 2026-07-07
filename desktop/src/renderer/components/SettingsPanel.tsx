@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import SettingsInterface from './SettingsInterface'
+import SettingsMe from './SettingsMe'
 
 type Section = 'me' | 'interface' | 'about'
 const NAV: { key: Section; label: string }[] = [
@@ -10,7 +11,6 @@ const NAV: { key: Section; label: string }[] = [
 
 export default function SettingsPanel({ onBack, onOpenProviders }: { onBack: () => void; onOpenProviders: () => void }): JSX.Element {
   const [active, setActive] = useState<Section>('interface')
-  void onOpenProviders // Task 7 (SettingsMe) 使用
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -31,7 +31,7 @@ export default function SettingsPanel({ onBack, onOpenProviders }: { onBack: () 
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {active === 'interface' && <SettingsInterface />}
-          {active === 'me' && <div className="text-xs text-fg-subtle">(我 — Task 7)</div>}
+          {active === 'me' && <SettingsMe onOpenProviders={onOpenProviders} />}
           {active === 'about' && <div className="text-xs text-fg-subtle">(关于 — Task 8)</div>}
         </div>
       </div>
