@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ToolCard as ToolCardType } from '../../shared/transcriptReducer'
-import { toolBadgeLabel } from '../../shared/toolBadge'
+import { toolBadgeLabel, toolCardFailed } from '../../shared/toolBadge'
 import { toolCardDefaultExpanded } from '../lib/toolCardExpand'
 
 interface ToolCardProps {
@@ -11,11 +11,11 @@ export default function ToolCard({ card }: ToolCardProps): JSX.Element {
   const [userToggled, setUserToggled] = useState<boolean | null>(null)
   const expanded = userToggled ?? toolCardDefaultExpanded(card)
 
-  const badgeClass = card.done
-    ? card.ok === false
+  const badgeClass = !card.done
+    ? 'bg-accent/15 text-accent'
+    : toolCardFailed(card)
       ? 'bg-danger text-white'
       : 'bg-ok text-white'
-    : 'bg-accent/15 text-accent'
 
   return (
     <div

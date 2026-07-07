@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { toolBadgeLabel } from '../src/shared/toolBadge'
+import { toolBadgeLabel, toolCardFailed } from '../src/shared/toolBadge'
 import type { ToolCard } from '../src/shared/transcriptReducer'
+const mk = (p: Partial<ToolCard>): ToolCard => ({ callId: 'x', name: 't', argsJson: '', output: '', done: true, ...p })
 
 function card(over: Partial<ToolCard>): ToolCard {
   return { callId: 'c1', name: 'read_file', argsJson: '{}', output: '', done: true, ...over }
@@ -25,5 +26,16 @@ describe('toolBadgeLabel', () => {
   it('未完成一律 running…', () => {
     expect(toolBadgeLabel(card({ name: 'web_search', done: false }))).toBe('running…')
     expect(toolBadgeLabel(card({ name: 'execute_command', done: false }))).toBe('running…')
+  })
+})
+
+describe('toolCardFailed', () => {
+  it('ok===false → 失败', () => { expect(toolCardFailed(mk({ ok: false }))).toBe(true) })
+  it('正文以失败标记开头 → 失败(即使 ok 非 false)', () => {
+    expect(toolCardFailed(mk({ output: '工具执行失败: boom\n' }))).toBe(true)
+    expect(toolCardFailed(mk({ output: '  🛡️ 策略拒绝: x' }))).toBe(true)
+  })
+  it('成功(ok 未定/正文正常) → 不失败', () => {
+    expect(toolCardFailed(mk({ output: '搜索结果…' }))).toBe(false)
   })
 })
