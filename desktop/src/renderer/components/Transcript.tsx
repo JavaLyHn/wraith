@@ -1,10 +1,10 @@
 import { useEffect, useRef } from 'react'
-import ReactMarkdown from 'react-markdown'
 import type { Item } from '../../shared/transcriptReducer'
 import ThinkingBlock from './ThinkingBlock'
 import ToolCard from './ToolCard'
 import DiffCard from './DiffCard'
 import UserMessage from './UserMessage'
+import AgentMessage from './AgentMessage'
 
 interface TranscriptProps {
   items: Item[]
@@ -58,11 +58,7 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
           )
         }
         if (item.type === 'message') {
-          return (
-            <div key={idx} className="text-sm leading-7 text-fg [&_code]:font-mono [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-black/[0.04] [&_pre]:p-3">
-              <ReactMarkdown>{item.text}</ReactMarkdown>
-            </div>
-          )
+          return <AgentMessage key={idx} text={item.text} />
         }
         if (item.type === 'thinking') {
           return <ThinkingBlock key={idx} label={item.label} text={item.text} done={item.done} />

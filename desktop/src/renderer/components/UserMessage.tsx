@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useSettings } from '../settings/SettingsContext'
+import { userAvatarGlyph } from '../lib/chatIdentity'
 
 interface UserMessageProps {
   text: string
@@ -12,6 +14,8 @@ interface UserMessageProps {
 
 /** 用户气泡:hover 浮现编辑/删除;编辑就地展开;删除二次点击确认(真回溯,裁掉之后全部)。 */
 export default function UserMessage({ text, ordinal, busy, onEdit, onDelete }: UserMessageProps): JSX.Element {
+  const { prefs } = useSettings()
+  const glyph = userAvatarGlyph(prefs.profile)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(text)
   const [confirming, setConfirming] = useState(false)
@@ -85,6 +89,7 @@ export default function UserMessage({ text, ordinal, busy, onEdit, onDelete }: U
       <div data-testid="user-msg" className="rounded-2xl bg-accent/10 px-3 py-2 text-sm text-fg">
         {text}
       </div>
+      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-[12px] font-medium text-fg" aria-hidden>{glyph}</div>
     </div>
   )
 }
