@@ -111,7 +111,7 @@ export default function UserMessage({ text, ordinal, isLastUser, busy, onEdit, o
           </button>
         </span>
       )}
-      <div data-testid="user-msg" className="rounded-2xl bg-accent/10 px-3 py-2 text-sm text-fg">
+      <div data-testid="user-msg" className="rounded-2xl bg-accent px-3 py-2 text-sm text-accent-fg shadow-sm">
         {text}
       </div>
       <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-xs font-medium text-fg" aria-hidden>{glyph}</div>
