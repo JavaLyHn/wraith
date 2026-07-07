@@ -341,3 +341,13 @@ export type AutomationEvent =
   | { kind: 'badge'; show: boolean }
   | { kind: 'approval'; runId: string; payload: Record<string, unknown> }
   | { kind: 'open-panel' }
+
+export interface AppInfo { version: string; repoUrl: string; dataDir: string }
+export interface UpdateResult {
+  current: string
+  latest: string | null
+  hasUpdate: boolean
+  url: string | null
+  isPrerelease: boolean
+  error?: string
+}

@@ -6,6 +6,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import readline from 'readline'
 import { JsonRpcClient } from '../shared/jsonRpcClient'
 import { resolveBackendCommand, defaultJarPath } from './backend'
+import { computeUpdate, type GhRelease } from './updateCheck'
 import fs from 'fs'
 import {
   resolvePersistedWorkspace,
@@ -654,6 +655,29 @@ ipcMain.handle('wraith:gatewayStatus', async () => gatewayManager?.getStatus() ?
 ipcMain.handle('wraith:gatewayLogs', async () => ({ lines: gatewayManager?.getLogs() ?? [] }))
 ipcMain.handle('wraith:gatewayBindStart', async () => { gatewayManager?.bindStart(); return { ok: true } })
 ipcMain.handle('wraith:gatewayBindCancel', async () => { gatewayManager?.cancelBind(); return { ok: true } })
+
+ipcMain.handle('wraith:appInfo', () => ({
+  version: app.getVersion(),
+  repoUrl: 'https://github.com/JavaLyHn/wraith',
+  dataDir: path.join(os.homedir(), '.wraith'),
+}))
+
+ipcMain.handle('wraith:checkUpdate', async (_e, beta: boolean) => {
+  const current = app.getVersion()
+  try {
+    const res = await fetch('https://api.github.com/repos/JavaLyHn/wraith/releases', {
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'wraith-desktop' },
+    })
+    if (!res.ok) return { current, latest: null, hasUpdate: false, url: null, isPrerelease: false, error: `HTTP ${res.status}` }
+    const releases = (await res.json()) as GhRelease[]
+    return computeUpdate(current, releases, !!beta)
+  } catch (e) {
+    return { current, latest: null, hasUpdate: false, url: null, isPrerelease: false, error: (e as Error).message }
+  }
+})
+
+ipcMain.handle('wraith:openExternal', (_e, url: string) => { void shell.openExternal(url) })
+ipcMain.handle('wraith:openPath', (_e, p: string) => shell.openPath(p))
 
 // ---------------------------------------------------------------------------
 // Part C: 启动一次性迁移(legacy automations.json → daemon)

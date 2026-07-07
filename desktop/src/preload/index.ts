@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult } from '../shared/types'
 import type { GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -83,6 +83,10 @@ export interface WraithApi {
   gatewayBindStart(): Promise<{ ok: boolean }>
   gatewayBindCancel(): Promise<{ ok: boolean }>
   onGatewayEvent(cb: (evt: GatewayEvent) => void): () => void
+  appInfo(): Promise<AppInfo>
+  checkUpdate(beta: boolean): Promise<UpdateResult>
+  openExternal(url: string): Promise<void>
+  openPath(path: string): Promise<void>
 }
 
 const wraith: WraithApi = {
@@ -353,6 +357,18 @@ const wraith: WraithApi = {
     const listener = (_e: Electron.IpcRendererEvent, evt: GatewayEvent) => cb(evt)
     ipcRenderer.on('wraith:gateway-event', listener)
     return () => { ipcRenderer.removeListener('wraith:gateway-event', listener) }
+  },
+  appInfo() {
+    return ipcRenderer.invoke('wraith:appInfo') as Promise<AppInfo>
+  },
+  checkUpdate(beta) {
+    return ipcRenderer.invoke('wraith:checkUpdate', beta) as Promise<UpdateResult>
+  },
+  openExternal(url) {
+    return ipcRenderer.invoke('wraith:openExternal', url) as Promise<void>
+  },
+  openPath(path) {
+    return ipcRenderer.invoke('wraith:openPath', path) as Promise<void>
   },
 }
 
