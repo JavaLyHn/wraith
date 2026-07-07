@@ -22,6 +22,7 @@ import {
   type Item,
 } from '../shared/transcriptReducer'
 import { messagesToItems } from '../shared/messagesToItems'
+import { lastUserMessage } from './lib/resend'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -706,9 +707,16 @@ export default function App(): JSX.Element {
         {modelFallbackNotice && (
           <ModelFallbackBanner onDismiss={() => setModelFallbackNotice(false)} />
         )}
-        {submitError && (
-          <SubmitErrorBanner message={submitError} onDismiss={() => setSubmitError(null)} />
-        )}
+        {submitError && (() => {
+          const lu = lastUserMessage(state.items)
+          return (
+            <SubmitErrorBanner
+              message={submitError}
+              onDismiss={() => setSubmitError(null)}
+              onResend={lu ? () => handleResendMessage(lu.ordinal, lu.text) : undefined}
+            />
+          )
+        })()}
         {updateNotice && (
           <div data-testid="update-banner" className="flex items-center gap-3 border-b border-border bg-accent/10 px-4 py-2 text-xs text-fg">
             <span>有新版 v{updateNotice.latest}</span>
