@@ -1405,6 +1405,9 @@ public class Main {
                         skillRegistry.reload();
                         return java.util.Map.of("ok", true);
                     }
+                    public java.util.Map<String,Object> skillsExistsInScope(String scope, String name) {
+                        return java.util.Map.of("exists", skillStore.existsInScope(scope, name));
+                    }
                     public java.util.Map<String,Object> skillsFork(String name) {
                         com.lyhn.wraith.skill.Skill s = skillRegistry.findAnySkill(name);
                         if (s == null) throw new IllegalArgumentException("技能不存在: " + name);

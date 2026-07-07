@@ -123,6 +123,10 @@ public final class AppServer {
         default java.util.Map<String, Object> skillsFork(String name) {
             throw new UnsupportedOperationException("skillsFork not implemented");
         }
+        /** 查某作用域下是否已存在同名技能(移动作用域前的冲突检测)。默认抛出。 */
+        default java.util.Map<String, Object> skillsExistsInScope(String scope, String name) {
+            throw new UnsupportedOperationException("skillsExistsInScope not implemented");
+        }
     }
 
     private final BufferedReader in;
@@ -330,6 +334,17 @@ public final class AppServer {
                 if (scope == null || scope.isBlank()) { writer.error(msg.id(), -32602, "缺 scope"); return true; }
                 if (name == null || name.isBlank()) { writer.error(msg.id(), -32602, "缺 name"); return true; }
                 try { writer.result(msg.id(), session.skillsDelete(scope, name)); }
+                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "skills.existsInScope" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String scope = textParam(p, "scope");
+                String name = textParam(p, "name");
+                if (scope == null || scope.isBlank()) { writer.error(msg.id(), -32602, "缺 scope"); return true; }
+                if (name == null || name.isBlank()) { writer.error(msg.id(), -32602, "缺 name"); return true; }
+                try { writer.result(msg.id(), session.skillsExistsInScope(scope, name)); }
                 catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
