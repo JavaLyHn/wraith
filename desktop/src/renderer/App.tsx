@@ -22,6 +22,7 @@ import {
   type Item,
 } from '../shared/transcriptReducer'
 import { messagesToItems } from '../shared/messagesToItems'
+import { lastUserMessage } from './lib/resend'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -480,33 +481,39 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [state.turn, state.pendingApproval, automationApproval])
 
-  // ── 消息编辑/删除(真回溯:后端裁剪 → 本地裁剪 → 编辑则重发) ─────────────────
-  const handleEditMessage = useCallback(
-    async (ordinal: number, newText: string) => {
+  // ── 消息编辑/重发/删除(真回溯:后端裁剪 → 本地裁剪 → 重发) ─────────────────
+  const rewindAndResubmit = useCallback(
+    async (ordinal: number, text: string) => {
       if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
-      setSubmitError(null) // 编辑重发:清除上次遗留的错误横幅
+      setSubmitError(null) // 重发:清除上次遗留的错误横幅
       try {
         await window.wraith.rewindSession(ordinal)
         dispatch({ type: 'truncateAtUser', ordinal })
-        dispatch({ type: 'addUserItem', text: newText })
+        dispatch({ type: 'addUserItem', text })
         void fetchSessions()
-        // I-1:与主 submit 路径(handleSubmit)对称——submitTurn 前即置 running,从源头
-        // 关闭 submit→turn.started 竞态窗(否则重发后到 turn.started 之间 turn 保持 idle,
-        // 窗内点 workspace-switch 会误发第二次 session.start)。
+        // 与主 submit 路径对称:submitTurn 前即置 running,从源头关闭 submit→turn.started 竞态窗。
         dispatch({ type: 'markStarted' })
-        await window.wraith.submitTurn(newText)
+        await window.wraith.submitTurn(text)
       } catch (err) {
-        console.error('[wraith] editMessage error:', err)
-        // 失败兜底:markStarted 已提前置 running,本地 RPC 失败(后端死/拒绝)时不会再有
-        // turn.started/turn.completed/turn.failed 通知到达来清 turn,会永久卡 running。
-        // 复用现有 turn.failed reducer 动作把 turn 归 idle(与 handleSubmit 完全对称)。
+        console.error('[wraith] rewindAndResubmit error:', err)
+        // 失败兜底:markStarted 已提前置 running,本地 RPC 失败时不会再有 turn.* 通知清 turn。
         dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
         const reason = err instanceof Error ? err.message : String(err)
         const short = reason.replace(/https?:\/\/\S+/g, '').replace(/sk-\S+/g, '').slice(0, 80).trim()
         setSubmitError(short ? `消息发送失败,请重试(${short})` : '消息发送失败,请重试')
       }
     },
-    [fetchSessions], // running 守卫改读 turnRef,不再依赖 state.turn
+    [fetchSessions], // running 守卫读 turnRef,不依赖 state.turn
+  )
+
+  const handleEditMessage = useCallback(
+    (ordinal: number, newText: string) => { void rewindAndResubmit(ordinal, newText) },
+    [rewindAndResubmit],
+  )
+
+  const handleResendMessage = useCallback(
+    (ordinal: number, text: string) => { void rewindAndResubmit(ordinal, text) },
+    [rewindAndResubmit],
   )
 
   const handleDeleteMessage = useCallback(
@@ -700,9 +707,16 @@ export default function App(): JSX.Element {
         {modelFallbackNotice && (
           <ModelFallbackBanner onDismiss={() => setModelFallbackNotice(false)} />
         )}
-        {submitError && (
-          <SubmitErrorBanner message={submitError} onDismiss={() => setSubmitError(null)} />
-        )}
+        {submitError && (() => {
+          const lu = lastUserMessage(state.items)
+          return (
+            <SubmitErrorBanner
+              message={submitError}
+              onDismiss={() => setSubmitError(null)}
+              onResend={lu ? () => handleResendMessage(lu.ordinal, lu.text) : undefined}
+            />
+          )
+        })()}
         {updateNotice && (
           <div data-testid="update-banner" className="flex items-center gap-3 border-b border-border bg-accent/10 px-4 py-2 text-xs text-fg">
             <span>有新版 v{updateNotice.latest}</span>
@@ -764,6 +778,7 @@ export default function App(): JSX.Element {
                   busy={state.turn === 'running'}
                   onEditMessage={handleEditMessage}
                   onDeleteMessage={handleDeleteMessage}
+                  onResendMessage={handleResendMessage}
                 />
                 <div className="shrink-0 px-4 py-3">{composer}</div>
               </>

@@ -6,19 +6,23 @@ interface UserMessageProps {
   text: string
   /** 该气泡是第几条用户消息(1-based),rewind 用。 */
   ordinal: number
+  /** 是否为最后一条用户消息:是则重发一键直发(重新生成),否则两击确认(丢弃其后内容)。 */
+  isLastUser: boolean
   /** turn 运行中禁用编辑/删除。 */
   busy: boolean
   onEdit: (ordinal: number, newText: string) => void
   onDelete: (ordinal: number) => void
+  onResend: (ordinal: number, text: string) => void
 }
 
 /** 用户气泡:hover 浮现编辑/删除;编辑就地展开;删除二次点击确认(真回溯,裁掉之后全部)。 */
-export default function UserMessage({ text, ordinal, busy, onEdit, onDelete }: UserMessageProps): JSX.Element {
+export default function UserMessage({ text, ordinal, isLastUser, busy, onEdit, onDelete, onResend }: UserMessageProps): JSX.Element {
   const { prefs } = useSettings()
   const glyph = userAvatarGlyph(prefs.profile)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(text)
   const [confirming, setConfirming] = useState(false)
+  const [resendConfirming, setResendConfirming] = useState(false)
 
   if (editing) {
     return (
@@ -64,11 +68,32 @@ export default function UserMessage({ text, ordinal, busy, onEdit, onDelete }: U
         <span className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <button
             data-testid="msg-edit"
-            onClick={() => { setDraft(text); setEditing(true); setConfirming(false) }}
+            onClick={() => { setDraft(text); setEditing(true); setConfirming(false); setResendConfirming(false) }}
             title="编辑并从此处重发(丢弃之后的内容)"
             className="rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent"
           >
             ✏️ 编辑
+          </button>
+          <button
+            data-testid="msg-resend"
+            onClick={() => {
+              if (isLastUser || resendConfirming) {
+                setResendConfirming(false)
+                onResend(ordinal, text)
+              } else {
+                setResendConfirming(true)
+              }
+            }}
+            onBlur={() => setResendConfirming(false)}
+            title={isLastUser ? '以原文本重新发送(重新生成回复)' : '丢弃此条之后的全部内容并以原文本重发'}
+            className={
+              'rounded-lg border px-2 py-1 text-2xs ' +
+              (resendConfirming
+                ? 'border-accent bg-accent/10 font-semibold text-accent'
+                : 'border-border text-fg-muted hover:border-accent hover:text-accent')
+            }
+          >
+            {resendConfirming ? '确认重发?' : '🔄 重新发送'}
           </button>
           <button
             data-testid="msg-delete"
@@ -86,7 +111,7 @@ export default function UserMessage({ text, ordinal, busy, onEdit, onDelete }: U
           </button>
         </span>
       )}
-      <div data-testid="user-msg" className="rounded-2xl bg-accent/10 px-3 py-2 text-sm text-fg">
+      <div data-testid="user-msg" className="rounded-2xl bg-accent px-3 py-2 text-sm text-accent-fg shadow-sm">
         {text}
       </div>
       <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-xs font-medium text-fg" aria-hidden>{glyph}</div>
