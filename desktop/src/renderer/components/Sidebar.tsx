@@ -240,7 +240,7 @@ export default function Sidebar({
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
               (activeNav === 'plugins' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
-            🧩 插件
+            🧩 MCP
           </button>
 
           {/* automations — enabled */}
