@@ -70,6 +70,7 @@ export interface WraithApi {
   getSkill(name: string): Promise<SkillDetail>
   upsertSkill(payload: SkillUpsertPayload): Promise<{ ok: boolean }>
   deleteSkill(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
+  skillExistsInScope(scope: 'user' | 'project', name: string): Promise<{ exists: boolean }>
   forkSkill(name: string): Promise<{ ok: boolean; name: string }>
   gatewayGetConfig(): Promise<GatewayConfigView>
   gatewaySetSecret(secret: string): Promise<{ ok: boolean }>
@@ -315,6 +316,9 @@ const wraith: WraithApi = {
   },
   deleteSkill(scope, name) {
     return ipcRenderer.invoke('wraith:deleteSkill', scope, name) as Promise<{ ok: boolean }>
+  },
+  skillExistsInScope(scope, name) {
+    return ipcRenderer.invoke('wraith:skillExistsInScope', scope, name) as Promise<{ exists: boolean }>
   },
   forkSkill(name) {
     return ipcRenderer.invoke('wraith:forkSkill', name) as Promise<{ ok: boolean; name: string }>

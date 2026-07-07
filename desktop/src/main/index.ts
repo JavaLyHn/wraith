@@ -507,6 +507,11 @@ ipcMain.handle('wraith:deleteSkill', async (_e, scope: 'user' | 'project', name:
   return client.request('skills.delete', { scope, name })
 })
 
+ipcMain.handle('wraith:skillExistsInScope', async (_e, scope: 'user' | 'project', name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('skills.existsInScope', { scope, name })
+})
+
 ipcMain.handle('wraith:forkSkill', async (_e, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.fork', { name })

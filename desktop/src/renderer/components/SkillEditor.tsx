@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { SkillDetail } from '../../shared/types'
-import { validateSkillName, toUpsertPayload, type SkillFormState } from '../lib/skillEditor'
+import { validateSkillName, toUpsertPayload, scopeToCleanup, type SkillFormState } from '../lib/skillEditor'
 
 interface Props {
   initial?: SkillDetail     // 编辑时预填;新建为 undefined
@@ -34,7 +34,17 @@ export default function SkillEditor({ initial, lockName, lockScope, onSaved, onC
     if (nameError) { setError(nameError); return }
     setSaving(true)
     try {
+      const cleanup = scopeToCleanup(initial?.source, form.scope)
+      if (cleanup) {
+        const { exists } = await window.wraith.skillExistsInScope(form.scope, form.name)
+        if (exists) {
+          setError(`目标作用域「${form.scope}」已存在同名技能「${form.name}」，无法移动`)
+          setSaving(false)
+          return
+        }
+      }
       await window.wraith.upsertSkill(toUpsertPayload(form))
+      if (cleanup) await window.wraith.deleteSkill(cleanup, form.name)
       onSaved()
     } catch (err) { setError((err as Error).message); setSaving(false) }
   }

@@ -58,7 +58,7 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
       onCancel={() => setMode({ kind: 'list' })} />
   }
   if (mode.kind === 'edit') {
-    return <SkillEditor initial={mode.detail} lockName lockScope
+    return <SkillEditor initial={mode.detail} lockName lockScope={false}
       onSaved={() => { setMode({ kind: 'list' }); void refresh() }}
       onCancel={() => setMode({ kind: 'list' })} />
   }
