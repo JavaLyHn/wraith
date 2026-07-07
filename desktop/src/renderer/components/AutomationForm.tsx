@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import type { AutomationTask, AutomationSchedule, ProjectView, ApprovalMode, ApprovalPolicy } from '../../shared/types'
 import { isValidCronShape, approvalModeLabel, parseDeliverTo, buildDeliverTo, parseApproval, saveErrorText } from '../lib/automationLabels'
+import Select from './ui/select'
 
 /** 覆盖行含稳定 UI-only id,不写入 AutomationTask */
 interface ToolOverrideRow { id: string; tool: string; mode: ApprovalMode }
@@ -161,23 +162,30 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
           className="mt-1 w-full resize-none rounded-lg border border-border bg-bg px-3 py-2 text-xs text-fg outline-none focus:border-accent" />
       </label>
       <label className="text-xs text-fg-muted">项目
-        <select data-testid="automation-form-project" value={projectPath} onChange={e => setProjectPath(e.target.value)}
-          className="mt-1 w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs text-fg outline-none">
-          {projects.map(p => <option key={p.path} value={p.path}>{p.name || p.path}</option>)}
-        </select>
+        <Select
+          testId="automation-form-project"
+          className="mt-1 w-full"
+          value={projectPath}
+          onChange={setProjectPath}
+          options={projects.map(p => ({ value: p.path, label: p.name || p.path }))}
+        />
       </label>
 
       {/* Schedule section */}
       <div className="flex items-end gap-2 text-xs text-fg-muted">
         <label>调度
-          <select data-testid="automation-form-schedule-kind" value={kind}
-            onChange={e => setKind(e.target.value as AutomationSchedule['kind'])}
-            className="mt-1 rounded-lg border border-border bg-bg px-2 py-2 text-xs text-fg outline-none">
-            <option value="interval">每隔 N 分钟</option>
-            <option value="daily">每天</option>
-            <option value="weekly">每周</option>
-            <option value="cron">cron 表达式</option>
-          </select>
+          <Select
+            testId="automation-form-schedule-kind"
+            className="mt-1"
+            value={kind}
+            onChange={v => setKind(v as AutomationSchedule['kind'])}
+            options={[
+              { value: 'interval', label: '每隔 N 分钟' },
+              { value: 'daily', label: '每天' },
+              { value: 'weekly', label: '每周' },
+              { value: 'cron', label: 'cron 表达式' },
+            ]}
+          />
         </label>
         {kind === 'interval' && (
           <label>分钟
@@ -187,10 +195,13 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
         )}
         {kind === 'weekly' && (
           <label>星期
-            <select data-testid="automation-form-schedule-weekday" value={weekday} onChange={e => setWeekday(Number(e.target.value))}
-              className="mt-1 rounded-lg border border-border bg-bg px-2 py-2 text-xs text-fg outline-none">
-              {WEEKDAYS.map((w, i) => <option key={i} value={i}>{w}</option>)}
-            </select>
+            <Select
+              testId="automation-form-schedule-weekday"
+              className="mt-1"
+              value={String(weekday)}
+              onChange={v => setWeekday(Number(v))}
+              options={WEEKDAYS.map((w, i) => ({ value: String(i), label: w }))}
+            />
           </label>
         )}
         {(kind === 'daily' || kind === 'weekly') && (
@@ -241,13 +252,12 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
         <div>工具调用审批</div>
         <label className="flex items-center gap-2">
           默认模式
-          <select data-testid="automation-form-approval-default" value={approvalDefault}
-            onChange={e => setApprovalDefault(e.target.value as ApprovalMode)}
-            className="rounded-lg border border-border bg-bg px-2 py-1.5 text-xs text-fg outline-none">
-            {APPROVAL_MODES.map(m => (
-              <option key={m} value={m}>{approvalModeLabel(m)}</option>
-            ))}
-          </select>
+          <Select
+            testId="automation-form-approval-default"
+            value={approvalDefault}
+            onChange={v => setApprovalDefault(v as ApprovalMode)}
+            options={APPROVAL_MODES.map(m => ({ value: m, label: approvalModeLabel(m) }))}
+          />
         </label>
 
         {/* per-tool overrides */}
@@ -260,13 +270,12 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
                   value={row.tool} onChange={e => updateToolOverride(row.id, 'tool', e.target.value)}
                   placeholder="工具名"
                   className="flex-1 rounded-lg border border-border bg-bg px-2 py-1.5 text-xs text-fg outline-none focus:border-accent" />
-                <select data-testid={`automation-form-tool-override-mode-${idx}`}
-                  value={row.mode} onChange={e => updateToolOverride(row.id, 'mode', e.target.value)}
-                  className="rounded-lg border border-border bg-bg px-2 py-1.5 text-xs text-fg outline-none">
-                  {APPROVAL_MODES.map(m => (
-                    <option key={m} value={m}>{approvalModeLabel(m)}</option>
-                  ))}
-                </select>
+                <Select
+                  testId={`automation-form-tool-override-mode-${idx}`}
+                  value={row.mode}
+                  onChange={v => updateToolOverride(row.id, 'mode', v)}
+                  options={APPROVAL_MODES.map(m => ({ value: m, label: approvalModeLabel(m) }))}
+                />
                 <button data-testid={`automation-form-tool-override-remove-${idx}`}
                   type="button" onClick={() => removeToolOverride(row.id)}
                   className="rounded px-1.5 py-1 text-xs text-fg-muted hover:text-danger">×</button>
