@@ -68,6 +68,8 @@ public final class SkillStore {
 
     /** 目标作用域下是否已存在该技能(&lt;scopeDir&gt;/&lt;name&gt;/SKILL.md)。scope/name 非法抛 IllegalArgumentException。 */
     public boolean existsInScope(String scope, String name) {
+        // 有意直接查文件系统(而非内存 SkillRegistry):registry 的 skillsByName 会用 user 遮蔽
+        // 同名 project 副本,只有读 FS 才能发现被遮蔽的同名件——这是"移动作用域防覆盖"的承重属性,勿改。
         Path dir = resolveScopeDir(scope);
         String safe = requireSafeName(name);
         return Files.isRegularFile(dir.resolve(safe).resolve("SKILL.md"));
