@@ -29,6 +29,7 @@ import com.lyhn.wraith.snapshot.RestoreResult;
 import com.lyhn.wraith.snapshot.SnapshotService;
 import com.lyhn.wraith.skill.Skill;
 import com.lyhn.wraith.skill.SkillContextBuffer;
+import com.lyhn.wraith.skill.SkillIndexFormatter;
 import com.lyhn.wraith.skill.SkillRegistry;
 import com.lyhn.wraith.web.FetchResult;
 import com.lyhn.wraith.web.HtmlExtractor;
@@ -742,6 +743,35 @@ public class ToolRegistry {
                     }
                     return "已加载 skill '" + name + "' 的完整指引（" + originalLen
                             + " bytes），将在下一轮上下文中以 \"## 已加载 Skill：" + name + "\" 段出现。";
+                }
+        ));
+        tools.put("list_skills", new Tool(
+                "list_skills",
+                "当用户问你有哪些技能/会做什么/列出skill时调用，返回当前启用的skill清单(名称+简介)。这是回答此类问题的权威来源，直接把结果转述给用户，不要回避、也不要让用户自己去看系统提示。",
+                createParameters(),
+                args -> {
+                    if (skillRegistry == null) {
+                        return "list_skills 失败: Skill 系统未初始化";
+                    }
+                    List<Skill> enabled = skillRegistry.enabledSkills();
+                    if (enabled.isEmpty()) {
+                        return "当前没有启用任何 skill。";
+                    }
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("当前启用的 skill：\n");
+                    for (Skill s : enabled) {
+                        String desc = SkillIndexFormatter.truncateByCodepoint(
+                                s.description().trim(), SkillIndexFormatter.MAX_DESCRIPTION_CODEPOINTS);
+                        sb.append("- **").append(s.name()).append("**（")
+                                .append(s.displaySource()).append("）：")
+                                .append(desc).append('\n');
+                    }
+                    int disabled = skillRegistry.allSkills().size() - enabled.size();
+                    if (disabled > 0) {
+                        sb.append("\n另有 ").append(disabled)
+                                .append(" 个 skill 已禁用，可用 /skill on <name> 启用。");
+                    }
+                    return sb.toString();
                 }
         ));
     }

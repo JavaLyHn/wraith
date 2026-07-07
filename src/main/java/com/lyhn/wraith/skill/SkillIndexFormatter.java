@@ -59,7 +59,7 @@ public final class SkillIndexFormatter {
         return sb.toString();
     }
 
-    static String truncateByCodepoint(String s, int limit) {
+    public static String truncateByCodepoint(String s, int limit) {
         if (s == null) return "";
         if (s.codePointCount(0, s.length()) <= limit) return s;
         StringBuilder sb = new StringBuilder();
