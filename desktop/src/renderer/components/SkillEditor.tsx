@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { SkillDetail } from '../../shared/types'
 import { validateSkillName, toUpsertPayload, scopeToCleanup, type SkillFormState } from '../lib/skillEditor'
+import Select from './ui/select'
 
 interface Props {
   initial?: SkillDetail     // 编辑时预填;新建为 undefined
@@ -71,11 +72,16 @@ export default function SkillEditor({ initial, lockName, lockScope, onSaved, onC
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-2xs text-fg-subtle">来源</span>
-            <select className={inputCls} value={form.scope} disabled={lockScope}
-              onChange={e => set('scope', e.target.value as 'user' | 'project')}>
-              <option value="user">用户(~/.wraith/skills)</option>
-              <option value="project">项目(&lt;项目&gt;/.wraith/skills)</option>
-            </select>
+            <Select
+              testId="skill-scope-select"
+              value={form.scope}
+              disabled={lockScope}
+              onChange={v => set('scope', v as 'user' | 'project')}
+              options={[
+                { value: 'user', label: '用户(~/.wraith/skills)' },
+                { value: 'project', label: '项目(<项目>/.wraith/skills)' },
+              ]}
+            />
           </label>
           <label className="flex flex-col gap-1">
             <span className="text-2xs text-fg-subtle">描述</span>
