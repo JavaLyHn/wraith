@@ -23,6 +23,7 @@ public class WraithConfig {
     private String defaultProvider = "glm";
     private Map<String, ProviderConfig> providers = new LinkedHashMap<>();
     private GatewayConfig gateway;
+    private SttConfig stt;
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ProviderConfig {
@@ -77,12 +78,35 @@ public class WraithConfig {
         public String getWorkspace() { return workspace; }       public void setWorkspace(String v){ workspace=v; }
     }
 
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class SttConfig {
+        private String providerId;   // 借用哪个 providers 条目的 key/baseUrl
+        private String model;
+        public String getProviderId() { return providerId; }
+        public void setProviderId(String v) { this.providerId = v; }
+        public String getModel() { return model; }
+        public void setModel(String v) { this.model = v; }
+    }
+
     public String getDefaultProvider() { return defaultProvider; }
     public void setDefaultProvider(String defaultProvider) { this.defaultProvider = defaultProvider; }
     public Map<String, ProviderConfig> getProviders() { return providers; }
     public void setProviders(Map<String, ProviderConfig> providers) { this.providers = providers; }
     public GatewayConfig getGateway() { return gateway; }
     public void setGateway(GatewayConfig gateway) { this.gateway = gateway; }
+    public SttConfig getStt() { return stt; }
+    public void setStt(SttConfig stt) { this.stt = stt; }
+
+    /** STT 借用的 provider id;缺省 siliconflow。 */
+    public String getSttProviderId() {
+        return (stt != null && stt.getProviderId() != null && !stt.getProviderId().isBlank())
+            ? stt.getProviderId().trim() : "siliconflow";
+    }
+    /** STT 模型;缺省 SenseVoiceSmall。 */
+    public String getSttModel() {
+        return (stt != null && stt.getModel() != null && !stt.getModel().isBlank())
+            ? stt.getModel().trim() : "FunAudioLLM/SenseVoiceSmall";
+    }
 
     public String getApiKey(String provider) {
         ProviderConfig providerConfig = providers.get(provider);
