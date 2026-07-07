@@ -4,6 +4,7 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import { baseName } from '../lib/paths'
+import { blobToBase64, insertAtCursor } from '../lib/dictation'
 import { shouldSendOnEnter } from '../../shared/composerKeys'
 import StatusChip from './StatusChip'
 import ModelSwitcher from './ModelSwitcher'
@@ -58,6 +59,13 @@ export default function Composer({
   const [mention, setMention] = useState<MentionState>({ active: false, start: 0, query: '' })
   const [mentionIndex, setMentionIndex] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [recording, setRecording] = useState(false)
+  const [transcribing, setTranscribing] = useState(false)
+  const [sttError, setSttError] = useState<string | null>(null)
+  const mediaRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const cancelledRef = useRef(false)
+  const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const items = mention.active ? filterMentionItems(resources, mention.query) : []
   const popoverOpen = mention.active && items.length > 0
 
@@ -95,6 +103,53 @@ export default function Composer({
     },
     [onSubmit, running, popoverOpen, items, mentionIndex, mention, value, onChange],
   )
+
+  const stopRec = useCallback(() => {
+    if (stopTimerRef.current) { clearTimeout(stopTimerRef.current); stopTimerRef.current = null }
+    mediaRef.current?.stop()
+  }, [])
+
+  const cancelRec = useCallback(() => {
+    cancelledRef.current = true
+    stopRec()
+    setRecording(false)
+  }, [stopRec])
+
+  const startRec = useCallback(async () => {
+    setSttError(null)
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mr = new MediaRecorder(stream)
+      chunksRef.current = []
+      cancelledRef.current = false
+      mr.ondataavailable = e => { if (e.data.size) chunksRef.current.push(e.data) }
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        if (cancelledRef.current) { setRecording(false); return }
+        setRecording(false); setTranscribing(true)
+        try {
+          const mime = mr.mimeType || 'audio/webm'
+          const blob = new Blob(chunksRef.current, { type: mime })
+          const b64 = await blobToBase64(blob)
+          const { text } = await window.wraith.transcribe(b64, mime)
+          const ta = textareaRef.current
+          const s = ta?.selectionStart ?? value.length
+          const en = ta?.selectionEnd ?? value.length
+          const r = insertAtCursor(value, s, en, text)
+          onChange(r.value)
+          requestAnimationFrame(() => { ta?.focus(); ta?.setSelectionRange(r.caret, r.caret) })
+        } catch (err) {
+          setSttError((err as Error).message || '转写失败')
+        } finally { setTranscribing(false) }
+      }
+      mr.start()
+      mediaRef.current = mr
+      setRecording(true)
+      stopTimerRef.current = setTimeout(() => stopRec(), 60_000)   // 60s 上限
+    } catch {
+      setSttError('无法访问麦克风,请在系统设置里授权')
+    }
+  }, [value, onChange, stopRec])
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -148,6 +203,13 @@ export default function Composer({
           </div>
         )}
 
+        {sttError && (
+          <div data-testid="stt-error" className="px-3 pt-2 text-2xs text-danger">
+            {sttError}
+            {sttError.includes('未配置') && <span className="text-fg-subtle">（到 Provider 配置里填 SiliconFlow 的 key）</span>}
+          </div>
+        )}
+
         {/* text row */}
         <textarea
           ref={textareaRef}
@@ -176,6 +238,33 @@ export default function Composer({
           >
             +
           </button>
+
+          {/* 语音听写 */}
+          {!recording && !transcribing && (
+            <button
+              data-testid="stt-mic"
+              disabled={running}
+              aria-label="语音输入"
+              title="按一下开始说话,再按停止转写"
+              onClick={() => void startRec()}
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              🎙
+            </button>
+          )}
+          {recording && (
+            <div className="flex items-center gap-1">
+              <button data-testid="stt-stop" onClick={stopRec} aria-label="停止并转写"
+                className="flex h-7 items-center gap-1 rounded-lg bg-danger/10 px-2 text-xs text-danger">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-danger" /> 录音中·停止
+              </button>
+              <button data-testid="stt-cancel" onClick={cancelRec} aria-label="取消"
+                className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle hover:text-fg">×</button>
+            </div>
+          )}
+          {transcribing && (
+            <span data-testid="stt-transcribing" className="text-xs text-fg-muted">转写中…</span>
+          )}
 
           {/* model chip — interactive switcher */}
           <ModelSwitcher initialModel={model} running={running} />
@@ -218,7 +307,7 @@ export default function Composer({
 
           <button
             onClick={onSubmit}
-            disabled={running || !value.trim()}
+            disabled={running || recording || transcribing || !value.trim()}
             className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-accent-fg disabled:cursor-not-allowed disabled:opacity-40"
           >
             发送
