@@ -35,6 +35,7 @@ import AutomationsPanel from './components/AutomationsPanel'
 import ImGatewayPanel from './components/ImGatewayPanel'
 import ProvidersPanel from './components/ProvidersPanel'
 import SkillsPanel from './components/SkillsPanel'
+import SettingsPanel from './components/SettingsPanel'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -126,7 +127,7 @@ export default function App(): JSX.Element {
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
-  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills'>('chat')
+  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'settings'>('chat')
   const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
   const [automationBadge, setAutomationBadge] = useState(false)
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
@@ -678,6 +679,7 @@ export default function App(): JSX.Element {
         onOpenImGateway={() => setView('im-gateway')}
         onOpenProviders={() => setView('providers')}
         onOpenSkills={() => setView('skills')}
+        onOpenSettings={() => setView('settings')}
         automationBadge={automationBadge}
       />
 
@@ -713,6 +715,8 @@ export default function App(): JSX.Element {
           <ProvidersPanel onBack={() => setView('chat')} />
         ) : view === 'skills' ? (
           <SkillsPanel onBack={() => setView('chat')} />
+        ) : view === 'settings' ? (
+          <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} />
         ) : (
           /* 既有 welcome ↔ transcript+composer 条件块整体原样嵌此 else */
           (() => {

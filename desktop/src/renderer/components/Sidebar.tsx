@@ -94,12 +94,13 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
   onOpenProviders: () => void
   onOpenSkills: () => void
+  onOpenSettings: () => void
   automationBadge: boolean
 }
 
@@ -125,6 +126,7 @@ export default function Sidebar({
   onOpenImGateway,
   onOpenProviders,
   onOpenSkills,
+  onOpenSettings,
   automationBadge,
 }: SidebarProps): JSX.Element {
   const [searchActive, setSearchActive] = useState(false)
@@ -369,6 +371,13 @@ export default function Sidebar({
 
         {/* footer: sandbox badge */}
         <div className="border-t border-border px-3 py-3">
+          <button
+            data-testid="nav-settings"
+            onClick={onOpenSettings}
+            className="mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-fg-muted hover:bg-surface hover:text-accent"
+          >
+            <span aria-hidden>⚙</span><span>设置</span>
+          </button>
           <div
             data-testid="sandbox-badge"
             className={
