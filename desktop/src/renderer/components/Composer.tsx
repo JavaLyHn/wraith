@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Switch } from './ui/switch'
 import {
   TooltipProvider,
@@ -63,9 +63,15 @@ export default function Composer({
   const [transcribing, setTranscribing] = useState(false)
   const [sttError, setSttError] = useState<string | null>(null)
   const mediaRef = useRef<MediaRecorder | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const cancelledRef = useRef(false)
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
+    streamRef.current?.getTracks().forEach(t => t.stop())
+  }, [])
+
   const items = mention.active ? filterMentionItems(resources, mention.query) : []
   const popoverOpen = mention.active && items.length > 0
 
@@ -117,14 +123,17 @@ export default function Composer({
 
   const startRec = useCallback(async () => {
     setSttError(null)
+    let stream: MediaStream | null = null
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
       const mr = new MediaRecorder(stream)
       chunksRef.current = []
       cancelledRef.current = false
       mr.ondataavailable = e => { if (e.data.size) chunksRef.current.push(e.data) }
       mr.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop())
+        streamRef.current?.getTracks().forEach(t => t.stop())
+        streamRef.current = null
         if (cancelledRef.current) { setRecording(false); return }
         setRecording(false); setTranscribing(true)
         try {
@@ -133,9 +142,10 @@ export default function Composer({
           const b64 = await blobToBase64(blob)
           const { text } = await window.wraith.transcribe(b64, mime)
           const ta = textareaRef.current
-          const s = ta?.selectionStart ?? value.length
-          const en = ta?.selectionEnd ?? value.length
-          const r = insertAtCursor(value, s, en, text)
+          const cur = ta?.value ?? value
+          const s = ta?.selectionStart ?? cur.length
+          const en = ta?.selectionEnd ?? cur.length
+          const r = insertAtCursor(cur, s, en, text)
           onChange(r.value)
           requestAnimationFrame(() => { ta?.focus(); ta?.setSelectionRange(r.caret, r.caret) })
         } catch (err) {
@@ -147,6 +157,8 @@ export default function Composer({
       setRecording(true)
       stopTimerRef.current = setTimeout(() => stopRec(), 60_000)   // 60s 上限
     } catch {
+      stream?.getTracks().forEach(t => t.stop())
+      streamRef.current = null
       setSttError('无法访问麦克风,请在系统设置里授权')
     }
   }, [value, onChange, stopRec])
