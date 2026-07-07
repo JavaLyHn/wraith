@@ -78,8 +78,8 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
         <button data-testid="plugins-back" onClick={onBack}
           className="rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface/60">← 返回对话</button>
-        <span className="text-sm font-bold text-fg">插件</span>
-        <span className="text-xs text-fg-subtle">MCP servers</span>
+        <span className="text-sm font-bold text-fg">MCP</span>
+        <span className="text-xs text-fg-subtle">服务器 · 内置能力</span>
       </div>
 
       {configError && (
