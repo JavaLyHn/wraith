@@ -1,6 +1,14 @@
 # Wraith CLI
 
+[![Release](https://img.shields.io/github/v/release/JavaLyHn/wraith?label=release&color=6d5df6)](https://github.com/JavaLyHn/wraith/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/JavaLyHn/wraith/total?color=6d5df6)](https://github.com/JavaLyHn/wraith/releases)
+[![macOS Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-000?logo=apple)](https://github.com/JavaLyHn/wraith/releases/latest)
+
 一个成熟的 Java Agent CLI 产品，从第一期的 `ReAct` 单代理循环逐步演进到第十六期的 `TUI 产品化`。
+
+## 下载
+
+桌面版（macOS · Apple Silicon）：前往 **[Releases](https://github.com/JavaLyHn/wraith/releases/latest)** 下载 `Wraith-<version>-arm64.dmg`。自包含内置 JRE，无需系统 Java；本版本未签名，首次启动请在「应用程序」里右键 → 打开。
 
 当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP。
 
