@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSettings } from '../settings/SettingsContext'
+import Logo from './Logo'
 import type { AppInfo, UpdateResult } from '../../shared/types'
 
 export default function SettingsAbout(): JSX.Element {
@@ -27,7 +28,7 @@ export default function SettingsAbout(): JSX.Element {
   return (
     <div className="flex max-w-xl flex-col gap-6">
       <div className="flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-2xl text-accent-fg" aria-hidden>👻</div>
+        <Logo className="h-12 w-12 object-contain" />
         <div>
           <div className="text-sm font-bold text-fg">Wraith</div>
           <div className="text-xs text-fg-subtle">版本 {info?.version ?? '—'} · MIT License</div>
