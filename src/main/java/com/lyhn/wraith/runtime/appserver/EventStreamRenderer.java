@@ -209,4 +209,46 @@ public final class EventStreamRenderer implements Renderer {
         java.util.concurrent.CompletableFuture<PlanReviewOutcome> fut = pendingReviews.get(reviewId);
         if (fut != null) fut.complete(new PlanReviewOutcome(decision == null ? "cancel" : decision, feedback));
     }
+
+    // ---- team.* 通知发射方法（供 EventStreamTeamListener 调用）----
+    // JsonRpcWriter.notify 内部已 synchronized，多线程并发调用安全，无需额外锁。
+
+    /** 多 Agent 协作开始通知。 */
+    public void emitTeamStarted(String teamId, String goal, List<Map<String, Object>> agents) {
+        Map<String, Object> p = base(); p.put("teamId", teamId); p.put("goal", goal); p.put("agents", agents);
+        writer.notify("team.started", p);
+    }
+
+    /** 协作计划已解析通知。 */
+    public void emitTeamPlan(String teamId, List<Map<String, Object>> steps) {
+        Map<String, Object> p = base(); p.put("teamId", teamId); p.put("steps", steps);
+        writer.notify("team.plan", p);
+    }
+
+    /** 批次启动通知。 */
+    public void emitTeamBatch(String teamId, int batchIndex, List<String> stepIds) {
+        Map<String, Object> p = base(); p.put("teamId", teamId); p.put("batchIndex", batchIndex); p.put("stepIds", stepIds);
+        writer.notify("team.batch", p);
+    }
+
+    /** 协作步骤开始通知（可并发触发）。 */
+    public void emitTeamStepStarted(String teamId, String stepId, String agent) {
+        Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId); p.put("agent", agent);
+        writer.notify("team.step.started", p);
+    }
+
+    /** 协作步骤完成通知（可并发触发）。 */
+    public void emitTeamStepCompleted(String teamId, String stepId, String status, String result,
+                                      boolean approved, int retries) {
+        Map<String, Object> p = base();
+        p.put("teamId", teamId); p.put("stepId", stepId); p.put("status", status);
+        p.put("result", result); p.put("approved", approved); p.put("retries", retries);
+        writer.notify("team.step.completed", p);
+    }
+
+    /** 多 Agent 协作结束通知。 */
+    public void emitTeamFinished(String teamId, String status) {
+        Map<String, Object> p = base(); p.put("teamId", teamId); p.put("status", status);
+        writer.notify("team.finished", p);
+    }
 }
