@@ -13,6 +13,9 @@ import ModeSwitcher from './ModeSwitcher'
 import type { StatusData, McpResourceView, RunMode } from '../../shared/types'
 import { detectMention, filterMentionItems, insertMention } from '../../shared/mentionTrigger'
 import type { MentionState } from '../../shared/mentionTrigger'
+import { VadSegmenter, DEFAULT_VAD } from '../lib/vadSegmenter'
+import { OrderedAppender } from '../lib/orderedAppender'
+import { micLevel } from '../lib/waveform'
 
 export interface AttachmentItem {
   path: string
@@ -70,17 +73,26 @@ export default function Composer({
   const [sttError, setSttError] = useState<string | null>(null)
   const mediaRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const chunksRef = useRef<Blob[]>([])
   const cancelledRef = useRef(false)
   const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
-      streamRef.current?.getTracks().forEach(t => t.stop())
-    }
+
+  // 分段录音新增 ref
+  const vadCtxRef = useRef<AudioContext | null>(null)
+  const vadRafRef = useRef<number | null>(null)
+  const vadRef = useRef<VadSegmenter | null>(null)
+  const appenderRef = useRef<OrderedAppender | null>(null)
+  const segSeqRef = useRef(0)
+  const stoppingRef = useRef(false)   // true=会话结束，onstop 不再 restart
+  const insertPosRef = useRef<number | null>(null)  // 追加插入点（随每段前移）
+
+  // 卸载清理：停 timer + VAD 资源 + stream
+  useEffect(() => () => {
+    mountedRef.current = false
+    if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
+    if (vadRafRef.current) cancelAnimationFrame(vadRafRef.current)
+    void vadCtxRef.current?.close()
+    streamRef.current?.getTracks().forEach(t => t.stop())
   }, [])
 
   const items = mention.active ? filterMentionItems(resources, mention.query) : []
@@ -121,15 +133,76 @@ export default function Composer({
     [onSubmit, running, popoverOpen, items, mentionIndex, mention, value, onChange],
   )
 
+  // 段落转写完成 → 按序 flush → 依次插入到追加点（段间空格分隔）
+  const flushSegment = useCallback((seq: number, text: string) => {
+    const ready = (appenderRef.current ??= new OrderedAppender()).arrive(seq, text.trim())
+    if (ready.length === 0) return
+    const ta = textareaRef.current
+    let cur = ta?.value ?? value
+    let pos = insertPosRef.current ?? (ta?.selectionStart ?? cur.length)
+    for (const piece of ready) {
+      const prefix = pos > 0 && !/\s$/.test(cur.slice(0, pos)) ? ' ' : ''
+      const r = insertAtCursor(cur, pos, pos, prefix + piece)
+      cur = r.value; pos = r.caret
+    }
+    insertPosRef.current = pos
+    onChange(cur)
+    requestAnimationFrame(() => { ta?.focus(); ta?.setSelectionRange(pos, pos) })
+  }, [value, onChange])
+
+  // 单段转写（fire-and-forget）：失败/空段当空处理，不弹全局错，不中断会话
+  const transcribeSegment = useCallback(async (seq: number, blob: Blob, mime: string) => {
+    try {
+      const b64 = await blobToBase64(blob)
+      const { text } = await Promise.race([
+        window.wraith.transcribe(b64, mime),
+        new Promise<{ text: string }>((_, rej) => setTimeout(() => rej(new Error('转写超时')), 30_000)),
+      ])
+      flushSegment(seq, text)
+    } catch (err) {
+      console.warn('[stt] 段转写失败，跳过:', (err as Error).message)
+      flushSegment(seq, '')   // 失败当空段：推进序号，不插入、不弹全局错
+    }
+  }, [flushSegment])
+
+  // 开启下一段录音：每段独立 MediaRecorder，stop 时产出完整可解码 webm
+  const startSegment = useCallback(() => {
+    const stream = streamRef.current
+    if (!stream || stoppingRef.current) return
+    const mr = new MediaRecorder(stream)
+    const seq = segSeqRef.current++
+    const chunks: Blob[] = []
+    mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data) }
+    mr.onstop = () => {
+      const mime = mr.mimeType || 'audio/webm'
+      if (!cancelledRef.current && chunks.length > 0) {
+        void transcribeSegment(seq, new Blob(chunks, { type: mime }), mime)
+      }
+      if (!stoppingRef.current && !cancelledRef.current) { startSegment(); return }
+      // 会话结束/取消：释放 stream（最后一段已在上面提交转写）
+      streamRef.current?.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+    mr.start()
+    mediaRef.current = mr
+  }, [transcribeSegment])
+
+  const stopVadLoop = useCallback(() => {
+    if (vadRafRef.current) { cancelAnimationFrame(vadRafRef.current); vadRafRef.current = null }
+    void vadCtxRef.current?.close(); vadCtxRef.current = null
+  }, [])
+
   const stopRec = useCallback(() => {
     if (stopTimerRef.current) { clearTimeout(stopTimerRef.current); stopTimerRef.current = null }
-    mediaRef.current?.stop()
-  }, [])
+    stoppingRef.current = true            // onstop 不再 restart
+    stopVadLoop()
+    mediaRef.current?.stop()              // flush 最后一段
+    setRecording(false)
+  }, [stopVadLoop])
 
   const cancelRec = useCallback(() => {
     cancelledRef.current = true
     stopRec()
-    setRecording(false)
   }, [stopRec])
 
   const startRec = useCallback(async () => {
@@ -139,44 +212,45 @@ export default function Composer({
       stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return }   // #1: 授权期间已卸载→释放
       streamRef.current = stream
-      const mr = new MediaRecorder(stream)
-      chunksRef.current = []
       cancelledRef.current = false
-      mr.ondataavailable = e => { if (e.data.size) chunksRef.current.push(e.data) }
-      mr.onstop = async () => {
-        streamRef.current?.getTracks().forEach(t => t.stop())
-        streamRef.current = null
-        if (cancelledRef.current) { setRecording(false); return }
-        setRecording(false); setTranscribing(true)
-        try {
-          const mime = mr.mimeType || 'audio/webm'
-          const blob = new Blob(chunksRef.current, { type: mime })
-          const b64 = await blobToBase64(blob)
-          const { text } = await Promise.race([                                        // #2: 渲染层超时兜底
-            window.wraith.transcribe(b64, mime),
-            new Promise<{ text: string }>((_, rej) => setTimeout(() => rej(new Error('转写超时,请重试')), 30_000)),
-          ])
-          const ta = textareaRef.current
-          const cur = ta?.value ?? value
-          const s = ta?.selectionStart ?? cur.length
-          const en = ta?.selectionEnd ?? cur.length
-          const r = insertAtCursor(cur, s, en, text)
-          onChange(r.value)
-          requestAnimationFrame(() => { ta?.focus(); ta?.setSelectionRange(r.caret, r.caret) })
-        } catch (err) {
-          setSttError((err as Error).message || '转写失败')
-        } finally { setTranscribing(false) }
+      stoppingRef.current = false
+      segSeqRef.current = 0
+      insertPosRef.current = textareaRef.current?.selectionStart ?? null
+      appenderRef.current = new OrderedAppender()
+      vadRef.current = new VadSegmenter(DEFAULT_VAD)
+
+      // VAD 循环：独立 AudioContext+Analyser（与 VoiceBars 并存）；算 level 喂 vad，cut→切段
+      try {
+        const ctx = new AudioContext()
+        vadCtxRef.current = ctx
+        const src = ctx.createMediaStreamSource(stream)
+        const analyser = ctx.createAnalyser()
+        analyser.fftSize = 256
+        src.connect(analyser)
+        const data = new Uint8Array(analyser.fftSize)
+        let last = performance.now()
+        const tick = (): void => {
+          const now = performance.now()
+          const dt = now - last; last = now
+          analyser.getByteTimeDomainData(data)
+          const d = vadRef.current?.feed(micLevel(data), dt)
+          if (d?.cut) { vadRef.current?.reset(); mediaRef.current?.stop() }  // 切段：stop→onstop 转写+restart
+          vadRafRef.current = requestAnimationFrame(tick)
+        }
+        vadRafRef.current = requestAnimationFrame(tick)
+      } catch {
+        // AudioContext 不可用 → 无 VAD，退化为单段（靠会话上限/手动停）
       }
-      mr.start()
-      mediaRef.current = mr
+
+      startSegment()
       setRecording(true)
-      stopTimerRef.current = setTimeout(() => stopRec(), 60_000)   // 60s 上限
+      stopTimerRef.current = setTimeout(() => stopRec(), 300_000)   // 宽松会话总上限 5min 防跑飞
     } catch {
       stream?.getTracks().forEach(t => t.stop())
       streamRef.current = null
-      setSttError('无法访问麦克风,请在系统设置里授权')
+      setSttError('无法访问麦克风，请在系统设置里授权')
     }
-  }, [value, onChange, stopRec])
+  }, [startSegment, stopRec])
 
   return (
     <TooltipProvider delayDuration={200}>
