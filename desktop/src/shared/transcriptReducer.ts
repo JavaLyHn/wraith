@@ -55,6 +55,29 @@ export interface PlanReviewItem {
   resolved: boolean
 }
 
+/** 团队步骤的渲染状态。 */
+export interface TeamStep {
+  id: string
+  description: string
+  type: string
+  agent?: string
+  status: 'pending' | 'running' | 'done' | 'failed' | 'skipped'
+  result?: string
+  approved?: boolean
+  retries?: number
+}
+
+/** 多智能体团队 item（team.* 事件维护）。 */
+export interface TeamItem {
+  type: 'team'
+  teamId: string
+  goal: string
+  agents: { id: string; role: string }[]
+  steps: TeamStep[]
+  parallelStepIds: string[]
+  status?: 'completed' | 'partial' | 'failed'
+}
+
 export type Item =
   | { type: 'user'; text: string }
   | { type: 'message'; text: string }
@@ -63,6 +86,7 @@ export type Item =
   | { type: 'diff'; filePath: string; before: string; after: string }
   | PlanItem
   | PlanReviewItem
+  | TeamItem
 
 export interface TranscriptState {
   items: Item[]
@@ -144,6 +168,27 @@ function updatePlanStep(
     ...state,
     items: state.items.map(it => {
       if (it.type === 'plan' && it.planId === planId) {
+        return { ...it, steps: it.steps.map(st => st.id === stepId ? fn(st) : st) }
+      }
+      return it
+    }),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Helper — 不可变更新 team item 内的某个步骤
+// ---------------------------------------------------------------------------
+
+function updateTeamStep(
+  state: TranscriptState,
+  teamId: string,
+  stepId: string,
+  fn: (step: TeamStep) => TeamStep,
+): TranscriptState {
+  return {
+    ...state,
+    items: state.items.map(it => {
+      if (it.type === 'team' && it.teamId === teamId) {
         return { ...it, steps: it.steps.map(st => st.id === stepId ? fn(st) : st) }
       }
       return it
@@ -383,6 +428,92 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
         ...st,
         output: (st.output ?? '') + text,
       }))
+    }
+
+    // ── team mode 事件 ─────────────────────────────────────────────────────
+    case 'team.started': {
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const goal = typeof p['goal'] === 'string' ? p['goal'] : ''
+      const rawAgents = Array.isArray(p['agents']) ? (p['agents'] as Array<Record<string, unknown>>) : []
+      const agents = rawAgents.map(a => ({
+        id: typeof a['id'] === 'string' ? a['id'] : '',
+        role: typeof a['role'] === 'string' ? a['role'] : '',
+      }))
+      const newItem: TeamItem = { type: 'team', teamId, goal, agents, steps: [], parallelStepIds: [] }
+      return { ...state, items: [...state.items, newItem] }
+    }
+
+    case 'team.plan': {
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const rawSteps = Array.isArray(p['steps']) ? (p['steps'] as Array<Record<string, unknown>>) : []
+      const steps: TeamStep[] = rawSteps.map(s => ({
+        id: typeof s['id'] === 'string' ? s['id'] : '',
+        description: typeof s['description'] === 'string' ? s['description'] : '',
+        type: typeof s['type'] === 'string' ? s['type'] : '',
+        status: 'pending' as const,
+      }))
+      return {
+        ...state,
+        items: state.items.map(it =>
+          it.type === 'team' && it.teamId === teamId
+            ? { ...it, steps }
+            : it
+        ),
+      }
+    }
+
+    case 'team.batch': {
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const newIds = Array.isArray(p['stepIds']) ? (p['stepIds'] as string[]) : []
+      return {
+        ...state,
+        items: state.items.map(it => {
+          if (it.type === 'team' && it.teamId === teamId) {
+            const merged = Array.from(new Set([...it.parallelStepIds, ...newIds]))
+            return { ...it, parallelStepIds: merged }
+          }
+          return it
+        }),
+      }
+    }
+
+    case 'team.step.started': {
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const stepId = typeof p['stepId'] === 'string' ? p['stepId'] : ''
+      const agent = typeof p['agent'] === 'string' ? p['agent'] : undefined
+      return updateTeamStep(state, teamId, stepId, st => ({ ...st, status: 'running', ...(agent !== undefined ? { agent } : {}) }))
+    }
+
+    case 'team.step.completed': {
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const stepId = typeof p['stepId'] === 'string' ? p['stepId'] : ''
+      const rawStatus = typeof p['status'] === 'string' ? p['status'] : ''
+      const stepStatus: TeamStep['status'] = rawStatus === 'failed' ? 'failed' : rawStatus === 'skipped' ? 'skipped' : 'done'
+      const result = typeof p['result'] === 'string' ? p['result'] : undefined
+      const approved = typeof p['approved'] === 'boolean' ? p['approved'] : undefined
+      const retries = typeof p['retries'] === 'number' ? p['retries'] : undefined
+      return updateTeamStep(state, teamId, stepId, st => ({
+        ...st,
+        status: stepStatus,
+        ...(result !== undefined ? { result } : {}),
+        ...(approved !== undefined ? { approved } : {}),
+        ...(retries !== undefined ? { retries } : {}),
+      }))
+    }
+
+    case 'team.finished': {
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const rawStatus = typeof p['status'] === 'string' ? p['status'] : ''
+      const finishedStatus: TeamItem['status'] =
+        rawStatus === 'completed' ? 'completed' : rawStatus === 'partial' ? 'partial' : rawStatus === 'failed' ? 'failed' : undefined
+      return {
+        ...state,
+        items: state.items.map(it =>
+          it.type === 'team' && it.teamId === teamId
+            ? { ...it, ...(finishedStatus !== undefined ? { status: finishedStatus } : {}) }
+            : it
+        ),
+      }
     }
 
     // ── unknown → safe ignore ───────────────────────────────────────────────
