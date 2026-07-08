@@ -1,6 +1,8 @@
 {
   "name": "wraith-desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Wraith — 幽灵主题终端 AI 编程助手桌面端",
+  "author": "JavaLyHn",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
@@ -9,7 +11,11 @@
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
-    "e2e": "npm run build && playwright test"
+    "e2e": "npm run build && playwright test",
+    "gen:icon": "node scripts/gen-icon.mjs",
+    "gen:jre": "node scripts/gen-jre.mjs",
+    "prepare:resources": "node scripts/prepare-resources.mjs",
+    "dist:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-vite build && npm run prepare:resources && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac"
   },
   "dependencies": {
     "@lobehub/icons": "~5.10.1",
@@ -32,8 +38,10 @@
     "@vitejs/plugin-react": "^4.3.0",
     "autoprefixer": "^10.4.19",
     "electron": "^32.0.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^2.3.0",
     "postcss": "^8.4.40",
+    "sharp": "^0.35.3",
     "tailwindcss": "^3.4.10",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"

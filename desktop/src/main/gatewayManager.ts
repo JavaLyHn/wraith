@@ -1,3 +1,4 @@
+import path from 'path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import readline from 'readline'
 import { defaultJarPath } from './backend'
@@ -10,10 +11,12 @@ import type { GatewayBindPhase, GatewayEvent, GatewayStatus } from '../shared/ga
 /**
  * 常驻网关命令。默认 `java -jar ~/.wraith/wraith.jar gateway`;
  * 可用 WRAITH_GATEWAY_CMD 覆盖(空格分割,首 token 为 cmd)。
+ * 优先级:WRAITH_GATEWAY_CMD 覆写 > packaged(捆绑 java+jar)> dev(系统 java + defaultJar)。
  */
 export function resolveGatewayCommand(
   env: NodeJS.ProcessEnv,
-  defaultJar: string
+  defaultJar: string,
+  packaged?: { resourcesPath: string },
 ): { cmd: string; args: string[] } {
   const override = env['WRAITH_GATEWAY_CMD']
   if (override && override.trim().length > 0) {
@@ -21,15 +24,22 @@ export function resolveGatewayCommand(
     const [cmd, ...args] = tokens
     return { cmd: cmd!, args }
   }
+  if (packaged) {
+    return {
+      cmd: path.join(packaged.resourcesPath, 'runtime', 'bin', 'java'),
+      args: ['-jar', path.join(packaged.resourcesPath, 'wraith.jar'), 'gateway'],
+    }
+  }
   return { cmd: 'java', args: ['-jar', defaultJar, 'gateway'] }
 }
 
 /** 绑定命令 = 网关命令 + `bind`。 */
 export function resolveBindCommand(
   env: NodeJS.ProcessEnv,
-  defaultJar: string
+  defaultJar: string,
+  packaged?: { resourcesPath: string },
 ): { cmd: string; args: string[] } {
-  const g = resolveGatewayCommand(env, defaultJar)
+  const g = resolveGatewayCommand(env, defaultJar, packaged)
   return { cmd: g.cmd, args: [...g.args, 'bind'] }
 }
 
@@ -96,7 +106,8 @@ export class GatewayManager {
     private readonly env: NodeJS.ProcessEnv,
     private readonly jarPath: string,
     /** 注入 shell.openExternal 以便测试。 */
-    private readonly openExternal: (url: string) => void
+    private readonly openExternal: (url: string) => void,
+    private readonly packaged?: { resourcesPath: string }
   ) {}
 
   static withDefaults(
@@ -129,7 +140,7 @@ export class GatewayManager {
   start(): void {
     if (this.daemon) return
     this.stopping = false
-    const { cmd, args } = resolveGatewayCommand(this.env, this.jarPath)
+    const { cmd, args } = resolveGatewayCommand(this.env, this.jarPath, this.packaged)
     this.setStatus({ state: 'starting' })
 
     let proc: ChildProcessWithoutNullStreams
@@ -191,7 +202,7 @@ export class GatewayManager {
   /** 一次性扫码绑定。spawn `... gateway bind`,解析 connect URL 打开浏览器,按输出报进度。 */
   bindStart(): void {
     if (this.bindProc) return
-    const { cmd, args } = resolveBindCommand(this.env, this.jarPath)
+    const { cmd, args } = resolveBindCommand(this.env, this.jarPath, this.packaged)
 
     let proc: ChildProcessWithoutNullStreams
     try {

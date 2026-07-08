@@ -4,3 +4,8 @@ dist
 playwright-report
 test-results
 .vite
+resources/
+
+# gen-icon 中间画布(仅本地瞄图,不入库)
+build/icon-master.png
+build/icon.iconset/

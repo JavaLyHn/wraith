@@ -1,0 +1,17 @@
+appId: com.lyhn.wraith
+productName: Wraith
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+mac:
+  target: [dmg, zip]
+  category: public.app-category.developer-tools
+  icon: build/icon.icns
+  identity: null   # ad-hoc / 不签名
+extraResources:
+  - from: resources/wraith.jar
+    to: wraith.jar
+  - from: resources/runtime
+    to: runtime

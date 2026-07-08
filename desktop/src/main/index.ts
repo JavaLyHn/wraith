@@ -155,7 +155,7 @@ function spawnBackend(): void {
     client = null
   }
 
-  const { cmd, args } = resolveBackendCommand(process.env, defaultJar)
+  const { cmd, args } = resolveBackendCommand(process.env, defaultJarPath(os.homedir()), app.isPackaged ? { resourcesPath: process.resourcesPath } : undefined)
 
   const proc = spawn(cmd, args, {
     stdio: ['pipe', 'pipe', 'pipe']
@@ -221,6 +221,8 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    // dev: show WR icon instead of Electron atom; packaged macOS: dock icon comes from .icns
+    icon: app.isPackaged ? undefined : path.join(__dirname, '../../build/icon-512.png'),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -801,11 +803,17 @@ app.whenReady().then(() => {
     sweepNonTerminalRuns(app.getPath('userData'))
   } catch { /* best-effort:清扫失败不阻塞启动 */ }
 
+  // dev: set WR dock icon to replace Electron atom (packaged macOS uses .icns)
+  if (process.platform === 'darwin' && app.dock && !app.isPackaged) {
+    try { app.dock.setIcon(path.join(__dirname, '../../build/icon-512.png')) } catch { /* ignore */ }
+  }
+
   gatewayManager = new GatewayManager(
     (evt) => pushGateway(evt),
     process.env,
     defaultJar,
-    (url) => { void shell.openExternal(url) }
+    (url) => { void shell.openExternal(url) },
+    app.isPackaged ? { resourcesPath: process.resourcesPath } : undefined
   )
 
   // 仅放行麦克风(媒体)权限,供语音听写用
