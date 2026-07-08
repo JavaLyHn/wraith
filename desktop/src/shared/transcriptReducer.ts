@@ -33,6 +33,8 @@ export interface PlanStepItem {
   description: string
   status: 'pending' | 'running' | 'done' | 'failed'
   result?: string
+  /** 步骤流式正文（plan.step.output delta 累积；默认折叠展示在步骤行下方）。 */
+  output?: string
 }
 
 /** 计划清单 item（plan.created / step.* 事件维护）。 */
@@ -370,6 +372,17 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
         ...state,
         items: [...state.items, { type: 'planReview', reviewId, planId, goal, steps, resolved: false }],
       }
+    }
+
+    case 'plan.step.output': {
+      // 步骤流式正文 delta — 追加到匹配步骤的 output 字段，默认折叠展示
+      const planId = typeof p['planId'] === 'string' ? p['planId'] : ''
+      const stepId = typeof p['stepId'] === 'string' ? p['stepId'] : ''
+      const text = typeof p['text'] === 'string' ? p['text'] : ''
+      return updatePlanStep(state, planId, stepId, st => ({
+        ...st,
+        output: (st.output ?? '') + text,
+      }))
     }
 
     // ── unknown → safe ignore ───────────────────────────────────────────────

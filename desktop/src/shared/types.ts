@@ -364,6 +364,9 @@ export interface PlanStepCompletedEvent { planId: string; stepId: string; ok: bo
 /** plan.review.requested 通知负载。 */
 export interface PlanReviewRequestedEvent { reviewId: string; planId: string; goal: string; steps: PlanStepView[] }
 
+/** plan.step.output 通知负载（步骤流式正文片段，嵌套在清单步骤行下方）。 */
+export interface PlanStepOutputEvent { planId: string; stepId: string; text: string }
+
 export interface AppInfo { version: string; repoUrl: string; dataDir: string }
 export interface UpdateResult {
   current: string

@@ -128,38 +128,43 @@ class EventStreamPlanListenerTest {
     // ---- planFinished ----
 
     @Test
-    void planFinished_emitsMessageEnd() throws Exception {
+    void planFinished_doesNotEmitMessageEnd() throws Exception {
+        // 步骤正文改走 plan.step.output；message.end 由 Main.java plan 路径在 runTurn 后统一发出，
+        // planFinished 不再负责 message.end。
         listener.planFinished("计划完成");
 
-        JsonNode params = findNotification("message.end");
-        assertNotNull(params, "planFinished 应发出 message.end 通知");
+        assertNull(findNotification("message.end"), "planFinished 不应再发 message.end（已改由 Main.java 收口）");
     }
 
     // ---- EventStreamStepListener（optional light test）----
 
     @Test
-    void stepListener_onContentDelta_emitsMessageDelta() throws Exception {
-        EventStreamStepListener stepListener = new EventStreamStepListener(renderer);
+    void stepListener_onContentDelta_emitsPlanStepOutput() throws Exception {
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
         stepListener.onContentDelta("hello");
 
-        JsonNode params = findNotification("message.delta");
-        assertNotNull(params, "onContentDelta 应发出 message.delta 通知");
+        JsonNode params = findNotification("plan.step.output");
+        assertNotNull(params, "onContentDelta 应发出 plan.step.output 通知");
         assertEquals("hello", params.path("text").asText());
+        assertEquals("plan_1", params.path("planId").asText());
+        assertEquals("t1", params.path("stepId").asText());
+        // 不再发 message.delta
+        assertNull(findNotification("message.delta"), "onContentDelta 不应发 message.delta");
     }
 
     @Test
     void stepListener_onContentDelta_skipsNullOrEmpty() throws Exception {
-        EventStreamStepListener stepListener = new EventStreamStepListener(renderer);
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
         stepListener.onContentDelta(null);
         stepListener.onContentDelta("");
 
-        // 无 message.delta 通知
-        assertNull(findNotification("message.delta"), "null/空 delta 不应发出通知");
+        // 无 plan.step.output 通知
+        assertNull(findNotification("plan.step.output"), "null/空 delta 不应发出通知");
     }
 
     @Test
     void stepListener_onReasoningDelta_emitsThinkingBeginThenDelta() throws Exception {
-        EventStreamStepListener stepListener = new EventStreamStepListener(renderer);
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
         stepListener.onReasoningDelta("思考片段");
 
         JsonNode beginParams = findNotification("thinking.begin");
@@ -173,7 +178,7 @@ class EventStreamPlanListenerTest {
 
     @Test
     void stepListener_onReasoningDelta_skipsBlank() throws Exception {
-        EventStreamStepListener stepListener = new EventStreamStepListener(renderer);
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
         stepListener.onReasoningDelta("   ");
         stepListener.onReasoningDelta(null);
 

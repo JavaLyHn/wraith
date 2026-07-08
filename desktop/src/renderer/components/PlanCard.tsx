@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { planStatusIcon, planStatusClass, type PlanStepStatus } from '../lib/planStatus'
 
-interface PlanStep { id: string; description: string; status: PlanStepStatus; result?: string }
+interface PlanStep { id: string; description: string; status: PlanStepStatus; result?: string; output?: string }
 interface PlanItem { type: 'plan'; planId: string; goal: string; steps: PlanStep[] }
 interface PlanReviewItem {
   type: 'planReview'
@@ -12,19 +12,44 @@ interface PlanReviewItem {
   resolved: boolean
 }
 
+/** 单个步骤行（含可折叠输出区）。 */
+function PlanStepRow({ s }: { s: PlanStep }): JSX.Element {
+  const [expanded, setExpanded] = useState(false)
+  const hasOutput = s.output && s.output.length > 0
+  return (
+    <li key={s.id} className="flex flex-col gap-0.5">
+      <div className="flex items-start gap-2">
+        <span className={`shrink-0 ${planStatusClass(s.status)}`}>{planStatusIcon(s.status)}</span>
+        <span className="flex-1 text-fg-muted">{s.description}</span>
+        {s.result && (
+          <span className="ml-1 truncate text-fg-subtle">{s.result}</span>
+        )}
+        {hasOutput && (
+          <button
+            className="ml-1 shrink-0 text-fg-subtle hover:text-fg-muted"
+            onClick={() => setExpanded(v => !v)}
+            aria-label={expanded ? '折叠输出' : '展开输出'}
+          >
+            {expanded ? '▼ 输出' : '▶ 输出'}
+          </button>
+        )}
+      </div>
+      {hasOutput && expanded && (
+        <div className="ml-5 mt-0.5 max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
+          <pre className="whitespace-pre-wrap break-words text-xs">{s.output}</pre>
+        </div>
+      )}
+    </li>
+  )
+}
+
 export function PlanChecklist({ item }: { item: PlanItem }): JSX.Element {
   return (
     <div className="my-1.5 rounded-lg border border-border bg-surface p-3 text-xs font-mono">
       <div className="mb-2 font-semibold text-accent">计划 · {item.goal}</div>
       <ul className="flex flex-col gap-1">
         {item.steps.map(s => (
-          <li key={s.id} className="flex items-start gap-2">
-            <span className={`shrink-0 ${planStatusClass(s.status)}`}>{planStatusIcon(s.status)}</span>
-            <span className="text-fg-muted">{s.description}</span>
-            {s.result && (
-              <span className="ml-1 truncate text-fg-subtle">{s.result}</span>
-            )}
-          </li>
+          <PlanStepRow key={s.id} s={s} />
         ))}
       </ul>
     </div>

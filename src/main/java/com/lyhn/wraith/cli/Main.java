@@ -1487,9 +1487,9 @@ public class Main {
                                         discard,
                                         new com.lyhn.wraith.runtime.appserver.EventStreamPlanListener(renderer, planId));
 
-                        // 步骤流 → message.delta（目标类型推断，StreamState 已 public）
+                        // 步骤流 → plan.step.output（嵌套在清单步骤行下，不浮动为独立 message）
                         planAgent.setStepStreamFactory(
-                                (id, ss) -> new com.lyhn.wraith.runtime.appserver.EventStreamStepListener(renderer));
+                                (id, ss) -> new com.lyhn.wraith.runtime.appserver.EventStreamStepListener(renderer, planId, id));
 
                         // 外部上下文（MCP 资源索引）
                         planAgent.setExternalContextSupplier(() -> {
@@ -1503,7 +1503,13 @@ public class Main {
 
                         // 快照封装（与 CLI plan 路径对齐）
                         com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
-                        return snap.runTurn("plan", goal, () -> planAgent.run(goal));
+                        String result = snap.runTurn("plan", goal, () -> planAgent.run(goal));
+                        // 计划汇总结果作为单条干净底部消息发出（各步正文已嵌套在清单行下）
+                        if (result != null && !result.isBlank()) {
+                            renderer.appendAssistantContentDelta(result);
+                            renderer.finishAssistantContent();
+                        }
+                        return result;
                     }
                 };
             }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
