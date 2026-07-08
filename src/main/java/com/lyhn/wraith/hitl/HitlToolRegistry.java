@@ -67,13 +67,13 @@ public class HitlToolRegistry extends ToolRegistry {
                     : "用户拒绝了此操作";
             getAuditLog().record(AuditLog.AuditEntry.denyByHitl(
                     name, argumentsJson, reason, elapsedMillis(start)));
-            return ToolOutput.text("[HITL] 操作已被拒绝：" + reason);
+            return ToolOutput.failure("[HITL] 操作已被拒绝：" + reason);
         }
 
         if (result.isSkipped()) {
             getAuditLog().record(AuditLog.AuditEntry.denyByHitl(
                     name, argumentsJson, "用户跳过", elapsedMillis(start)));
-            return ToolOutput.text("[HITL] 操作已被跳过");
+            return ToolOutput.failure("[HITL] 操作已被跳过");
         }
 
         // 批准（含修改参数）- 使用 effectiveArguments 获取最终参数；父类执行路径会负责 allow audit

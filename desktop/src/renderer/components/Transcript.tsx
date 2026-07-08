@@ -2,10 +2,12 @@ import { useEffect, useRef } from 'react'
 import type { Item } from '../../shared/transcriptReducer'
 import ThinkingBlock from './ThinkingBlock'
 import ToolCard from './ToolCard'
+import ToolGroup from './ToolGroup'
 import DiffCard from './DiffCard'
 import UserMessage from './UserMessage'
 import AgentMessage from './AgentMessage'
 import { PlanChecklist, PlanReviewCard } from './PlanCard'
+import { groupToolRuns } from '../lib/groupToolRuns'
 
 interface TranscriptProps {
   items: Item[]
@@ -48,12 +50,24 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
       data-testid="transcript"
       className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-4 [&>*]:shrink-0"
     >
-      {items.map((item, idx) => {
+      {groupToolRuns(items).map((node, nodeIdx) => {
+        // 工具组：单张卡片直接渲染（避免双层展开），≥2 张才用可折叠 ToolGroup
+        if (node.kind === 'toolGroup') {
+          // 用首张卡片的 callId 作为稳定 key（同一 run 内 callId 唯一）
+          const firstCallId = node.cards[0]?.callId ?? `toolgroup-${nodeIdx}`
+          if (node.cards.length === 1) {
+            return <ToolCard key={firstCallId} card={node.cards[0]} />
+          }
+          return <ToolGroup key={firstCallId} cards={node.cards} />
+        }
+
+        // 普通 item：按类型分发渲染；用 originalIdx 作 key，工具追加时不随分组位置偏移
+        const { item, originalIdx } = node
         if (item.type === 'user') {
           userOrdinal++
           return (
             <UserMessage
-              key={idx}
+              key={`user-${userOrdinal}`}
               text={item.text}
               ordinal={userOrdinal}
               isLastUser={userOrdinal === totalUsers}
@@ -65,16 +79,13 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
           )
         }
         if (item.type === 'message') {
-          return <AgentMessage key={idx} text={item.text} />
+          return <AgentMessage key={`msg-${originalIdx}`} text={item.text} />
         }
         if (item.type === 'thinking') {
-          return <ThinkingBlock key={idx} label={item.label} text={item.text} done={item.done} />
-        }
-        if (item.type === 'tool') {
-          return <ToolCard key={item.card.callId || idx} card={item.card} />
+          return <ThinkingBlock key={`think-${originalIdx}`} label={item.label} text={item.text} done={item.done} />
         }
         if (item.type === 'diff') {
-          return <DiffCard key={idx} filePath={item.filePath} before={item.before} after={item.after} />
+          return <DiffCard key={`diff-${originalIdx}`} filePath={item.filePath} before={item.before} after={item.after} />
         }
         if (item.type === 'plan') {
           return <PlanChecklist key={item.planId} item={item} />

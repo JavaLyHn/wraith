@@ -54,7 +54,7 @@ public final class EventStreamPlanListener implements PlanProgressListener {
 
     @Override
     public void planFinished(String finalResult) {
-        // 整个计划结束时关闭 message 流；由此处统一发 message.end，避免各步骤重复收口
-        renderer.finishAssistantContent();
+        // 步骤正文已改走 plan.step.output，无 message 流需要在此收口。
+        // 最终汇总结果由 Main.java plan 路径在 runTurn 返回后统一发 message.delta + message.end。
     }
 }

@@ -131,6 +131,54 @@ class PlanExecuteAgentTest {
     }
 
     @Test
+    void cleanResultStripsTerminalChromeWhileRunReturnKeepsIt() throws Exception {
+        Path sampleFile = Files.createFile(tempDir.resolve("clean.txt"));
+        Files.writeString(sampleFile, "clean-content");
+
+        StubGLMClient llmClient = new StubGLMClient(List.of(
+                new LlmClient.ChatResponse(
+                        "assistant",
+                        "",
+                        List.of(new LlmClient.ToolCall(
+                                "call_1",
+                                new LlmClient.ToolCall.Function(
+                                        "read_file",
+                                        "{\"path\":\"" + sampleFile.toString().replace("\\", "\\\\") + "\"}"
+                                )
+                        )),
+                        120,
+                        30
+                ),
+                new LlmClient.ChatResponse("assistant", "已读取并确认文件内容", null, 140, 40)
+        ));
+
+        MemoryManager memoryManager = new MemoryManager(
+                llmClient,
+                4096,
+                128000,
+                new LongTermMemory(tempDir.resolve("memory-clean").toFile())
+        );
+        ToolRegistry toolRegistry = new ToolRegistry();
+        toolRegistry.setProjectPath(tempDir.toString());
+        PlanExecuteAgent agent = new PlanExecuteAgent(
+                llmClient,
+                toolRegistry,
+                new StubPlanner(llmClient),
+                memoryManager,
+                (goal, plan) -> PlanExecuteAgent.PlanReviewDecision.execute()
+        );
+
+        String result = agent.run("请读取测试文件并确认内容");
+        String clean = agent.getLastCleanResult();
+
+        // run() 返回值保留终端 chrome（供 CLI 打印）
+        assertTrue(result.contains("✅ 计划执行完成！"), "run() 应含终端头: " + result);
+        assertTrue(result.contains("[task_1]"), "run() 应含任务标签: " + result);
+        // 桌面干净答案剥离所有 chrome，只剩纯答案
+        assertEquals("已读取并确认文件内容", clean);
+    }
+
+    @Test
     void shouldNotPrintEmptyTaskReasoningHeadingAndShouldUseOutputLabel() throws Exception {
         StubGLMClient llmClient = StubGLMClient.streaming(List.of(
                 StubResponse.scripted(

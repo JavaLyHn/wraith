@@ -128,38 +128,43 @@ class EventStreamPlanListenerTest {
     // ---- planFinished ----
 
     @Test
-    void planFinished_emitsMessageEnd() throws Exception {
+    void planFinished_doesNotEmitMessageEnd() throws Exception {
+        // 步骤正文改走 plan.step.output；message.end 由 Main.java plan 路径在 runTurn 后统一发出，
+        // planFinished 不再负责 message.end。
         listener.planFinished("计划完成");
 
-        JsonNode params = findNotification("message.end");
-        assertNotNull(params, "planFinished 应发出 message.end 通知");
+        assertNull(findNotification("message.end"), "planFinished 不应再发 message.end（已改由 Main.java 收口）");
     }
 
     // ---- EventStreamStepListener（optional light test）----
 
     @Test
-    void stepListener_onContentDelta_emitsMessageDelta() throws Exception {
-        EventStreamStepListener stepListener = new EventStreamStepListener(renderer);
+    void stepListener_onContentDelta_emitsPlanStepOutput() throws Exception {
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
         stepListener.onContentDelta("hello");
 
-        JsonNode params = findNotification("message.delta");
-        assertNotNull(params, "onContentDelta 应发出 message.delta 通知");
+        JsonNode params = findNotification("plan.step.output");
+        assertNotNull(params, "onContentDelta 应发出 plan.step.output 通知");
         assertEquals("hello", params.path("text").asText());
+        assertEquals("plan_1", params.path("planId").asText());
+        assertEquals("t1", params.path("stepId").asText());
+        // 不再发 message.delta
+        assertNull(findNotification("message.delta"), "onContentDelta 不应发 message.delta");
     }
 
     @Test
     void stepListener_onContentDelta_skipsNullOrEmpty() throws Exception {
-        EventStreamStepListener stepListener = new EventStreamStepListener(renderer);
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
         stepListener.onContentDelta(null);
         stepListener.onContentDelta("");
 
-        // 无 message.delta 通知
-        assertNull(findNotification("message.delta"), "null/空 delta 不应发出通知");
+        // 无 plan.step.output 通知
+        assertNull(findNotification("plan.step.output"), "null/空 delta 不应发出通知");
     }
 
     @Test
     void stepListener_onReasoningDelta_emitsThinkingBeginThenDelta() throws Exception {
-        EventStreamStepListener stepListener = new EventStreamStepListener(renderer);
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
         stepListener.onReasoningDelta("思考片段");
 
         JsonNode beginParams = findNotification("thinking.begin");
@@ -173,10 +178,39 @@ class EventStreamPlanListenerTest {
 
     @Test
     void stepListener_onReasoningDelta_skipsBlank() throws Exception {
-        EventStreamStepListener stepListener = new EventStreamStepListener(renderer);
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
         stepListener.onReasoningDelta("   ");
         stepListener.onReasoningDelta(null);
 
         assertNull(findNotification("thinking.begin"), "空白 reasoning delta 不应触发 thinking.begin");
+    }
+
+    @Test
+    void stepListener_contentAfterReasoning_emitsThinkingEnd() throws Exception {
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
+        stepListener.onReasoningDelta("思考片段");
+        stepListener.onContentDelta("正文");
+
+        assertNotNull(findNotification("thinking.end"),
+                "reasoning→content 过渡应收口思考块（thinking.end），否则前端停在「思考中」");
+    }
+
+    @Test
+    void stepListener_finishAfterReasoning_emitsThinkingEnd() throws Exception {
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
+        stepListener.onReasoningDelta("只思考不产出正文");
+        stepListener.finish();
+
+        assertNotNull(findNotification("thinking.end"),
+                "纯思考步骤在 finish() 时也应收口思考块（thinking.end）");
+    }
+
+    @Test
+    void stepListener_finishWithoutReasoning_noThinkingEnd() throws Exception {
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
+        stepListener.finish();
+
+        assertNull(findNotification("thinking.end"),
+                "未开过思考块的步骤 finish() 不应发 thinking.end");
     }
 }

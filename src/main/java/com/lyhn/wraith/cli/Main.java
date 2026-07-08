@@ -1487,9 +1487,9 @@ public class Main {
                                         discard,
                                         new com.lyhn.wraith.runtime.appserver.EventStreamPlanListener(renderer, planId));
 
-                        // 步骤流 → message.delta（目标类型推断，StreamState 已 public）
+                        // 步骤流 → plan.step.output（嵌套在清单步骤行下，不浮动为独立 message）
                         planAgent.setStepStreamFactory(
-                                (id, ss) -> new com.lyhn.wraith.runtime.appserver.EventStreamStepListener(renderer));
+                                (id, ss) -> new com.lyhn.wraith.runtime.appserver.EventStreamStepListener(renderer, planId, id));
 
                         // 外部上下文（MCP 资源索引）
                         planAgent.setExternalContextSupplier(() -> {
@@ -1503,7 +1503,15 @@ public class Main {
 
                         // 快照封装（与 CLI plan 路径对齐）
                         com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
-                        return snap.runTurn("plan", goal, () -> planAgent.run(goal));
+                        String result = snap.runTurn("plan", goal, () -> planAgent.run(goal));
+                        // 干净答案作为单条底部消息发出（无 "✅ 计划执行完成！" 头 / "[task_id]" 前缀；
+                        // 各步正文已嵌套在清单行下）。run() 返回值仍保留终端 chrome，仅供 CLI 使用。
+                        String cleanAnswer = planAgent.getLastCleanResult();
+                        if (cleanAnswer != null && !cleanAnswer.isBlank()) {
+                            renderer.appendAssistantContentDelta(cleanAnswer);
+                            renderer.finishAssistantContent();
+                        }
+                        return result;
                     }
                 };
             }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));

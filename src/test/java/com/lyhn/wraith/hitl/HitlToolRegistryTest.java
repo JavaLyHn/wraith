@@ -8,6 +8,7 @@ import com.lyhn.wraith.browser.BrowserGuard;
 import com.lyhn.wraith.browser.BrowserSession;
 import com.lyhn.wraith.browser.SensitivePagePolicy;
 import com.lyhn.wraith.mcp.protocol.McpToolDescriptor;
+import com.lyhn.wraith.tool.ToolOutput;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -87,6 +88,36 @@ class HitlToolRegistryTest {
         assertTrue(result.startsWith("[HITL]"), "结果应为 HITL 跳过消息: " + result);
         assertTrue(result.contains("跳过"));
         assertFalse(Files.exists(target));
+    }
+
+    // ---- ok=false 契约：拒绝/跳过路径的 ToolOutput.ok() 必须是 false ----
+
+    @Test
+    void rejectedDecisionReturnsFailureOutput(@TempDir Path tempDir) throws Exception {
+        Path target = tempDir.resolve("no-file.txt");
+        StubHandler stub = new StubHandler(req -> ApprovalResult.reject("deny-reason"));
+        HitlToolRegistry registry = new HitlToolRegistry(stub);
+
+        ToolOutput output = registry.executeToolOutput("write_file",
+                "{\"path\":\"" + target.toString().replace("\\", "\\\\") + "\",\"content\":\"x\"}");
+
+        assertFalse(output.ok(), "HITL 拒绝必须 ok=false，否则前端会显示绿色成功徽标");
+        assertTrue(output.text().startsWith("[HITL]"));
+        assertTrue(output.text().contains("deny-reason"));
+    }
+
+    @Test
+    void skippedDecisionReturnsFailureOutput(@TempDir Path tempDir) {
+        Path target = tempDir.resolve("no-file2.txt");
+        StubHandler stub = new StubHandler(req -> ApprovalResult.skip());
+        HitlToolRegistry registry = new HitlToolRegistry(stub);
+
+        ToolOutput output = registry.executeToolOutput("write_file",
+                "{\"path\":\"" + target.toString().replace("\\", "\\\\") + "\",\"content\":\"x\"}");
+
+        assertFalse(output.ok(), "HITL 跳过必须 ok=false，否则前端会显示绿色成功徽标");
+        assertTrue(output.text().startsWith("[HITL]"));
+        assertTrue(output.text().contains("跳过"));
     }
 
     @Test

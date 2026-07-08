@@ -175,6 +175,12 @@ public final class EventStreamRenderer implements Renderer {
         writer.notify("plan.step.completed", p);
     }
 
+    /** 计划步骤流式正文片段（嵌套在清单步骤行下方，不浮动为独立 message）。 */
+    public void emitPlanStepOutput(String planId, String stepId, String text) {
+        Map<String, Object> p = base(); p.put("planId", planId); p.put("stepId", stepId); p.put("text", text);
+        writer.notify("plan.step.output", p);
+    }
+
     // ---- 计划复审阻塞管道（镜像 promptApproval）----
 
     /**

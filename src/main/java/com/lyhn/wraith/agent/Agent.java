@@ -377,7 +377,15 @@ public class Agent {
             return;
         }
         if ("execute_command".equals(result.name())) {
-            return;
+            // HITL 拒绝/跳过 或 策略拦截时，CommandOutputObserver 从未触发，
+            // 必须在此补发 tool.result，否则桌面卡片永远停留 running。
+            // 仅当文本表明命令"未执行"时才继续向下走；正常执行路径仍跳过（避免双份）。
+            String t = result.result() == null ? "" : result.result();
+            boolean notExecuted = t.startsWith("[HITL]") || t.startsWith("🛡️ 策略拒绝");
+            if (!notExecuted) {
+                return;  // 正常执行：CommandOutputObserver 已流式输出+收尾，不重复发
+            }
+            // 跌落到下方通用路径，补发 ok=false 的 tool.result
         }
         String text = result.result() == null ? "" : result.result();
         boolean ok = result.ok();

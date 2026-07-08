@@ -134,6 +134,40 @@ describe('plan.created 幂等', () => {
 })
 
 // ---------------------------------------------------------------------------
+// Test 5-new: plan.step.output — 累积到正确步骤的 output 字段
+// ---------------------------------------------------------------------------
+describe('plan.step.output', () => {
+  it('delta 追加到匹配步骤的 output，累积两次', () => {
+    let s = transcriptReducer(initialTranscriptState(), {
+      type: 'plan.created', planId: 'p1', goal: '目标',
+      steps: [
+        { id: 't1', description: '步骤一', deps: [] },
+        { id: 't2', description: '步骤二', deps: ['t1'] },
+      ],
+    } as never)
+    s = transcriptReducer(s, { type: 'plan.step.output', planId: 'p1', stepId: 't1', text: '片段A' } as never)
+    s = transcriptReducer(s, { type: 'plan.step.output', planId: 'p1', stepId: 't1', text: '片段B' } as never)
+    expect(planStep(s, 't1').output).toBe('片段A片段B')
+    // t2 不受影响
+    expect(planStep(s, 't2').output).toBeUndefined()
+  })
+
+  it('不同 stepId 各自累积，不相互污染', () => {
+    let s = transcriptReducer(initialTranscriptState(), {
+      type: 'plan.created', planId: 'p1', goal: '目标',
+      steps: [
+        { id: 't1', description: '步骤一', deps: [] },
+        { id: 't2', description: '步骤二', deps: ['t1'] },
+      ],
+    } as never)
+    s = transcriptReducer(s, { type: 'plan.step.output', planId: 'p1', stepId: 't1', text: 'X' } as never)
+    s = transcriptReducer(s, { type: 'plan.step.output', planId: 'p1', stepId: 't2', text: 'Y' } as never)
+    expect(planStep(s, 't1').output).toBe('X')
+    expect(planStep(s, 't2').output).toBe('Y')
+  })
+})
+
+// ---------------------------------------------------------------------------
 // Test 5: markPlanReviewResolved — 翻 resolved:true
 // ---------------------------------------------------------------------------
 describe('markPlanReviewResolved', () => {

@@ -115,6 +115,12 @@ public class PlanExecuteAgent {
     private SkillRegistry skillRegistry;
     private SkillContextBuffer skillContextBuffer;
     private final PromptAssembler promptAssembler = PromptAssembler.createDefault();
+    /**
+     * 最近一次 run() 的「干净答案」——不含终端 chrome（无 "✅ 计划执行完成！" 头、无 "[task_id]" 前缀）。
+     * run() 的返回值供 CLI 终端打印（保留 chrome）；桌面通过 {@link #getLastCleanResult()} 取干净版发底部消息。
+     * null 表示尚未由成功路径显式赋值，run() 收尾时回落为返回串（取消/失败等本就是干净的用户消息）。
+     */
+    private String lastCleanResult;
 
     public PlanExecuteAgent(LlmClient llmClient) {
         this(llmClient, (goal, plan) -> PlanReviewDecision.execute());
@@ -242,6 +248,7 @@ public class PlanExecuteAgent {
         log.info("Plan run started: inputLength={}", userInput == null ? 0 : userInput.length());
         memoryManager.addUserMessage(userInput);
         StreamState streamState = new StreamState();
+        lastCleanResult = null; // 成功路径会赋干净答案；否则收尾回落为 result
         String result;
         try {
             if (CancellationContext.isCancelled()) {
@@ -263,9 +270,21 @@ public class PlanExecuteAgent {
             result = "❌ 执行失败: " + e.getMessage();
             memoryManager.addAssistantMessage(result);
         }
+        // 成功路径已赋干净答案；取消/失败/异常等路径的 result 本就是干净用户消息，回落即可
+        if (lastCleanResult == null) {
+            lastCleanResult = result == null ? "" : result;
+        }
         // 所有路径统一回调，含入口取消检查
         progressListener.planFinished(result == null ? "" : result);
         return result;
+    }
+
+    /**
+     * 最近一次 {@link #run(String)} 的干净答案（无 "✅ 计划执行完成！" 头、无 "[task_id]" 前缀）。
+     * 供桌面路径发底部消息用；run() 的返回值仍保留终端 chrome 供 CLI 打印。
+     */
+    public String getLastCleanResult() {
+        return lastCleanResult == null ? "" : lastCleanResult;
     }
 
 /**
@@ -359,19 +378,26 @@ public class PlanExecuteAgent {
             return "⚠️ 计划未能继续推进，存在未满足依赖的任务。";
         }
 
+        // 终端汇总带 [task_id] 标签；桌面干净答案去标签（失败累积文本本就干净）
         String planSummary = finalResult.isEmpty()
-                ? buildFinalResult(plan, streamedTaskOutputs)
+                ? buildFinalResult(plan, streamedTaskOutputs, true)
+                : finalResult.toString();
+        String cleanSummary = finalResult.isEmpty()
+                ? buildFinalResult(plan, streamedTaskOutputs, false)
                 : finalResult.toString();
 
         if (plan.hasFailed()) {
             plan.markFailed();
+            String head = "⚠️ 计划部分完成，有任务失败。";
+            lastCleanResult = cleanSummary.isBlank() ? head : head + "\n" + cleanSummary;
             if (planSummary.isBlank()) {
-                return "⚠️ 计划部分完成，有任务失败。";
+                return head;
             }
-            return "⚠️ 计划部分完成，有任务失败。\n" + planSummary;
+            return head + "\n" + planSummary;
         }
 
         plan.markCompleted();
+        lastCleanResult = cleanSummary; // 干净答案（无 chrome）；空串时桌面不发底部消息
         if (planSummary.isBlank()) {
             return "✅ 计划执行完成！";
         }
@@ -908,7 +934,11 @@ public class PlanExecuteAgent {
         return context.toString();
     }
 
-    private String buildFinalResult(ExecutionPlan plan, Map<String, Boolean> streamedTaskOutputs) {
+    /**
+     * 聚合叶子任务结果为最终汇总。
+     * @param labeled true 则每段带 "[task_id] " 前缀（终端可读）；false 则纯答案（桌面干净底部消息）。
+     */
+    private String buildFinalResult(ExecutionPlan plan, Map<String, Boolean> streamedTaskOutputs, boolean labeled) {
         StringBuilder result = new StringBuilder();
         List<Task> leafTasks = plan.getAllTasks().stream()
                 .filter(task -> task.getDependents().isEmpty())
@@ -922,9 +952,12 @@ public class PlanExecuteAgent {
                 continue;
             }
             if (!result.isEmpty()) {
-                result.append("\n");
+                result.append(labeled ? "\n" : "\n\n");
             }
-            result.append("[").append(task.getId()).append("] ").append(task.getResult());
+            if (labeled) {
+                result.append("[").append(task.getId()).append("] ");
+            }
+            result.append(task.getResult());
         }
 
         if (!result.isEmpty()) {
