@@ -1,3 +1,4 @@
+import path from 'path'
 import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import readline from 'readline'
 import { defaultJarPath } from './backend'
@@ -10,10 +11,12 @@ import type { GatewayBindPhase, GatewayEvent, GatewayStatus } from '../shared/ga
 /**
  * 常驻网关命令。默认 `java -jar ~/.wraith/wraith.jar gateway`;
  * 可用 WRAITH_GATEWAY_CMD 覆盖(空格分割,首 token 为 cmd)。
+ * 优先级:WRAITH_GATEWAY_CMD 覆写 > packaged(捆绑 java+jar)> dev(系统 java + defaultJar)。
  */
 export function resolveGatewayCommand(
   env: NodeJS.ProcessEnv,
-  defaultJar: string
+  defaultJar: string,
+  packaged?: { resourcesPath: string },
 ): { cmd: string; args: string[] } {
   const override = env['WRAITH_GATEWAY_CMD']
   if (override && override.trim().length > 0) {
@@ -21,15 +24,22 @@ export function resolveGatewayCommand(
     const [cmd, ...args] = tokens
     return { cmd: cmd!, args }
   }
+  if (packaged) {
+    return {
+      cmd: path.join(packaged.resourcesPath, 'runtime', 'bin', 'java'),
+      args: ['-jar', path.join(packaged.resourcesPath, 'wraith.jar'), 'gateway'],
+    }
+  }
   return { cmd: 'java', args: ['-jar', defaultJar, 'gateway'] }
 }
 
 /** 绑定命令 = 网关命令 + `bind`。 */
 export function resolveBindCommand(
   env: NodeJS.ProcessEnv,
-  defaultJar: string
+  defaultJar: string,
+  packaged?: { resourcesPath: string },
 ): { cmd: string; args: string[] } {
-  const g = resolveGatewayCommand(env, defaultJar)
+  const g = resolveGatewayCommand(env, defaultJar, packaged)
   return { cmd: g.cmd, args: [...g.args, 'bind'] }
 }
 

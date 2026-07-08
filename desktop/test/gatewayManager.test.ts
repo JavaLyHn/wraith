@@ -21,6 +21,18 @@ describe('resolveGatewayCommand', () => {
       args: ['gw'],
     })
   })
+  it('packaged → 捆绑 java + 捆绑 jar + gateway', () => {
+    expect(resolveGatewayCommand({}, '/j/wraith.jar', { resourcesPath: '/R' })).toEqual({
+      cmd: '/R/runtime/bin/java',
+      args: ['-jar', '/R/wraith.jar', 'gateway'],
+    })
+  })
+  it('env 覆写最高优先(即使 packaged 也让位)', () => {
+    expect(resolveGatewayCommand({ WRAITH_GATEWAY_CMD: 'bar x' }, '/j.jar', { resourcesPath: '/R' })).toEqual({
+      cmd: 'bar',
+      args: ['x'],
+    })
+  })
 })
 
 describe('resolveBindCommand', () => {
@@ -28,6 +40,12 @@ describe('resolveBindCommand', () => {
     expect(resolveBindCommand({}, '/j/wraith.jar')).toEqual({
       cmd: 'java',
       args: ['-jar', '/j/wraith.jar', 'gateway', 'bind'],
+    })
+  })
+  it('packaged → 捆绑 java + 捆绑 jar + gateway bind', () => {
+    expect(resolveBindCommand({}, '/j/wraith.jar', { resourcesPath: '/R' })).toEqual({
+      cmd: '/R/runtime/bin/java',
+      args: ['-jar', '/R/wraith.jar', 'gateway', 'bind'],
     })
   })
 })
