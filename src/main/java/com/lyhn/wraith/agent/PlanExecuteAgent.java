@@ -144,7 +144,7 @@ public class PlanExecuteAgent {
     }
 
     // 桌面注入进度监听器；其余装配同 6 参构造。
-    PlanExecuteAgent(LlmClient llmClient, ToolRegistry toolRegistry, Planner planner,
+    public PlanExecuteAgent(LlmClient llmClient, ToolRegistry toolRegistry, Planner planner,
                      MemoryManager memoryManager, PlanReviewHandler reviewHandler, PrintStream out,
                      PlanProgressListener progressListener) {
         this.llmClient = llmClient;
@@ -232,28 +232,30 @@ public class PlanExecuteAgent {
         log.info("Plan run started: inputLength={}", userInput == null ? 0 : userInput.length());
         memoryManager.addUserMessage(userInput);
         StreamState streamState = new StreamState();
+        String result;
         try {
             if (CancellationContext.isCancelled()) {
-                return "⏹️ 已取消当前计划执行。";
+                result = "⏹️ 已取消当前计划执行。";
+            } else {
+                PlanRunOutcome outcome = runWithPlan(userInput, streamState);
+                if (outcome.persistAssistantMessage() && outcome.result() != null && !outcome.result().isBlank()) {
+                    memoryManager.addAssistantMessage("[计划结果] " + outcome.result());
+                }
+                String finalOut = outcome.result();
+                if (streamState.hasStreamedOutput() && (finalOut == null || finalOut.isBlank())) {
+                    result = "";
+                } else {
+                    result = finalOut;
+                }
             }
-            PlanRunOutcome outcome = runWithPlan(userInput, streamState);
-            if (outcome.persistAssistantMessage() && outcome.result() != null && !outcome.result().isBlank()) {
-                memoryManager.addAssistantMessage("[计划结果] " + outcome.result());
-            }
-            // 成功路径：回调 planFinished
-            String finalOut = outcome.result();
-            progressListener.planFinished(finalOut == null ? "" : finalOut);
-            if (streamState.hasStreamedOutput() && (finalOut == null || finalOut.isBlank())) {
-                return "";
-            }
-            return finalOut;
         } catch (Exception e) {
             log.error("Plan run failed", e);
-            String errorMessage = "❌ 执行失败: " + e.getMessage();
-            memoryManager.addAssistantMessage(errorMessage);
-            progressListener.planFinished(errorMessage);
-            return errorMessage;
+            result = "❌ 执行失败: " + e.getMessage();
+            memoryManager.addAssistantMessage(result);
         }
+        // 所有路径统一回调，含入口取消检查
+        progressListener.planFinished(result == null ? "" : result);
+        return result;
     }
 
 /**
@@ -288,6 +290,7 @@ public class PlanExecuteAgent {
     private String executePlan(ExecutionPlan plan, StreamState streamState) throws IOException {
         log.info("Executing plan: goal='{}', taskCount={}", plan.getGoal(), plan.getAllTasks().size());
         out.println("🚀 开始执行计划...\n");
+        // 仅在复审通过（EXECUTE/空反馈）后由 reviewAndExecutePlan 调用此方法，此时计划已确认执行。
         progressListener.planCreated(plan);
 
         plan.markStarted();
