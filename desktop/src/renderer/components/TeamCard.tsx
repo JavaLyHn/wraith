@@ -100,8 +100,12 @@ function ReviewTag({ step }: { step: TeamStep }): JSX.Element | null {
 
 function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass: string }): JSX.Element {
   const [expanded, setExpanded] = useState(false)
-  const hasResult = typeof step.result === 'string' && step.result.length > 0
   const agentName = step.agent ?? ''
+
+  // running 时优先展示流式 output（自动展开）；done 时展示 result（手动折叠）
+  const isRunning = step.status === 'running'
+  const hasLiveOutput = isRunning && typeof step.output === 'string' && step.output.length > 0
+  const hasResult = !isRunning && typeof step.result === 'string' && step.result.length > 0
 
   return (
     <li className="flex flex-col gap-0.5">
@@ -122,7 +126,7 @@ function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass:
         <span className="min-w-0 flex-1 break-words text-fg-muted">{step.description}</span>
         {/* Review verdict */}
         <ReviewTag step={step} />
-        {/* Expand toggle */}
+        {/* Expand toggle — 仅 done 且有 result 时显示 */}
         {hasResult && (
           <button
             className="ml-1 shrink-0 text-fg-subtle hover:text-fg-muted"
@@ -133,6 +137,13 @@ function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass:
           </button>
         )}
       </div>
+      {/* running 步骤：流式 output 自动展开 */}
+      {hasLiveOutput && (
+        <div className="ml-5 mt-0.5 max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
+          <pre className="whitespace-pre-wrap break-words text-xs">{step.output}</pre>
+        </div>
+      )}
+      {/* done 步骤：result 可折叠 */}
       {hasResult && expanded && (
         <div className="ml-5 mt-0.5 max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
           <pre className="whitespace-pre-wrap break-words text-xs">{step.result}</pre>
@@ -232,7 +243,17 @@ export function TeamCard({ item }: { item: TeamItem }): JSX.Element {
         </div>
       </div>
 
-      {/* Planning row */}
+      {/* Planner streaming area — 仅在 steps 尚未到达时显示实时规划输出 */}
+      {item.steps.length === 0 && item.plannerOutput && item.plannerOutput.length > 0 && (
+        <div className="mb-2">
+          <div className="mb-0.5 text-blue-400">🧭 规划中…</div>
+          <div className="max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
+            <pre className="whitespace-pre-wrap break-words text-xs">{item.plannerOutput}</pre>
+          </div>
+        </div>
+      )}
+
+      {/* Planning row — steps 到达后显示，取代实时规划区 */}
       {item.steps.length > 0 && (
         <div className="mb-2 text-fg-muted">
           🧭 拆解为 {item.steps.length} 步
