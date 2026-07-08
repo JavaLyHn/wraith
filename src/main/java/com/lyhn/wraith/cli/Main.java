@@ -1475,6 +1475,10 @@ public class Main {
                             orchestrator.setProgressListener(
                                     new com.lyhn.wraith.runtime.appserver.EventStreamTeamListener(renderer, teamId));
 
+                            // 流式转发：planner 和各步骤的 LLM delta → team.plan.output / team.step.output
+                            orchestrator.setStepStreamFactory((kind, id) ->
+                                    new com.lyhn.wraith.runtime.appserver.EventStreamTeamStreamListener(renderer, teamId, kind, id));
+
                             // 外部上下文（MCP 资源索引，与 CLI team 路径一致）
                             orchestrator.setExternalContextSupplier(() -> {
                                 com.lyhn.wraith.mcp.McpServerManager mgr = appServerMcp.manager();

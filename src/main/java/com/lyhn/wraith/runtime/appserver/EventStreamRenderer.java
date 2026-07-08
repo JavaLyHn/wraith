@@ -251,4 +251,16 @@ public final class EventStreamRenderer implements Renderer {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("status", status);
         writer.notify("team.finished", p);
     }
+
+    /** Planner LLM 流式正文片段（嵌套在 TeamCard 计划行下，不浮动为独立 message）。 */
+    public void emitTeamPlanOutput(String teamId, String text) {
+        Map<String, Object> p = base(); p.put("teamId", teamId); p.put("text", text);
+        writer.notify("team.plan.output", p);
+    }
+
+    /** 协作步骤 LLM 流式正文片段（嵌套在 TeamCard 步骤行下，不浮动为独立 message）。 */
+    public void emitTeamStepOutput(String teamId, String stepId, String text) {
+        Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId); p.put("text", text);
+        writer.notify("team.step.output", p);
+    }
 }

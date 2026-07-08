@@ -237,4 +237,89 @@ class EventStreamTeamListenerTest {
         assertEquals("sess-t2", params.path("sessionId").asText(), "sessionId 应在 params 中");
         assertEquals("turn-t2", params.path("turnId").asText(), "turnId 应在 params 中");
     }
+
+    // ---- Task 3: EventStreamTeamStreamListener ----
+
+    @Test
+    void plannerKind_emitsTeamPlanOutput() throws Exception {
+        EventStreamTeamStreamListener streamListener =
+                new EventStreamTeamStreamListener(renderer, "team_1", "planner", "");
+        streamListener.onContentDelta("hello planner");
+
+        JsonNode params = findNotification("team.plan.output");
+        assertNotNull(params, "planner kind 应发出 team.plan.output 通知");
+        assertEquals("team_1", params.path("teamId").asText());
+        assertEquals("hello planner", params.path("text").asText());
+    }
+
+    @Test
+    void stepKind_emitsTeamStepOutput() throws Exception {
+        EventStreamTeamStreamListener streamListener =
+                new EventStreamTeamStreamListener(renderer, "team_1", "executor", "step_42");
+        streamListener.onContentDelta("step delta text");
+
+        JsonNode params = findNotification("team.step.output");
+        assertNotNull(params, "非 planner kind 应发出 team.step.output 通知");
+        assertEquals("team_1", params.path("teamId").asText());
+        assertEquals("step_42", params.path("stepId").asText());
+        assertEquals("step delta text", params.path("text").asText());
+    }
+
+    @Test
+    void nullOrEmptyDelta_doesNotEmit() throws Exception {
+        EventStreamTeamStreamListener streamListener =
+                new EventStreamTeamStreamListener(renderer, "team_1", "planner", "");
+        streamListener.onContentDelta(null);
+        streamListener.onContentDelta("");
+
+        // 没有发出 team.plan.output
+        assertNull(findNotification("team.plan.output"), "null/empty delta 不应发出通知");
+    }
+
+    @Test
+    void reasoningDelta_routedAsPlanOutput_forPlanner() throws Exception {
+        EventStreamTeamStreamListener streamListener =
+                new EventStreamTeamStreamListener(renderer, "team_1", "planner", "");
+        streamListener.onReasoningDelta("reasoning text");
+
+        JsonNode params = findNotification("team.plan.output");
+        assertNotNull(params, "planner reasoning delta 应路由到 team.plan.output");
+        assertEquals("reasoning text", params.path("text").asText());
+    }
+
+    @Test
+    void reasoningDelta_routedAsStepOutput_forStep() throws Exception {
+        EventStreamTeamStreamListener streamListener =
+                new EventStreamTeamStreamListener(renderer, "team_1", "executor", "step_7");
+        streamListener.onReasoningDelta("step reasoning");
+
+        JsonNode params = findNotification("team.step.output");
+        assertNotNull(params, "步骤 reasoning delta 应路由到 team.step.output");
+        assertEquals("step_7", params.path("stepId").asText());
+        assertEquals("step reasoning", params.path("text").asText());
+    }
+
+    @Test
+    void planOutput_containsSessionIdAndTurnId() throws Exception {
+        EventStreamTeamStreamListener streamListener =
+                new EventStreamTeamStreamListener(renderer, "team_1", "planner", "");
+        streamListener.onContentDelta("content");
+
+        JsonNode params = findNotification("team.plan.output");
+        assertNotNull(params);
+        assertEquals("sess-t2", params.path("sessionId").asText());
+        assertEquals("turn-t2", params.path("turnId").asText());
+    }
+
+    @Test
+    void stepOutput_containsSessionIdAndTurnId() throws Exception {
+        EventStreamTeamStreamListener streamListener =
+                new EventStreamTeamStreamListener(renderer, "team_1", "executor", "s1");
+        streamListener.onContentDelta("content");
+
+        JsonNode params = findNotification("team.step.output");
+        assertNotNull(params);
+        assertEquals("sess-t2", params.path("sessionId").asText());
+        assertEquals("turn-t2", params.path("turnId").asText());
+    }
 }
