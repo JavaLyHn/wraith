@@ -17,7 +17,7 @@ function PlanStepRow({ s }: { s: PlanStep }): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const hasOutput = s.output && s.output.length > 0
   return (
-    <li key={s.id} className="flex flex-col gap-0.5">
+    <li className="flex flex-col gap-0.5">
       <div className="flex items-start gap-2">
         <span className={`shrink-0 ${planStatusClass(s.status)}`}>{planStatusIcon(s.status)}</span>
         <span className="flex-1 text-fg-muted">{s.description}</span>

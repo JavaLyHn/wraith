@@ -2,7 +2,16 @@ package com.lyhn.wraith.runtime.appserver;
 
 import com.lyhn.wraith.llm.LlmClient;
 
-/** 把 Plan 步骤的流式正文导向 plan.step.output / thinking.*（桌面 sink）。 */
+/**
+ * 把 Plan 步骤的流式正文导向 plan.step.output / thinking.*（桌面 sink）。
+ *
+ * <p>不变式：本监听器<b>故意不持有 StreamState、不调用 markStreamed()</b>。
+ * 步骤正文走 plan.step.output（而非 message.delta），因此
+ * {@code streamState.hasStreamedOutput()} 保持 false，
+ * {@code PlanExecuteAgent.run()} 才会返回真实汇总串而非 ""（Main.java plan 路径
+ * 据此发出唯一一条底部 message）。若日后在此触碰 streamState.markStreamed()，
+ * 该不变式会被静默破坏。
+ */
 public final class EventStreamStepListener implements LlmClient.StreamListener {
     private final EventStreamRenderer renderer;
     private final String planId;
