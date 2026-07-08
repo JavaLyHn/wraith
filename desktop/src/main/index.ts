@@ -261,7 +261,7 @@ ipcMain.handle('wraith:startSession', async (_e, workspaceDir: string | null) =>
   return r
 })
 
-ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { path: string; kind: string }[], mode?: 'react' | 'plan') => {
+ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { path: string; kind: string }[], mode?: 'react' | 'plan' | 'team') => {
   if (!client) throw new Error('Backend not connected')
   // T11 硬化:进入早窗(submit 在途、尚未 resolve)前清零 currentTurnId,
   // 使此窗口内的 turn.interrupt 发送 null 而非陈旧的上一 turn id。

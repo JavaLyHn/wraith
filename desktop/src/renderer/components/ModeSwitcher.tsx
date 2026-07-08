@@ -18,7 +18,7 @@ interface ModeDef {
   desc: string
 }
 
-// 可选模式(Team 待 Spec 2 再加一行)。icon 用 emoji,与工具条其余 chip 的风格一致。
+// 可选模式(react / plan / team)。icon 用 emoji,与工具条其余 chip 的风格一致。
 const MODES: ModeDef[] = [
   { id: 'react', icon: '⚡', label: 'ReAct', desc: '边想边做 · 单 Agent 推理与工具调用的即时循环' },
   { id: 'plan', icon: '📋', label: 'Plan', desc: '先规划后执行 · 生成计划、复审,逐步推进' },
