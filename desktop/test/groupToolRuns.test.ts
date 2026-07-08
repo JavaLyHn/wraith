@@ -57,12 +57,13 @@ describe('groupToolRuns', () => {
     }
   })
 
-  it('非工具 item→透传为 RenderItem', () => {
+  it('非工具 item→透传为 RenderItem，originalIdx 为原始数组下标', () => {
     const nodes = groupToolRuns([mkMsg('hello')])
     expect(nodes).toHaveLength(1)
     expect(nodes[0].kind).toBe('item')
     if (nodes[0].kind === 'item') {
       expect(nodes[0].item).toEqual(mkMsg('hello'))
+      expect(nodes[0].originalIdx).toBe(0)
     }
   })
 
@@ -81,9 +82,10 @@ describe('groupToolRuns', () => {
   it('顺序保留：message, tool, tool, message, tool', () => {
     const items: Item[] = [mkMsg('intro'), mkTool('a'), mkTool('b'), mkMsg('middle'), mkTool('c')]
     const nodes = groupToolRuns(items)
-    // [item, toolGroup(a,b), item, toolGroup(c)]
+    // [item(0), toolGroup(a,b), item(3), toolGroup(c)]
     expect(nodes).toHaveLength(4)
     expect(nodes[0].kind).toBe('item')
+    if (nodes[0].kind === 'item') expect(nodes[0].originalIdx).toBe(0)
     expect(nodes[1].kind).toBe('toolGroup')
     if (nodes[1].kind === 'toolGroup') {
       expect(nodes[1].cards).toHaveLength(2)
@@ -91,6 +93,7 @@ describe('groupToolRuns', () => {
       expect(nodes[1].cards[1].callId).toBe('b')
     }
     expect(nodes[2].kind).toBe('item')
+    if (nodes[2].kind === 'item') expect(nodes[2].originalIdx).toBe(3)
     expect(nodes[3].kind).toBe('toolGroup')
     if (nodes[3].kind === 'toolGroup') {
       expect(nodes[3].cards[0].callId).toBe('c')

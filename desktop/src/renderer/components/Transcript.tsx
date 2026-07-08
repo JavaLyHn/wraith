@@ -51,15 +51,18 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
       className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-4 [&>*]:shrink-0"
     >
       {groupToolRuns(items).map((node, nodeIdx) => {
-        // 工具组：将连续工具卡片渲染为可折叠「工作过程」区块
+        // 工具组：单张卡片直接渲染（避免双层展开），≥2 张才用可折叠 ToolGroup
         if (node.kind === 'toolGroup') {
           // 用首张卡片的 callId 作为稳定 key（同一 run 内 callId 唯一）
-          const groupKey = node.cards[0]?.callId ?? `toolgroup-${nodeIdx}`
-          return <ToolGroup key={groupKey} cards={node.cards} />
+          const firstCallId = node.cards[0]?.callId ?? `toolgroup-${nodeIdx}`
+          if (node.cards.length === 1) {
+            return <ToolCard key={firstCallId} card={node.cards[0]} />
+          }
+          return <ToolGroup key={firstCallId} cards={node.cards} />
         }
 
-        // 普通 item：按类型分发渲染（与原逻辑完全一致）
-        const item = node.item
+        // 普通 item：按类型分发渲染；用 originalIdx 作 key，工具追加时不随分组位置偏移
+        const { item, originalIdx } = node
         if (item.type === 'user') {
           userOrdinal++
           return (
@@ -76,13 +79,13 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
           )
         }
         if (item.type === 'message') {
-          return <AgentMessage key={`msg-${nodeIdx}`} text={item.text} />
+          return <AgentMessage key={`msg-${originalIdx}`} text={item.text} />
         }
         if (item.type === 'thinking') {
-          return <ThinkingBlock key={`think-${nodeIdx}`} label={item.label} text={item.text} done={item.done} />
+          return <ThinkingBlock key={`think-${originalIdx}`} label={item.label} text={item.text} done={item.done} />
         }
         if (item.type === 'diff') {
-          return <DiffCard key={`diff-${nodeIdx}`} filePath={item.filePath} before={item.before} after={item.after} />
+          return <DiffCard key={`diff-${originalIdx}`} filePath={item.filePath} before={item.before} after={item.after} />
         }
         if (item.type === 'plan') {
           return <PlanChecklist key={item.planId} item={item} />

@@ -4,10 +4,12 @@ import type { Item, ToolCard } from '../../shared/transcriptReducer'
 // RenderNode — transcript 渲染节点联合类型
 // ---------------------------------------------------------------------------
 
-/** 单个非工具 item，直接透传渲染。 */
+/** 单个非工具 item，直接透传渲染。originalIdx 为该 item 在原始数组中的索引，用于稳定 key。 */
 export interface RenderItem {
   kind: 'item'
   item: Item
+  /** 该 item 在原始 items 数组中的位置，工具追加时不随分组偏移而变化。 */
+  originalIdx: number
 }
 
 /**
@@ -48,7 +50,7 @@ export function groupToolRuns(items: Item[]): RenderNode[] {
       }
       result.push({ kind: 'toolGroup', cards })
     } else {
-      result.push({ kind: 'item', item })
+      result.push({ kind: 'item', item, originalIdx: i })
       i++
     }
   }
