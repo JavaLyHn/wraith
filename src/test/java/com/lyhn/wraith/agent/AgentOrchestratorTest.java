@@ -115,6 +115,27 @@ class AgentOrchestratorTest {
     }
 
     @Test
+    void shouldParsePlanWithNaturalLanguagePreamble() {
+        // planner 有时在 JSON 前后带自然语言(如「好的，计划如下：」),parsePlan 需能剥离
+        AgentOrchestrator orchestrator = new AgentOrchestrator(new GLMClient("test-key"));
+        String planJson = """
+                好的，我来为你制定执行计划，计划如下：
+                {
+                    "summary": "分析",
+                    "steps": [
+                        { "id": "t1", "description": "读取项目结构", "type": "COMMAND", "dependencies": [] }
+                    ]
+                }
+                希望这个计划对你有帮助！
+                """;
+
+        List<AgentOrchestrator.ExecutionStep> steps = orchestrator.parsePlan(planJson);
+        assertEquals(1, steps.size());
+        assertEquals("step_1", steps.get(0).id());
+        assertEquals("读取项目结构", steps.get(0).description());
+    }
+
+    @Test
     void shouldParsePlanWithTasksField() {
         // 兼容 "tasks" 字段（Plan-and-Execute 的格式）
         AgentOrchestrator orchestrator = new AgentOrchestrator(new GLMClient("test-key"));

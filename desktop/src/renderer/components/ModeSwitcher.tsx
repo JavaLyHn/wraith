@@ -27,7 +27,7 @@ const MODES: ModeDef[] = [
 
 /**
  * 执行模式下拉选择器(替代分段按钮)。
- * 触发器显示当前模式(图标 + 名称 + ⌄);展开后每行 = 图标 + 名称 + 描述,
+ * 触发器显示当前模式(图标 + 名称);展开后每行 = 图标 + 名称 + 描述,
  * 当前项打勾。逐条语义:选择只改父级 pendingMode,发送后父级复位。
  */
 export default function ModeSwitcher({ mode, onModeChange, running = false }: ModeSwitcherProps): JSX.Element {
@@ -50,7 +50,6 @@ export default function ModeSwitcher({ mode, onModeChange, running = false }: Mo
         >
           <span>{current.icon}</span>
           <span>{current.label}</span>
-          <span className="text-fg-subtle">⌄</span>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64">

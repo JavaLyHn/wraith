@@ -146,6 +146,7 @@ public class AgentOrchestrator {
             new TeamProgressListener.AgentInfo("worker-2", "worker"),
             new TeamProgressListener.AgentInfo("reviewer", "reviewer")));
         if (CancellationContext.isCancelled()) {
+            progressListener.finished("failed");
             return "⏹️ 已取消当前多 Agent 任务。";
         }
 
@@ -158,19 +159,23 @@ public class AgentOrchestrator {
         AgentMessage planResult = planner.execute(planMessage, out);
         planner.clearHistory();
         if (CancellationContext.isCancelled()) {
+            progressListener.finished("failed");
             return "⏹️ 已取消当前多 Agent 任务。";
         }
 
         if (planResult.type() == AgentMessage.Type.ERROR) {
+            progressListener.finished("failed");
             return "❌ 规划阶段失败，规划者 LLM 调用出错：" + planResult.content();
         }
         if (planResult.content() == null || planResult.content().isBlank()) {
+            progressListener.finished("failed");
             return "❌ 规划失败：规划者未能生成有效计划";
         }
 
         // 2. 解析计划
         List<ExecutionStep> steps = parsePlan(planResult.content());
         if (steps.isEmpty()) {
+            progressListener.finished("failed");
             return "❌ 规划失败：无法解析执行计划\n原始输出:\n" + planResult.content();
         }
         progressListener.planParsed(steps.stream()
@@ -188,6 +193,7 @@ public class AgentOrchestrator {
 
         while (true) {
             if (CancellationContext.isCancelled()) {
+                progressListener.finished("failed");
                 return "⏹️ 已取消当前多 Agent 任务。";
             }
             List<ExecutionStep> executable = getExecutableSteps(steps);
@@ -240,6 +246,14 @@ public class AgentOrchestrator {
             String cleaned = planJson.replaceAll("```json\\s*", "")
                     .replaceAll("```\\s*", "")
                     .trim();
+
+            // 剥离 JSON 前后的自然语言(planner 有时输出「好的，计划如下：{...}」这类前言),
+            // 取第一个 { 到最后一个 } 之间的子串;取不到则原样交给 readTree 抛错。
+            int lb = cleaned.indexOf('{');
+            int rb = cleaned.lastIndexOf('}');
+            if (lb >= 0 && rb > lb) {
+                cleaned = cleaned.substring(lb, rb + 1);
+            }
 
             JsonNode root = mapper.readTree(cleaned);
             JsonNode stepsNode = root.path("steps");
