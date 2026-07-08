@@ -32,6 +32,13 @@ public final class AppServer {
                                java.util.List<String> imageNames) throws Exception {
             return runTurn(input);
         }
+        /** 带执行模式的重载(react|plan);默认忽略 mode,退化到带图重载。桌面覆写以支持 plan。 */
+        default String runTurn(String input,
+                               java.util.List<com.lyhn.wraith.llm.LlmClient.ContentPart> imageParts,
+                               java.util.List<String> imageNames,
+                               String mode) throws Exception {
+            return runTurn(input, imageParts, imageNames);
+        }
         /** 切换审批模式。auto=true → 关闭 HITL（自动放行）。默认 no-op，旧实现无需改动。 */
         default void setApprovalMode(boolean auto) { }
         /** 本项目历史会话(最近在前)。默认空。 */
@@ -530,6 +537,8 @@ public final class AppServer {
         }
         JsonNode params = msg.params();
         String input = (params != null && params.hasNonNull("input")) ? params.get("input").asText() : "";
+        // 读取执行模式(react|plan),缺省 react
+        String mode = (params != null && params.hasNonNull("mode")) ? params.get("mode").asText("react") : "react";
 
         // 附件解析与校验（失败走 started→turn.failed 时序，不发 LLM）
         TurnAttachments.Resolved att;
@@ -549,9 +558,10 @@ public final class AppServer {
         writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
         writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
         final TurnAttachments.Resolved attFinal = att;
+        final String modeFinal = mode;
         Thread t = new Thread(() -> {
             try {
-                session.runTurn(effectiveInput, attFinal.imageParts(), attFinal.imageNames());
+                session.runTurn(effectiveInput, attFinal.imageParts(), attFinal.imageNames(), modeFinal);
                 String persisted = session.persistTurn();
                 String reported = (persisted != null) ? persisted : sessionId;
                 if (persisted != null) sessionId = persisted;
