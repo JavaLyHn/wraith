@@ -13,8 +13,9 @@ class SttClientTest {
     @Test void missingTextThrows() {
         assertThrows(IllegalStateException.class, () -> SttClient.parseTranscription("{\"foo\":1}"));
     }
-    @Test void emptyTextThrows() {
-        assertThrows(IllegalStateException.class, () -> SttClient.parseTranscription("{\"text\":\"   \"}"));
+    @Test void emptyTextReturnsEmpty() {
+        assertEquals("", SttClient.parseTranscription("{\"text\":\"   \"}"));
+        assertEquals("", SttClient.parseTranscription("{\"text\":\"\"}"));
     }
     @Test void malformedJsonThrows() {
         assertThrows(IllegalStateException.class, () -> SttClient.parseTranscription("not json"));

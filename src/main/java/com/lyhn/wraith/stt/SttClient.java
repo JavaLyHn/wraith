@@ -18,7 +18,7 @@ public final class SttClient {
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15)).build();
 
-    /** 取响应 JSON 的 text 字段(trim);缺字段/空/畸形 → IllegalStateException。 */
+    /** 取响应 JSON 的 text 字段(trim);缺字段/畸形 → IllegalStateException;空/空白 → 返回 ""。 */
     public static String parseTranscription(String json) {
         JsonNode n;
         try {
@@ -28,9 +28,7 @@ public final class SttClient {
         }
         JsonNode t = n == null ? null : n.get("text");
         if (t == null || t.isNull()) throw new IllegalStateException("转写响应无 text 字段");
-        String s = t.asText().trim();
-        if (s.isEmpty()) throw new IllegalStateException("转写结果为空");
-        return s;
+        return t.asText().trim();  // 空/空白 → "";由调用方决定忽略,不当错误
     }
 
     /** 录音字节 → 转写文本。 */
