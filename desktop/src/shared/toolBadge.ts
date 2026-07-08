@@ -1,13 +1,15 @@
 import type { ToolCard } from './transcriptReducer'
 
-/**
- * 工具卡片徽标文案 — 纯 TS。
- * 成功一律 ✓ 完成(execute_command 也不显误导性的 "exit 0",退出码在输出正文里已可见);
- * execute_command 失败时保留非零退出码 exit N(有诊断价值);其它工具失败 ✗ 失败。
- */
+const FAIL_RE = /^(工具执行失败|🛡️ 策略拒绝|工具执行超时)/
+
+/** 卡片是否失败:显式 ok===false,或输出以失败标记开头(与正文一致,兜底 ok 信号缺失)。 */
+export function toolCardFailed(card: ToolCard): boolean {
+  return card.ok === false || FAIL_RE.test((card.output ?? '').trimStart())
+}
+
 export function toolBadgeLabel(card: ToolCard): string {
   if (!card.done) return 'running…'
-  const failed = card.ok === false
+  const failed = toolCardFailed(card)
   if (card.name === 'execute_command' && failed) {
     return `exit ${card.exitCode ?? 1}`
   }

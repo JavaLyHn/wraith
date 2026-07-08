@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Logo from './Logo'
+import { stripDsml } from '../lib/toolContent'
 
 /** Agent 消息 markdown 正文的自定义渲染:表格外包横向滚动容器、链接走系统浏览器。 */
 const MARKDOWN_COMPONENTS: Components = {
@@ -33,7 +34,7 @@ export default function AgentMessage({ text }: { text: string }): JSX.Element {
         <div className="mb-0.5 text-2xs font-semibold text-fg-muted">Wraith</div>
         <div className="agent-markdown text-sm leading-7 text-fg">
           <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
-            {text}
+            {stripDsml(text)}
           </ReactMarkdown>
         </div>
       </div>

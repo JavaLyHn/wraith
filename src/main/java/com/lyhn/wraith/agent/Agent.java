@@ -380,7 +380,7 @@ public class Agent {
             return;
         }
         String text = result.result() == null ? "" : result.result();
-        boolean ok = !result.timedOut() && !text.startsWith("工具执行失败:");
+        boolean ok = result.ok();
         if (text.length() > MAX_TOOL_CARD_RESULT_CHARS) {
             text = text.substring(0, MAX_TOOL_CARD_RESULT_CHARS) + "\n…(已截断)";
         }

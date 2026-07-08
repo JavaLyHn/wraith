@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import type { ToolCard as ToolCardType } from '../../shared/transcriptReducer'
-import { toolBadgeLabel } from '../../shared/toolBadge'
+import { toolBadgeLabel, toolCardFailed } from '../../shared/toolBadge'
 import { toolCardDefaultExpanded } from '../lib/toolCardExpand'
+import { prettyArgs } from '../lib/toolContent'
 
 interface ToolCardProps {
   card: ToolCardType
@@ -11,11 +12,11 @@ export default function ToolCard({ card }: ToolCardProps): JSX.Element {
   const [userToggled, setUserToggled] = useState<boolean | null>(null)
   const expanded = userToggled ?? toolCardDefaultExpanded(card)
 
-  const badgeClass = card.done
-    ? card.ok === false
+  const badgeClass = !card.done
+    ? 'bg-accent/15 text-accent'
+    : toolCardFailed(card)
       ? 'bg-danger text-white'
       : 'bg-ok text-white'
-    : 'bg-accent/15 text-accent'
 
   return (
     <div
@@ -42,12 +43,19 @@ export default function ToolCard({ card }: ToolCardProps): JSX.Element {
         </span>
       </button>
       {expanded && (
-        <pre
-          data-testid="tool-output"
-          className="m-0 max-h-60 overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 text-xs leading-relaxed text-fg-muted"
-        >
-          {card.output || ' '}
-        </pre>
+        <div className="border-t border-border">
+          {card.argsJson.trim() && (
+            <pre data-testid="tool-args" className="m-0 max-h-40 overflow-y-auto whitespace-pre-wrap break-words border-b border-border/50 px-3 py-2 text-2xs leading-relaxed text-fg-subtle">
+              {prettyArgs(card.argsJson)}
+            </pre>
+          )}
+          <pre
+            data-testid="tool-output"
+            className="m-0 max-h-60 overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 text-xs leading-relaxed text-fg-muted"
+          >
+            {card.output || ' '}
+          </pre>
+        </div>
       )}
     </div>
   )
