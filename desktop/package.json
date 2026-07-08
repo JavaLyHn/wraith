@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "e2e": "npm run build && playwright test",
-    "gen:icon": "node scripts/gen-icon.mjs"
+    "gen:icon": "node scripts/gen-icon.mjs",
+    "gen:jre": "node scripts/gen-jre.mjs",
+    "prepare:resources": "node scripts/prepare-resources.mjs"
   },
   "dependencies": {
     "@lobehub/icons": "~5.10.1",
