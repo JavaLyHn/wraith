@@ -107,6 +107,8 @@ public class PlanExecuteAgent {
     private final MemoryManager memoryManager;
     private final ConversationHistoryCompactor historyCompactor;
     private final PrintStream out;
+    /** 生命周期旁路监听器；默认 NOOP，CLI 行为不受影响。 */
+    private final PlanProgressListener progressListener;
     private Supplier<String> externalContextSupplier = () -> "";
     private SkillRegistry skillRegistry;
     private SkillContextBuffer skillContextBuffer;
@@ -138,6 +140,13 @@ public class PlanExecuteAgent {
 
     PlanExecuteAgent(LlmClient llmClient, ToolRegistry toolRegistry, Planner planner,
                      MemoryManager memoryManager, PlanReviewHandler reviewHandler, PrintStream out) {
+        this(llmClient, toolRegistry, planner, memoryManager, reviewHandler, out, PlanProgressListener.NOOP);
+    }
+
+    // 桌面注入进度监听器；其余装配同 6 参构造。
+    PlanExecuteAgent(LlmClient llmClient, ToolRegistry toolRegistry, Planner planner,
+                     MemoryManager memoryManager, PlanReviewHandler reviewHandler, PrintStream out,
+                     PlanProgressListener progressListener) {
         this.llmClient = llmClient;
         this.toolRegistry = toolRegistry != null ? toolRegistry : new ToolRegistry();
         this.out = out == null ? deferredSystemOut() : out;
@@ -145,6 +154,7 @@ public class PlanExecuteAgent {
         this.reviewHandler = reviewHandler == null ? (goal, plan) -> PlanReviewDecision.execute() : reviewHandler;
         this.memoryManager = memoryManager != null ? memoryManager : new MemoryManager(llmClient);
         this.historyCompactor = new ConversationHistoryCompactor(llmClient);
+        this.progressListener = progressListener != null ? progressListener : PlanProgressListener.NOOP;
         this.toolRegistry.setContextProfile(this.memoryManager.getContextProfile());
         this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
         this.memoryManager.setProjectPath(this.toolRegistry.getProjectPath());
@@ -230,14 +240,18 @@ public class PlanExecuteAgent {
             if (outcome.persistAssistantMessage() && outcome.result() != null && !outcome.result().isBlank()) {
                 memoryManager.addAssistantMessage("[计划结果] " + outcome.result());
             }
-            if (streamState.hasStreamedOutput() && (outcome.result() == null || outcome.result().isBlank())) {
+            // 成功路径：回调 planFinished
+            String finalOut = outcome.result();
+            progressListener.planFinished(finalOut == null ? "" : finalOut);
+            if (streamState.hasStreamedOutput() && (finalOut == null || finalOut.isBlank())) {
                 return "";
             }
-            return outcome.result();
+            return finalOut;
         } catch (Exception e) {
             log.error("Plan run failed", e);
             String errorMessage = "❌ 执行失败: " + e.getMessage();
             memoryManager.addAssistantMessage(errorMessage);
+            progressListener.planFinished(errorMessage);
             return errorMessage;
         }
     }
@@ -274,6 +288,7 @@ public class PlanExecuteAgent {
     private String executePlan(ExecutionPlan plan, StreamState streamState) throws IOException {
         log.info("Executing plan: goal='{}', taskCount={}", plan.getGoal(), plan.getAllTasks().size());
         out.println("🚀 开始执行计划...\n");
+        progressListener.planCreated(plan);
 
         plan.markStarted();
         StringBuilder finalResult = new StringBuilder();
@@ -294,6 +309,7 @@ public class PlanExecuteAgent {
 
                 if (!batchResult.failed()) {
                     task.markCompleted(batchResult.result());
+                    progressListener.stepCompleted(task.getId(), true, batchResult.result());
                     streamedTaskOutputs.put(task.getId(), batchResult.streamedOutput());
                     log.info("Task completed: {} status={} resultChars={}",
                             task.getId(), task.getStatus(), batchResult.result() == null ? 0 : batchResult.result().length());
@@ -308,6 +324,7 @@ public class PlanExecuteAgent {
 
                 Exception error = batchResult.error();
                 task.markFailed(error.getMessage());
+                progressListener.stepCompleted(task.getId(), false, error.getMessage());
                 log.warn("Task failed: {} error={}", task.getId(), error.getMessage());
                 out.println("❌ 失败 [" + task.getId() + "]: " + error.getMessage() + "\n");
 
@@ -366,6 +383,7 @@ public class PlanExecuteAgent {
             log.info("Executing single task: {} type={}", task.getId(), task.getType());
             out.println("▶️ 执行任务 [" + task.getId() + "]: " + task.getDescription());
             task.markStarted();
+            progressListener.stepStarted(task.getId());
 
             try {
                 return List.of(TaskExecutionResult.success(task, executeTask(plan.getGoal(), plan, task, streamState, out)));
@@ -391,6 +409,7 @@ public class PlanExecuteAgent {
             for (Task task : executableTasks) {
                 out.println("▶️ 并行任务 [" + task.getId() + "]: " + task.getDescription());
                 task.markStarted();
+                progressListener.stepStarted(task.getId());
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 buffers.put(task.getId(), baos);
                 PrintStream taskOut = new PrintStream(baos, true, StandardCharsets.UTF_8);
