@@ -20,8 +20,10 @@ describe('resolveIconKind', () => {
     expect(resolveIconKind('mimo')).toEqual({ kind: 'lobe', name: 'XiaomiMiMo' })
     expect(resolveIconKind('xfyun')).toEqual({ kind: 'lobe', name: 'Spark' })
   })
-  it('无 lobeIcon/未知 → 回落首字母', () => {
-    expect(resolveIconKind('agnes')).toEqual({ kind: 'fallback', letter: 'A' })   // displayName 'Agnes AI'
+  it('lobehub 没有的品牌但有自带 PNG(agnes)→ image', () => {
+    expect(resolveIconKind('agnes')).toEqual({ kind: 'image', id: 'agnes' })
+  })
+  it('无 lobeIcon/无自带图/未知 → 回落首字母', () => {
     expect(resolveIconKind('不存在-provider')).toEqual({ kind: 'fallback', letter: '不' })
   })
 })
