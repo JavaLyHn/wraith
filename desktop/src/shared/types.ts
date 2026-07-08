@@ -392,6 +392,12 @@ export interface TeamStepCompletedEvent { teamId: string; stepId: string; status
 /** team.finished 通知负载。 */
 export interface TeamFinishedEvent { teamId: string; status: string }
 
+/** team.plan.output 通知负载（规划器流式正文片段）。 */
+export interface TeamPlanOutputEvent { teamId: string; text: string }
+
+/** team.step.output 通知负载（步骤流式正文片段）。 */
+export interface TeamStepOutputEvent { teamId: string; stepId: string; text: string }
+
 export interface AppInfo { version: string; repoUrl: string; dataDir: string }
 export interface UpdateResult {
   current: string
