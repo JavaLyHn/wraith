@@ -102,4 +102,51 @@ class AgentToolCardEmitTest {
     void nullRendererIsSafeNoop() {
         assertDoesNotThrow(() -> Agent.emitToolCardResult(null, result("c7", "read_file", "x", false, true)));
     }
+
+    // -----------------------------------------------------------------------
+    // HITL / 策略拒绝的 execute_command：CommandOutputObserver 未触发，
+    // emitToolCardResult 必须补发 tool.result（ok=false），否则桌面卡片永远 running。
+    // -----------------------------------------------------------------------
+
+    @Test
+    void hitlDeniedExecuteCommandEmitsFailResult() {
+        // HITL 拒绝：文本以 "[HITL]" 开头，CommandOutputObserver 未触发
+        CapturingRenderer r = new CapturingRenderer();
+        Agent.emitToolCardResult(r, result("c8", "execute_command",
+                "[HITL] 操作已被拒绝：用户拒绝了此操作", false, false));
+        // 必须补发一个 ok=false 的 tool.result
+        assertEquals(1, r.results.size(), "HITL 拒绝的 execute_command 必须补发 tool.result");
+        assertFalse(r.results.get(0).ok(), "HITL 拒绝结果 ok 应为 false");
+        assertEquals("c8", r.results.get(0).callId());
+    }
+
+    @Test
+    void hitlSkippedExecuteCommandEmitsFailResult() {
+        // HITL 跳过：文本同样以 "[HITL]" 开头
+        CapturingRenderer r = new CapturingRenderer();
+        Agent.emitToolCardResult(r, result("c9", "execute_command",
+                "[HITL] 操作已被跳过", false, false));
+        assertEquals(1, r.results.size(), "HITL 跳过的 execute_command 必须补发 tool.result");
+        assertFalse(r.results.get(0).ok());
+    }
+
+    @Test
+    void policyDeniedExecuteCommandEmitsFailResult() {
+        // 策略拒绝：文本以 "🛡️ 策略拒绝" 开头
+        CapturingRenderer r = new CapturingRenderer();
+        Agent.emitToolCardResult(r, result("c10", "execute_command",
+                "🛡️ 策略拒绝: 命令不在白名单", false, false));
+        assertEquals(1, r.results.size(), "策略拒绝的 execute_command 必须补发 tool.result");
+        assertFalse(r.results.get(0).ok());
+    }
+
+    @Test
+    void normalExecuteCommandStillSkipped() {
+        // 正常执行的 execute_command：由 CommandOutputObserver 处理，emitToolCardResult 不应重复发
+        CapturingRenderer r = new CapturingRenderer();
+        Agent.emitToolCardResult(r, result("c11", "execute_command",
+                "ls -la\n总用量 8\n…", false, true));
+        assertTrue(r.outputs.isEmpty(), "正常执行的 execute_command 不应重复发 output.delta");
+        assertTrue(r.results.isEmpty(), "正常执行的 execute_command 不应重复发 tool.result");
+    }
 }
