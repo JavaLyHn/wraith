@@ -109,6 +109,8 @@ public class PlanExecuteAgent {
     private final PrintStream out;
     /** 生命周期旁路监听器；默认 NOOP，CLI 行为不受影响。 */
     private final PlanProgressListener progressListener;
+    /** 每个任务步骤的流式监听器工厂；默认输出到 out（CLI 行为不变），桌面可注入以导向事件流。 */
+    private java.util.function.BiFunction<String, StreamState, LlmClient.StreamListener> stepStreamFactory;
     private Supplier<String> externalContextSupplier = () -> "";
     private SkillRegistry skillRegistry;
     private SkillContextBuffer skillContextBuffer;
@@ -160,6 +162,14 @@ public class PlanExecuteAgent {
         this.memoryManager.setProjectPath(this.toolRegistry.getProjectPath());
         this.toolRegistry.setScopedMemorySaver(this.memoryManager::storeFact);
         this.planner.setProjectMemorySupplier(this::buildProjectMemoryContext);
+        // 默认工厂：复现原 TaskStreamRenderer 行为，CLI 输出字节完全不变。
+        this.stepStreamFactory = (taskId, ss) -> new TaskStreamRenderer(taskId, ss, this.out);
+    }
+
+    /** 桌面注入：把步骤流式正文导向 message.delta 事件流而非终端 out。 */
+    public void setStepStreamFactory(
+            java.util.function.BiFunction<String, StreamState, LlmClient.StreamListener> factory) {
+        if (factory != null) this.stepStreamFactory = factory;
     }
 
     private static PrintStream deferredSystemOut() {
@@ -491,7 +501,7 @@ public class PlanExecuteAgent {
 
         StringBuilder allResults = new StringBuilder();
         int iteration = 0;
-        TaskStreamRenderer streamRenderer = new TaskStreamRenderer(task.getId(), streamState, out);
+        LlmClient.StreamListener streamRenderer = stepStreamFactory.apply(task.getId(), streamState);
 
         int totalInputTokens = 0;
         int totalOutputTokens = 0;
@@ -725,14 +735,15 @@ public class PlanExecuteAgent {
         }
     }
 
-    private static final class StreamState {
+    // package-private：供同包内工厂 lambda 的类型参数推断（stepStreamFactory BiFunction 第二参数）。
+    static final class StreamState {
         private volatile boolean streamedOutput;
 
-        private void markStreamed() {
+        void markStreamed() {
             this.streamedOutput = true;
         }
 
-        private boolean hasStreamedOutput() {
+        boolean hasStreamedOutput() {
             return streamedOutput;
         }
     }
@@ -811,7 +822,8 @@ public class PlanExecuteAgent {
             out.flush();
         }
 
-        private synchronized void finish() {
+        @Override
+        public synchronized void finish() {
             if (streamedOutput) {
                 if (reasoningRenderer != null) {
                     reasoningRenderer.finish();
@@ -828,7 +840,8 @@ public class PlanExecuteAgent {
          * 两次 iteration 之间（通常是一次 tool-call 分支完成后）调用：收尾当前渲染器并重置状态，
          * 让下一轮迭代能重新打印 🧠 / 🤖 标题，避免标题和内容被 HITL / 工具执行中断而错位。
          */
-        private synchronized void resetBetweenIterations() {
+        @Override
+        public synchronized void resetBetweenIterations() {
             if (reasoningRenderer != null) {
                 reasoningRenderer.finish();
                 reasoningRenderer = null;
@@ -846,7 +859,8 @@ public class PlanExecuteAgent {
             }
         }
 
-        private synchronized boolean hasStreamedOutput() {
+        @Override
+        public synchronized boolean hasStreamedOutput() {
             return streamedOutput;
         }
 

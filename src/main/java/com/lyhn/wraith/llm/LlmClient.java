@@ -189,6 +189,15 @@ public interface LlmClient {
         default void onReasoningDelta(String delta) {}
 
         default void onContentDelta(String delta) {}
+
+        /** 流式输出完成时调用（收尾渲染器、刷新缓冲）。默认空实现，具体实现可覆写。 */
+        default void finish() {}
+
+        /** 是否已向终端/事件流推送过任何内容。默认 false，具体实现可覆写。 */
+        default boolean hasStreamedOutput() { return false; }
+
+        /** 两次工具调用迭代之间重置渲染状态（避免标题错位）。默认空实现，具体实现可覆写。 */
+        default void resetBetweenIterations() {}
     }
 
     record ChatResponse(String role, String content, String reasoningContent, List<ToolCall> toolCalls,

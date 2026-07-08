@@ -106,6 +106,22 @@ class PlanProgressWiringTest {
         assertFalse(events.contains("created"), "取消路径不应触发 planCreated: " + events);
     }
 
+    @Test
+    void 注入的步骤工厂接收正文流() {
+        StringBuilder body = new StringBuilder();
+        FakeLlmClient llm = new FakeLlmClient("hello-body");
+        PlanExecuteAgent agent = new PlanExecuteAgent(
+                llm, new ToolRegistry(), new SingleStepPlanner(llm), null,
+                (goal, plan) -> PlanExecuteAgent.PlanReviewDecision.execute(),
+                new java.io.PrintStream(java.io.OutputStream.nullOutputStream()),
+                PlanProgressListener.NOOP);
+        agent.setStepStreamFactory((id, ss) -> new LlmClient.StreamListener() {
+            @Override public void onContentDelta(String delta) { body.append(delta); }
+        });
+        agent.run("做一件事");
+        assertTrue(body.length() > 0, "自定义工厂应收到正文 delta");
+    }
+
     /** 单步计划 stub：始终返回含 1 个 Task 的 ExecutionPlan。 */
     private static final class SingleStepPlanner extends Planner {
         private SingleStepPlanner(LlmClient llmClient) {
@@ -136,6 +152,10 @@ class PlanProgressWiringTest {
 
         @Override
         public ChatResponse chat(List<Message> messages, List<Tool> tools, StreamListener listener) throws IOException {
+            // 向注入的 listener 推送 content delta，供步骤工厂测试拦截。
+            if (listener != null && !content.isEmpty()) {
+                listener.onContentDelta(content);
+            }
             return new ChatResponse("assistant", content, null, 10, 5);
         }
 
