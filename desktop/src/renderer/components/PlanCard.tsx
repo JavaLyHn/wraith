@@ -15,16 +15,16 @@ interface PlanReviewItem {
 /** 单个步骤行（含可折叠输出区）。 */
 function PlanStepRow({ s }: { s: PlanStep }): JSX.Element {
   const [expanded, setExpanded] = useState(false)
-  const hasOutput = s.output && s.output.length > 0
+  // 步骤正文优先取流式 output，缺失时回落到完成事件的 result（二者为同一份内容）。
+  // 一律折叠展示——绝不内联渲染整段答案，否则中文描述会被挤成单字竖排。
+  const body = (s.output && s.output.length > 0) ? s.output : (s.result ?? '')
+  const hasBody = body.length > 0
   return (
     <li className="flex flex-col gap-0.5">
       <div className="flex items-start gap-2">
         <span className={`shrink-0 ${planStatusClass(s.status)}`}>{planStatusIcon(s.status)}</span>
-        <span className="flex-1 text-fg-muted">{s.description}</span>
-        {s.result && (
-          <span className="ml-1 truncate text-fg-subtle">{s.result}</span>
-        )}
-        {hasOutput && (
+        <span className="min-w-0 flex-1 break-words text-fg-muted">{s.description}</span>
+        {hasBody && (
           <button
             className="ml-1 shrink-0 text-fg-subtle hover:text-fg-muted"
             onClick={() => setExpanded(v => !v)}
@@ -34,9 +34,9 @@ function PlanStepRow({ s }: { s: PlanStep }): JSX.Element {
           </button>
         )}
       </div>
-      {hasOutput && expanded && (
+      {hasBody && expanded && (
         <div className="ml-5 mt-0.5 max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
-          <pre className="whitespace-pre-wrap break-words text-xs">{s.output}</pre>
+          <pre className="whitespace-pre-wrap break-words text-xs">{body}</pre>
         </div>
       )}
     </li>

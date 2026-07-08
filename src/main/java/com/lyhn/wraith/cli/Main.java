@@ -1504,9 +1504,11 @@ public class Main {
                         // 快照封装（与 CLI plan 路径对齐）
                         com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
                         String result = snap.runTurn("plan", goal, () -> planAgent.run(goal));
-                        // 计划汇总结果作为单条干净底部消息发出（各步正文已嵌套在清单行下）
-                        if (result != null && !result.isBlank()) {
-                            renderer.appendAssistantContentDelta(result);
+                        // 干净答案作为单条底部消息发出（无 "✅ 计划执行完成！" 头 / "[task_id]" 前缀；
+                        // 各步正文已嵌套在清单行下）。run() 返回值仍保留终端 chrome，仅供 CLI 使用。
+                        String cleanAnswer = planAgent.getLastCleanResult();
+                        if (cleanAnswer != null && !cleanAnswer.isBlank()) {
+                            renderer.appendAssistantContentDelta(cleanAnswer);
                             renderer.finishAssistantContent();
                         }
                         return result;
