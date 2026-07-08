@@ -106,7 +106,8 @@ export class GatewayManager {
     private readonly env: NodeJS.ProcessEnv,
     private readonly jarPath: string,
     /** 注入 shell.openExternal 以便测试。 */
-    private readonly openExternal: (url: string) => void
+    private readonly openExternal: (url: string) => void,
+    private readonly packaged?: { resourcesPath: string }
   ) {}
 
   static withDefaults(
@@ -139,7 +140,7 @@ export class GatewayManager {
   start(): void {
     if (this.daemon) return
     this.stopping = false
-    const { cmd, args } = resolveGatewayCommand(this.env, this.jarPath)
+    const { cmd, args } = resolveGatewayCommand(this.env, this.jarPath, this.packaged)
     this.setStatus({ state: 'starting' })
 
     let proc: ChildProcessWithoutNullStreams
@@ -201,7 +202,7 @@ export class GatewayManager {
   /** 一次性扫码绑定。spawn `... gateway bind`,解析 connect URL 打开浏览器,按输出报进度。 */
   bindStart(): void {
     if (this.bindProc) return
-    const { cmd, args } = resolveBindCommand(this.env, this.jarPath)
+    const { cmd, args } = resolveBindCommand(this.env, this.jarPath, this.packaged)
 
     let proc: ChildProcessWithoutNullStreams
     try {
