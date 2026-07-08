@@ -38,6 +38,7 @@ function stepStatusIcon(s: TeamStepStatus): string {
     case 'done': return '✓'
     case 'failed': return '✗'
     case 'skipped': return '⏭'
+    default: return '?'
   }
 }
 
@@ -97,20 +98,20 @@ function ReviewTag({ step }: { step: TeamStep }): JSX.Element | null {
 // TeamStepRow
 // ---------------------------------------------------------------------------
 
-function TeamStepRow({ step }: { step: TeamStep }): JSX.Element {
+function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass: string }): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   const hasResult = typeof step.result === 'string' && step.result.length > 0
-  const agentRole = step.agent ?? ''
+  const agentName = step.agent ?? ''
 
   return (
     <li className="flex flex-col gap-0.5">
       <div className="flex items-start gap-2">
-        {/* Agent badge */}
-        {agentRole && (
+        {/* Agent badge：文字为 agent 名(worker-1),配色按其角色(从 item.agents 解析后传入) */}
+        {agentName && (
           <span
-            className={`shrink-0 rounded border px-1 py-0 leading-none ${roleColor(agentRole)}`}
+            className={`shrink-0 rounded border px-1 py-0 leading-none ${roleColorClass}`}
           >
-            {agentRole}
+            {agentName}
           </span>
         )}
         {/* Status icon */}
@@ -204,6 +205,9 @@ function footerClass(s: TeamStatus): string {
 export function TeamCard({ item }: { item: TeamItem }): JSX.Element {
   const groups = groupSteps(item.steps, item.parallelStepIds)
   const footer = footerText(item.status)
+  // agentId(如 worker-1)→ role(worker),用于步骤徽标配色
+  const roleById = new Map(item.agents.map(a => [a.id, a.role]))
+  const stepRoleColor = (step: TeamStep): string => roleColor(roleById.get(step.agent ?? '') ?? '')
 
   return (
     <div className="my-1.5 rounded-lg border border-border bg-surface p-3 text-xs font-mono">
@@ -238,17 +242,17 @@ export function TeamCard({ item }: { item: TeamItem }): JSX.Element {
       {/* Step timeline with B1 parallel grouping */}
       {groups.length > 0 && (
         <ul className="flex flex-col gap-1">
-          {groups.map((group, idx) => {
+          {groups.map(group => {
             if (group.kind === 'solo') {
-              return <TeamStepRow key={group.step.id} step={group.step} />
+              return <TeamStepRow key={group.step.id} step={group.step} roleColorClass={stepRoleColor(group.step)} />
             }
-            // Parallel group
+            // Parallel group — key 用批内首步 id(稳定),避免 batch 陆续到达时下标错位
             return (
-              <li key={`parallel-${idx}`} className="flex flex-col gap-0.5">
+              <li key={`parallel-${group.steps[0].id}`} className="flex flex-col gap-0.5">
                 <div className="text-fg-subtle">⚡ 并行执行</div>
                 <ul className="ml-3 flex flex-col gap-1 border-l border-border pl-2">
                   {group.steps.map(step => (
-                    <TeamStepRow key={step.id} step={step} />
+                    <TeamStepRow key={step.id} step={step} roleColorClass={stepRoleColor(step)} />
                   ))}
                 </ul>
               </li>
