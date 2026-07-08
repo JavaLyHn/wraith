@@ -735,8 +735,9 @@ public class PlanExecuteAgent {
         }
     }
 
-    // package-private：供同包内工厂 lambda 的类型参数推断（stepStreamFactory BiFunction 第二参数）。
-    static final class StreamState {
+    // public：setStepStreamFactory 的 BiFunction 第二参数类型，属其公开 API 面；
+    // 跨包注入(cli 包引用 agent 包)时类型推断需可见，故必须 public。
+    public static final class StreamState {
         private volatile boolean streamedOutput;
 
         void markStreamed() {
