@@ -1,5 +1,5 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
-import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView } from '../shared/types'
+import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode } from '../shared/types'
 import type { McpFormValue } from './components/McpServerForm'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
 import { createThrottleLatest, type ThrottledPush } from '../shared/throttleLatest'
@@ -24,6 +24,7 @@ import {
 } from '../shared/transcriptReducer'
 import { messagesToItems } from '../shared/messagesToItems'
 import { lastUserMessage } from './lib/resend'
+import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -144,6 +145,7 @@ export default function App(): JSX.Element {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const { prefs: appPrefs } = useSettings()
   const [updateNotice, setUpdateNotice] = useState<{ latest: string; url: string } | null>(null)
+  const [pendingMode, setPendingMode] = useState<RunMode>('react')
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
@@ -393,7 +395,8 @@ export default function App(): JSX.Element {
     dispatch({ type: 'markStarted' })
     dispatch({ type: 'addUserItem', text })
     try {
-      await window.wraith.submitTurn(text, pendingAttachments.length > 0 ? pendingAttachments.map(a => ({ path: a.path, kind: a.kind })) : undefined)
+      await window.wraith.submitTurn(text, pendingAttachments.length > 0 ? pendingAttachments.map(a => ({ path: a.path, kind: a.kind })) : undefined, pendingMode)
+      setPendingMode(pendingModeAfterSubmit(pendingMode))
     } catch (err) {
       console.error('[wraith] submitTurn error:', err)
       // 失败路径:markStarted 已提前置 turn='running',但本地 RPC 失败(后端死/拒绝)时
@@ -405,7 +408,7 @@ export default function App(): JSX.Element {
       const short = reason.replace(/https?:\/\/\S+/g, '').replace(/sk-\S+/g, '').slice(0, 80).trim()
       setSubmitError(short ? `消息发送失败,请重试(${short})` : '消息发送失败,请重试')
     }
-  }, [inputValue, state.turn, attachments])
+  }, [inputValue, state.turn, attachments, pendingMode])
 
   // ── approval handlers ──────────────────────────────────────────────────────
   const handleApprovalRespond = useCallback(
@@ -783,6 +786,8 @@ export default function App(): JSX.Element {
                 attachments={attachments}
                 onPickAttachments={handlePickAttachments}
                 onRemoveAttachment={handleRemoveAttachment}
+                mode={pendingMode}
+                onModeChange={setPendingMode}
               />
             )
             return state.hasStarted ? (

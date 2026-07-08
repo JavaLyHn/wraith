@@ -8,7 +8,7 @@ import { blobToBase64, insertAtCursor } from '../lib/dictation'
 import { shouldSendOnEnter } from '../../shared/composerKeys'
 import StatusChip from './StatusChip'
 import ModelSwitcher from './ModelSwitcher'
-import type { StatusData, McpResourceView } from '../../shared/types'
+import type { StatusData, McpResourceView, RunMode } from '../../shared/types'
 import { detectMention, filterMentionItems, insertMention } from '../../shared/mentionTrigger'
 import type { MentionState } from '../../shared/mentionTrigger'
 
@@ -36,6 +36,8 @@ interface ComposerProps {
   attachments?: AttachmentItem[]
   onPickAttachments?: () => void
   onRemoveAttachment?: (index: number) => void
+  mode?: RunMode
+  onModeChange?: (m: RunMode) => void
 }
 
 export default function Composer({
@@ -55,6 +57,8 @@ export default function Composer({
   attachments = [],
   onPickAttachments,
   onRemoveAttachment,
+  mode = 'react',
+  onModeChange,
 }: ComposerProps): JSX.Element {
   const [mention, setMention] = useState<MentionState>({ active: false, start: 0, query: '' })
   const [mentionIndex, setMentionIndex] = useState(0)
@@ -296,6 +300,17 @@ export default function Composer({
           </button>
 
           <div className="flex-1" />
+
+          {/* 模式分段：逐条 */}
+          <div className="flex items-center gap-0.5 rounded-lg border border-border p-0.5 text-xs" role="radiogroup" aria-label="执行模式">
+            {(['react', 'plan'] as const).map(m => (
+              <button key={m} data-testid={`mode-${m}`} role="radio" aria-checked={mode === m}
+                onClick={() => onModeChange?.(m)}
+                className={'rounded px-2 py-0.5 ' + (mode === m ? 'bg-accent text-accent-fg' : 'text-fg-muted')}>
+                {m === 'react' ? 'ReAct' : 'Plan'}
+              </button>
+            ))}
+          </div>
 
           {/* approve-mode toggle — functional */}
           <label className="flex select-none items-center gap-1.5 text-xs text-fg-muted">
