@@ -52,6 +52,8 @@ public class AgentOrchestrator {
     private final ToolRegistry toolRegistry;
     private final PrintStream out;
     private Supplier<String> externalContextSupplier = () -> "";
+    private TeamProgressListener progressListener = TeamProgressListener.NOOP;
+    public void setProgressListener(TeamProgressListener l) { this.progressListener = (l != null) ? l : TeamProgressListener.NOOP; }
 
     // 执行步骤的数据结构（package-private 供测试访问）
     record ExecutionStep(String id, String description, String type,
@@ -138,6 +140,11 @@ public class AgentOrchestrator {
     public String run(String userInput) {
         log.info("Multi-Agent run started: inputLength={}", userInput == null ? 0 : userInput.length());
         memoryManager.addUserMessage(userInput);
+        progressListener.started(userInput, List.of(
+            new TeamProgressListener.AgentInfo("planner", "planner"),
+            new TeamProgressListener.AgentInfo("worker-1", "worker"),
+            new TeamProgressListener.AgentInfo("worker-2", "worker"),
+            new TeamProgressListener.AgentInfo("reviewer", "reviewer")));
         if (CancellationContext.isCancelled()) {
             return "⏹️ 已取消当前多 Agent 任务。";
         }
@@ -166,6 +173,9 @@ public class AgentOrchestrator {
         if (steps.isEmpty()) {
             return "❌ 规划失败：无法解析执行计划\n原始输出:\n" + planResult.content();
         }
+        progressListener.planParsed(steps.stream()
+            .map(s -> new TeamProgressListener.StepInfo(s.id(), s.description(), s.type(), s.dependencies()))
+            .toList());
 
         out.println(AnsiStyle.heading("📋 执行计划"));
         out.println(summarizeSteps(steps) + "\n");
@@ -198,6 +208,7 @@ public class AgentOrchestrator {
                 // 多步批次：真正并行执行，每步用独立的 PrintStream 缓冲，完成后按 step_id 顺序 flush
                 out.println("⚡ 批次 #" + batchIndex + "：" + executable.size()
                         + " 个独立步骤并行执行（最多 " + workers.size() + " 个并发 Worker）\n");
+                progressListener.batchStarted(batchIndex, executable.stream().map(ExecutionStep::id).toList());
                 runBatchParallel(executable, steps, retryCount);
             }
         }
@@ -206,12 +217,17 @@ public class AgentOrchestrator {
         for (ExecutionStep step : steps) {
             if (step.status() == StepStatus.PENDING) {
                 out.println("⏭️ 步骤 [" + step.id() + "] 因前置步骤失败被跳过: " + step.description());
+                progressListener.stepCompleted(step.id(), "skipped", "", false, 0);
             }
         }
 
         // 6. 汇总结果
         String finalResult = buildFinalResult(steps);
         memoryManager.addAssistantMessage("[多Agent结果] " + finalResult);
+
+        boolean allCompleted = steps.stream().allMatch(s -> s.status() == StepStatus.COMPLETED);
+        boolean anyFailed = steps.stream().anyMatch(s -> s.status() == StepStatus.FAILED);
+        progressListener.finished(allCompleted ? "completed" : anyFailed ? "failed" : "partial");
 
         return finalResult;
     }
@@ -483,9 +499,11 @@ public class AgentOrchestrator {
                          SubAgent worker, SubAgent reviewer, String context,
                          PrintStream out) {
         out.println("🛠️ " + worker.getName() + " 执行步骤 [" + step.id() + "]: " + step.description());
+        progressListener.stepStarted(step.id(), worker.getName());
         if (CancellationContext.isCancelled()) {
             updateStep(steps, step.id(), step.withFailed("用户取消"));
             out.println("⏹️ 步骤 [" + step.id() + "] 已取消\n");
+            progressListener.stepCompleted(step.id(), "failed", "用户取消", false, 0);
             return;
         }
 
@@ -494,17 +512,20 @@ public class AgentOrchestrator {
         if (CancellationContext.isCancelled()) {
             updateStep(steps, step.id(), step.withFailed("用户取消"));
             out.println("⏹️ 步骤 [" + step.id() + "] 已取消\n");
+            progressListener.stepCompleted(step.id(), "failed", "用户取消", false, 0);
             return;
         }
 
         if (result.type() == AgentMessage.Type.ERROR) {
             updateStep(steps, step.id(), step.withFailed(result.content()));
             out.println("❌ 步骤 [" + step.id() + "] 执行失败：" + result.content() + "\n");
+            progressListener.stepCompleted(step.id(), "failed", result.content(), false, 0);
             return;
         }
         if (result.content() == null || result.content().isBlank()) {
             updateStep(steps, step.id(), step.withFailed("执行结果为空"));
             out.println("❌ 步骤 [" + step.id() + "] 执行失败：结果为空\n");
+            progressListener.stepCompleted(step.id(), "failed", "执行结果为空", false, 0);
             return;
         }
 
@@ -516,6 +537,7 @@ public class AgentOrchestrator {
             log.warn("Reviewer failed for step {}: {}", step.id(), reviewResult.content());
             out.println("⚠️ 步骤 [" + step.id() + "] 审查阶段 LLM 调用失败，保留当前执行结果\n");
             updateStep(steps, step.id(), step.withResult(result.content()));
+            progressListener.stepCompleted(step.id(), "completed", result.content(), false, retryCount.getOrDefault(step.id(), 0));
             return;
         }
 
@@ -525,6 +547,7 @@ public class AgentOrchestrator {
         if (approved) {
             updateStep(steps, step.id(), step.withResult(acceptedResult));
             out.println("✅ 步骤 [" + step.id() + "] 审查通过\n");
+            progressListener.stepCompleted(step.id(), "completed", acceptedResult, true, 0);
             return;
         }
 
@@ -575,6 +598,7 @@ public class AgentOrchestrator {
         } else {
             out.println("⚠️ 步骤 [" + step.id() + "] 超过最大重试次数，保留当前结果\n");
         }
+        progressListener.stepCompleted(step.id(), "completed", acceptedResult, approved, retries);
     }
 
     private String buildStepContext(List<ExecutionStep> steps, ExecutionStep currentStep) {
