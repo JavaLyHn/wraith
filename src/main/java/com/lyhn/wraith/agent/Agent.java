@@ -1046,11 +1046,11 @@ public class Agent {
             out().flush();
         }
 
-        private boolean hasStreamedOutput() {
+        @Override public boolean hasStreamedOutput() {
             return streamedOutput;
         }
 
-        private void resetBetweenIterations() {
+        @Override public void resetBetweenIterations() {
             if (hasThinkingPanel()) {
                 finishThinkingPanelAndPrintQuote();
             }
@@ -1087,7 +1087,7 @@ public class Agent {
             }
         }
 
-        private void finish() {
+        @Override public void finish() {
             if (hasThinkingPanel()) {
                 finishThinkingPanelAndPrintQuote();
             }
