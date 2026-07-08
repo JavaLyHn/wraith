@@ -85,14 +85,19 @@ export default function Composer({
   const segSeqRef = useRef(0)
   const stoppingRef = useRef(false)   // true=会话结束，onstop 不再 restart
   const insertPosRef = useRef<number | null>(null)  // 追加插入点（随每段前移）
+  const inFlightRef = useRef(0)                      // 飞行中转写段计数
 
-  // 卸载清理：停 timer + VAD 资源 + stream
-  useEffect(() => () => {
-    mountedRef.current = false
-    if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
-    if (vadRafRef.current) cancelAnimationFrame(vadRafRef.current)
-    void vadCtxRef.current?.close()
-    streamRef.current?.getTracks().forEach(t => t.stop())
+  // 挂载/重挂载清理：每次 mount 重置 mountedRef；cleanup 释放 VAD + stream
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
+      if (vadRafRef.current) cancelAnimationFrame(vadRafRef.current)
+      void vadCtxRef.current?.close()
+      streamRef.current?.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
   }, [])
 
   const items = mention.active ? filterMentionItems(resources, mention.query) : []
@@ -151,7 +156,10 @@ export default function Composer({
   }, [value, onChange])
 
   // 单段转写（fire-and-forget）：失败/空段当空处理，不弹全局错，不中断会话
+  // inFlightRef 计数驱动 transcribing 状态：任一段飞行中则 true，全落地则 false
   const transcribeSegment = useCallback(async (seq: number, blob: Blob, mime: string) => {
+    inFlightRef.current++
+    setTranscribing(true)
     try {
       const b64 = await blobToBase64(blob)
       const { text } = await Promise.race([
@@ -162,6 +170,9 @@ export default function Composer({
     } catch (err) {
       console.warn('[stt] 段转写失败，跳过:', (err as Error).message)
       flushSegment(seq, '')   // 失败当空段：推进序号，不插入、不弹全局错
+    } finally {
+      inFlightRef.current--
+      if (inFlightRef.current <= 0) { inFlightRef.current = 0; setTranscribing(false) }
     }
   }, [flushSegment])
 
