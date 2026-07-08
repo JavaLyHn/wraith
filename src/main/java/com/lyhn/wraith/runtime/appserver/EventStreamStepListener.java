@@ -28,6 +28,9 @@ public final class EventStreamStepListener implements LlmClient.StreamListener {
     @Override
     public void onContentDelta(String delta) {
         if (delta == null || delta.isEmpty()) return;
+        // reasoning→content 过渡：正文一开始就收口思考块（thinking.end → 前端 done=true），
+        // 否则思考块会一直停在「思考中」。镜像 ReAct 路径行为。
+        endThinkingIfOpen();
         // 步骤正文嵌套在计划清单步骤行下方，不再作为独立 message.delta 浮动
         renderer.emitPlanStepOutput(planId, stepId, delta);
     }
@@ -43,6 +46,18 @@ public final class EventStreamStepListener implements LlmClient.StreamListener {
         renderer.appendThinking(delta);
     }
 
-    // finish() 不覆写：步骤流是流量 delta，无需独立收口；
-    // 计划完成后由 Main.java plan 路径统一发 message.end。
+    @Override
+    public void finish() {
+        // 步骤流结束：收口尚未闭合的思考块（纯思考、无正文的步骤靠这里收口）。
+        // 计划完成后的 message.end 仍由 Main.java plan 路径统一处理。
+        endThinkingIfOpen();
+    }
+
+    /** 若本步骤开过思考块则收口它（thinking.end → 前端 done=true）；幂等。 */
+    private void endThinkingIfOpen() {
+        if (thinkingBegun) {
+            renderer.endThinking();
+            thinkingBegun = false;
+        }
+    }
 }

@@ -184,4 +184,33 @@ class EventStreamPlanListenerTest {
 
         assertNull(findNotification("thinking.begin"), "空白 reasoning delta 不应触发 thinking.begin");
     }
+
+    @Test
+    void stepListener_contentAfterReasoning_emitsThinkingEnd() throws Exception {
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
+        stepListener.onReasoningDelta("思考片段");
+        stepListener.onContentDelta("正文");
+
+        assertNotNull(findNotification("thinking.end"),
+                "reasoning→content 过渡应收口思考块（thinking.end），否则前端停在「思考中」");
+    }
+
+    @Test
+    void stepListener_finishAfterReasoning_emitsThinkingEnd() throws Exception {
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
+        stepListener.onReasoningDelta("只思考不产出正文");
+        stepListener.finish();
+
+        assertNotNull(findNotification("thinking.end"),
+                "纯思考步骤在 finish() 时也应收口思考块（thinking.end）");
+    }
+
+    @Test
+    void stepListener_finishWithoutReasoning_noThinkingEnd() throws Exception {
+        EventStreamStepListener stepListener = new EventStreamStepListener(renderer, "plan_1", "t1");
+        stepListener.finish();
+
+        assertNull(findNotification("thinking.end"),
+                "未开过思考块的步骤 finish() 不应发 thinking.end");
+    }
 }
