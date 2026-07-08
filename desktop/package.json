@@ -1,6 +1,8 @@
 {
   "name": "wraith-desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Wraith — 幽灵主题终端 AI 编程助手桌面端",
+  "author": "JavaLyHn",
   "private": true,
   "type": "module",
   "main": "./out/main/index.js",
