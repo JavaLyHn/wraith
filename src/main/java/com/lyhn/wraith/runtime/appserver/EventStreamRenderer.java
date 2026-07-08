@@ -23,6 +23,14 @@ public final class EventStreamRenderer implements Renderer {
     private final Map<String, java.util.concurrent.CompletableFuture<ApprovalResult>> pending =
             new java.util.concurrent.ConcurrentHashMap<>();
 
+    // 计划复审管道（镜像 approval 管道，独立字段避免干扰）
+    private final java.util.concurrent.atomic.AtomicLong reviewSeq = new java.util.concurrent.atomic.AtomicLong();
+    private final Map<String, java.util.concurrent.CompletableFuture<PlanReviewOutcome>> pendingReviews =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    /** 计划复审结果；decision ∈ {"execute","supplement","cancel"}。 */
+    public record PlanReviewOutcome(String decision, String feedback) {}
+
     public EventStreamRenderer(JsonRpcWriter writer, String sessionId) {
         this.writer = writer;
         this.sessionId = sessionId;
@@ -144,5 +152,55 @@ public final class EventStreamRenderer implements Renderer {
     public void resolveApproval(String approvalId, ApprovalResult result) {
         java.util.concurrent.CompletableFuture<ApprovalResult> fut = pending.get(approvalId);
         if (fut != null) fut.complete(result);
+    }
+
+    // ---- plan.* 通知发射方法（供 Task A5 的 sink 调用）----
+
+    /** 计划已创建通知。 */
+    public void emitPlanCreated(String planId, String goal, java.util.List<java.util.Map<String, Object>> steps) {
+        Map<String, Object> p = base(); p.put("planId", planId); p.put("goal", goal); p.put("steps", steps);
+        writer.notify("plan.created", p);
+    }
+
+    /** 计划步骤开始通知。 */
+    public void emitPlanStepStarted(String planId, String stepId) {
+        Map<String, Object> p = base(); p.put("planId", planId); p.put("stepId", stepId);
+        writer.notify("plan.step.started", p);
+    }
+
+    /** 计划步骤完成通知。 */
+    public void emitPlanStepCompleted(String planId, String stepId, boolean ok, String result) {
+        Map<String, Object> p = base(); p.put("planId", planId); p.put("stepId", stepId);
+        p.put("ok", ok); p.put("result", result);
+        writer.notify("plan.step.completed", p);
+    }
+
+    // ---- 计划复审阻塞管道（镜像 promptApproval）----
+
+    /**
+     * 请求前端复审计划。阻塞直到 resolvePlanReview 被调用。
+     * 中断或异常时返回 cancel 结果，避免 agent 线程悬挂。
+     */
+    public PlanReviewOutcome requestPlanReview(String planId, String goal,
+                                               java.util.List<java.util.Map<String, Object>> steps) {
+        String reviewId = "review_" + reviewSeq.incrementAndGet();
+        java.util.concurrent.CompletableFuture<PlanReviewOutcome> fut = new java.util.concurrent.CompletableFuture<>();
+        pendingReviews.put(reviewId, fut);
+        Map<String, Object> p = base();
+        p.put("reviewId", reviewId); p.put("planId", planId); p.put("goal", goal); p.put("steps", steps);
+        writer.notify("plan.review.requested", p);
+        try {
+            return fut.get();
+        } catch (Exception e) {
+            return new PlanReviewOutcome("cancel", null);   // 中断/异常 → 取消，避免线程悬挂
+        } finally {
+            pendingReviews.remove(reviewId);
+        }
+    }
+
+    /** AppServer 收到 plan.review.respond 时调用；未知 reviewId 幂等忽略。 */
+    public void resolvePlanReview(String reviewId, String decision, String feedback) {
+        java.util.concurrent.CompletableFuture<PlanReviewOutcome> fut = pendingReviews.get(reviewId);
+        if (fut != null) fut.complete(new PlanReviewOutcome(decision == null ? "cancel" : decision, feedback));
     }
 }

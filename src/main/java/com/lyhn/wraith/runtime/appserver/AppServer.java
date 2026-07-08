@@ -187,6 +187,7 @@ public final class AppServer {
                 writer.result(msg.id(), Map.of("ok", true));
             }
             case "approval.respond" -> handleApprovalRespond(msg);
+            case "plan.review.respond" -> handlePlanReviewRespond(msg);
             case "session.setApprovalMode" -> handleSetApprovalMode(msg);
             case "session.list" -> handleSessionList(msg);
             case "session.resume" -> handleSessionResume(msg);
@@ -593,6 +594,18 @@ public final class AppServer {
         }
         ApprovalResult result = new ApprovalResult(d, modifiedArgs, reason, allowNetwork);
         session.renderer().resolveApproval(approvalId, result);
+        writer.result(msg.id(), java.util.Map.of("ok", true));
+    }
+
+    /** 处理前端的计划复审响应（镜像 handleApprovalRespond）。 */
+    private void handlePlanReviewRespond(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        String reviewId = (p != null && p.hasNonNull("reviewId")) ? p.get("reviewId").asText() : null;
+        if (reviewId == null) { writer.error(msg.id(), -32602, "缺 reviewId"); return; }
+        String decision = (p.hasNonNull("decision")) ? p.get("decision").asText("cancel") : "cancel";
+        String feedback = p.hasNonNull("feedback") ? p.get("feedback").asText(null) : null;
+        session.renderer().resolvePlanReview(reviewId, decision, feedback);
         writer.result(msg.id(), java.util.Map.of("ok", true));
     }
 
