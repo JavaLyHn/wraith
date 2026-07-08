@@ -54,6 +54,9 @@ public class AgentOrchestrator {
     private Supplier<String> externalContextSupplier = () -> "";
     private TeamProgressListener progressListener = TeamProgressListener.NOOP;
     public void setProgressListener(TeamProgressListener l) { this.progressListener = (l != null) ? l : TeamProgressListener.NOOP; }
+    private java.util.function.BiFunction<String,String,LlmClient.StreamListener> streamFactory;
+    public void setStepStreamFactory(java.util.function.BiFunction<String,String,LlmClient.StreamListener> f) { this.streamFactory = f; }
+    private LlmClient.StreamListener streamFor(String kind, String id) { return streamFactory == null ? null : streamFactory.apply(kind, id); }
 
     // 执行步骤的数据结构（package-private 供测试访问）
     record ExecutionStep(String id, String description, String type,
@@ -156,7 +159,7 @@ public class AgentOrchestrator {
 
         AgentMessage planMessage = AgentMessage.task("orchestrator",
                 "请为以下任务制定执行计划：\n" + userInput);
-        AgentMessage planResult = planner.execute(planMessage, out);
+        AgentMessage planResult = planner.execute(planMessage, out, streamFor("planner", "planner"));
         planner.clearHistory();
         if (CancellationContext.isCancelled()) {
             progressListener.finished("failed");
@@ -522,7 +525,7 @@ public class AgentOrchestrator {
         }
 
         AgentMessage taskMsg = AgentMessage.task("orchestrator", step.description());
-        AgentMessage result = worker.executeWithContext(taskMsg, context, out);
+        AgentMessage result = worker.executeWithContext(taskMsg, context, out, streamFor("step", step.id()));
         if (CancellationContext.isCancelled()) {
             updateStep(steps, step.id(), step.withFailed("用户取消"));
             out.println("⏹️ 步骤 [" + step.id() + "] 已取消\n");
@@ -576,7 +579,7 @@ public class AgentOrchestrator {
             out.println("   反馈: " + issues + "\n");
 
             String feedbackContext = context + "\n\n之前的执行结果被审查拒绝，原因：\n" + issues;
-            AgentMessage retryResult = worker.executeWithContext(taskMsg, feedbackContext, out);
+            AgentMessage retryResult = worker.executeWithContext(taskMsg, feedbackContext, out, streamFor("step", step.id()));
             if (retryResult.type() == AgentMessage.Type.ERROR) {
                 log.warn("Step {} retry {} failed at LLM layer: {}", step.id(), retries, retryResult.content());
                 issues = "重试时 LLM 调用失败：" + retryResult.content();
