@@ -26,3 +26,17 @@ export function computeUpdate(current: string, releases: GhRelease[], includeBet
   const hasUpdate = !!latest && semverCompare(latest, current) > 0
   return { current, latest, hasUpdate, url: best ? best.html_url : null, isPrerelease: !!best && best.prerelease }
 }
+
+/** 语义化版本比较:latest 是否严格新于 current。剥离前导 v;非法串一律 false(不误报)。 */
+export function isNewerVersion(latest: string, current: string): boolean {
+  const parse = (v: string): number[] | null => {
+    const m = String(v ?? '').trim().replace(/^v/i, '').match(/^(\d+)\.(\d+)\.(\d+)/)
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+  }
+  const a = parse(latest), b = parse(current)
+  if (!a || !b) return false
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] > b[i]
+  }
+  return false
+}
