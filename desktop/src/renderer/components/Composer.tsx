@@ -9,7 +9,8 @@ import VoiceBars from './VoiceBars'
 import { shouldSendOnEnter } from '../../shared/composerKeys'
 import StatusChip from './StatusChip'
 import ModelSwitcher from './ModelSwitcher'
-import type { StatusData, McpResourceView } from '../../shared/types'
+import ModeSwitcher from './ModeSwitcher'
+import type { StatusData, McpResourceView, RunMode } from '../../shared/types'
 import { detectMention, filterMentionItems, insertMention } from '../../shared/mentionTrigger'
 import type { MentionState } from '../../shared/mentionTrigger'
 
@@ -37,6 +38,8 @@ interface ComposerProps {
   attachments?: AttachmentItem[]
   onPickAttachments?: () => void
   onRemoveAttachment?: (index: number) => void
+  mode?: RunMode
+  onModeChange?: (m: RunMode) => void
 }
 
 export default function Composer({
@@ -56,6 +59,8 @@ export default function Composer({
   attachments = [],
   onPickAttachments,
   onRemoveAttachment,
+  mode = 'react',
+  onModeChange,
 }: ComposerProps): JSX.Element {
   const [mention, setMention] = useState<MentionState>({ active: false, start: 0, query: '' })
   const [mentionIndex, setMentionIndex] = useState(0)
@@ -306,6 +311,9 @@ export default function Composer({
           </button>
 
           <div className="flex-1" />
+
+          {/* 执行模式:下拉选择(逐条) */}
+          <ModeSwitcher mode={mode} onModeChange={onModeChange} running={running} />
 
           {/* approve-mode toggle — functional */}
           <label className="flex select-none items-center gap-1.5 text-xs text-fg-muted">

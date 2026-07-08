@@ -1,5 +1,5 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
-import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView } from '../shared/types'
+import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode } from '../shared/types'
 import type { McpFormValue } from './components/McpServerForm'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
 import { createThrottleLatest, type ThrottledPush } from '../shared/throttleLatest'
@@ -18,11 +18,13 @@ import {
   setSandbox,
   addUserItem,
   truncateAtUserOrdinal,
+  markPlanReviewResolved,
   type TranscriptState,
   type Item,
 } from '../shared/transcriptReducer'
 import { messagesToItems } from '../shared/messagesToItems'
 import { lastUserMessage } from './lib/resend'
+import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -56,6 +58,7 @@ type LocalAction =
   | { type: 'setSessionId'; sessionId: string }
   | { type: 'setSandbox'; sandbox: 'macos-seatbelt' | 'none' | 'unknown' }
   | { type: 'truncateAtUser'; ordinal: number }
+  | { type: 'markPlanReviewResolved'; reviewId: string }
 
 type Action = BackendEvent | LocalAction
 
@@ -100,6 +103,9 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   if ('type' in action && action.type === 'truncateAtUser') {
     return truncateAtUserOrdinal(state, action.ordinal)
   }
+  if ('type' in action && action.type === 'markPlanReviewResolved') {
+    return markPlanReviewResolved(state, action.reviewId)
+  }
   // BackendEvent has 'kind' field
   return reduce(state, action as BackendEvent)
 }
@@ -139,6 +145,7 @@ export default function App(): JSX.Element {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const { prefs: appPrefs } = useSettings()
   const [updateNotice, setUpdateNotice] = useState<{ latest: string; url: string } | null>(null)
+  const [pendingMode, setPendingMode] = useState<RunMode>('react')
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
@@ -388,7 +395,8 @@ export default function App(): JSX.Element {
     dispatch({ type: 'markStarted' })
     dispatch({ type: 'addUserItem', text })
     try {
-      await window.wraith.submitTurn(text, pendingAttachments.length > 0 ? pendingAttachments.map(a => ({ path: a.path, kind: a.kind })) : undefined)
+      await window.wraith.submitTurn(text, pendingAttachments.length > 0 ? pendingAttachments.map(a => ({ path: a.path, kind: a.kind })) : undefined, pendingMode)
+      setPendingMode(pendingModeAfterSubmit(pendingMode))
     } catch (err) {
       console.error('[wraith] submitTurn error:', err)
       // 失败路径:markStarted 已提前置 turn='running',但本地 RPC 失败(后端死/拒绝)时
@@ -400,7 +408,7 @@ export default function App(): JSX.Element {
       const short = reason.replace(/https?:\/\/\S+/g, '').replace(/sk-\S+/g, '').slice(0, 80).trim()
       setSubmitError(short ? `消息发送失败,请重试(${short})` : '消息发送失败,请重试')
     }
-  }, [inputValue, state.turn, attachments])
+  }, [inputValue, state.turn, attachments, pendingMode])
 
   // ── approval handlers ──────────────────────────────────────────────────────
   const handleApprovalRespond = useCallback(
@@ -528,6 +536,15 @@ export default function App(): JSX.Element {
       }
     },
     [fetchSessions], // running 守卫改读 turnRef,不再依赖 state.turn
+  )
+
+  // ── plan review response ──────────────────────────────────────────────────
+  const handlePlanReview = useCallback(
+    (reviewId: string, decision: 'execute' | 'supplement' | 'cancel', feedback?: string) => {
+      void window.wraith.respondPlanReview(reviewId, decision, feedback)
+      dispatch({ type: 'markPlanReviewResolved', reviewId })
+    },
+    [],
   )
 
   // ── approval mode toggle ──────────────────────────────────────────────────
@@ -769,6 +786,8 @@ export default function App(): JSX.Element {
                 attachments={attachments}
                 onPickAttachments={handlePickAttachments}
                 onRemoveAttachment={handleRemoveAttachment}
+                mode={pendingMode}
+                onModeChange={setPendingMode}
               />
             )
             return state.hasStarted ? (
@@ -779,6 +798,7 @@ export default function App(): JSX.Element {
                   onEditMessage={handleEditMessage}
                   onDeleteMessage={handleDeleteMessage}
                   onResendMessage={handleResendMessage}
+                  onPlanReview={handlePlanReview}
                 />
                 <div className="shrink-0 px-4 py-3">{composer}</div>
               </>

@@ -259,7 +259,7 @@ ipcMain.handle('wraith:startSession', async (_e, workspaceDir: string | null) =>
   return r
 })
 
-ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { path: string; kind: string }[]) => {
+ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { path: string; kind: string }[], mode?: 'react' | 'plan') => {
   if (!client) throw new Error('Backend not connected')
   // T11 硬化:进入早窗(submit 在途、尚未 resolve)前清零 currentTurnId,
   // 使此窗口内的 turn.interrupt 发送 null 而非陈旧的上一 turn id。
@@ -268,7 +268,8 @@ ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { pa
   const result = await client.request('turn.submit', {
     sessionId: currentSessionId,
     input,
-    ...(attachments?.length ? { attachments: attachments.map(a => ({ path: a.path, kind: a.kind })) } : {})
+    ...(attachments?.length ? { attachments: attachments.map(a => ({ path: a.path, kind: a.kind })) } : {}),
+    mode: mode ?? 'react',
   })
   const r = result as { turnId: string; status: string }
   currentTurnId = r.turnId
@@ -330,6 +331,12 @@ ipcMain.handle(
     })
   }
 )
+
+// Plan mode 审批响应:将用户决策(execute/supplement/cancel)透传给后端 plan.review.respond。
+ipcMain.handle('wraith:respondPlanReview', async (_e, reviewId: string, decision: string, feedback: string | null) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('plan.review.respond', { reviewId, decision, ...(feedback ? { feedback } : {}) })
+})
 
 ipcMain.handle('wraith:interrupt', async () => {
   if (!client) throw new Error('Backend not connected')

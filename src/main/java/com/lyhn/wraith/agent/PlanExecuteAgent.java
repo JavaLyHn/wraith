@@ -107,6 +107,10 @@ public class PlanExecuteAgent {
     private final MemoryManager memoryManager;
     private final ConversationHistoryCompactor historyCompactor;
     private final PrintStream out;
+    /** 生命周期旁路监听器；默认 NOOP，CLI 行为不受影响。 */
+    private final PlanProgressListener progressListener;
+    /** 每个任务步骤的流式监听器工厂；默认输出到 out（CLI 行为不变），桌面可注入以导向事件流。 */
+    private java.util.function.BiFunction<String, StreamState, LlmClient.StreamListener> stepStreamFactory;
     private Supplier<String> externalContextSupplier = () -> "";
     private SkillRegistry skillRegistry;
     private SkillContextBuffer skillContextBuffer;
@@ -138,6 +142,13 @@ public class PlanExecuteAgent {
 
     PlanExecuteAgent(LlmClient llmClient, ToolRegistry toolRegistry, Planner planner,
                      MemoryManager memoryManager, PlanReviewHandler reviewHandler, PrintStream out) {
+        this(llmClient, toolRegistry, planner, memoryManager, reviewHandler, out, PlanProgressListener.NOOP);
+    }
+
+    // 桌面注入进度监听器；其余装配同 6 参构造。
+    public PlanExecuteAgent(LlmClient llmClient, ToolRegistry toolRegistry, Planner planner,
+                     MemoryManager memoryManager, PlanReviewHandler reviewHandler, PrintStream out,
+                     PlanProgressListener progressListener) {
         this.llmClient = llmClient;
         this.toolRegistry = toolRegistry != null ? toolRegistry : new ToolRegistry();
         this.out = out == null ? deferredSystemOut() : out;
@@ -145,11 +156,20 @@ public class PlanExecuteAgent {
         this.reviewHandler = reviewHandler == null ? (goal, plan) -> PlanReviewDecision.execute() : reviewHandler;
         this.memoryManager = memoryManager != null ? memoryManager : new MemoryManager(llmClient);
         this.historyCompactor = new ConversationHistoryCompactor(llmClient);
+        this.progressListener = progressListener != null ? progressListener : PlanProgressListener.NOOP;
         this.toolRegistry.setContextProfile(this.memoryManager.getContextProfile());
         this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
         this.memoryManager.setProjectPath(this.toolRegistry.getProjectPath());
         this.toolRegistry.setScopedMemorySaver(this.memoryManager::storeFact);
         this.planner.setProjectMemorySupplier(this::buildProjectMemoryContext);
+        // 默认工厂：复现原 TaskStreamRenderer 行为，CLI 输出字节完全不变。
+        this.stepStreamFactory = (taskId, ss) -> new TaskStreamRenderer(taskId, ss, this.out);
+    }
+
+    /** 桌面注入：把步骤流式正文导向 message.delta 事件流而非终端 out。 */
+    public void setStepStreamFactory(
+            java.util.function.BiFunction<String, StreamState, LlmClient.StreamListener> factory) {
+        if (factory != null) this.stepStreamFactory = factory;
     }
 
     private static PrintStream deferredSystemOut() {
@@ -222,24 +242,30 @@ public class PlanExecuteAgent {
         log.info("Plan run started: inputLength={}", userInput == null ? 0 : userInput.length());
         memoryManager.addUserMessage(userInput);
         StreamState streamState = new StreamState();
+        String result;
         try {
             if (CancellationContext.isCancelled()) {
-                return "⏹️ 已取消当前计划执行。";
+                result = "⏹️ 已取消当前计划执行。";
+            } else {
+                PlanRunOutcome outcome = runWithPlan(userInput, streamState);
+                if (outcome.persistAssistantMessage() && outcome.result() != null && !outcome.result().isBlank()) {
+                    memoryManager.addAssistantMessage("[计划结果] " + outcome.result());
+                }
+                String finalOut = outcome.result();
+                if (streamState.hasStreamedOutput() && (finalOut == null || finalOut.isBlank())) {
+                    result = "";
+                } else {
+                    result = finalOut;
+                }
             }
-            PlanRunOutcome outcome = runWithPlan(userInput, streamState);
-            if (outcome.persistAssistantMessage() && outcome.result() != null && !outcome.result().isBlank()) {
-                memoryManager.addAssistantMessage("[计划结果] " + outcome.result());
-            }
-            if (streamState.hasStreamedOutput() && (outcome.result() == null || outcome.result().isBlank())) {
-                return "";
-            }
-            return outcome.result();
         } catch (Exception e) {
             log.error("Plan run failed", e);
-            String errorMessage = "❌ 执行失败: " + e.getMessage();
-            memoryManager.addAssistantMessage(errorMessage);
-            return errorMessage;
+            result = "❌ 执行失败: " + e.getMessage();
+            memoryManager.addAssistantMessage(result);
         }
+        // 所有路径统一回调，含入口取消检查
+        progressListener.planFinished(result == null ? "" : result);
+        return result;
     }
 
 /**
@@ -274,6 +300,8 @@ public class PlanExecuteAgent {
     private String executePlan(ExecutionPlan plan, StreamState streamState) throws IOException {
         log.info("Executing plan: goal='{}', taskCount={}", plan.getGoal(), plan.getAllTasks().size());
         out.println("🚀 开始执行计划...\n");
+        // 仅在复审通过（EXECUTE/空反馈）后由 reviewAndExecutePlan 调用此方法，此时计划已确认执行。
+        progressListener.planCreated(plan);
 
         plan.markStarted();
         StringBuilder finalResult = new StringBuilder();
@@ -294,6 +322,7 @@ public class PlanExecuteAgent {
 
                 if (!batchResult.failed()) {
                     task.markCompleted(batchResult.result());
+                    progressListener.stepCompleted(task.getId(), true, batchResult.result());
                     streamedTaskOutputs.put(task.getId(), batchResult.streamedOutput());
                     log.info("Task completed: {} status={} resultChars={}",
                             task.getId(), task.getStatus(), batchResult.result() == null ? 0 : batchResult.result().length());
@@ -308,6 +337,7 @@ public class PlanExecuteAgent {
 
                 Exception error = batchResult.error();
                 task.markFailed(error.getMessage());
+                progressListener.stepCompleted(task.getId(), false, error.getMessage());
                 log.warn("Task failed: {} error={}", task.getId(), error.getMessage());
                 out.println("❌ 失败 [" + task.getId() + "]: " + error.getMessage() + "\n");
 
@@ -366,6 +396,7 @@ public class PlanExecuteAgent {
             log.info("Executing single task: {} type={}", task.getId(), task.getType());
             out.println("▶️ 执行任务 [" + task.getId() + "]: " + task.getDescription());
             task.markStarted();
+            progressListener.stepStarted(task.getId());
 
             try {
                 return List.of(TaskExecutionResult.success(task, executeTask(plan.getGoal(), plan, task, streamState, out)));
@@ -391,6 +422,7 @@ public class PlanExecuteAgent {
             for (Task task : executableTasks) {
                 out.println("▶️ 并行任务 [" + task.getId() + "]: " + task.getDescription());
                 task.markStarted();
+                progressListener.stepStarted(task.getId());
                 ByteArrayOutputStream baos = new ByteArrayOutputStream();
                 buffers.put(task.getId(), baos);
                 PrintStream taskOut = new PrintStream(baos, true, StandardCharsets.UTF_8);
@@ -469,7 +501,7 @@ public class PlanExecuteAgent {
 
         StringBuilder allResults = new StringBuilder();
         int iteration = 0;
-        TaskStreamRenderer streamRenderer = new TaskStreamRenderer(task.getId(), streamState, out);
+        LlmClient.StreamListener streamRenderer = stepStreamFactory.apply(task.getId(), streamState);
 
         int totalInputTokens = 0;
         int totalOutputTokens = 0;
@@ -703,14 +735,16 @@ public class PlanExecuteAgent {
         }
     }
 
-    private static final class StreamState {
+    // public：setStepStreamFactory 的 BiFunction 第二参数类型，属其公开 API 面；
+    // 跨包注入(cli 包引用 agent 包)时类型推断需可见，故必须 public。
+    public static final class StreamState {
         private volatile boolean streamedOutput;
 
-        private void markStreamed() {
+        void markStreamed() {
             this.streamedOutput = true;
         }
 
-        private boolean hasStreamedOutput() {
+        boolean hasStreamedOutput() {
             return streamedOutput;
         }
     }
@@ -789,7 +823,8 @@ public class PlanExecuteAgent {
             out.flush();
         }
 
-        private synchronized void finish() {
+        @Override
+        public synchronized void finish() {
             if (streamedOutput) {
                 if (reasoningRenderer != null) {
                     reasoningRenderer.finish();
@@ -806,7 +841,8 @@ public class PlanExecuteAgent {
          * 两次 iteration 之间（通常是一次 tool-call 分支完成后）调用：收尾当前渲染器并重置状态，
          * 让下一轮迭代能重新打印 🧠 / 🤖 标题，避免标题和内容被 HITL / 工具执行中断而错位。
          */
-        private synchronized void resetBetweenIterations() {
+        @Override
+        public synchronized void resetBetweenIterations() {
             if (reasoningRenderer != null) {
                 reasoningRenderer.finish();
                 reasoningRenderer = null;
@@ -824,7 +860,8 @@ public class PlanExecuteAgent {
             }
         }
 
-        private synchronized boolean hasStreamedOutput() {
+        @Override
+        public synchronized boolean hasStreamedOutput() {
             return streamedOutput;
         }
 

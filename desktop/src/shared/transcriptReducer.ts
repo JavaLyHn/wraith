@@ -11,7 +11,7 @@
  *   scanning the items array and is O(1).
  */
 
-import type { BackendEvent, StatusData } from './types'
+import type { BackendEvent, StatusData, PlanStepView } from './types'
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -27,12 +27,40 @@ export interface ToolCard {
   done: boolean
 }
 
+/** 计划步骤的渲染状态。 */
+export interface PlanStepItem {
+  id: string
+  description: string
+  status: 'pending' | 'running' | 'done' | 'failed'
+  result?: string
+}
+
+/** 计划清单 item（plan.created / step.* 事件维护）。 */
+export interface PlanItem {
+  type: 'plan'
+  planId: string
+  goal: string
+  steps: PlanStepItem[]
+}
+
+/** 计划复审 item（plan.review.requested 事件追加，响应后前端标记 resolved）。 */
+export interface PlanReviewItem {
+  type: 'planReview'
+  reviewId: string
+  planId: string
+  goal: string
+  steps: PlanStepView[]
+  resolved: boolean
+}
+
 export type Item =
   | { type: 'user'; text: string }
   | { type: 'message'; text: string }
   | { type: 'thinking'; label: string; text: string; done: boolean }
   | { type: 'tool'; card: ToolCard }
   | { type: 'diff'; filePath: string; before: string; after: string }
+  | PlanItem
+  | PlanReviewItem
 
 export interface TranscriptState {
   items: Item[]
@@ -98,6 +126,27 @@ function updateToolCard(
     }
     return item
   })
+}
+
+// ---------------------------------------------------------------------------
+// Helper — 不可变更新 plan item 内的某个步骤
+// ---------------------------------------------------------------------------
+
+function updatePlanStep(
+  state: TranscriptState,
+  planId: string,
+  stepId: string,
+  fn: (step: PlanStepItem) => PlanStepItem,
+): TranscriptState {
+  return {
+    ...state,
+    items: state.items.map(it => {
+      if (it.type === 'plan' && it.planId === planId) {
+        return { ...it, steps: it.steps.map(st => st.id === stepId ? fn(st) : st) }
+      }
+      return it
+    }),
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +318,60 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
       }
     }
 
+    // ── plan mode 事件 ──────────────────────────────────────────────────────
+    case 'plan.created': {
+      const planId = typeof p['planId'] === 'string' ? p['planId'] : ''
+      const goal = typeof p['goal'] === 'string' ? p['goal'] : ''
+      const rawSteps = Array.isArray(p['steps']) ? (p['steps'] as Array<Record<string, unknown>>) : []
+      const steps: PlanStepItem[] = rawSteps.map(s => ({
+        id: typeof s['id'] === 'string' ? s['id'] : '',
+        description: typeof s['description'] === 'string' ? s['description'] : '',
+        status: 'pending' as const,
+      }))
+      // 幂等：同一 planId 已存在则替换(后端重新规划时会再发 plan.created)，否则追加
+      const exists = state.items.some(it => it.type === 'plan' && it.planId === planId)
+      if (exists) {
+        return {
+          ...state,
+          items: state.items.map(it =>
+            it.type === 'plan' && it.planId === planId
+              ? { ...it, goal, steps }
+              : it
+          ),
+        }
+      }
+      return { ...state, items: [...state.items, { type: 'plan', planId, goal, steps }] }
+    }
+
+    case 'plan.step.started': {
+      const planId = typeof p['planId'] === 'string' ? p['planId'] : ''
+      const stepId = typeof p['stepId'] === 'string' ? p['stepId'] : ''
+      return updatePlanStep(state, planId, stepId, st => ({ ...st, status: 'running' }))
+    }
+
+    case 'plan.step.completed': {
+      const planId = typeof p['planId'] === 'string' ? p['planId'] : ''
+      const stepId = typeof p['stepId'] === 'string' ? p['stepId'] : ''
+      const ok = typeof p['ok'] === 'boolean' ? p['ok'] : false
+      const result = typeof p['result'] === 'string' ? p['result'] : undefined
+      return updatePlanStep(state, planId, stepId, st => ({
+        ...st,
+        status: ok ? 'done' : 'failed',
+        ...(result !== undefined ? { result } : {}),
+      }))
+    }
+
+    case 'plan.review.requested': {
+      const reviewId = typeof p['reviewId'] === 'string' ? p['reviewId'] : ''
+      const planId = typeof p['planId'] === 'string' ? p['planId'] : ''
+      const goal = typeof p['goal'] === 'string' ? p['goal'] : ''
+      const steps = Array.isArray(p['steps']) ? (p['steps'] as PlanStepView[]) : []
+      return {
+        ...state,
+        items: [...state.items, { type: 'planReview', reviewId, planId, goal, steps, resolved: false }],
+      }
+    }
+
     // ── unknown → safe ignore ───────────────────────────────────────────────
     default:
       return state
@@ -357,6 +460,50 @@ export function setSessionId(state: TranscriptState, sessionId: string): Transcr
 /** 设置沙箱状态。 */
 export function setSandbox(state: TranscriptState, sandbox: 'macos-seatbelt' | 'none' | 'unknown'): TranscriptState {
   return { ...state, sandbox }
+}
+
+/**
+ * 将指定 reviewId 的 planReview item 标记为已处理(resolved:true)。
+ * B3 PlanReviewCard 在用户提交响应后调用。
+ */
+export function markPlanReviewResolved(state: TranscriptState, reviewId: string): TranscriptState {
+  return {
+    ...state,
+    items: state.items.map(it =>
+      it.type === 'planReview' && it.reviewId === reviewId
+        ? { ...it, resolved: true }
+        : it
+    ),
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 兼容别名（测试与外部模块使用 transcriptReducer / initialTranscriptState）
+// ---------------------------------------------------------------------------
+
+/**
+ * 公开别名。接受标准 BackendEvent（JSON-RPC 通知形式）或
+ * 测试用的"扁平事件"形式 `{ type: 'plan.created', planId, ... }`。
+ * 扁平形式会被规范化为 `{ kind: 'notification', method, params }` 后转给 reduce。
+ */
+export function transcriptReducer(
+  state: TranscriptState,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  evt: BackendEvent | Record<string, any>,
+): TranscriptState {
+  // 若已是标准 BackendEvent（含 kind 字段），直接转发
+  if (typeof (evt as BackendEvent).kind === 'string') {
+    return reduce(state, evt as BackendEvent)
+  }
+  // 扁平形式：{ type: 'plan.created', planId, ... } → 规范化为通知
+  const { type: method, ...rest } = evt as Record<string, unknown>
+  if (typeof method !== 'string') return state
+  return reduce(state, { kind: 'notification', method, params: rest })
+}
+
+/** 返回一份新的 initialState 拷贝（防止测试间共享同一引用）。 */
+export function initialTranscriptState(): TranscriptState {
+  return { ...initialState }
 }
 
 /** 提交时 echo 一条 user 气泡(封口当前 message)。 */

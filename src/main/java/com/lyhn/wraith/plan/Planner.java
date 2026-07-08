@@ -289,7 +289,7 @@ public class Planner {
             out.flush();
         }
 
-        private void finish() {
+        @Override public void finish() {
             if (streamed) {
                 if (reasoningRenderer != null) {
                     reasoningRenderer.finish();

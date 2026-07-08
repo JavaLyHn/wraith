@@ -535,7 +535,7 @@ public class SubAgent {
          * 在两次迭代（通常是 tool-call 分支）之间调用：收尾当前渲染器并重置状态，
          * 让下一轮迭代的 reasoning/content 能重新打印各自的标题。
          */
-        private void resetBetweenIterations() {
+        @Override public void resetBetweenIterations() {
             if (reasoningRenderer != null) {
                 reasoningRenderer.finish();
                 reasoningRenderer = null;
@@ -562,7 +562,7 @@ public class SubAgent {
             }
         }
 
-        private void finish() {
+        @Override public void finish() {
             if (reasoningRenderer != null) {
                 reasoningRenderer.finish();
             }

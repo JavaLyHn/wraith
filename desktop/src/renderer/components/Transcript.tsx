@@ -5,6 +5,7 @@ import ToolCard from './ToolCard'
 import DiffCard from './DiffCard'
 import UserMessage from './UserMessage'
 import AgentMessage from './AgentMessage'
+import { PlanChecklist, PlanReviewCard } from './PlanCard'
 
 interface TranscriptProps {
   items: Item[]
@@ -13,9 +14,11 @@ interface TranscriptProps {
   onEditMessage: (ordinal: number, newText: string) => void
   onDeleteMessage: (ordinal: number) => void
   onResendMessage: (ordinal: number, text: string) => void
+  /** 计划复审响应回调。 */
+  onPlanReview: (reviewId: string, decision: 'execute' | 'supplement' | 'cancel', feedback?: string) => void
 }
 
-export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage }: TranscriptProps): JSX.Element {
+export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview }: TranscriptProps): JSX.Element {
   let userOrdinal = 0 // 渲染期为 user 气泡计数(1-based),rewind 用
   const totalUsers = items.filter(i => i.type === 'user').length
   const containerRef = useRef<HTMLDivElement>(null)
@@ -72,6 +75,12 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
         }
         if (item.type === 'diff') {
           return <DiffCard key={idx} filePath={item.filePath} before={item.before} after={item.after} />
+        }
+        if (item.type === 'plan') {
+          return <PlanChecklist key={item.planId} item={item} />
+        }
+        if (item.type === 'planReview') {
+          return <PlanReviewCard key={item.reviewId} item={item} onReview={onPlanReview} />
         }
         return null
       })}

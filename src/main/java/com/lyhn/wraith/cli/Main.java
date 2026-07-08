@@ -1438,6 +1438,73 @@ public class Main {
                             throw new RuntimeException(em);
                         }
                     }
+                    // ── mode=plan 覆写：组装 PlanExecuteAgent 并路由到桌面事件流 ──────────────
+                    @Override
+                    public String runTurn(String input,
+                                         java.util.List<com.lyhn.wraith.llm.LlmClient.ContentPart> imageParts,
+                                         java.util.List<String> imageNames,
+                                         String mode) throws Exception {
+                        if (!"plan".equals(mode)) {
+                            // ReAct 原路径：委托三参重载
+                            return runTurn(input, imageParts, imageNames);
+                        }
+                        // @-mention 展开(与 ReAct 路径保持一致)
+                        String expanded = input;
+                        com.lyhn.wraith.mcp.McpServerManager m = appServerMcp.manager();
+                        if (m != null) expanded = new com.lyhn.wraith.mcp.mention.AtMentionExpander(m).expand(input);
+                        final String goal = expanded;
+
+                        // 本轮合成 planId(禁用 Date/random，用 identityHashCode)
+                        String planId = "plan_" + java.lang.System.identityHashCode(goal);
+
+                        // 复审桥：计划生成 → 路由到 UI → 映射回 PlanReviewDecision
+                        com.lyhn.wraith.agent.PlanExecuteAgent.PlanReviewHandler reviewHandler = (g, plan) -> {
+                            java.util.List<java.util.Map<String, Object>> steps =
+                                    com.lyhn.wraith.runtime.appserver.EventStreamPlanListener.stepsOf(plan);
+                            com.lyhn.wraith.runtime.appserver.EventStreamRenderer.PlanReviewOutcome outcome =
+                                    renderer.requestPlanReview(planId, g, steps);
+                            return switch (outcome.decision()) {
+                                case "supplement" ->
+                                        com.lyhn.wraith.agent.PlanExecuteAgent.PlanReviewDecision.supplement(outcome.feedback());
+                                case "cancel" ->
+                                        com.lyhn.wraith.agent.PlanExecuteAgent.PlanReviewDecision.cancel();
+                                default ->
+                                        com.lyhn.wraith.agent.PlanExecuteAgent.PlanReviewDecision.execute();
+                            };
+                        };
+
+                        // out=discard：桌面 stdout 是 JSON-RPC 管道，绝不写
+                        java.io.PrintStream discard = new java.io.PrintStream(java.io.OutputStream.nullOutputStream());
+
+                        // 装配 PlanExecuteAgent（7 参公开构造，planner=null 则内部 new Planner(llmClient)）
+                        com.lyhn.wraith.agent.PlanExecuteAgent planAgent =
+                                new com.lyhn.wraith.agent.PlanExecuteAgent(
+                                        currentClient[0],
+                                        agent.getToolRegistry(),
+                                        null,  // planner=null → 内部 new Planner(llmClient)
+                                        agent.getMemoryManager(),
+                                        reviewHandler,
+                                        discard,
+                                        new com.lyhn.wraith.runtime.appserver.EventStreamPlanListener(renderer, planId));
+
+                        // 步骤流 → message.delta（目标类型推断，StreamState 已 public）
+                        planAgent.setStepStreamFactory(
+                                (id, ss) -> new com.lyhn.wraith.runtime.appserver.EventStreamStepListener(renderer));
+
+                        // 外部上下文（MCP 资源索引）
+                        planAgent.setExternalContextSupplier(() -> {
+                            com.lyhn.wraith.mcp.McpServerManager mgr = appServerMcp.manager();
+                            return mgr != null ? mgr.resourceIndexForPrompt() : "";
+                        });
+
+                        // skill 装配（桌面 runner 已持有 skillRegistry/skillContextBuffer，一并注入）
+                        planAgent.setSkillRegistry(skillRegistry);
+                        planAgent.setSkillContextBuffer(skillContextBuffer);
+
+                        // 快照封装（与 CLI plan 路径对齐）
+                        com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
+                        return snap.runTurn("plan", goal, () -> planAgent.run(goal));
+                    }
                 };
             }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
 

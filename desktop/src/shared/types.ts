@@ -342,6 +342,28 @@ export type AutomationEvent =
   | { kind: 'approval'; runId: string; payload: Record<string, unknown> }
   | { kind: 'open-panel' }
 
+// ---------------------------------------------------------------------------
+// Plan mode: 运行模式 + 计划事件负载(Java PlanMode / Plan* 通知的前端镜像)
+// ---------------------------------------------------------------------------
+
+/** 会话运行模式:'react' = 传统反应模式,'plan' = 计划审批模式。 */
+export type RunMode = 'react' | 'plan'
+
+/** 计划步骤视图(mirrors Java PlanStep). */
+export interface PlanStepView { id: string; description: string; deps: string[] }
+
+/** plan.created 通知负载。 */
+export interface PlanCreatedEvent { planId: string; goal: string; steps: PlanStepView[] }
+
+/** plan.step.started 通知负载。 */
+export interface PlanStepStartedEvent { planId: string; stepId: string }
+
+/** plan.step.completed 通知负载。 */
+export interface PlanStepCompletedEvent { planId: string; stepId: string; ok: boolean; result?: string }
+
+/** plan.review.requested 通知负载。 */
+export interface PlanReviewRequestedEvent { reviewId: string; planId: string; goal: string; steps: PlanStepView[] }
+
 export interface AppInfo { version: string; repoUrl: string; dataDir: string }
 export interface UpdateResult {
   current: string

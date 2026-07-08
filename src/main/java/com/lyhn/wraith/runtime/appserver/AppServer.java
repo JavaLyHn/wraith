@@ -32,6 +32,13 @@ public final class AppServer {
                                java.util.List<String> imageNames) throws Exception {
             return runTurn(input);
         }
+        /** 带执行模式的重载(react|plan);默认忽略 mode,退化到带图重载。桌面覆写以支持 plan。 */
+        default String runTurn(String input,
+                               java.util.List<com.lyhn.wraith.llm.LlmClient.ContentPart> imageParts,
+                               java.util.List<String> imageNames,
+                               String mode) throws Exception {
+            return runTurn(input, imageParts, imageNames);
+        }
         /** 切换审批模式。auto=true → 关闭 HITL（自动放行）。默认 no-op，旧实现无需改动。 */
         default void setApprovalMode(boolean auto) { }
         /** 本项目历史会话(最近在前)。默认空。 */
@@ -180,6 +187,7 @@ public final class AppServer {
                 writer.result(msg.id(), Map.of("ok", true));
             }
             case "approval.respond" -> handleApprovalRespond(msg);
+            case "plan.review.respond" -> handlePlanReviewRespond(msg);
             case "session.setApprovalMode" -> handleSetApprovalMode(msg);
             case "session.list" -> handleSessionList(msg);
             case "session.resume" -> handleSessionResume(msg);
@@ -530,6 +538,8 @@ public final class AppServer {
         }
         JsonNode params = msg.params();
         String input = (params != null && params.hasNonNull("input")) ? params.get("input").asText() : "";
+        // 读取执行模式(react|plan),缺省 react
+        String mode = (params != null && params.hasNonNull("mode")) ? params.get("mode").asText("react") : "react";
 
         // 附件解析与校验（失败走 started→turn.failed 时序，不发 LLM）
         TurnAttachments.Resolved att;
@@ -549,9 +559,10 @@ public final class AppServer {
         writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
         writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
         final TurnAttachments.Resolved attFinal = att;
+        final String modeFinal = mode;
         Thread t = new Thread(() -> {
             try {
-                session.runTurn(effectiveInput, attFinal.imageParts(), attFinal.imageNames());
+                session.runTurn(effectiveInput, attFinal.imageParts(), attFinal.imageNames(), modeFinal);
                 String persisted = session.persistTurn();
                 String reported = (persisted != null) ? persisted : sessionId;
                 if (persisted != null) sessionId = persisted;
@@ -583,6 +594,18 @@ public final class AppServer {
         }
         ApprovalResult result = new ApprovalResult(d, modifiedArgs, reason, allowNetwork);
         session.renderer().resolveApproval(approvalId, result);
+        writer.result(msg.id(), java.util.Map.of("ok", true));
+    }
+
+    /** 处理前端的计划复审响应（镜像 handleApprovalRespond）。 */
+    private void handlePlanReviewRespond(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        String reviewId = (p != null && p.hasNonNull("reviewId")) ? p.get("reviewId").asText() : null;
+        if (reviewId == null) { writer.error(msg.id(), -32602, "缺 reviewId"); return; }
+        String decision = (p.hasNonNull("decision")) ? p.get("decision").asText("cancel") : "cancel";
+        String feedback = p.hasNonNull("feedback") ? p.get("feedback").asText(null) : null;
+        session.renderer().resolvePlanReview(reviewId, decision, feedback);
         writer.result(msg.id(), java.util.Map.of("ok", true));
     }
 
