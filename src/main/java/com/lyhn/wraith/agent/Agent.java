@@ -519,6 +519,21 @@ public class Agent {
     }
 
     /**
+     * 记录一轮"外部执行"到 conversationHistory——用于 Plan/Team 模式:它们经
+     * PlanExecuteAgent/AgentOrchestrator 运行(不走本 Agent 的 run,故只写了 memoryManager),
+     * 需把该轮补进 conversationHistory,才能被 persistTurn 落盘到会话历史、出现在左侧列表。
+     * 与 react 轮次一致:追加一条 user + 一条 assistant(与 memoryManager 的双写对齐)。
+     */
+    public void recordExternalTurn(String userInput, String assistantResult) {
+        if (userInput != null && !userInput.isBlank()) {
+            conversationHistory.add(LlmClient.Message.user(userInput));
+        }
+        if (assistantResult != null && !assistantResult.isBlank()) {
+            conversationHistory.add(LlmClient.Message.assistant(assistantResult));
+        }
+    }
+
+    /**
      * 获取记忆管理器
      */
     public MemoryManager getMemoryManager() {

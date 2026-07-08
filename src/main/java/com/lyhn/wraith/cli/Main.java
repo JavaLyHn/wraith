@@ -1488,6 +1488,8 @@ public class Main {
                             com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
                             String result = snap.runTurn("team", goal, () -> orchestrator.run(goal));
                             // 不发底部消息：TeamCard 已是完整产出，handleTurn 忽略返回值
+                            // 把本轮补进 conversationHistory,使 persistTurn 能落盘到会话历史(否则 team 轮不进左侧列表)
+                            agent.recordExternalTurn(goal, result);
                             return result;
                         }
                         // @-mention 展开(与 ReAct 路径保持一致)
@@ -1553,6 +1555,9 @@ public class Main {
                             renderer.appendAssistantContentDelta(cleanAnswer);
                             renderer.finishAssistantContent();
                         }
+                        // 把本轮补进 conversationHistory,使 persistTurn 能落盘到会话历史(否则 plan 轮不进左侧列表)
+                        agent.recordExternalTurn(goal,
+                                (cleanAnswer != null && !cleanAnswer.isBlank()) ? cleanAnswer : result);
                         return result;
                     }
                 };
