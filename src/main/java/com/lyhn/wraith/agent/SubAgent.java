@@ -14,6 +14,7 @@ import com.lyhn.wraith.prompt.ProjectMemoryLoader;
 import com.lyhn.wraith.skill.SkillContextBuffer;
 import com.lyhn.wraith.skill.SkillIndexFormatter;
 import com.lyhn.wraith.skill.SkillRegistry;
+import com.lyhn.wraith.llm.CompositeStreamListener;
 import com.lyhn.wraith.tool.ToolRegistry;
 import com.lyhn.wraith.tool.ToolRegistry.ToolExecutionResult;
 import com.lyhn.wraith.tool.ToolRegistry.ToolInvocation;
@@ -169,8 +170,22 @@ public class SubAgent {
     /**
      * 执行任务并将流式输出写入指定 PrintStream。并发执行时为每个步骤传入独立的 PrintStream，
      * 避免多个 Agent 同时写入 System.out 造成输出交错。
+     *
+     * <p>CLI 兼容入口 — {@code extra} 为 {@code null}，行为与原签名字节相同。</p>
      */
     public AgentMessage execute(AgentMessage task, PrintStream out) {
+        return execute(task, out, null);
+    }
+
+    /**
+     * 执行任务，允许调用方注入一个额外的 {@link LlmClient.StreamListener}（例如桌面端事件转发器）。
+     *
+     * <p>当 {@code extra == null} 时仅使用内部 {@link SubAgentStreamRenderer}，
+     * 行为与无 extra 的重载完全一致（CLI 字节不变）。
+     * 当 {@code extra != null} 时通过 {@link CompositeStreamListener} 扇出，
+     * 两个监听器均收到全部 delta/finish/reset 事件。</p>
+     */
+    public AgentMessage execute(AgentMessage task, PrintStream out, LlmClient.StreamListener extra) {
         log.info("[{}] executing task from {}: type={}", name, task.fromAgent(), task.type());
         pruneHistoricalImagePayloads();
         refreshSystemPrompt();
@@ -182,6 +197,9 @@ public class SubAgent {
                 Path.of(toolRegistry.getProjectPath())));
 
         SubAgentStreamRenderer streamRenderer = new SubAgentStreamRenderer(name, role, out);
+        LlmClient.StreamListener listener = (extra == null)
+                ? streamRenderer
+                : new CompositeStreamListener(List.of(streamRenderer, extra));
 
         AgentBudget budget = AgentBudget.fromLlmClient(llmClient);
 
@@ -189,7 +207,7 @@ public class SubAgent {
         while (true) {
             AgentBudget.ExitReason exitReason = budget.check();
             if (exitReason != AgentBudget.ExitReason.WITHIN_BUDGET) {
-                streamRenderer.finish();
+                listener.finish();
                 String description = budget.describeExit(exitReason);
                 log.warn("[{}] run exhausted budget: reason={}, iteration={}, tokens={}/{}",
                         name, exitReason, budget.iteration(),
@@ -207,7 +225,7 @@ public class SubAgent {
                 LlmClient.ChatResponse response = llmClient.chat(
                         conversationHistory,
                         shouldUseTools() && llmClient.supportsTools() ? toolRegistry.getToolDefinitions() : null,
-                        streamRenderer
+                        listener
                 );
                 LlmTraceLogger.logReasoning(log,
                         "sub-agent name=" + name + " role=" + role + " iteration=" + budget.iteration(),
@@ -227,7 +245,7 @@ public class SubAgent {
 
                     // 在工具执行前 flush 并重置流式渲染器：TerminalMarkdownRenderer 按换行 flush，
                     // 没有换行的 pending 内容会被 HITL 提示"跨过"导致标题错位。
-                    streamRenderer.resetBetweenIterations();
+                    listener.resetBetweenIterations();
 
                     List<ToolExecutionResult> toolResults = executeToolCalls(response.toolCalls());
                     for (ToolExecutionResult toolResult : toolResults) {
@@ -240,13 +258,13 @@ public class SubAgent {
                 // 没有工具调用，返回最终结果
                 conversationHistory.add(LlmClient.Message.assistant(response.content()));
 
-                streamRenderer.finish();
+                listener.finish();
 
                 return AgentMessage.result(name, role, response.content());
 
             } catch (IOException e) {
                 log.error("[{}] LLM call failed", name, e);
-                streamRenderer.finish();
+                listener.finish();
                 return AgentMessage.error(name, role, "LLM 调用失败: " + e.getMessage());
             }
         }
@@ -256,17 +274,28 @@ public class SubAgent {
      * 执行任务（带上下文注入），用于 Worker 接收额外上下文
      */
     public AgentMessage executeWithContext(AgentMessage task, String context) {
-        return executeWithContext(task, context, System.out);
+        return executeWithContext(task, context, System.out, null);
     }
 
+    /**
+     * CLI 兼容入口 — {@code extra} 隐式为 {@code null}。
+     */
     public AgentMessage executeWithContext(AgentMessage task, String context, PrintStream out) {
+        return executeWithContext(task, context, out, null);
+    }
+
+    /**
+     * 执行任务（带上下文注入），允许注入额外 {@link LlmClient.StreamListener}。
+     */
+    public AgentMessage executeWithContext(AgentMessage task, String context, PrintStream out,
+                                           LlmClient.StreamListener extra) {
         String enrichedContent = task.content();
         if (context != null && !context.isEmpty()) {
             enrichedContent = context + "\n\n当前任务：" + task.content();
         }
         AgentMessage enrichedTask = new AgentMessage(task.fromAgent(), task.fromRole(),
                 enrichedContent, task.type());
-        return execute(enrichedTask, out);
+        return execute(enrichedTask, out, extra);
     }
 
     /**
