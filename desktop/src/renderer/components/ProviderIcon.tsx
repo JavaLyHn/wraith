@@ -37,6 +37,8 @@ import ModelScopeColor from '@lobehub/icons/es/ModelScope/components/Color'
 import InfinigenceColor from '@lobehub/icons/es/Infinigence/components/Color'
 import XiaomiMiMoMono from '@lobehub/icons/es/XiaomiMiMo/components/Mono'
 import SparkColor from '@lobehub/icons/es/Spark/components/Color'
+// — Custom brand marks not in @lobehub/icons (bundled PNG, keyed by provider id) —
+import agnesLogo from '../assets/agnes.png'
 import { findCatalogEntry } from '../../shared/providerCatalog'
 
 type LobeIconComp = React.ComponentType<{ size?: number | string }>
@@ -71,17 +73,29 @@ const LOBE_ICONS: Record<string, LobeIconComp> = {
   Spark: SparkColor as unknown as LobeIconComp,
 }
 
-export type IconKind = { kind: 'lobe'; name: string } | { kind: 'fallback'; letter: string }
+// Brands absent from @lobehub/icons — official mark bundled as a PNG, keyed by provider id.
+const CUSTOM_ICONS: Record<string, string> = {
+  agnes: agnesLogo,
+}
+
+export type IconKind =
+  | { kind: 'lobe'; name: string }
+  | { kind: 'image'; id: string }
+  | { kind: 'fallback'; letter: string }
 
 /**
- * 决定用 lobehub 图标还是回落首字母(纯函数,可测)。
+ * 决定用 lobehub 图标 / 自定义品牌图 / 回落首字母(纯函数,可测)。
  * - 如果 catalog 有 lobeIcon 且在 LOBE_ICONS 映射中 → lobe
+ * - 否则若 id 在 CUSTOM_ICONS(lobehub 没有的品牌,自带 PNG)→ image
  * - 否则 → fallback,letter 取 displayName/id 的第一个 Unicode 字符
  */
 export function resolveIconKind(id: string): IconKind {
   const e = findCatalogEntry(id)
   if (e?.lobeIcon && e.lobeIcon in LOBE_ICONS) {
     return { kind: 'lobe', name: e.lobeIcon }
+  }
+  if (id in CUSTOM_ICONS) {
+    return { kind: 'image', id }
   }
   const label = e?.displayName ?? id
   return { kind: 'fallback', letter: [...label][0] ?? '?' }
@@ -105,6 +119,19 @@ export default function ProviderIcon({
     if (Comp) {
       return <Comp size={size} />
     }
+  }
+
+  if (k.kind === 'image') {
+    return (
+      <img
+        src={CUSTOM_ICONS[k.id]}
+        width={size}
+        height={size}
+        alt=""
+        aria-hidden
+        className="rounded-full object-contain"
+      />
+    )
   }
 
   // Fallback: colored letter badge
