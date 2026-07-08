@@ -18,6 +18,7 @@ import {
   setSandbox,
   addUserItem,
   truncateAtUserOrdinal,
+  markPlanReviewResolved,
   type TranscriptState,
   type Item,
 } from '../shared/transcriptReducer'
@@ -56,6 +57,7 @@ type LocalAction =
   | { type: 'setSessionId'; sessionId: string }
   | { type: 'setSandbox'; sandbox: 'macos-seatbelt' | 'none' | 'unknown' }
   | { type: 'truncateAtUser'; ordinal: number }
+  | { type: 'markPlanReviewResolved'; reviewId: string }
 
 type Action = BackendEvent | LocalAction
 
@@ -99,6 +101,9 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   }
   if ('type' in action && action.type === 'truncateAtUser') {
     return truncateAtUserOrdinal(state, action.ordinal)
+  }
+  if ('type' in action && action.type === 'markPlanReviewResolved') {
+    return markPlanReviewResolved(state, action.reviewId)
   }
   // BackendEvent has 'kind' field
   return reduce(state, action as BackendEvent)
@@ -530,6 +535,15 @@ export default function App(): JSX.Element {
     [fetchSessions], // running 守卫改读 turnRef,不再依赖 state.turn
   )
 
+  // ── plan review response ──────────────────────────────────────────────────
+  const handlePlanReview = useCallback(
+    (reviewId: string, decision: 'execute' | 'supplement' | 'cancel', feedback?: string) => {
+      void window.wraith.respondPlanReview(reviewId, decision, feedback)
+      dispatch({ type: 'markPlanReviewResolved', reviewId })
+    },
+    [],
+  )
+
   // ── approval mode toggle ──────────────────────────────────────────────────
   const handleToggleApproval = useCallback(
     async (auto: boolean) => {
@@ -779,6 +793,7 @@ export default function App(): JSX.Element {
                   onEditMessage={handleEditMessage}
                   onDeleteMessage={handleDeleteMessage}
                   onResendMessage={handleResendMessage}
+                  onPlanReview={handlePlanReview}
                 />
                 <div className="shrink-0 px-4 py-3">{composer}</div>
               </>
