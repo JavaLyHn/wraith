@@ -68,11 +68,11 @@ function roleDotClass(
     return steps.length > 0 ? 'bg-green-500' : 'bg-fg-subtle/40'
   }
   if (role === 'reviewer') {
-    return anyRunning ? 'bg-amber-400' : 'bg-fg-subtle/40'
+    return anyRunning ? 'bg-amber-400 animate-pulse' : 'bg-fg-subtle/40'
   }
   // Worker: amber if it's the agent of any running step
   const workerRunning = steps.some(s => s.status === 'running' && s.agent === agentId)
-  return workerRunning ? 'bg-amber-400' : 'bg-fg-subtle/40'
+  return workerRunning ? 'bg-amber-400 animate-pulse' : 'bg-fg-subtle/40'
 }
 
 // ---------------------------------------------------------------------------
@@ -114,8 +114,8 @@ function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass:
             {agentName}
           </span>
         )}
-        {/* Status icon */}
-        <span className={`shrink-0 ${stepStatusClass(step.status)}`}>
+        {/* Status icon（running 时脉冲动画,避免整卡看着静止） */}
+        <span className={`shrink-0 ${step.status === 'running' ? 'animate-pulse ' : ''}${stepStatusClass(step.status)}`}>
           {stepStatusIcon(step.status)}
         </span>
         {/* Description */}
