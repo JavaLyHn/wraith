@@ -63,6 +63,8 @@ export interface TeamStep {
   agent?: string
   status: 'pending' | 'running' | 'done' | 'failed' | 'skipped'
   result?: string
+  /** 步骤流式正文（team.step.output delta 累积；与完成时的 result 字段独立）。 */
+  output?: string
   approved?: boolean
   retries?: number
 }
@@ -76,6 +78,8 @@ export interface TeamItem {
   steps: TeamStep[]
   parallelStepIds: string[]
   status?: 'completed' | 'partial' | 'failed'
+  /** 规划器流式输出（team.plan.output delta 累积）。 */
+  plannerOutput?: string
 }
 
 export type Item =
@@ -514,6 +518,32 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
             : it
         ),
       }
+    }
+
+    case 'team.plan.output': {
+      // 规划器流式正文 delta — 追加到匹配 team 的 plannerOutput 字段
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const text = typeof p['text'] === 'string' ? p['text'] : ''
+      return {
+        ...state,
+        items: state.items.map(it => {
+          if (it.type === 'team' && it.teamId === teamId) {
+            return { ...it, plannerOutput: (it.plannerOutput ?? '') + text }
+          }
+          return it
+        }),
+      }
+    }
+
+    case 'team.step.output': {
+      // 步骤流式正文 delta — 追加到匹配步骤的 output 字段
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const stepId = typeof p['stepId'] === 'string' ? p['stepId'] : ''
+      const text = typeof p['text'] === 'string' ? p['text'] : ''
+      return updateTeamStep(state, teamId, stepId, st => ({
+        ...st,
+        output: (st.output ?? '') + text,
+      }))
     }
 
     // ── unknown → safe ignore ───────────────────────────────────────────────

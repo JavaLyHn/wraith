@@ -43,4 +43,69 @@ describe('team 归约', () => {
     expect(item.steps.find((x: any) => x.id === 'step_2')).toMatchObject({ status: 'done', result: 'R2', retries: 1 })
     expect(item.steps.find((x: any) => x.id === 'step_1')).toMatchObject({ status: 'failed', result: 'E1' })
   })
+
+  // ── Task 5: plannerOutput + step.output streaming ─────────────────────────
+
+  it('team.plan.output 两 delta 累加到 plannerOutput', () => {
+    const s = run([
+      ev('team.started', { teamId: 't2', goal: 'G', agents: [] }),
+      ev('team.plan.output', { teamId: 't2', text: 'Hello ' }),
+      ev('team.plan.output', { teamId: 't2', text: 'World' }),
+    ])
+    const item: any = s.items.find(i => i.type === 'team' && i.teamId === 't2')
+    expect(item.plannerOutput).toBe('Hello World')
+  })
+
+  it('team.plan.output unknown teamId 安全忽略', () => {
+    const s = run([
+      ev('team.started', { teamId: 't2', goal: 'G', agents: [] }),
+      ev('team.plan.output', { teamId: 'unknown', text: 'X' }),
+    ])
+    const item: any = s.items.find(i => i.type === 'team' && i.teamId === 't2')
+    expect(item.plannerOutput).toBeUndefined()
+  })
+
+  it('team.step.output 两 delta 累加到该步 output，另一步保持 undefined', () => {
+    const s = run([
+      ev('team.started', { teamId: 't3', goal: 'G', agents: [] }),
+      ev('team.plan', { teamId: 't3', steps: [
+        { id: 's1', description: 'A', type: 'X', dependencies: [] },
+        { id: 's2', description: 'B', type: 'X', dependencies: [] },
+      ] }),
+      ev('team.step.output', { teamId: 't3', stepId: 's1', text: 'foo ' }),
+      ev('team.step.output', { teamId: 't3', stepId: 's1', text: 'bar' }),
+    ])
+    const item: any = s.items.find(i => i.type === 'team' && i.teamId === 't3')
+    expect(item.steps.find((x: any) => x.id === 's1').output).toBe('foo bar')
+    expect(item.steps.find((x: any) => x.id === 's2').output).toBeUndefined()
+  })
+
+  it('两个并行 step 的 step.output 乱序到达各归其位，不串台', () => {
+    const s = run([
+      ev('team.started', { teamId: 't4', goal: 'G', agents: [] }),
+      ev('team.plan', { teamId: 't4', steps: [
+        { id: 'sA', description: 'A', type: 'X', dependencies: [] },
+        { id: 'sB', description: 'B', type: 'X', dependencies: [] },
+      ] }),
+      ev('team.step.output', { teamId: 't4', stepId: 'sA', text: 'alpha1 ' }),
+      ev('team.step.output', { teamId: 't4', stepId: 'sB', text: 'beta1 ' }),
+      ev('team.step.output', { teamId: 't4', stepId: 'sA', text: 'alpha2' }),
+      ev('team.step.output', { teamId: 't4', stepId: 'sB', text: 'beta2' }),
+    ])
+    const item: any = s.items.find(i => i.type === 'team' && i.teamId === 't4')
+    expect(item.steps.find((x: any) => x.id === 'sA').output).toBe('alpha1 alpha2')
+    expect(item.steps.find((x: any) => x.id === 'sB').output).toBe('beta1 beta2')
+  })
+
+  it('team.step.output unknown stepId 安全忽略', () => {
+    const s = run([
+      ev('team.started', { teamId: 't5', goal: 'G', agents: [] }),
+      ev('team.plan', { teamId: 't5', steps: [
+        { id: 's1', description: 'A', type: 'X', dependencies: [] },
+      ] }),
+      ev('team.step.output', { teamId: 't5', stepId: 'ghost', text: 'X' }),
+    ])
+    const item: any = s.items.find(i => i.type === 'team' && i.teamId === 't5')
+    expect(item.steps.find((x: any) => x.id === 's1').output).toBeUndefined()
+  })
 })
