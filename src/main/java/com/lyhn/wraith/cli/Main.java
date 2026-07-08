@@ -1438,15 +1438,57 @@ public class Main {
                             throw new RuntimeException(em);
                         }
                     }
-                    // ── mode=plan 覆写：组装 PlanExecuteAgent 并路由到桌面事件流 ──────────────
+                    // ── mode=plan / mode=team 覆写：组装对应 Agent 并路由到桌面事件流 ──────────────
                     @Override
                     public String runTurn(String input,
                                          java.util.List<com.lyhn.wraith.llm.LlmClient.ContentPart> imageParts,
                                          java.util.List<String> imageNames,
                                          String mode) throws Exception {
-                        if (!"plan".equals(mode)) {
+                        if (!"plan".equals(mode) && !"team".equals(mode)) {
                             // ReAct 原路径：委托三参重载
                             return runTurn(input, imageParts, imageNames);
+                        }
+
+                        // ── mode=team 分支：组装 AgentOrchestrator 并路由到桌面事件流 ───────────
+                        if ("team".equals(mode)) {
+                            // @-mention 展开（与其他模式保持一致）
+                            String expandedTeam = input;
+                            com.lyhn.wraith.mcp.McpServerManager mt = appServerMcp.manager();
+                            if (mt != null) expandedTeam = new com.lyhn.wraith.mcp.mention.AtMentionExpander(mt).expand(input);
+                            final String goal = expandedTeam;
+
+                            // teamId 与 plan 同款：identityHashCode
+                            String teamId = "team_" + java.lang.System.identityHashCode(goal);
+
+                            // out=discard：桌面 stdout 是 JSON-RPC 管道，绝不写
+                            java.io.PrintStream discard = new java.io.PrintStream(java.io.OutputStream.nullOutputStream());
+
+                            // 装配 AgentOrchestrator（与 CLI createTeamAgent + CLI team 路径完全对齐）
+                            com.lyhn.wraith.agent.AgentOrchestrator orchestrator =
+                                    new com.lyhn.wraith.agent.AgentOrchestrator(
+                                            currentClient[0],
+                                            agent.getToolRegistry(),
+                                            agent.getMemoryManager(),
+                                            discard);
+
+                            // 事件流 sink（TeamCard 即产出，不另发底部消息）
+                            orchestrator.setProgressListener(
+                                    new com.lyhn.wraith.runtime.appserver.EventStreamTeamListener(renderer, teamId));
+
+                            // 外部上下文（MCP 资源索引，与 CLI team 路径一致）
+                            orchestrator.setExternalContextSupplier(() -> {
+                                com.lyhn.wraith.mcp.McpServerManager mgr = appServerMcp.manager();
+                                return mgr != null ? mgr.resourceIndexForPrompt() : "";
+                            });
+
+                            // skill 装配（与 CLI team 路径一致）
+                            orchestrator.setSkillSystem(skillRegistry, skillContextBuffer);
+
+                            // 快照封装（与 CLI team 路径对齐）
+                            com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
+                            String result = snap.runTurn("team", goal, () -> orchestrator.run(goal));
+                            // 不发底部消息：TeamCard 已是完整产出，handleTurn 忽略返回值
+                            return result;
                         }
                         // @-mention 展开(与 ReAct 路径保持一致)
                         String expanded = input;
