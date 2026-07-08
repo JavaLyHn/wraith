@@ -346,8 +346,8 @@ export type AutomationEvent =
 // Plan mode: 运行模式 + 计划事件负载(Java PlanMode / Plan* 通知的前端镜像)
 // ---------------------------------------------------------------------------
 
-/** 会话运行模式:'react' = 传统反应模式,'plan' = 计划审批模式。 */
-export type RunMode = 'react' | 'plan'
+/** 会话运行模式:'react' = 传统反应模式,'plan' = 计划审批模式,'team' = 多智能体模式。 */
+export type RunMode = 'react' | 'plan' | 'team'
 
 /** 计划步骤视图(mirrors Java PlanStep). */
 export interface PlanStepView { id: string; description: string; deps: string[] }
@@ -366,6 +366,31 @@ export interface PlanReviewRequestedEvent { reviewId: string; planId: string; go
 
 /** plan.step.output 通知负载（步骤流式正文片段，嵌套在清单步骤行下方）。 */
 export interface PlanStepOutputEvent { planId: string; stepId: string; text: string }
+
+// ---------------------------------------------------------------------------
+// Team mode: 多智能体运行模式 + 团队事件负载(Java TeamMode / Team* 通知的前端镜像)
+// ---------------------------------------------------------------------------
+
+/** team.started 通知负载。 */
+export interface TeamStartedEvent { teamId: string; goal: string; agents: { id: string; role: string }[] }
+
+/** 团队步骤视图(mirrors Java TeamStep). */
+export interface TeamStepView { id: string; description: string; type: string; dependencies: string[] }
+
+/** team.plan 通知负载。 */
+export interface TeamPlanEvent { teamId: string; steps: TeamStepView[] }
+
+/** team.batch 通知负载。 */
+export interface TeamBatchEvent { teamId: string; batchIndex: number; stepIds: string[] }
+
+/** team.step.started 通知负载。 */
+export interface TeamStepStartedEvent { teamId: string; stepId: string; agent: string }
+
+/** team.step.completed 通知负载。 */
+export interface TeamStepCompletedEvent { teamId: string; stepId: string; status: string; result: string; approved: boolean; retries: number }
+
+/** team.finished 通知负载。 */
+export interface TeamFinishedEvent { teamId: string; status: string }
 
 export interface AppInfo { version: string; repoUrl: string; dataDir: string }
 export interface UpdateResult {
