@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode } from '../shared/types'
 import type { GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -11,7 +11,8 @@ import type { GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/g
 export interface WraithApi {
   initialize(workspaceDir: string | null): Promise<unknown>
   startSession(workspaceDir: string | null): Promise<{ sessionId: string }>
-  submitTurn(input: string, attachments?: { path: string; kind: string }[]): Promise<{ turnId: string; status: string }>
+  submitTurn(input: string, attachments?: { path: string; kind: string }[], mode?: RunMode): Promise<{ turnId: string; status: string }>
+  respondPlanReview(reviewId: string, decision: 'execute' | 'supplement' | 'cancel', feedback?: string): Promise<{ ok: boolean }>
   pickAttachments(): Promise<{ path: string; name: string; kind: string }[]>
   respondApproval(
     approvalId: string,
@@ -100,8 +101,8 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:startSession', workspaceDir)
   },
 
-  submitTurn(input, attachments) {
-    return ipcRenderer.invoke('wraith:submitTurn', input, attachments)
+  submitTurn(input, attachments, mode) {
+    return ipcRenderer.invoke('wraith:submitTurn', input, attachments, mode ?? 'react')
   },
 
   pickAttachments() {
@@ -110,6 +111,10 @@ const wraith: WraithApi = {
 
   respondApproval(approvalId, decision, opts) {
     return ipcRenderer.invoke('wraith:respondApproval', approvalId, decision, opts ?? null)
+  },
+
+  respondPlanReview(reviewId, decision, feedback) {
+    return ipcRenderer.invoke('wraith:respondPlanReview', reviewId, decision, feedback ?? null) as Promise<{ ok: boolean }>
   },
 
   interrupt() {
