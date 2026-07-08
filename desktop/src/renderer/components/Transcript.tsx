@@ -7,6 +7,7 @@ import DiffCard from './DiffCard'
 import UserMessage from './UserMessage'
 import AgentMessage from './AgentMessage'
 import { PlanChecklist, PlanReviewCard } from './PlanCard'
+import { TeamCard } from './TeamCard'
 import { groupToolRuns } from '../lib/groupToolRuns'
 
 interface TranscriptProps {
@@ -92,6 +93,9 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
         }
         if (item.type === 'planReview') {
           return <PlanReviewCard key={item.reviewId} item={item} onReview={onPlanReview} />
+        }
+        if (item.type === 'team') {
+          return <TeamCard key={item.teamId} item={item} />
         }
         return null
       })}

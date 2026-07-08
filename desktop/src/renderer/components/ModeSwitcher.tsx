@@ -22,6 +22,7 @@ interface ModeDef {
 const MODES: ModeDef[] = [
   { id: 'react', icon: '⚡', label: 'ReAct', desc: '边想边做 · 单 Agent 推理与工具调用的即时循环' },
   { id: 'plan', icon: '📋', label: 'Plan', desc: '先规划后执行 · 生成计划、复审,逐步推进' },
+  { id: 'team', icon: '🤝', label: 'Team', desc: '多 Agent 协作 · 规划-并行执行-复查' },
 ]
 
 /**
