@@ -1501,7 +1501,13 @@ public class Main {
                             // 快照封装（与 CLI team 路径对齐）
                             com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
                             renderer.startCardRecording();
-                            String result = snap.runTurn("team", goal, () -> orchestrator.run(goal));
+                            final String result;
+                            try {
+                                result = snap.runTurn("team", goal, () -> orchestrator.run(goal));
+                            } catch (Exception e) {
+                                renderer.stopCardRecording(); // discard partial recording; do NOT set pending holders
+                                throw e;
+                            }
                             java.util.List<java.util.Map<String, Object>> recordedTeam = renderer.stopCardRecording();
                             // 干净最终答案作为单条底部消息发出(无 "✅ 多 Agent..." 头 / "[step_id]" 前缀 / 结果截断;
                             // 各步进程正文已嵌套在 TeamCard 步骤行下)。run() 返回值仍保留终端 chrome,仅供 CLI。
@@ -1582,7 +1588,13 @@ public class Main {
                         // 快照封装（与 CLI plan 路径对齐）
                         com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
                         renderer.startCardRecording();
-                        String result = snap.runTurn("plan", goal, () -> planAgent.run(goal));
+                        final String result;
+                        try {
+                            result = snap.runTurn("plan", goal, () -> planAgent.run(goal));
+                        } catch (Exception e) {
+                            renderer.stopCardRecording(); // discard partial recording; do NOT set pending holders
+                            throw e;
+                        }
                         java.util.List<java.util.Map<String, Object>> recordedPlan = renderer.stopCardRecording();
                         // 干净答案作为单条底部消息发出（无 "✅ 计划执行完成！" 头 / "[task_id]" 前缀；
                         // 各步正文已嵌套在清单行下）。run() 返回值仍保留终端 chrome，仅供 CLI 使用。
