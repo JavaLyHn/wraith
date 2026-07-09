@@ -29,7 +29,7 @@ export interface WraithApi {
   restartBackend(): Promise<void>
   setApprovalMode(auto: boolean): Promise<{ ok: boolean }>
   listSessions(): Promise<{ sessions: SessionMeta[] }>
-  resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[]; provider?: string; model?: string; modelFallback?: boolean }>
+  resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[]; provider?: string; model?: string; modelFallback?: boolean; cards?: Array<{ turnOrdinal: number; events: Array<{ method: string; params: unknown }> }> }>
   rewindSession(userOrdinal: number): Promise<{ ok: boolean }>
   setSessionStarred(sessionId: string, starred: boolean): Promise<{ ok: boolean }>
   renameSession(sessionId: string, name: string): Promise<{ ok: boolean }>
@@ -164,6 +164,7 @@ const wraith: WraithApi = {
       provider?: string
       model?: string
       modelFallback?: boolean
+      cards?: Array<{ turnOrdinal: number; events: Array<{ method: string; params: unknown }> }>
     }>
   },
 
