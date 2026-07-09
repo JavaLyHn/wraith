@@ -51,10 +51,12 @@ public final class EventStreamRenderer implements Renderer {
      * 每项格式：{"method": String, "params": Map}。
      */
     public List<Map<String, Object>> stopCardRecording() {
-        java.util.List<Map<String, Object>> raw = cardRecording == null
-                ? java.util.List.of() : cardRecording;
+        java.util.List<Map<String, Object>> raw = cardRecording;
         cardRecording = null;
-        return coalesce(raw);
+        if (raw == null) return java.util.List.of();
+        java.util.List<Map<String, Object>> snapshot;
+        synchronized (raw) { snapshot = new java.util.ArrayList<>(raw); }
+        return coalesce(snapshot);
     }
 
     /** 判断是否为卡片事件（plan.* 或 team.*，但排除 plan.review.requested）。 */
