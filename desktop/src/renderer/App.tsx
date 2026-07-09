@@ -347,8 +347,8 @@ export default function App(): JSX.Element {
         dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(sb) })
         await window.wraith.startSession(ws)
         if (activeId) {
-          const { messages, model } = await window.wraith.resumeSession(activeId)
-          dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
+          const { messages, model, cards } = await window.wraith.resumeSession(activeId)
+          dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
           if (model) {
             dispatch({ type: 'setModel', model })
           }
@@ -581,8 +581,8 @@ export default function App(): JSX.Element {
         setSessions(sessions)
         if (sessions.length > 0) {
           // session.list 按 updatedAt 倒序:第一条即最近会话
-          const { sessionId, messages, model, modelFallback } = await window.wraith.resumeSession(sessions[0]!.id)
-          dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
+          const { sessionId, messages, model, modelFallback, cards } = await window.wraith.resumeSession(sessions[0]!.id)
+          dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
           dispatch({ type: 'setSessionId', sessionId })
           dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
           if (model) {
