@@ -17,6 +17,9 @@ import java.util.Map;
 public final class EventStreamRenderer implements Renderer {
     private final JsonRpcWriter writer;
     private final String sessionId;
+
+    // ---- 卡片事件录制（null = 关闭；非 null = 录制中）----
+    private java.util.List<Map<String, Object>> cardRecording; // null=关闭
     private final PrintStream discard = new PrintStream(OutputStream.nullOutputStream());
     private volatile String currentTurnId = "";
     private final java.util.concurrent.atomic.AtomicLong approvalSeq = new java.util.concurrent.atomic.AtomicLong();
@@ -37,6 +40,76 @@ public final class EventStreamRenderer implements Renderer {
     }
 
     public void setCurrentTurnId(String turnId) { this.currentTurnId = turnId; }
+
+    // ---- 卡片录制公共 API ----
+
+    /** 开始录制本轮卡片事件（plan.{@literal *}/team.{@literal *} 方法，plan.review.requested 除外）。 */
+    public void startCardRecording() { this.cardRecording = new java.util.ArrayList<>(); }
+
+    /**
+     * 返回本轮录制并合流后的事件列表；关闭录制。无录制 → 空列表。
+     * 每项格式：{"method": String, "params": Map}。
+     */
+    public List<Map<String, Object>> stopCardRecording() {
+        java.util.List<Map<String, Object>> raw = cardRecording == null
+                ? java.util.List.of() : cardRecording;
+        cardRecording = null;
+        return coalesce(raw);
+    }
+
+    /** 判断是否为卡片事件（plan.* 或 team.*，但排除 plan.review.requested）。 */
+    private static boolean isCardMethod(String m) {
+        return (m.startsWith("plan.") || m.startsWith("team."))
+                && !m.equals("plan.review.requested");
+    }
+
+    /**
+     * 统一出口：录制开启且是卡片事件则缓存，再照常 notify。
+     * 录制关闭时与直接 writer.notify(method, p) 行为完全一致。
+     */
+    private void emit(String method, Map<String, Object> p) {
+        if (cardRecording != null && isCardMethod(method)) {
+            Map<String, Object> rec = new java.util.LinkedHashMap<>();
+            rec.put("method", method);
+            rec.put("params", new java.util.LinkedHashMap<>(p)); // 浅拷贝，防后续复用
+            cardRecording.add(rec);
+        }
+        writer.notify(method, p);
+    }
+
+    /** 合并连续同通道 *.output（method 相同且除 text 外字段全等）→ text 拼接。 */
+    private static List<Map<String, Object>> coalesce(List<Map<String, Object>> in) {
+        java.util.List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (Map<String, Object> ev : in) {
+            String method = (String) ev.get("method");
+            boolean isOutput = method.endsWith(".output");
+            if (isOutput && !out.isEmpty()) {
+                Map<String, Object> prev = out.get(out.size() - 1);
+                if (sameChannel(prev, ev)) {
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> pp = (Map<String, Object>) prev.get("params");
+                    @SuppressWarnings("unchecked")
+                    Map<String, Object> cp = (Map<String, Object>) ev.get("params");
+                    pp.put("text", String.valueOf(pp.getOrDefault("text", ""))
+                            + String.valueOf(cp.getOrDefault("text", "")));
+                    continue;
+                }
+            }
+            out.add(ev);
+        }
+        return out;
+    }
+
+    private static boolean sameChannel(Map<String, Object> a, Map<String, Object> b) {
+        if (!java.util.Objects.equals(a.get("method"), b.get("method"))) return false;
+        @SuppressWarnings("unchecked")
+        Map<String, Object> pa = new java.util.HashMap<>((Map<String, Object>) a.get("params"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> pb = new java.util.HashMap<>((Map<String, Object>) b.get("params"));
+        pa.remove("text");
+        pb.remove("text");
+        return pa.equals(pb);
+    }
 
     private Map<String, Object> base() {
         Map<String, Object> p = new LinkedHashMap<>();
@@ -159,26 +232,26 @@ public final class EventStreamRenderer implements Renderer {
     /** 计划已创建通知。 */
     public void emitPlanCreated(String planId, String goal, java.util.List<java.util.Map<String, Object>> steps) {
         Map<String, Object> p = base(); p.put("planId", planId); p.put("goal", goal); p.put("steps", steps);
-        writer.notify("plan.created", p);
+        emit("plan.created", p);
     }
 
     /** 计划步骤开始通知。 */
     public void emitPlanStepStarted(String planId, String stepId) {
         Map<String, Object> p = base(); p.put("planId", planId); p.put("stepId", stepId);
-        writer.notify("plan.step.started", p);
+        emit("plan.step.started", p);
     }
 
     /** 计划步骤完成通知。 */
     public void emitPlanStepCompleted(String planId, String stepId, boolean ok, String result) {
         Map<String, Object> p = base(); p.put("planId", planId); p.put("stepId", stepId);
         p.put("ok", ok); p.put("result", result);
-        writer.notify("plan.step.completed", p);
+        emit("plan.step.completed", p);
     }
 
     /** 计划步骤流式正文片段（嵌套在清单步骤行下方，不浮动为独立 message）。 */
     public void emitPlanStepOutput(String planId, String stepId, String text) {
         Map<String, Object> p = base(); p.put("planId", planId); p.put("stepId", stepId); p.put("text", text);
-        writer.notify("plan.step.output", p);
+        emit("plan.step.output", p);
     }
 
     // ---- 计划复审阻塞管道（镜像 promptApproval）----
@@ -194,7 +267,7 @@ public final class EventStreamRenderer implements Renderer {
         pendingReviews.put(reviewId, fut);
         Map<String, Object> p = base();
         p.put("reviewId", reviewId); p.put("planId", planId); p.put("goal", goal); p.put("steps", steps);
-        writer.notify("plan.review.requested", p);
+        emit("plan.review.requested", p);
         try {
             return fut.get();
         } catch (Exception e) {
@@ -216,25 +289,25 @@ public final class EventStreamRenderer implements Renderer {
     /** 多 Agent 协作开始通知。 */
     public void emitTeamStarted(String teamId, String goal, List<Map<String, Object>> agents) {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("goal", goal); p.put("agents", agents);
-        writer.notify("team.started", p);
+        emit("team.started", p);
     }
 
     /** 协作计划已解析通知。 */
     public void emitTeamPlan(String teamId, List<Map<String, Object>> steps) {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("steps", steps);
-        writer.notify("team.plan", p);
+        emit("team.plan", p);
     }
 
     /** 批次启动通知。 */
     public void emitTeamBatch(String teamId, int batchIndex, List<String> stepIds) {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("batchIndex", batchIndex); p.put("stepIds", stepIds);
-        writer.notify("team.batch", p);
+        emit("team.batch", p);
     }
 
     /** 协作步骤开始通知（可并发触发）。 */
     public void emitTeamStepStarted(String teamId, String stepId, String agent) {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId); p.put("agent", agent);
-        writer.notify("team.step.started", p);
+        emit("team.step.started", p);
     }
 
     /** 协作步骤完成通知（可并发触发）。 */
@@ -243,30 +316,30 @@ public final class EventStreamRenderer implements Renderer {
         Map<String, Object> p = base();
         p.put("teamId", teamId); p.put("stepId", stepId); p.put("status", status);
         p.put("result", result); p.put("approved", approved); p.put("retries", retries);
-        writer.notify("team.step.completed", p);
+        emit("team.step.completed", p);
     }
 
     /** 多 Agent 协作结束通知。 */
     public void emitTeamFinished(String teamId, String status) {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("status", status);
-        writer.notify("team.finished", p);
+        emit("team.finished", p);
     }
 
     /** Planner LLM 流式正文片段（嵌套在 TeamCard 计划行下，不浮动为独立 message）。 */
     public void emitTeamPlanOutput(String teamId, String text) {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("text", text);
-        writer.notify("team.plan.output", p);
+        emit("team.plan.output", p);
     }
 
     /** 协作步骤 LLM 流式正文片段（嵌套在 TeamCard 步骤行下，不浮动为独立 message）。 */
     public void emitTeamStepOutput(String teamId, String stepId, String text) {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId); p.put("text", text);
-        writer.notify("team.step.output", p);
+        emit("team.step.output", p);
     }
 
     /** 协作步骤审查 LLM 流式正文片段（嵌套在 TeamCard 步骤行下，标识为 reviewer 输出）。 */
     public void emitTeamReviewOutput(String teamId, String stepId, String text) {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId); p.put("text", text);
-        writer.notify("team.review.output", p);
+        emit("team.review.output", p);
     }
 }
