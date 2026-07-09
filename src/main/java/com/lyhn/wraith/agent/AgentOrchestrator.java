@@ -557,7 +557,7 @@ public class AgentOrchestrator {
         }
 
         out.println("🔍 " + reviewer.getName() + " 正在审查步骤 [" + step.id() + "] 的结果...");
-        AgentMessage reviewResult = reviewer.review(step.description(), result.content(), out);
+        AgentMessage reviewResult = reviewer.review(step.description(), result.content(), out, streamFor("review", step.id()));
         reviewer.clearHistory();
 
         if (reviewResult.type() == AgentMessage.Type.ERROR) {
@@ -605,7 +605,7 @@ public class AgentOrchestrator {
             }
 
             acceptedResult = retryResult.content();
-            AgentMessage retryReview = reviewer.review(step.description(), acceptedResult, out);
+            AgentMessage retryReview = reviewer.review(step.description(), acceptedResult, out, streamFor("review", step.id()));
             reviewer.clearHistory();
 
             if (retryReview.type() == AgentMessage.Type.ERROR) {

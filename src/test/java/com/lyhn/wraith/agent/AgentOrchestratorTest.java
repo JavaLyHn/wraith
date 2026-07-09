@@ -463,6 +463,21 @@ class AgentOrchestratorTest {
         assertTrue(finalResult.contains("[step_2] ⏳ 第二步"));
     }
 
+    @Test
+    void shouldInjectReviewStreamListener(@TempDir java.nio.file.Path tempDir) {
+        StubGLMClient llmClient = new StubGLMClient(List.of(
+            response("{\"summary\":\"单步\",\"steps\":[{\"id\":\"s1\",\"description\":\"做事\",\"type\":\"COMMAND\",\"dependencies\":[]}]}"),
+            response("执行结果"),
+            response("{\"approved\":true,\"summary\":\"ok\",\"issues\":[]}")
+        ));
+        AgentOrchestrator orch = new AgentOrchestrator(llmClient, new ToolRegistry(), new NoOpMemoryManager(tempDir.toFile()));
+        java.util.List<String> kinds = new java.util.ArrayList<>();
+        orch.setStepStreamFactory((kind, id) -> { kinds.add(kind + ":" + id); return new LlmClient.StreamListener() {}; });
+        orch.run("测试 review 注入");
+        assertTrue(kinds.stream().anyMatch(s -> s.startsWith("review:step_1")),
+                "reviewer 调用应拿到 kind=review + stepId 的 listener; got=" + kinds);
+    }
+
     private static LlmClient.ChatResponse response(String content) {
         return new LlmClient.ChatResponse("assistant", content, null, 100, 20);
     }
