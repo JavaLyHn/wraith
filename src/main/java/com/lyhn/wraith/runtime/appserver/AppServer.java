@@ -51,6 +51,8 @@ public final class AppServer {
         }
         /** 落盘当前对话,返回持久化后的真实 sessionId(空对话可能为 null)。默认 no-op。 */
         default String persistTurn() { return null; }
+        /** 轮次开始即为新会话落最小桩,返回其 sessionId(续接会话为原 id;空输入 null)。使会话立刻进侧栏。默认 no-op。 */
+        default String beginTurn(String input) { return null; }
         /** 真回溯:丢弃从第 userOrdinal 条 user 消息(1-based,含)起的全部历史。false=拒绝(超界等)。 */
         default boolean rewind(int userOrdinal) { return false; }
         default boolean setSessionStarred(String sessionId, boolean starred) { return false; }
@@ -563,6 +565,11 @@ public final class AppServer {
 
         String turnId = "turn_" + turnSeq.incrementAndGet();
         session.renderer().setCurrentTurnId(turnId);
+        // 新会话:轮次开始即落桩,使会话立刻出现在侧栏(不必等 turn 末 persist);续接会话返回原 id。
+        String beginId = session.beginTurn(input);
+        if (beginId != null && !beginId.isBlank()) {
+            sessionId = beginId;
+        }
         writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
         writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
         final TurnAttachments.Resolved attFinal = att;

@@ -1369,6 +1369,10 @@ public class Main {
                     public java.util.List<com.fasterxml.jackson.databind.JsonNode> readCards(String id) {
                         return sessionStore.readCards(id);
                     }
+                    @Override
+                    public String beginTurn(String input) {
+                        return sessionStore.beginTurn(input);
+                    }
                     public java.util.Map<String, Object> skillsList() {
                         java.util.List<java.util.Map<String, Object>> list = new java.util.ArrayList<>();
                         java.util.Set<String> disabled = skillRegistry.stateStore().disabled();

@@ -203,6 +203,12 @@ export default function App(): JSX.Element {
     }
   }, [])
 
+  // sessionId 变化即刷新侧栏:新会话在 turn.started 时后端已落桩并带回真实 id,
+  // 这里拉一次 listSessions,使会话「发送即出现」在左侧(不必等 turn 结束)。
+  useEffect(() => {
+    if (state.sessionId) void fetchSessions()
+  }, [state.sessionId, fetchSessions])
+
   // ── automationApprovalRef:缓存最近一次 approval push(唯一弹窗入口是运行历史「处理审批」钮) ──
   const automationApprovalRef = useRef<{ runId: string; payload: Record<string, unknown> } | null>(null)
 

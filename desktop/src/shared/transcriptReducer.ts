@@ -222,8 +222,12 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
 
   switch (method) {
     // ── turn lifecycle ──────────────────────────────────────────────────────
-    case 'turn.started':
-      return { ...state, turn: 'running' }
+    case 'turn.started': {
+      // 后端在轮次开始即为新会话落桩并把真实 sessionId 带在 turn.started 里 →
+      // 立即置 sessionId,使侧栏能高亮并即时拉到该会话(不必等 turn.completed)。
+      const sid = typeof p['sessionId'] === 'string' ? p['sessionId'] : ''
+      return { ...state, turn: 'running', ...(sid ? { sessionId: sid } : {}) }
+    }
 
     case 'turn.completed': {
       const sid = typeof p['sessionId'] === 'string' ? p['sessionId'] : ''

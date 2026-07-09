@@ -124,6 +124,35 @@ public final class SessionStore {
         return currentId;
     }
 
+    /**
+     * 轮次开始即为"新会话"落一份仅含用户消息的最小记录,使其**立刻**出现在会话列表
+     * (无需等 turn 结束的 persist)。已有会话(currentId!=null)直接返回其 id 且**不重写**
+     * (避免覆盖历史)。轮次末尾的 {@link #persist(List)} 会以同一 id 覆写此桩为完整历史。
+     *
+     * @return 会话 id;续接会话为现有 id;输入空白则不建会话、返回 null。
+     */
+    public synchronized String beginTurn(String userInput) {
+        if (currentId != null) {
+            return currentId; // 续接中:已持久化且已在列表,不动
+        }
+        if (userInput == null || userInput.isBlank()) {
+            return null;
+        }
+        String now = Instant.now().toString();
+        currentId = newId();
+        createdAt = now;
+        List<LlmClient.Message> stub = List.of(LlmClient.Message.user(userInput));
+        if (title == null || title.isBlank()) {
+            title = deriveTitle(stub);
+        }
+        try {
+            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, 1, starred, name), stub);
+        } catch (IOException e) {
+            // 非致命:桩写失败则该会话要等轮末 persist 才出现在列表(退回旧行为),不影响本轮执行
+        }
+        return currentId;
+    }
+
     /** 删除当前会话文件并重置(rewind 清空到无用户消息时用):无当前会话则为 no-op。 */
     public synchronized void deleteCurrent() {
         if (currentId != null) {
