@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView } from '../shared/types'
 import type { GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -36,6 +36,7 @@ export interface WraithApi {
   renameSession(sessionId: string, name: string): Promise<{ ok: boolean }>
   deleteSession(sessionId: string): Promise<{ ok: boolean }>
   mcpList(): Promise<McpListResult>
+  listBuiltinTools(): Promise<{ tools: BuiltinToolView[] }>
   mcpEnable(name: string): Promise<{ ok: boolean }>
   mcpDisable(name: string): Promise<{ ok: boolean }>
   mcpRestart(name: string): Promise<{ ok: boolean }>
@@ -195,6 +196,10 @@ const wraith: WraithApi = {
 
   mcpList() {
     return ipcRenderer.invoke('wraith:mcpList') as Promise<McpListResult>
+  },
+
+  listBuiltinTools() {
+    return ipcRenderer.invoke('wraith:listBuiltinTools') as Promise<{ tools: BuiltinToolView[] }>
   },
 
   mcpEnable(name) {

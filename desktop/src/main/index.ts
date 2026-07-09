@@ -553,6 +553,11 @@ ipcMain.handle('wraith:listSessions', async () => {
   return client.request('session.list', {})
 })
 
+ipcMain.handle('wraith:listBuiltinTools', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('tools.list', {})
+})
+
 ipcMain.handle('wraith:resumeSession', async (_e, sessionId: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.resume', { sessionId })

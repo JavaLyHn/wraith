@@ -413,3 +413,6 @@ export interface UpdateResult {
   isPrerelease: boolean
   error?: string
 }
+
+/** 内置工具定义(tools.list 回传;= 模型看到的定义)。 */
+export interface BuiltinToolView { name: string; description: string; parameters?: unknown }
