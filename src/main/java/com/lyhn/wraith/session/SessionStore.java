@@ -129,6 +129,7 @@ public final class SessionStore {
         if (currentId != null) {
             try {
                 Files.deleteIfExists(dir.resolve(currentId + ".jsonl"));
+                Files.deleteIfExists(cardsFile(currentId));
             } catch (IOException ignored) {
                 // 删除失败不致命:文件残留,但内存状态照常重置
             }
@@ -144,6 +145,7 @@ public final class SessionStore {
         try {
             String sid = safeId(id);
             boolean removed = Files.deleteIfExists(dir.resolve(sid + ".jsonl"));
+            Files.deleteIfExists(cardsFile(id));
             if (removed && sid.equals(currentId)) {
                 startNew();   // 删掉的是当前会话 → 重置内存态
             }
@@ -164,6 +166,43 @@ public final class SessionStore {
         String nm = (newName == null || newName.isBlank()) ? null : newName.strip();
         return rewriteMeta(id, m -> new SessionMeta(m.id(), m.cwd(), m.createdAt(), m.updatedAt(),
                 m.provider(), m.model(), m.title(), m.turns(), m.starred(), nm));
+    }
+
+    // ---------------- sidecar cards ----------------
+
+    private Path cardsFile(String id) {
+        return dir.resolve(safeId(id) + ".cards.jsonl");
+    }
+
+    /** 追加一条卡片记录(events 为已序列化的 JSON 数组字符串)。 */
+    public synchronized void appendCard(String sessionId, int turnOrdinal, String eventsJson) {
+        if (sessionId == null || sessionId.isBlank() || eventsJson == null) return;
+        try {
+            Files.createDirectories(dir);
+            ObjectNode line = mapper.createObjectNode();
+            line.put("v", 1);
+            line.put("turnOrdinal", turnOrdinal);
+            line.set("events", mapper.readTree(eventsJson));
+            Files.writeString(cardsFile(sessionId), mapper.writeValueAsString(line) + "\n",
+                    StandardCharsets.UTF_8,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.APPEND);
+        } catch (IOException e) { /* 非致命 */ }
+    }
+
+    /** 读回卡片记录(每项 {turnOrdinal, events})。文件不存在或坏行 → 跳过。 */
+    public synchronized List<JsonNode> readCards(String id) {
+        Path f = cardsFile(id);
+        if (!Files.isRegularFile(f)) return List.of();
+        List<JsonNode> out = new ArrayList<>();
+        try (BufferedReader r = Files.newBufferedReader(f, StandardCharsets.UTF_8)) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                if (line.isBlank()) continue;
+                try { out.add(mapper.readTree(line)); } catch (Exception ignore) {}
+            }
+        } catch (IOException e) { return out; }
+        return out;
     }
 
     /** 读该会话整文件 → 变换 meta 首行 → 原子写回。若是当前会话,同步内存态。 */
