@@ -101,12 +101,14 @@ function ReviewTag({ step }: { step: TeamStep }): JSX.Element | null {
 function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass: string }): JSX.Element {
   // done 步骤结果默认展开：team 卡片即完整产出,输出不该藏在一次点击之后(保留折叠钮供收起)。
   const [expanded, setExpanded] = useState(true)
+  const [reviewExpanded, setReviewExpanded] = useState(true)
   const agentName = step.agent ?? ''
 
   // running 时优先展示流式 output（自动展开）；done 时展示 result（默认展开,可手动折叠）
   const isRunning = step.status === 'running'
   const hasLiveOutput = isRunning && typeof step.output === 'string' && step.output.length > 0
   const hasResult = !isRunning && typeof step.result === 'string' && step.result.length > 0
+  const hasReviewOutput = typeof step.reviewOutput === 'string' && step.reviewOutput.length > 0
 
   return (
     <li className="flex flex-col gap-0.5">
@@ -150,7 +152,68 @@ function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass:
           <pre className="whitespace-pre-wrap break-words text-xs">{step.result}</pre>
         </div>
       )}
+      {/* reviewer 分区：reviewOutput 存在时渲染，实时增长，默认展开可折叠 */}
+      {hasReviewOutput && (
+        <div className="ml-5 mt-1 border-t border-border/50 pt-1">
+          <div className="mb-0.5 flex items-center gap-1 text-amber-400">
+            <span className="text-xs">🔎 reviewer</span>
+            <button
+              className="ml-1 shrink-0 text-fg-subtle hover:text-fg-muted text-xs"
+              onClick={() => setReviewExpanded(v => !v)}
+              aria-label={reviewExpanded ? '折叠审查输出' : '展开审查输出'}
+            >
+              {reviewExpanded ? '▼' : '▶'}
+            </button>
+          </div>
+          {reviewExpanded && (
+            <div className="max-h-48 overflow-y-auto rounded border border-amber-400/20 bg-amber-400/5 px-2 py-1 text-fg-subtle">
+              <pre className="whitespace-pre-wrap break-words text-xs">{step.reviewOutput}</pre>
+            </div>
+          )}
+        </div>
+      )}
     </li>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// PlannerRow — 常驻 planner 行，结构同 worker 行
+// ---------------------------------------------------------------------------
+
+function PlannerRow({ item }: { item: TeamItem }): JSX.Element {
+  const [expanded, setExpanded] = useState(true)
+  const hasPlannerOutput = typeof item.plannerOutput === 'string' && item.plannerOutput.length > 0
+  const summary = item.steps.length > 0
+    ? `规划 · 拆解为 ${item.steps.length} 步`
+    : '规划中…'
+
+  return (
+    <div className="mb-2 flex flex-col gap-0.5">
+      <div className="flex items-center gap-2">
+        {/* Planner badge */}
+        <span className={`shrink-0 rounded border px-1 py-0 leading-none ${roleColor('planner')}`}>
+          🧭 planner
+        </span>
+        {/* Summary text */}
+        <span className="min-w-0 flex-1 break-words text-fg-muted">{summary}</span>
+        {/* Expand toggle — 有 plannerOutput 时显示 */}
+        {hasPlannerOutput && (
+          <button
+            className="ml-1 shrink-0 text-fg-subtle hover:text-fg-muted"
+            onClick={() => setExpanded(v => !v)}
+            aria-label={expanded ? '折叠规划输出' : '展开规划输出'}
+          >
+            {expanded ? '▼ 输出' : '▶ 输出'}
+          </button>
+        )}
+      </div>
+      {/* Planner 输出可折叠块，默认展开 */}
+      {hasPlannerOutput && expanded && (
+        <div className="ml-5 mt-0.5 max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
+          <pre className="whitespace-pre-wrap break-words text-xs">{item.plannerOutput}</pre>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -244,22 +307,8 @@ export function TeamCard({ item }: { item: TeamItem }): JSX.Element {
         </div>
       </div>
 
-      {/* Planner streaming area — 仅在 steps 尚未到达时显示实时规划输出 */}
-      {item.steps.length === 0 && item.plannerOutput && item.plannerOutput.length > 0 && (
-        <div className="mb-2">
-          <div className="mb-0.5 text-blue-400">🧭 规划中…</div>
-          <div className="max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
-            <pre className="whitespace-pre-wrap break-words text-xs">{item.plannerOutput}</pre>
-          </div>
-        </div>
-      )}
-
-      {/* Planning row — steps 到达后显示，取代实时规划区 */}
-      {item.steps.length > 0 && (
-        <div className="mb-2 text-fg-muted">
-          🧭 拆解为 {item.steps.length} 步
-        </div>
-      )}
+      {/* Planner 常驻行 — 始终显示于步骤时间线最上方，结构同 worker 行 */}
+      <PlannerRow item={item} />
 
       {/* Step timeline with B1 parallel grouping */}
       {groups.length > 0 && (
