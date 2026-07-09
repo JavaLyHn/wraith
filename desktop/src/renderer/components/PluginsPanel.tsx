@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
-import type { McpServerView, McpResourceView } from '../../shared/types'
+import { useCallback, useEffect, useState } from 'react'
+import type { McpServerView, McpResourceView, BuiltinToolView } from '../../shared/types'
 import McpServerForm, { type McpFormValue, type McpPrefill } from './McpServerForm'
 import { BUILTIN_CAPABILITIES, RECOMMENDED_MCP } from '../lib/pluginShowcase'
+import { joinBuiltinTools, type BuiltinToolRow } from '../lib/builtinCapabilityDetail'
 
 interface PluginsPanelProps {
   servers: McpServerView[]
@@ -32,6 +33,33 @@ type Tab = 'tools' | 'resources' | 'prompts' | 'logs'
 /** 左列顶部「能力概览」的哨兵选中值(非某个 server)。 */
 const OVERVIEW = '__overview__'
 
+/** 内置工具的一行:真名 + 描述 + 可折叠参数(JSON schema);missing 则淡色标记。 */
+function BuiltinToolRowView({ row }: { row: BuiltinToolRow }): JSX.Element {
+  const [expanded, setExpanded] = useState(false)
+  const hasParams = row.parameters != null && typeof row.parameters === 'object'
+    && Object.keys(row.parameters as object).length > 0
+  return (
+    <div className="rounded-lg bg-surface/60 px-3 py-2">
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-xs text-fg">{row.name}</span>
+        {row.missing && <span className="text-3xs text-fg-subtle">定义缺失 / 当前不可用</span>}
+        {hasParams && (
+          <button onClick={() => setExpanded(v => !v)}
+            className="ml-auto shrink-0 text-3xs text-fg-subtle hover:text-fg-muted">
+            {expanded ? '▼ 参数' : '▶ 参数'}
+          </button>
+        )}
+      </div>
+      {row.description && <div className="mt-0.5 text-xs text-fg-muted">{row.description}</div>}
+      {hasParams && expanded && (
+        <pre className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded bg-bg px-2 py-1 text-2xs text-fg-subtle">
+{JSON.stringify(row.parameters, null, 2)}
+        </pre>
+      )}
+    </div>
+  )
+}
+
 export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
   const { servers, configError, busy, onBack, onRefresh } = props
   const [selected, setSelected] = useState<string>(OVERVIEW)   // 默认落在能力概览
@@ -43,10 +71,19 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
     resources: [], prompts: '', logs: '',
   })
 
+  // 内置能力目录状态:懒加载,builtinError 阻止失败后自旋。
+  const [builtinCatalog, setBuiltinCatalog] = useState<BuiltinToolView[] | null>(null)
+  const [builtinError, setBuiltinError] = useState(false)
+
   // 进入面板拉全量(spec §5.2)
   useEffect(() => { onRefresh() }, [onRefresh])
 
   const current = selected !== OVERVIEW ? (servers.find(s => s.name === selected) ?? null) : null
+
+  // 选中值为 'builtin:<id>' 哨兵时,解析出对应内置能力(否则 null)。
+  const selectedBuiltin = selected.startsWith('builtin:')
+    ? (BUILTIN_CAPABILITIES.find(c => c.id === selected.slice('builtin:'.length)) ?? null)
+    : null
 
   // 选中/换 tab 时拉取动态内容(工具列表在 servers 里,静态)
   useEffect(() => {
@@ -72,6 +109,20 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
   }, [current?.name, current?.state, tab])
 
   useEffect(() => { setConfirmingRemove(false); setFormMode('hidden') }, [current?.name])
+
+  const fetchBuiltinCatalog = useCallback(async () => {
+    try {
+      const { tools } = await window.wraith.listBuiltinTools()
+      setBuiltinCatalog(tools); setBuiltinError(false)
+    } catch (err) {
+      console.error('[wraith] listBuiltinTools error:', err); setBuiltinError(true)
+    }
+  }, [])
+
+  // 首次进入任一能力详情时拉一次目录并缓存(builtinError 阻止失败后自旋)。
+  useEffect(() => {
+    if (selectedBuiltin && builtinCatalog === null && !builtinError) void fetchBuiltinCatalog()
+  }, [selectedBuiltin, builtinCatalog, builtinError, fetchBuiltinCatalog])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -136,6 +187,30 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
               onCancel={() => setFormMode('hidden')}
               onSubmit={async v => { const ok = await props.onSubmitForm(v); if (ok) setFormMode('hidden'); return ok }}
             />
+          ) : selectedBuiltin ? (
+            <div data-testid="mcp-builtin-detail" className="flex min-w-0 flex-1 flex-col gap-3">
+              <button data-testid="mcp-builtin-back" onClick={() => setSelected(OVERVIEW)}
+                className="self-start rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface/60">← 概览</button>
+              <div className="flex items-center gap-2">
+                <span className="text-base leading-none">{selectedBuiltin.icon}</span>
+                <span className="text-sm font-bold text-fg">{selectedBuiltin.name}</span>
+                <span className="text-2xs text-fg-subtle">{selectedBuiltin.desc}</span>
+                <span className="ml-1 shrink-0 rounded bg-surface px-1.5 py-0.5 text-4xs text-fg-subtle">已内置</span>
+              </div>
+              {builtinError && (
+                <div className="rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
+                  无法加载内置工具定义
+                  <button data-testid="mcp-builtin-retry"
+                    onClick={() => { setBuiltinError(false); void fetchBuiltinCatalog() }}
+                    className="ml-2 underline hover:no-underline">重试</button>
+                </div>
+              )}
+              <div className="flex flex-col gap-1">
+                {joinBuiltinTools(selectedBuiltin.tools, builtinCatalog ?? []).map(row => (
+                  <BuiltinToolRowView key={row.name} row={row} />
+                ))}
+              </div>
+            </div>
           ) : !current ? (
             <div data-testid="mcp-overview" className="flex flex-col gap-5">
               <section>
@@ -143,15 +218,17 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                 <div className="mb-3 text-2xs text-fg-subtle">Wraith 自带的能力,无需配置即可在对话中调用。</div>
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
                   {BUILTIN_CAPABILITIES.map(c => (
-                    <div key={c.id} title={c.tools.join(' · ')}
-                      className="rounded-lg border border-border bg-surface/40 p-3">
+                    <button key={c.id} type="button" data-testid="mcp-builtin-card"
+                      onClick={() => setSelected('builtin:' + c.id)}
+                      title={c.tools.join(' · ')}
+                      className="rounded-lg border border-border bg-surface/40 p-3 text-left hover:border-accent">
                       <div className="flex items-center gap-2">
                         <span className="text-base leading-none">{c.icon}</span>
                         <span className="truncate text-xs font-medium text-fg">{c.name}</span>
                         <span className="ml-auto shrink-0 rounded bg-surface px-1.5 py-0.5 text-4xs text-fg-subtle">已内置</span>
                       </div>
                       <div className="mt-1 text-2xs text-fg-muted">{c.desc}</div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </section>
