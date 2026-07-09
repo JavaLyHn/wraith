@@ -1197,6 +1197,10 @@ public class Main {
                 // resume 后若 provider 恢复失败,置此标志供 modelList 回传 modelFallback
                 boolean[] resumeFallback = { false };
 
+                // 旁车暂存：team/plan 录制完后暂存，persistTurn 落盘时消费（AtomicReference 作 effectively-final 持有者）
+                final java.util.concurrent.atomic.AtomicReference<int[]> pendingCardOrdinal = new java.util.concurrent.atomic.AtomicReference<>();
+                final java.util.concurrent.atomic.AtomicReference<String> pendingCardEventsJson = new java.util.concurrent.atomic.AtomicReference<>();
+
                 return new com.lyhn.wraith.runtime.appserver.AppServer.SessionRunner() {
                     public com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer() { return renderer; }
                     public String runTurn(String input) throws Exception {
@@ -1243,7 +1247,13 @@ public class Main {
                     }
                     public String persistTurn() {
                         sessionStore.persist(agent.getConversationHistory());
-                        return sessionStore.currentId();
+                        String id = sessionStore.currentId();
+                        int[] ord = pendingCardOrdinal.getAndSet(null);
+                        String ev = pendingCardEventsJson.getAndSet(null);
+                        if (id != null && ord != null && ev != null) {
+                            sessionStore.appendCard(id, ord[0], ev);
+                        }
+                        return id;
                     }
                     public boolean rewind(int userOrdinal) {
                         java.util.List<com.lyhn.wraith.llm.LlmClient.Message> kept =
@@ -1490,7 +1500,9 @@ public class Main {
 
                             // 快照封装（与 CLI team 路径对齐）
                             com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
+                            renderer.startCardRecording();
                             String result = snap.runTurn("team", goal, () -> orchestrator.run(goal));
+                            java.util.List<java.util.Map<String, Object>> recordedTeam = renderer.stopCardRecording();
                             // 干净最终答案作为单条底部消息发出(无 "✅ 多 Agent..." 头 / "[step_id]" 前缀 / 结果截断;
                             // 各步进程正文已嵌套在 TeamCard 步骤行下)。run() 返回值仍保留终端 chrome,仅供 CLI。
                             String cleanTeamAnswer = orchestrator.getLastCleanResult();
@@ -1499,7 +1511,19 @@ public class Main {
                                 renderer.finishAssistantContent();
                             }
                             // 把本轮补进 conversationHistory,使 persistTurn 能落盘到会话历史(否则 team 轮不进左侧列表)
-                            agent.recordExternalTurn(goal, result);
+                            // 一致性修正：记干净答案（与 plan 对齐），resumed bubble 匹配 live
+                            agent.recordExternalTurn(goal,
+                                    (cleanTeamAnswer != null && !cleanTeamAnswer.isBlank()) ? cleanTeamAnswer : result);
+                            if (!recordedTeam.isEmpty()) {
+                                int turnOrdinal = countUserTurns(agent.getConversationHistory()) - 1;
+                                pendingCardOrdinal.set(new int[]{turnOrdinal});
+                                try {
+                                    pendingCardEventsJson.set(
+                                            com.lyhn.wraith.runtime.appserver.JsonRpc.MAPPER.writeValueAsString(recordedTeam));
+                                } catch (com.fasterxml.jackson.core.JsonProcessingException __jpe) {
+                                    // 序列化失败则不写旁车（不影响主流程）
+                                }
+                            }
                             return result;
                         }
                         // @-mention 展开(与 ReAct 路径保持一致)
@@ -1557,7 +1581,9 @@ public class Main {
 
                         // 快照封装（与 CLI plan 路径对齐）
                         com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
+                        renderer.startCardRecording();
                         String result = snap.runTurn("plan", goal, () -> planAgent.run(goal));
+                        java.util.List<java.util.Map<String, Object>> recordedPlan = renderer.stopCardRecording();
                         // 干净答案作为单条底部消息发出（无 "✅ 计划执行完成！" 头 / "[task_id]" 前缀；
                         // 各步正文已嵌套在清单行下）。run() 返回值仍保留终端 chrome，仅供 CLI 使用。
                         String cleanAnswer = planAgent.getLastCleanResult();
@@ -1568,6 +1594,16 @@ public class Main {
                         // 把本轮补进 conversationHistory,使 persistTurn 能落盘到会话历史(否则 plan 轮不进左侧列表)
                         agent.recordExternalTurn(goal,
                                 (cleanAnswer != null && !cleanAnswer.isBlank()) ? cleanAnswer : result);
+                        if (!recordedPlan.isEmpty()) {
+                            int turnOrdinal = countUserTurns(agent.getConversationHistory()) - 1;
+                            pendingCardOrdinal.set(new int[]{turnOrdinal});
+                            try {
+                                pendingCardEventsJson.set(
+                                        com.lyhn.wraith.runtime.appserver.JsonRpc.MAPPER.writeValueAsString(recordedPlan));
+                            } catch (com.fasterxml.jackson.core.JsonProcessingException __jpe) {
+                                // 序列化失败则不写旁车（不影响主流程）
+                            }
+                        }
                         return result;
                     }
                 };
@@ -1596,6 +1632,13 @@ public class Main {
             }
         }
         return null;
+    }
+
+    /** 统计 conversationHistory 中 user 角色消息数（用于确定当前轮次序号）。 */
+    private static int countUserTurns(java.util.List<com.lyhn.wraith.llm.LlmClient.Message> h) {
+        int n = 0;
+        for (var m : h) if ("user".equals(m.role())) n++;
+        return n;
     }
 
     /** app-server 沙箱工厂:默认断网,-Dwraith.sandbox.network=on 全局放行网络。 */
