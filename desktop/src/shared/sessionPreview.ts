@@ -6,7 +6,7 @@ export type Preview =
   | { kind: 'session'; sessionId: string; items: Item[] }
   | { kind: 'new' }
 
-type Turn = 'idle' | 'running'
+export type Turn = 'idle' | 'running'
 
 /** 点侧栏会话行的决策。running→预览覆盖;idle→完整切换。 */
 export function selectAction(

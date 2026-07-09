@@ -388,17 +388,25 @@ export default function App(): JSX.Element {
     })()
   }, [state.connection, state.workspace, fetchSessions])
 
-  // ── refresh session list when a turn completes + 落定 preview ────────────
+  // ── refresh session list when a turn completes ────────────
   const prevTurnRef = useRef(state.turn)
   useEffect(() => {
     if (prevTurnRef.current === 'running' && state.turn === 'idle') {
       void fetchSessions()
-      const r = resolveOnIdle(previewRef.current)   // 执行被推迟的真实切换
-      if (r.action === 'resume') { setPreview(null); void commitSwitchTo(r.sessionId) }
-      else if (r.action === 'new') { void handleNewConversation() }   // 其内部走 idle 分支并清 preview
     }
     prevTurnRef.current = state.turn
-  }, [state.turn, fetchSessions, commitSwitchTo, handleNewConversation])
+  }, [state.turn, fetchSessions])
+
+  // ── 落定 preview:处于 idle 且有挂着的 preview 时,执行被推迟的真实切换。
+  // 覆盖两种情形:(a) turn 正常跑完;(b) 点会话与 turn 结束擦肩——peek 的 async
+  // setPreview 落在 turn→idle 之后、边沿已过,靠本 effect 的 idle+preview 条件兜住,
+  // 否则会留下"idle 悬挂预览"导致续聊打到错的后端会话。
+  useEffect(() => {
+    if (state.turn !== 'idle' || preview === null) return
+    const r = resolveOnIdle(preview)
+    if (r.action === 'resume') { setPreview(null); void commitSwitchTo(r.sessionId) }
+    else if (r.action === 'new') { void handleNewConversation() }   // 其内部走 idle 分支并清 preview
+  }, [preview, state.turn, commitSwitchTo, handleNewConversation])
 
   // ── pick attachments ──────────────────────────────────────────────────────
   const handlePickAttachments = useCallback(async () => {

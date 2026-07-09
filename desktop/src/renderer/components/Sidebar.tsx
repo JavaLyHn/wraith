@@ -75,9 +75,13 @@ function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDe
       <button data-testid="session-rename" title="改名"
         onClick={startEdit}
         className="shrink-0 px-1 text-xs text-fg-subtle opacity-0 group-hover:opacity-100">✎</button>
-      <button data-testid="session-delete" title={confirmDel ? '确认删除?' : '删除'}
+      <button data-testid="session-delete"
+        title={running ? '会话进行中,不可删除' : (confirmDel ? '确认删除?' : '删除')}
+        disabled={running}
         onClick={() => { if (!confirmDel) { setConfirmDel(true); return } onDelete(s.id) }}
-        className={'shrink-0 px-1 text-xs opacity-0 group-hover:opacity-100 ' + (confirmDel ? 'text-danger opacity-100' : 'text-fg-subtle')}>
+        className={'shrink-0 px-1 text-xs opacity-0 group-hover:opacity-100 ' +
+          (running ? 'disabled:cursor-not-allowed disabled:opacity-40' : '') +
+          (confirmDel ? ' text-danger opacity-100' : ' text-fg-subtle')}>
         {confirmDel ? '✓' : '🗑'}
       </button>
     </div>
@@ -323,7 +327,7 @@ export default function Sidebar({
                       title={s.title}
                     >
                       {s.id === runningSessionId && (
-                        <span className="relative flex h-2 w-2 shrink-0" title="运行中">
+                        <span data-testid="session-running-dot" className="relative flex h-2 w-2 shrink-0" title="运行中">
                           <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-accent opacity-75 motion-reduce:hidden" />
                           <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
                         </span>
