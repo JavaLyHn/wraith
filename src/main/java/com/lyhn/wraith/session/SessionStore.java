@@ -145,7 +145,7 @@ public final class SessionStore {
         try {
             String sid = safeId(id);
             boolean removed = Files.deleteIfExists(dir.resolve(sid + ".jsonl"));
-            Files.deleteIfExists(cardsFile(id));
+            Files.deleteIfExists(cardsFile(sid));
             if (removed && sid.equals(currentId)) {
                 startNew();   // 删掉的是当前会话 → 重置内存态
             }
@@ -259,7 +259,10 @@ public final class SessionStore {
         List<SessionMeta> metas = new ArrayList<>();
         try (Stream<Path> files = Files.list(dir)) {
             List<Path> jsonl = files
-                    .filter(f -> f.getFileName().toString().endsWith(".jsonl"))
+                    .filter(f -> {
+                        String n = f.getFileName().toString();
+                        return n.endsWith(".jsonl") && !n.endsWith(".cards.jsonl");
+                    })
                     .collect(Collectors.toList());
             for (Path p : jsonl) {
                 SessionMeta m = readMeta(p);

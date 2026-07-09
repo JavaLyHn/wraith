@@ -94,6 +94,26 @@ class SessionStoreCardsTest {
     }
 
     @Test
+    void listExcludesSidecarPhantomSessions(@TempDir Path home) {
+        SessionStore store = SessionStore.open(home, "/proj/cards6", "p", "m");
+        store.persist(sampleHistory());
+        String id = store.currentId();
+        assertNotNull(id);
+
+        // Create a sidecar .cards.jsonl file
+        store.appendCard(id, 0, "[{\"method\":\"team.started\",\"params\":{}}]");
+
+        // list() must return exactly one entry — not two (phantom from sidecar)
+        List<SessionMeta> sessions = store.list(50);
+        assertEquals(1, sessions.size(), "sidecar .cards.jsonl must not appear as a session");
+
+        // The single entry must have a non-null, non-blank id
+        SessionMeta meta = sessions.get(0);
+        assertNotNull(meta.id(), "session id must not be null");
+        assertFalse(meta.id().isBlank(), "session id must not be blank");
+    }
+
+    @Test
     void appendCardGuardsNullOrBlankInputs(@TempDir Path home) {
         SessionStore store = SessionStore.open(home, "/proj/cards5", "p", "m");
         store.persist(sampleHistory());
