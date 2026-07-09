@@ -398,6 +398,9 @@ export interface TeamPlanOutputEvent { teamId: string; text: string }
 /** team.step.output 通知负载（步骤流式正文片段）。 */
 export interface TeamStepOutputEvent { teamId: string; stepId: string; text: string }
 
+/** team.review.output 通知负载（审评流式正文片段）。 */
+export interface TeamReviewOutputEvent { teamId: string; stepId: string; text: string }
+
 export interface AppInfo { version: string; repoUrl: string; dataDir: string }
 export interface UpdateResult {
   current: string
