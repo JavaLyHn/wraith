@@ -305,10 +305,30 @@ public class SubAgent {
         return review(originalTask, executionResult, System.out);
     }
 
+    /** CLI 兼容入口 — extra 隐式为 null（终端行为字节不变）。 */
     public AgentMessage review(String originalTask, String executionResult, PrintStream out) {
+        return review(originalTask, executionResult, out, null);
+    }
+
+    /** 允许注入额外 StreamListener（桌面事件转发）；extra=null 时与旧签名一致。 */
+    public AgentMessage review(String originalTask, String executionResult, PrintStream out,
+                               LlmClient.StreamListener extra) {
         String reviewInput = "原始任务：" + originalTask + "\n\n执行结果：\n" + executionResult;
         AgentMessage reviewTask = AgentMessage.task("orchestrator", reviewInput);
-        return execute(reviewTask, out);
+        return execute(reviewTask, out, extra);
+    }
+
+    /** AgentMessage 重载的 CLI 兼容入口 — extra 隐式为 null。 */
+    public AgentMessage review(AgentMessage original, AgentMessage result, PrintStream out) {
+        return review(original, result, out, null);
+    }
+
+    /** AgentMessage 重载，允许注入额外 StreamListener（桌面事件转发）；extra=null 时行为与无 extra 重载一致。 */
+    public AgentMessage review(AgentMessage original, AgentMessage result, PrintStream out,
+                               LlmClient.StreamListener extra) {
+        String reviewInput = "原始任务：" + original.content() + "\n\n执行结果：\n" + result.content();
+        AgentMessage reviewTask = AgentMessage.task("orchestrator", reviewInput);
+        return execute(reviewTask, out, extra);
     }
 
     /**
