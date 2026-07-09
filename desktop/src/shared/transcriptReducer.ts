@@ -65,6 +65,8 @@ export interface TeamStep {
   result?: string
   /** 步骤流式正文（team.step.output delta 累积；与完成时的 result 字段独立）。 */
   output?: string
+  /** 复审器流式正文（team.review.output delta 累积）。 */
+  reviewOutput?: string
   approved?: boolean
   retries?: number
 }
@@ -544,6 +546,14 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
         ...st,
         output: (st.output ?? '') + text,
       }))
+    }
+
+    case 'team.review.output': {
+      // 复审器流式正文 delta — 按 stepId 追加到匹配步骤的 reviewOutput 字段
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const stepId = typeof p['stepId'] === 'string' ? p['stepId'] : ''
+      const text = typeof p['text'] === 'string' ? p['text'] : ''
+      return updateTeamStep(state, teamId, stepId, st => ({ ...st, reviewOutput: (st.reviewOutput ?? '') + text }))
     }
 
     // ── unknown → safe ignore ───────────────────────────────────────────────

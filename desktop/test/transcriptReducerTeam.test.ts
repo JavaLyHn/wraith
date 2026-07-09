@@ -108,4 +108,19 @@ describe('team 归约', () => {
     const item: any = s.items.find(i => i.type === 'team' && i.teamId === 't5')
     expect(item.steps.find((x: any) => x.id === 's1').output).toBeUndefined()
   })
+
+  // ── Task 5 (T5): reviewOutput streaming ──────────────────────────────────
+
+  it('accumulates team.review.output per stepId', () => {
+    const s = run([
+      ev('team.started', { teamId: 't1', goal: 'g', agents: [] }),
+      ev('team.plan', { teamId: 't1', steps: [{ id: 's1', description: 'a', type: 'X', dependencies: [] }, { id: 's2', description: 'b', type: 'X', dependencies: [] }] }),
+      ev('team.review.output', { teamId: 't1', stepId: 's1', text: '审1' }),
+      ev('team.review.output', { teamId: 't1', stepId: 's2', text: '审2' }),
+      ev('team.review.output', { teamId: 't1', stepId: 's1', text: '审1b' }),
+    ])
+    const team = s.items.find(i => i.type === 'team') as any
+    expect(team.steps.find((x: any) => x.id === 's1').reviewOutput).toBe('审1审1b')
+    expect(team.steps.find((x: any) => x.id === 's2').reviewOutput).toBe('审2')
+  })
 })
