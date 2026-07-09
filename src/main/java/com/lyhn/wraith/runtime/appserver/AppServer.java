@@ -151,6 +151,10 @@ public final class AppServer {
         default java.util.List<com.fasterxml.jackson.databind.JsonNode> readCards(String id) {
             return java.util.List.of();
         }
+        /** 内置工具目录(= 模型看到的定义:name/description/parameters)。默认空。供 UI 只读展示。 */
+        default java.util.List<com.lyhn.wraith.llm.LlmClient.Tool> builtinTools() {
+            return java.util.List.of();
+        }
     }
 
     private final BufferedReader in;
@@ -205,6 +209,7 @@ public final class AppServer {
             case "session.list" -> handleSessionList(msg);
             case "session.resume" -> handleSessionResume(msg);
             case "session.peek" -> handleSessionPeek(msg);
+            case "tools.list" -> handleToolsList(msg);
             case "session.rewind" -> handleSessionRewind(msg);
             case "session.setStarred" -> handleSessionSetStarred(msg);
             case "session.rename" -> handleSessionRename(msg);
@@ -778,6 +783,24 @@ public final class AppServer {
         result.put("sessionId", id);
         result.put("messages", wire);
         result.put("cards", session.readCards(id));
+        writer.result(msg.id(), result);
+    }
+
+    private void handleToolsList(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        // 纯只读:仅回工具定义,不改 sessionId/agent。
+        java.util.List<com.fasterxml.jackson.databind.node.ObjectNode> wire = new java.util.ArrayList<>();
+        for (com.lyhn.wraith.llm.LlmClient.Tool t : session.builtinTools()) {
+            com.fasterxml.jackson.databind.node.ObjectNode n = JsonRpc.MAPPER.createObjectNode();
+            n.put("name", t.name());
+            n.put("description", t.description() == null ? "" : t.description());
+            if (t.parameters() != null) {
+                n.set("parameters", t.parameters());   // JSON schema;null 时省略该字段
+            }
+            wire.add(n);
+        }
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("tools", wire);
         writer.result(msg.id(), result);
     }
 }
