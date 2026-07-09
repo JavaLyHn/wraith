@@ -690,6 +690,11 @@ export function initialTranscriptState(): TranscriptState {
   return { ...initialState }
 }
 
+/** 返回空白的 TranscriptState（spliceCards 回放专用别名）。 */
+export function freshState(): TranscriptState {
+  return { ...initialState }
+}
+
 /** 提交时 echo 一条 user 气泡(封口当前 message)。 */
 export function addUserItem(state: TranscriptState, text: string): TranscriptState {
   return { ...state, items: [...state.items, { type: 'user', text }], _messageOpen: false }

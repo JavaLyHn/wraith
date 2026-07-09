@@ -23,6 +23,7 @@ import {
   type Item,
 } from '../shared/transcriptReducer'
 import { messagesToItems } from '../shared/messagesToItems'
+import { spliceCards } from '../shared/spliceCards'
 import { lastUserMessage } from './lib/resend'
 import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import Transcript from './components/Transcript'
@@ -258,9 +259,9 @@ export default function App(): JSX.Element {
     if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
     setView('chat') // 点侧边栏会话:无论当前在哪个面板,都切回聊天界面
     try {
-      const { sessionId, messages, model, modelFallback } = await window.wraith.resumeSession(id)
+      const { sessionId, messages, model, modelFallback, cards } = await window.wraith.resumeSession(id)
       statusThrottleRef.current?.cancel() // 紧贴 resumeSession dispatch:消 await 期间 status 尾巴重新入窗
-      dispatch({ type: 'loadHistory', items: messagesToItems(messages) })
+      dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
       dispatch({ type: 'setSessionId', sessionId })
       dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
       if (model) {
