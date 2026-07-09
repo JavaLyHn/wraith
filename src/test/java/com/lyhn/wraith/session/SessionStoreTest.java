@@ -173,4 +173,33 @@ class SessionStoreTest {
         assertEquals("deepseek", meta.provider(), "null/blank provider 不应覆盖原值");
         assertEquals("deepseek-chat", meta.model(), "null/blank model 不应覆盖原值");
     }
+
+    @Test
+    void peekReturnsMessagesWithoutChangingCurrentSession(@TempDir Path home) {
+        SessionStore store = SessionStore.open(home, "/proj/a", "p", "m");
+        store.persist(sampleHistory());                 // 会话 A
+        store.startNew();
+        store.persist(List.of(
+                LlmClient.Message.system("s"),
+                LlmClient.Message.user("第二个会话")));   // 会话 B(当前)
+        String bId = store.currentId();
+        List<SessionMeta> metas = store.list(10);
+        assertEquals(2, metas.size());
+        // 取 A 的 id(list 按 updatedAt 倒序,B 在前,A 在后)
+        String aId = metas.get(1).id();
+
+        List<LlmClient.Message> peeked = store.peek(aId);
+        assertEquals(2, peeked.size(), "system 不持久化,应剩 user+assistant");
+        assertEquals("帮我重构 Foo 类", peeked.get(0).content());
+        assertEquals(bId, store.currentId(), "peek 必须只读,绝不改 currentId");
+    }
+
+    @Test
+    void peekMissingSessionReturnsEmptyAndKeepsCurrent(@TempDir Path home) {
+        SessionStore store = SessionStore.open(home, "/proj/a", "p", "m");
+        store.persist(sampleHistory());
+        String before = store.currentId();
+        assertTrue(store.peek("no-such-id").isEmpty());
+        assertEquals(before, store.currentId());
+    }
 }

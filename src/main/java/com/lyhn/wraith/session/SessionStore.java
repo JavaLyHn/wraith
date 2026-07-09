@@ -267,6 +267,12 @@ public final class SessionStore {
         return rec.messages();
     }
 
+    /** 只读载入指定会话的消息,不改 currentId/内存态(供只读预览)。找不到返回空列表。 */
+    public synchronized List<LlmClient.Message> peek(String id) {
+        SessionRecord rec = read(id);
+        return rec == null ? List.of() : rec.messages();
+    }
+
     /** 读取指定 id 会话的元信息(不加载消息体)。id 不存在返回 null。 */
     public SessionMeta meta(String id) {
         if (id == null || id.isBlank()) return null;
