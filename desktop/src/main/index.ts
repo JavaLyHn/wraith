@@ -39,6 +39,10 @@ import type { GatewayEvent } from '../shared/gateway'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
+// Dev 下 app.name 默认回落为 "Electron"(Dock 提示/菜单栏/关于面板);打包版由
+// electron-builder productName=Wraith 处理,dev 需显式设名。尽早调用(app ready 前)。
+app.setName('Wraith')
+
 // E2E:userData 重定向到临时目录,settings 读写不污染真实应用数据
 if (process.env['WRAITH_E2E_USERDATA']) {
   app.setPath('userData', process.env['WRAITH_E2E_USERDATA'])
