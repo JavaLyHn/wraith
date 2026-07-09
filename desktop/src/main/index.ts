@@ -558,6 +558,12 @@ ipcMain.handle('wraith:resumeSession', async (_e, sessionId: string) => {
   return client.request('session.resume', { sessionId })
 })
 
+ipcMain.handle('wraith:peekSession', async (_e, sessionId: string) => {
+  if (!client) throw new Error('Backend not connected')
+  // 只读预览:不更新 currentSessionId(这是运行中会话的活跃指针)。
+  return client.request('session.peek', { sessionId })
+})
+
 ipcMain.handle('wraith:rewindSession', async (_e, userOrdinal: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.rewind', { sessionId: currentSessionId, userOrdinal })
