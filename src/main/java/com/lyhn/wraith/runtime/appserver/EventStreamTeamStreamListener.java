@@ -38,6 +38,8 @@ public final class EventStreamTeamStreamListener implements LlmClient.StreamList
         if (delta == null || delta.isEmpty()) return;
         if ("planner".equals(kind)) {
             renderer.emitTeamPlanOutput(teamId, delta);
+        } else if ("review".equals(kind)) {
+            renderer.emitTeamReviewOutput(teamId, id, delta);
         } else {
             renderer.emitTeamStepOutput(teamId, id, delta);
         }

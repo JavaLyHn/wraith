@@ -263,4 +263,10 @@ public final class EventStreamRenderer implements Renderer {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId); p.put("text", text);
         writer.notify("team.step.output", p);
     }
+
+    /** 协作步骤审查 LLM 流式正文片段（嵌套在 TeamCard 步骤行下，标识为 reviewer 输出）。 */
+    public void emitTeamReviewOutput(String teamId, String stepId, String text) {
+        Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId); p.put("text", text);
+        writer.notify("team.review.output", p);
+    }
 }
