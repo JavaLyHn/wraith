@@ -1245,6 +1245,10 @@ public class Main {
                         }
                         return msgs;
                     }
+                    @Override
+                    public java.util.List<com.lyhn.wraith.llm.LlmClient.Message> peekSession(String id) {
+                        return sessionStore.peek(id);   // 纯读,不碰 agent/currentId
+                    }
                     public String persistTurn() {
                         sessionStore.persist(agent.getConversationHistory());
                         String id = sessionStore.currentId();

@@ -49,6 +49,10 @@ public final class AppServer {
         default java.util.List<com.lyhn.wraith.llm.LlmClient.Message> resume(String sessionId) {
             return java.util.List.of();
         }
+        /** 只读读取指定会话消息,不切活跃会话/不碰 agent(供预览)。默认空。 */
+        default java.util.List<com.lyhn.wraith.llm.LlmClient.Message> peekSession(String sessionId) {
+            return java.util.List.of();
+        }
         /** 落盘当前对话,返回持久化后的真实 sessionId(空对话可能为 null)。默认 no-op。 */
         default String persistTurn() { return null; }
         /** 轮次开始即为新会话落最小桩,返回其 sessionId(续接会话为原 id;空输入 null)。使会话立刻进侧栏。默认 no-op。 */
@@ -200,6 +204,7 @@ public final class AppServer {
             case "session.setApprovalMode" -> handleSetApprovalMode(msg);
             case "session.list" -> handleSessionList(msg);
             case "session.resume" -> handleSessionResume(msg);
+            case "session.peek" -> handleSessionPeek(msg);
             case "session.rewind" -> handleSessionRewind(msg);
             case "session.setStarred" -> handleSessionSetStarred(msg);
             case "session.rename" -> handleSessionRename(msg);
@@ -754,6 +759,24 @@ public final class AppServer {
                 result.put("modelFallback", true);
             }
         }
+        result.put("cards", session.readCards(id));
+        writer.result(msg.id(), result);
+    }
+
+    private void handleSessionPeek(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        String id = (p != null && p.hasNonNull("sessionId")) ? p.get("sessionId").asText() : "";
+        if (id.isBlank()) { writer.error(msg.id(), -32602, "missing sessionId"); return; }
+        // 纯只读:绝不 sessionId = id,绝不碰 agent/model。
+        java.util.List<com.lyhn.wraith.llm.LlmClient.Message> msgs = session.peekSession(id);
+        java.util.List<com.fasterxml.jackson.databind.node.ObjectNode> wire = new java.util.ArrayList<>();
+        for (com.lyhn.wraith.llm.LlmClient.Message m : msgs) {
+            wire.add(com.lyhn.wraith.session.SessionMessageCodec.toJson(JsonRpc.MAPPER, m));
+        }
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("sessionId", id);
+        result.put("messages", wire);
         result.put("cards", session.readCards(id));
         writer.result(msg.id(), result);
     }

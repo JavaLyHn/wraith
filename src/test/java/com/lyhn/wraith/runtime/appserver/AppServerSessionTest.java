@@ -176,4 +176,58 @@ class AppServerSessionTest {
             assertEquals("missing sessionId", err.get("error").get("message").asText());
         }
     }
+
+    @Test
+    void sessionPeekReadsMessagesAndCardsWithoutResuming() throws Exception {
+        java.util.concurrent.atomic.AtomicInteger resumeCalls = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger peekCalls = new java.util.concurrent.atomic.AtomicInteger();
+        AppServer.SessionRunnerFactory f = (writer, sessionId, workspaceDir) -> {
+            EventStreamRenderer r = new EventStreamRenderer(writer, sessionId);
+            return new AppServer.SessionRunner() {
+                public EventStreamRenderer renderer() { return r; }
+                public String runTurn(String input) { return "ok"; }
+                public List<LlmClient.Message> resume(String id) { resumeCalls.incrementAndGet(); return List.of(); }
+                public List<LlmClient.Message> peekSession(String id) {
+                    peekCalls.incrementAndGet();
+                    return List.of(new LlmClient.Message("user", "peeked-hi", null, null, null));
+                }
+                public List<JsonNode> readCards(String id) {
+                    com.fasterxml.jackson.databind.node.ObjectNode n = JsonRpc.MAPPER.createObjectNode();
+                    n.put("turnOrdinal", 1);
+                    n.set("events", JsonRpc.MAPPER.createArrayNode());
+                    return List.of(n);
+                }
+            };
+        };
+        String in = String.join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.start\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.peek\",\"params\":{\"sessionId\":\"s7\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(new ByteArrayInputStream(in.getBytes(StandardCharsets.UTF_8)), out, f).serve();
+        JsonNode res = parseAll(out.toString(StandardCharsets.UTF_8)).stream()
+            .filter(n -> n.path("id").asInt(-1) == 2 && n.has("result")).findFirst().orElseThrow().get("result");
+        assertEquals("s7", res.get("sessionId").asText());
+        assertEquals(1, res.get("messages").size());
+        assertEquals("peeked-hi", res.get("messages").get(0).get("content").asText());
+        assertTrue(res.get("cards").isArray() && res.get("cards").size() == 1);
+        assertEquals(1, peekCalls.get(), "session.peek 必须走 peekSession");
+        assertEquals(0, resumeCalls.get(), "session.peek 绝不能触发 resume(有副作用)");
+    }
+
+    @Test
+    void sessionPeekGuardsNoSessionAndMissingId() throws Exception {
+        String in = String.join("\n",
+            "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"session.peek\",\"params\":{\"sessionId\":\"s1\"}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.start\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session.peek\",\"params\":{}}",
+            "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(new ByteArrayInputStream(in.getBytes(StandardCharsets.UTF_8)), out, factory(new AtomicInteger())).serve();
+        List<JsonNode> replies = parseAll(out.toString(StandardCharsets.UTF_8));
+        assertEquals(-32000, replies.stream().filter(n -> n.path("id").asInt(-1) == 1 && n.has("error"))
+            .findFirst().orElseThrow().get("error").get("code").asInt());   // no session
+        assertEquals(-32602, replies.stream().filter(n -> n.path("id").asInt(-1) == 3 && n.has("error"))
+            .findFirst().orElseThrow().get("error").get("code").asInt());   // missing sessionId
+    }
 }
