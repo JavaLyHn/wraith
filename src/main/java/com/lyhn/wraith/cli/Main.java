@@ -1366,6 +1366,9 @@ public class Main {
                     public boolean deleteSession(String id) {
                         return sessionStore.deleteById(id);
                     }
+                    public java.util.List<com.fasterxml.jackson.databind.JsonNode> readCards(String id) {
+                        return sessionStore.readCards(id);
+                    }
                     public java.util.Map<String, Object> skillsList() {
                         java.util.List<java.util.Map<String, Object>> list = new java.util.ArrayList<>();
                         java.util.Set<String> disabled = skillRegistry.stateStore().disabled();

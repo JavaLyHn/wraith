@@ -138,6 +138,13 @@ public final class AppServer {
         default java.util.Map<String, Object> sttTranscribe(String audioBase64, String mime) {
             throw new UnsupportedOperationException("sttTranscribe not implemented");
         }
+        /**
+         * 读取指定会话的 card 事件列表(供 resume 回放 plan/team 卡片)。
+         * 每条记录为 {@code {turnOrdinal, events}} JsonNode。默认空列表(向后兼容)。
+         */
+        default java.util.List<com.fasterxml.jackson.databind.JsonNode> readCards(String id) {
+            return java.util.List.of();
+        }
     }
 
     private final BufferedReader in;
@@ -740,6 +747,7 @@ public final class AppServer {
                 result.put("modelFallback", true);
             }
         }
+        result.put("cards", session.readCards(id));
         writer.result(msg.id(), result);
     }
 }
