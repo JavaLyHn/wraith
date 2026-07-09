@@ -58,6 +58,14 @@ public class AgentOrchestrator {
     public void setStepStreamFactory(java.util.function.BiFunction<String,String,LlmClient.StreamListener> f) { this.streamFactory = f; }
     private LlmClient.StreamListener streamFor(String kind, String id) { return streamFactory == null ? null : streamFactory.apply(kind, id); }
 
+    /**
+     * run() 的返回值保留终端 chrome（"✅ 多 Agent 协作任务完成！" / "[step_id]" / 结果截断）供 CLI 打印；
+     * 桌面通过 {@link #getLastCleanResult()} 取干净版（无 chrome、无 [step_id]、不截断）发底部答案消息。
+     * 与 {@link PlanExecuteAgent#getLastCleanResult()} 同款约定。
+     */
+    private String lastCleanResult = "";
+    public String getLastCleanResult() { return lastCleanResult == null ? "" : lastCleanResult; }
+
     // 执行步骤的数据结构（package-private 供测试访问）
     record ExecutionStep(String id, String description, String type,
                                   List<String> dependencies, String result,
@@ -142,6 +150,7 @@ public class AgentOrchestrator {
      */
     public String run(String userInput) {
         log.info("Multi-Agent run started: inputLength={}", userInput == null ? 0 : userInput.length());
+        this.lastCleanResult = ""; // 早退路径（取消/规划失败）不赋值 → 桌面不发底部消息
         memoryManager.addUserMessage(userInput);
         progressListener.started(userInput, List.of(
             new TeamProgressListener.AgentInfo("planner", "planner"),
@@ -230,8 +239,9 @@ public class AgentOrchestrator {
             }
         }
 
-        // 6. 汇总结果
-        String finalResult = buildFinalResult(steps);
+        // 6. 汇总结果：run() 返回带 chrome 版（CLI 打印）；干净版留给桌面底部答案消息
+        String finalResult = buildFinalResult(steps, true);
+        this.lastCleanResult = buildFinalResult(steps, false);
         memoryManager.addAssistantMessage("[多Agent结果] " + finalResult);
 
         boolean allCompleted = steps.stream().allMatch(s -> s.status() == StepStatus.COMPLETED);
@@ -657,7 +667,14 @@ public class AgentOrchestrator {
      * 注意：Worker/Reviewer 的完整输出在执行阶段已经通过流式渲染打印给用户，
      * 此处只返回"步骤状态 + 简短预览"作为总结，避免同一段内容被打印 2-3 次。
      */
-    private String buildFinalResult(List<ExecutionStep> steps) {
+    /**
+     * @param labeled true → 终端可读版（顶部状态头 + "[step_id]" 前缀 + 结果预览截断），供 CLI；
+     *                false → 干净答案版（无 chrome、无 [step_id]、完整不截断），供桌面底部消息。
+     */
+    private String buildFinalResult(List<ExecutionStep> steps, boolean labeled) {
+        if (!labeled) {
+            return buildCleanResult(steps);
+        }
         StringBuilder result = new StringBuilder();
         boolean allCompleted = steps.stream().allMatch(step -> step.status() == StepStatus.COMPLETED);
         boolean hasFailedSteps = steps.stream().anyMatch(step -> step.status() == StepStatus.FAILED);
@@ -691,5 +708,24 @@ public class AgentOrchestrator {
         }
 
         return result.toString();
+    }
+
+    /**
+     * 干净最终答案：拼接所有已完成步骤的**完整**结果（无 chrome、无 "[step_id]" 前缀、不截断），
+     * 段间以空行分隔。桌面 team 分支用它发底部答案消息（与 plan 模式的干净答案对齐）。
+     * 无任何已完成结果时返回空串 → 桌面不发底部消息（失败/取消轮次由 TeamCard 页脚表达）。
+     */
+    private String buildCleanResult(List<ExecutionStep> steps) {
+        StringBuilder sb = new StringBuilder();
+        for (ExecutionStep step : steps) {
+            if (step.status() == StepStatus.COMPLETED
+                    && step.result() != null && !step.result().isBlank()) {
+                if (sb.length() > 0) {
+                    sb.append("\n\n");
+                }
+                sb.append(step.result().trim());
+            }
+        }
+        return sb.toString();
     }
 }

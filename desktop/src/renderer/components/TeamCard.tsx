@@ -99,10 +99,11 @@ function ReviewTag({ step }: { step: TeamStep }): JSX.Element | null {
 // ---------------------------------------------------------------------------
 
 function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass: string }): JSX.Element {
-  const [expanded, setExpanded] = useState(false)
+  // done 步骤结果默认展开：team 卡片即完整产出,输出不该藏在一次点击之后(保留折叠钮供收起)。
+  const [expanded, setExpanded] = useState(true)
   const agentName = step.agent ?? ''
 
-  // running 时优先展示流式 output（自动展开）；done 时展示 result（手动折叠）
+  // running 时优先展示流式 output（自动展开）；done 时展示 result（默认展开,可手动折叠）
   const isRunning = step.status === 'running'
   const hasLiveOutput = isRunning && typeof step.output === 'string' && step.output.length > 0
   const hasResult = !isRunning && typeof step.result === 'string' && step.result.length > 0

@@ -311,6 +311,54 @@ class AgentOrchestratorTest {
     }
 
     @Test
+    void shouldExposeCleanFinalResultWithoutChromeOrTruncation(@TempDir Path tempDir) {
+        // 完整（>120 字）的 worker 答案，用于验证干净版不截断
+        String longAnswer = "你好！我是 Wraith，一个运行在终端里的 AI 编程助手。"
+                + "我可以帮你读写文件、执行命令、检索与理解代码库，调用 MCP 工具，"
+                + "以及以多 Agent 协作的方式把复杂任务拆解成步骤并逐一完成。"
+                + "我也支持计划模式（先拆解再逐步执行）与团队协作模式（规划者、执行者、审查者分工），"
+                + "适合处理需要多步推理和跨文件改动的复杂工程任务。请告诉我你想做什么，我会立刻开始。";
+        assertTrue(longAnswer.length() > 120, "test fixture must exceed the 120-char preview cap");
+
+        StubGLMClient llmClient = new StubGLMClient(List.of(
+                response("""
+                        {
+                          "summary": "单步任务",
+                          "steps": [
+                            {"id": "s1", "description": "回复用户问候", "type": "COMMAND", "dependencies": []}
+                          ]
+                        }
+                        """),
+                response(longAnswer),
+                response("""
+                        {"approved": true, "summary": "通过", "issues": []}
+                        """)
+        ));
+
+        AgentOrchestrator orchestrator = new AgentOrchestrator(
+                llmClient,
+                new ToolRegistry(),
+                new NoOpMemoryManager(tempDir.toFile())
+        );
+
+        String chrome = orchestrator.run("你好");
+        String clean = orchestrator.getLastCleanResult();
+
+        // run() 返回值保留终端 chrome（CLI 用）：状态头 + [step_id] 标签 + 预览截断
+        // 注：parsePlan 会把计划里的 id 重编号为 step_1/step_2…
+        assertTrue(chrome.contains("✅ 多 Agent 协作任务完成！"), "run() 应保留 chrome 状态头");
+        assertTrue(chrome.contains("[step_1]"), "run() 应保留 [step_id] 标签");
+        assertTrue(chrome.contains("..."), "run() 结果预览应截断");
+
+        // getLastCleanResult() 干净版：无 chrome、无 [step_id]、无 "结果：" 前缀，且完整不截断
+        assertEquals(longAnswer, clean, "clean answer 应为完整未截断的 worker 结果");
+        assertFalse(clean.contains("✅ 多 Agent"), "clean answer 不应含 chrome 状态头");
+        assertFalse(clean.contains("[step_1]"), "clean answer 不应含 [step_id] 标签");
+        assertFalse(clean.contains("结果："), "clean answer 不应含 '结果：' 前缀");
+        assertFalse(clean.contains("..."), "clean answer 不应被截断");
+    }
+
+    @Test
     void shouldRunIndependentStepsInParallel(@TempDir Path tempDir) throws Exception {
         // 两个互相独立的步骤同属一个依赖批次。若并行执行生效，两个 worker 应同时在 chat() 内等待。
         CountDownLatch workersInFlight = new CountDownLatch(2);

@@ -1491,7 +1491,13 @@ public class Main {
                             // 快照封装（与 CLI team 路径对齐）
                             com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
                             String result = snap.runTurn("team", goal, () -> orchestrator.run(goal));
-                            // 不发底部消息：TeamCard 已是完整产出，handleTurn 忽略返回值
+                            // 干净最终答案作为单条底部消息发出(无 "✅ 多 Agent..." 头 / "[step_id]" 前缀 / 结果截断;
+                            // 各步进程正文已嵌套在 TeamCard 步骤行下)。run() 返回值仍保留终端 chrome,仅供 CLI。
+                            String cleanTeamAnswer = orchestrator.getLastCleanResult();
+                            if (cleanTeamAnswer != null && !cleanTeamAnswer.isBlank()) {
+                                renderer.appendAssistantContentDelta(cleanTeamAnswer);
+                                renderer.finishAssistantContent();
+                            }
                             // 把本轮补进 conversationHistory,使 persistTurn 能落盘到会话历史(否则 team 轮不进左侧列表)
                             agent.recordExternalTurn(goal, result);
                             return result;
