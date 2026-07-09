@@ -196,3 +196,28 @@ describe('markPlanReviewResolved', () => {
     expect(planItem(s).planId).toBe('p1')
   })
 })
+
+// ---------------------------------------------------------------------------
+// plan.output: 规划器"生成计划"阶段的流式正文(plan.created 前的空窗填充)
+// ---------------------------------------------------------------------------
+describe('plan.output (规划器生成阶段流式)', () => {
+  it('plan.created 前即创建 plan item 并累积 plannerOutput，steps 为空', () => {
+    let s = transcriptReducer(initialTranscriptState(), { type: 'plan.output', planId: 'p1', text: '规划中' } as never)
+    s = transcriptReducer(s, { type: 'plan.output', planId: 'p1', text: '：读+验' } as never)
+    const item = planItem(s)
+    expect(item.plannerOutput).toBe('规划中：读+验')
+    expect(item.steps).toHaveLength(0)
+  })
+
+  it('随后 plan.created 填入 steps 且保留 plannerOutput，不重复创建 plan item', () => {
+    let s = transcriptReducer(initialTranscriptState(), { type: 'plan.output', planId: 'p1', text: 'gen' } as never)
+    s = transcriptReducer(s, {
+      type: 'plan.created', planId: 'p1', goal: 'g',
+      steps: [{ id: 't1', description: 'a', deps: [] }],
+    } as never)
+    const item = planItem(s)
+    expect(item.steps).toHaveLength(1)
+    expect(item.plannerOutput).toBe('gen')
+    expect(s.items.filter(i => i.type === 'plan')).toHaveLength(1)
+  })
+})

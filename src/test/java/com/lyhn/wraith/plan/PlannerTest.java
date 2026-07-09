@@ -5,9 +5,11 @@ import com.lyhn.wraith.llm.LlmClient;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class PlannerTest {
@@ -80,6 +82,59 @@ class PlannerTest {
         @Override
         public ChatResponse chat(List<Message> messages, List<Tool> tools, StreamListener listener) {
             this.lastSystemPrompt = messages.get(0).content();
+            return new ChatResponse("assistant", content, null, 100, 20);
+        }
+    }
+
+    // ── createPlan(goal, extra) 每调用可选 StreamListener（桌面规划器流式）─────────
+
+    @Test
+    void createPlanForwardsGenerationDeltasToExtraListener() throws Exception {
+        StreamingStubClient client = new StreamingStubClient(
+                "规划中：先读后验…",
+                "{\"summary\":\"复杂\",\"tasks\":[{\"id\":\"t1\",\"description\":\"先读取 pom.xml\",\"type\":\"FILE_READ\",\"dependencies\":[]}]}");
+        Planner planner = new Planner(client);
+        List<String> captured = new ArrayList<>();
+        LlmClient.StreamListener extra = new LlmClient.StreamListener() {
+            @Override public void onContentDelta(String d) { captured.add(d); }
+        };
+
+        ExecutionPlan plan = planner.createPlan("先读取 pom.xml 然后验证项目结构", extra);
+
+        assertEquals("复杂", plan.getSummary());
+        assertTrue(captured.stream().anyMatch(s -> s.contains("规划中")),
+                "extra listener should receive plan-generation deltas; got=" + captured);
+    }
+
+    @Test
+    void createPlanWithoutExtraStillGeneratesPlan() throws Exception {
+        StreamingStubClient client = new StreamingStubClient(
+                "x",
+                "{\"summary\":\"复杂\",\"tasks\":[{\"id\":\"t1\",\"description\":\"先读取\",\"type\":\"FILE_READ\",\"dependencies\":[]}]}");
+        Planner planner = new Planner(client);
+
+        ExecutionPlan plan = planner.createPlan("先读取 pom.xml 然后验证项目结构"); // 无 extra，CLI 路径
+
+        assertEquals("复杂", plan.getSummary());
+        assertFalse(plan.getAllTasks().isEmpty());
+    }
+
+    /** 流式桩：chat 时先对 listener 吐一段 delta，再返回计划 JSON。 */
+    private static final class StreamingStubClient extends GLMClient {
+        private final String delta;
+        private final String content;
+
+        private StreamingStubClient(String delta, String content) {
+            super("test-key");
+            this.delta = delta;
+            this.content = content;
+        }
+
+        @Override
+        public ChatResponse chat(List<Message> messages, List<Tool> tools, StreamListener listener) {
+            if (listener != null && delta != null && !delta.isEmpty()) {
+                listener.onContentDelta(delta);
+            }
             return new ChatResponse("assistant", content, null, 100, 20);
         }
     }

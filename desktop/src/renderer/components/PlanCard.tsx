@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { planStatusIcon, planStatusClass, type PlanStepStatus } from '../lib/planStatus'
 
 interface PlanStep { id: string; description: string; status: PlanStepStatus; result?: string; output?: string }
-interface PlanItem { type: 'plan'; planId: string; goal: string; steps: PlanStep[] }
+interface PlanItem { type: 'plan'; planId: string; goal: string; steps: PlanStep[]; plannerOutput?: string }
 interface PlanReviewItem {
   type: 'planReview'
   reviewId: string
@@ -44,14 +44,31 @@ function PlanStepRow({ s }: { s: PlanStep }): JSX.Element {
 }
 
 export function PlanChecklist({ item }: { item: PlanItem }): JSX.Element {
+  // 计划表(steps)到达前的"规划中"实时正文:消除数秒空窗的"死机感"。steps 一到即收敛为清单
+  // (规划阶段流出的是计划 JSON 原文,计划表出来后再展示原文冗余,故仅生成期显示)。
+  const generating = item.steps.length === 0
+  const hasPlannerOutput = typeof item.plannerOutput === 'string' && item.plannerOutput.length > 0
   return (
     <div className="my-1.5 rounded-lg border border-border bg-surface p-3 text-xs font-mono">
-      <div className="mb-2 font-semibold text-accent">计划 · {item.goal}</div>
-      <ul className="flex flex-col gap-1">
-        {item.steps.map(s => (
-          <PlanStepRow key={s.id} s={s} />
-        ))}
-      </ul>
+      <div className="mb-2 font-semibold text-accent">计划{item.goal ? ` · ${item.goal}` : ''}</div>
+      {generating && hasPlannerOutput && (
+        <div>
+          <div className="mb-0.5 flex items-center gap-1 text-accent">
+            <span className="animate-pulse">🧭</span>
+            <span>正在规划…</span>
+          </div>
+          <div className="max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
+            <pre className="whitespace-pre-wrap break-words text-xs">{item.plannerOutput}</pre>
+          </div>
+        </div>
+      )}
+      {item.steps.length > 0 && (
+        <ul className="flex flex-col gap-1">
+          {item.steps.map(s => (
+            <PlanStepRow key={s.id} s={s} />
+          ))}
+        </ul>
+      )}
     </div>
   )
 }

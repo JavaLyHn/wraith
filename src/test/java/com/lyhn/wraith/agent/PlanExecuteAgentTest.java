@@ -244,7 +244,7 @@ class PlanExecuteAgentTest {
         }
 
         @Override
-        public ExecutionPlan createPlan(String goal) {
+        public ExecutionPlan createPlan(String goal, LlmClient.StreamListener extra) {
             ExecutionPlan plan = new ExecutionPlan("plan-test", goal);
             plan.addTask(new Task("task_1", "读取测试文件", Task.TaskType.FILE_READ));
             plan.computeExecutionOrder();

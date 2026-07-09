@@ -367,6 +367,9 @@ export interface PlanReviewRequestedEvent { reviewId: string; planId: string; go
 /** plan.step.output 通知负载（步骤流式正文片段，嵌套在清单步骤行下方）。 */
 export interface PlanStepOutputEvent { planId: string; stepId: string; text: string }
 
+/** plan.output 通知负载（规划器"生成计划"阶段的流式正文，plan.created 到达前的空窗期）。 */
+export interface PlanOutputEvent { planId: string; text: string }
+
 // ---------------------------------------------------------------------------
 // Team mode: 多智能体运行模式 + 团队事件负载(Java TeamMode / Team* 通知的前端镜像)
 // ---------------------------------------------------------------------------

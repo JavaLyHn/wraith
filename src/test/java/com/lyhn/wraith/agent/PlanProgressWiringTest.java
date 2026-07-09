@@ -129,7 +129,7 @@ class PlanProgressWiringTest {
         }
 
         @Override
-        public ExecutionPlan createPlan(String goal) {
+        public ExecutionPlan createPlan(String goal, LlmClient.StreamListener extra) {
             ExecutionPlan plan = new ExecutionPlan("plan-wiring-test", goal);
             plan.addTask(new Task("task_1", "做一件事", Task.TaskType.FILE_READ));
             plan.computeExecutionOrder();
@@ -179,7 +179,7 @@ class PlanProgressWiringTest {
         }
 
         @Override
-        public ExecutionPlan createPlan(String goal) {
+        public ExecutionPlan createPlan(String goal, LlmClient.StreamListener extra) {
             ExecutionPlan plan = new ExecutionPlan("plan-failure-test", goal);
             plan.addTask(new Task("task_1", "做一件事", Task.TaskType.FILE_READ));
             plan.computeExecutionOrder();

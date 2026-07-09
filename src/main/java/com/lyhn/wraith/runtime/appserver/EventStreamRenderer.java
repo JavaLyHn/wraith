@@ -257,6 +257,12 @@ public final class EventStreamRenderer implements Renderer {
         emit("plan.step.output", p);
     }
 
+    /** 规划器"生成计划"阶段的流式正文片段（plan.created 之前的空窗期实时出字）。 */
+    public void emitPlanOutput(String planId, String text) {
+        Map<String, Object> p = base(); p.put("planId", planId); p.put("text", text);
+        emit("plan.output", p);
+    }
+
     // ---- 计划复审阻塞管道（镜像 promptApproval）----
 
     /**

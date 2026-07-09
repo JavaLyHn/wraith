@@ -49,6 +49,16 @@ public class Planner {
      * 为复杂任务创建执行计划
      */
     public ExecutionPlan createPlan(String goal) throws IOException {
+        return createPlan(goal, null);
+    }
+
+    /**
+     * 为复杂任务创建执行计划,允许注入额外的 {@link LlmClient.StreamListener}
+     * (桌面用它把规划器"边生成计划边出字"转成 plan.output 事件)。
+     * {@code extra == null} 时仅用内部 {@link PlanningStreamRenderer},行为与
+     * 无参重载完全一致(CLI 字节不变)。
+     */
+    public ExecutionPlan createPlan(String goal, LlmClient.StreamListener extra) throws IOException {
         out.println("📋 正在规划任务: " + goal + "\n");
 
         if (isSimpleGoal(goal)) {
@@ -63,11 +73,14 @@ public class Planner {
                 LlmClient.Message.user("请为以下任务制定执行计划：\n" + goal)
         );
 
-        // 调用LLM生成计划
+        // 调用LLM生成计划（extra != null 时 fan-out 到桌面事件转发器）
         PlanningStreamRenderer streamRenderer = new PlanningStreamRenderer(out);
-        LlmClient.ChatResponse response = llmClient.chat(messages, null, streamRenderer);
+        LlmClient.StreamListener listener = (extra == null)
+                ? streamRenderer
+                : new com.lyhn.wraith.llm.CompositeStreamListener(java.util.List.of(streamRenderer, extra));
+        LlmClient.ChatResponse response = llmClient.chat(messages, null, listener);
         LlmTraceLogger.logReasoning(log, "planner", llmClient, response.reasoningContent());
-        streamRenderer.finish();
+        listener.finish();
         String planJson = response.content();
 
         // 解析JSON计划

@@ -1581,6 +1581,9 @@ public class Main {
                         // 步骤流 → plan.step.output（嵌套在清单步骤行下，不浮动为独立 message）
                         planAgent.setStepStreamFactory(
                                 (id, ss) -> new com.lyhn.wraith.runtime.appserver.EventStreamStepListener(renderer, planId, id));
+                        // 规划器生成计划阶段的流 → plan.output（plan.created 前的空窗期实时出字）
+                        planAgent.setPlanStreamFactory(
+                                () -> new com.lyhn.wraith.runtime.appserver.EventStreamPlanGenListener(renderer, planId));
 
                         // 外部上下文（MCP 资源索引）
                         planAgent.setExternalContextSupplier(() -> {

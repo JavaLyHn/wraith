@@ -178,6 +178,18 @@ public class PlanExecuteAgent {
         if (factory != null) this.stepStreamFactory = factory;
     }
 
+    /**
+     * 桌面注入：把"规划器生成计划"阶段的流式正文导向 plan.output 事件(否则 out=discard 丢弃,
+     * 前端只见空窗)。每次生成计划取一个新监听器。默认 null → CLI 不注入,行为字节不变。
+     */
+    private java.util.function.Supplier<LlmClient.StreamListener> planStreamFactory;
+    public void setPlanStreamFactory(java.util.function.Supplier<LlmClient.StreamListener> factory) {
+        this.planStreamFactory = factory;
+    }
+    private LlmClient.StreamListener planStream() {
+        return planStreamFactory == null ? null : planStreamFactory.get();
+    }
+
     private static PrintStream deferredSystemOut() {
         return new PrintStream(new OutputStream() {
             @Override
@@ -291,7 +303,7 @@ public class PlanExecuteAgent {
      * 使用Plan-and-Execute模式执行
      */
     private PlanRunOutcome runWithPlan(String goal, StreamState streamState) throws IOException {
-        ExecutionPlan plan = planner.createPlan(goal);
+        ExecutionPlan plan = planner.createPlan(goal, planStream());
         return reviewAndExecutePlan(plan, streamState);
     }
 
@@ -312,7 +324,7 @@ public class PlanExecuteAgent {
             }
 
             out.println("📝 已收到补充要求，正在重新规划...\n");
-            plan = planner.createPlan(plan.getGoal() + "\n补充要求：" + feedback);
+            plan = planner.createPlan(plan.getGoal() + "\n补充要求：" + feedback, planStream());
         }
     }
 

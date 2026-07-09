@@ -43,6 +43,8 @@ export interface PlanItem {
   planId: string
   goal: string
   steps: PlanStepItem[]
+  /** 规划器"生成计划"阶段的流式正文（plan.output delta 累积；steps 到达前的实时进度）。 */
+  plannerOutput?: string
 }
 
 /** 计划复审 item（plan.review.requested 事件追加，响应后前端标记 resolved）。 */
@@ -376,6 +378,25 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
     }
 
     // ── plan mode 事件 ──────────────────────────────────────────────────────
+    case 'plan.output': {
+      // 规划器生成计划阶段的流式正文 delta —— 在 plan.created(计划表)到达前,
+      // 提前创建/更新该 planId 的 plan item 并累积 plannerOutput,消除空窗。
+      const planId = typeof p['planId'] === 'string' ? p['planId'] : ''
+      const text = typeof p['text'] === 'string' ? p['text'] : ''
+      const exists = state.items.some(it => it.type === 'plan' && it.planId === planId)
+      if (exists) {
+        return {
+          ...state,
+          items: state.items.map(it =>
+            it.type === 'plan' && it.planId === planId
+              ? { ...it, plannerOutput: (it.plannerOutput ?? '') + text }
+              : it
+          ),
+        }
+      }
+      return { ...state, items: [...state.items, { type: 'plan', planId, goal: '', steps: [], plannerOutput: text }] }
+    }
+
     case 'plan.created': {
       const planId = typeof p['planId'] === 'string' ? p['planId'] : ''
       const goal = typeof p['goal'] === 'string' ? p['goal'] : ''
