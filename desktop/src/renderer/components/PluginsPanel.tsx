@@ -44,7 +44,7 @@ function BuiltinToolRowView({ row }: { row: BuiltinToolRow }): JSX.Element {
         <span className="font-mono text-xs text-fg">{row.name}</span>
         {row.missing && <span className="text-3xs text-fg-subtle">定义缺失 / 当前不可用</span>}
         {hasParams && (
-          <button onClick={() => setExpanded(v => !v)}
+          <button type="button" onClick={() => setExpanded(v => !v)}
             className="ml-auto shrink-0 text-3xs text-fg-subtle hover:text-fg-muted">
             {expanded ? '▼ 参数' : '▶ 参数'}
           </button>
@@ -205,11 +205,15 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                     className="ml-2 underline hover:no-underline">重试</button>
                 </div>
               )}
-              <div className="flex flex-col gap-1">
-                {joinBuiltinTools(selectedBuiltin.tools, builtinCatalog ?? []).map(row => (
-                  <BuiltinToolRowView key={row.name} row={row} />
-                ))}
-              </div>
+              {builtinCatalog === null && !builtinError ? (
+                <div className="text-xs text-fg-subtle">加载中…</div>
+              ) : (
+                <div className="flex flex-col gap-1">
+                  {joinBuiltinTools(selectedBuiltin.tools, builtinCatalog ?? []).map(row => (
+                    <BuiltinToolRowView key={row.name} row={row} />
+                  ))}
+                </div>
+              )}
             </div>
           ) : !current ? (
             <div data-testid="mcp-overview" className="flex flex-col gap-5">
