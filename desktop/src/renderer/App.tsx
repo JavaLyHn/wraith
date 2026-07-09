@@ -34,6 +34,8 @@ import ModelFallbackBanner from './components/ModelFallbackBanner'
 import SubmitErrorBanner from './components/SubmitErrorBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import Sidebar from './components/Sidebar'
+import PreviewBanner from './components/PreviewBanner'
+import { selectAction, resolveOnIdle, deriveView, type Preview } from '../shared/sessionPreview'
 import PluginsPanel from './components/PluginsPanel'
 import AutomationsPanel from './components/AutomationsPanel'
 import ImGatewayPanel from './components/ImGatewayPanel'
@@ -157,6 +159,11 @@ export default function App(): JSX.Element {
     turnRef.current = state.turn
   }, [state.turn])
 
+  // 预览覆盖态:running 时只读显示另一会话或空白新会话页
+  const [preview, setPreview] = useState<Preview>(null)
+  const previewRef = useRef<Preview>(null)
+  useEffect(() => { previewRef.current = preview }, [preview])
+
   // Define fetchMcpResources before onEvent effect so it can be referenced in deps
   const fetchMcpResources = useCallback(async () => {
     try {
@@ -247,38 +254,50 @@ export default function App(): JSX.Element {
   }, [])
 
   const handleNewConversation = useCallback(async () => {
-    if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
-    setView('chat') // 点新对话:无论当前在哪个面板,都切回聊天界面
+    if (turnRef.current === 'running') { setPreview({ kind: 'new' }); setView('chat'); return }
+    setView('chat')
     try {
       await window.wraith.startSession(state.workspace || null)
-      statusThrottleRef.current?.cancel() // 紧贴 resetSession:消 await 期间 status 尾巴重新入窗
+      statusThrottleRef.current?.cancel()
       dispatch({ type: 'resetSession', ws: state.workspace })
-      setModelFallbackNotice(false) // 新会话:清除残余回退通知
-      setSubmitError(null) // 新会话:清除残余提交错误横幅
+      setModelFallbackNotice(false)
+      setSubmitError(null)
+      setPreview(null)
       void fetchSessions()
     } catch (err) {
       console.error('[wraith] newConversation error:', err)
     }
-  }, [state.workspace, fetchSessions]) // running 守卫改读 turnRef,不再依赖 state.turn
+  }, [state.workspace, fetchSessions])
+
+  // 完整切换到某会话(仅 idle 安全调用):真实 resume 同步后端 agent+currentId + 前端载入。
+  const commitSwitchTo = useCallback(async (id: string) => {
+    const { sessionId, messages, model, modelFallback, cards } = await window.wraith.resumeSession(id)
+    statusThrottleRef.current?.cancel()
+    dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
+    dispatch({ type: 'setSessionId', sessionId })
+    dispatch({ type: 'markResumed' })
+    if (model) dispatch({ type: 'setModel', model })
+    setModelFallbackNotice(modelFallback === true)
+    void fetchSessions()
+  }, [fetchSessions])
 
   const handleSelectSession = useCallback(async (id: string) => {
-    if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
-    setView('chat') // 点侧边栏会话:无论当前在哪个面板,都切回聊天界面
-    try {
-      const { sessionId, messages, model, modelFallback, cards } = await window.wraith.resumeSession(id)
-      statusThrottleRef.current?.cancel() // 紧贴 resumeSession dispatch:消 await 期间 status 尾巴重新入窗
-      dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
-      dispatch({ type: 'setSessionId', sessionId })
-      dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
-      if (model) {
-        dispatch({ type: 'setModel', model })
+    const act = selectAction(turnRef.current, id, state.sessionId)
+    setView('chat')
+    if (act.mode === 'preview-return') { setPreview(null); return }
+    if (act.mode === 'preview-open') {
+      try {
+        const { messages, cards } = await window.wraith.peekSession(id)   // 纯读,后台 turn 不受扰
+        setPreview({ kind: 'session', sessionId: id, items: spliceCards(messagesToItems(messages), cards ?? []) })
+      } catch (err) {
+        console.error('[wraith] peekSession error:', err)                 // 失败则不进预览,留在 live
       }
-      setModelFallbackNotice(modelFallback === true)
-      void fetchSessions()
-    } catch (err) {
-      console.error('[wraith] resumeSession error:', err)
+      return
     }
-  }, [fetchSessions]) // running 守卫改读 turnRef,不再依赖 state.turn
+    // full-switch(idle)
+    try { setPreview(null); await commitSwitchTo(id) }
+    catch (err) { console.error('[wraith] resumeSession error:', err) }
+  }, [state.sessionId, commitSwitchTo])
 
   const handleToggleStar = useCallback(async (id: string, starred: boolean) => {
     await window.wraith.setSessionStarred(id, starred)
@@ -299,6 +318,9 @@ export default function App(): JSX.Element {
     } else {
       void fetchSessions()
     }
+    // 删除边界:删的是当前预览目标则回 live
+    const pv = previewRef.current
+    if (pv && pv.kind === 'session' && pv.sessionId === id) setPreview(null)
   }, [fetchSessions, state.sessionId, handleNewConversation])
 
   // ── startup flow (runs once) ───────────────────────────────────────────────
@@ -366,14 +388,17 @@ export default function App(): JSX.Element {
     })()
   }, [state.connection, state.workspace, fetchSessions])
 
-  // ── refresh session list when a turn completes ────────────────────────────
+  // ── refresh session list when a turn completes + 落定 preview ────────────
   const prevTurnRef = useRef(state.turn)
   useEffect(() => {
     if (prevTurnRef.current === 'running' && state.turn === 'idle') {
       void fetchSessions()
+      const r = resolveOnIdle(previewRef.current)   // 执行被推迟的真实切换
+      if (r.action === 'resume') { setPreview(null); void commitSwitchTo(r.sessionId) }
+      else if (r.action === 'new') { void handleNewConversation() }   // 其内部走 idle 分支并清 preview
     }
     prevTurnRef.current = state.turn
-  }, [state.turn, fetchSessions])
+  }, [state.turn, fetchSessions, commitSwitchTo, handleNewConversation])
 
   // ── pick attachments ──────────────────────────────────────────────────────
   const handlePickAttachments = useCallback(async () => {
@@ -696,6 +721,14 @@ export default function App(): JSX.Element {
     catch (err) { console.error('[wraith] mcp upsert error:', err); return false }
   }, [fetchMcp])
 
+  // 派生视图模型:由 preview 覆盖态 + live 状态计算展示层数据(命名 pv,避开已有面板态 view)
+  const pv = deriveView(preview, {
+    sessionId: state.sessionId,
+    items: state.items,
+    hasStarted: state.hasStarted,
+    turn: state.turn,
+  })
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-fg">
       <Sidebar
@@ -703,7 +736,8 @@ export default function App(): JSX.Element {
         projects={projects}
         busy={state.turn === 'running'}
         sessions={sessions}
-        activeSessionId={state.sessionId}
+        activeSessionId={pv.activeSessionId}
+        runningSessionId={pv.runningSessionId}
         onNewConversation={handleNewConversation}
         onSelectSession={handleSelectSession}
         onToggleStar={handleToggleStar}
@@ -749,6 +783,10 @@ export default function App(): JSX.Element {
           </div>
         )}
 
+        {view === 'chat' && pv.showReturnBanner && (
+          <PreviewBanner onReturn={() => setPreview(null)} />
+        )}
+
         {view === 'plugins' ? (
           <PluginsPanel
             servers={mcpServers}
@@ -787,7 +825,7 @@ export default function App(): JSX.Element {
                 model={state.model}
                 workspace={state.workspace}
                 onSwitchWorkspace={handleAddProject}
-                centered={!state.hasStarted}
+                centered={pv.showWelcome}
                 status={state.status}
                 resources={mcpResources}
                 attachments={attachments}
@@ -797,11 +835,11 @@ export default function App(): JSX.Element {
                 onModeChange={setPendingMode}
               />
             )
-            return state.hasStarted ? (
+            return !pv.showWelcome ? (
               <>
                 <Transcript
-                  items={state.items}
-                  busy={state.turn === 'running'}
+                  items={pv.items}
+                  busy={pv.transcriptBusy}
                   onEditMessage={handleEditMessage}
                   onDeleteMessage={handleDeleteMessage}
                   onResendMessage={handleResendMessage}

@@ -11,8 +11,8 @@ import { filterSidebar } from '../lib/sidebarSearch'
 import { sessionDisplayName, partitionStarred, groupSessionsByTime } from '../lib/sessionView'
 import type { SessionMeta, ProjectView } from '../../shared/types'
 
-function SessionRow({ s, active, onSelect, onToggleStar, onRename, onDelete }: {
-  s: SessionMeta; active: boolean
+function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDelete }: {
+  s: SessionMeta; active: boolean; running: boolean
   onSelect: (id: string) => void
   onToggleStar: (id: string, starred: boolean) => void
   onRename: (id: string, name: string) => void
@@ -56,6 +56,12 @@ function SessionRow({ s, active, onSelect, onToggleStar, onRename, onDelete }: {
     <div className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 ' +
       (active ? 'bg-surface' : 'hover:bg-surface/60')}
       onMouseLeave={() => setConfirmDel(false)}>
+      {running && (
+        <span data-testid="session-running-dot" className="relative ml-1 flex h-2 w-2 shrink-0" title="运行中">
+          <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-accent opacity-75 motion-reduce:hidden" />
+          <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+        </span>
+      )}
       <button data-testid="conversation-item" onClick={() => onSelect(s.id)}
         className={'flex-1 truncate px-2 py-2 text-left text-xs ' + (active ? 'text-fg' : 'text-fg-muted')}
         title={sessionDisplayName(s)}>
@@ -84,6 +90,7 @@ interface SidebarProps {
   busy: boolean
   sessions: SessionMeta[]
   activeSessionId: string
+  runningSessionId: string
   onNewConversation: () => void
   onSelectSession: (id: string) => void
   onToggleStar: (id: string, starred: boolean) => void
@@ -110,6 +117,7 @@ export default function Sidebar({
   busy,
   sessions,
   activeSessionId,
+  runningSessionId,
   onNewConversation,
   onSelectSession,
   onToggleStar,
@@ -309,12 +317,18 @@ export default function Sidebar({
                       data-testid="conversation-item"
                       onClick={() => onSelectSession(s.id)}
                       className={
-                        'mb-0.5 block w-full truncate rounded-lg px-3 py-2 text-left text-xs ' +
+                        'mb-0.5 flex w-full items-center gap-1 truncate rounded-lg px-3 py-2 text-left text-xs ' +
                         (s.id === activeSessionId ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')
                       }
                       title={s.title}
                     >
-                      {s.title || '(未命名)'}
+                      {s.id === runningSessionId && (
+                        <span className="relative flex h-2 w-2 shrink-0" title="运行中">
+                          <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-accent opacity-75 motion-reduce:hidden" />
+                          <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+                        </span>
+                      )}
+                      <span className="truncate">{s.title || '(未命名)'}</span>
                     </button>
                   ))
                 )}
@@ -327,6 +341,7 @@ export default function Sidebar({
                 const { starred, rest } = partitionStarred(sessions)
                 const renderRows = (list: SessionMeta[]): JSX.Element[] => list.map(s => (
                   <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
+                    running={s.id === runningSessionId}
                     onSelect={onSelectSession} onToggleStar={onToggleStar}
                     onRename={onRenameSession} onDelete={onDeleteSession} />
                 ))
