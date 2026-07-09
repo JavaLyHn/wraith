@@ -19,7 +19,7 @@ public final class EventStreamRenderer implements Renderer {
     private final String sessionId;
 
     // ---- 卡片事件录制（null = 关闭；非 null = 录制中）----
-    private java.util.List<Map<String, Object>> cardRecording; // null=关闭
+    private volatile java.util.List<Map<String, Object>> cardRecording; // null=关闭；volatile for cross-thread visibility
     private final PrintStream discard = new PrintStream(OutputStream.nullOutputStream());
     private volatile String currentTurnId = "";
     private final java.util.concurrent.atomic.AtomicLong approvalSeq = new java.util.concurrent.atomic.AtomicLong();
@@ -44,7 +44,7 @@ public final class EventStreamRenderer implements Renderer {
     // ---- 卡片录制公共 API ----
 
     /** 开始录制本轮卡片事件（plan.{@literal *}/team.{@literal *} 方法，plan.review.requested 除外）。 */
-    public void startCardRecording() { this.cardRecording = new java.util.ArrayList<>(); }
+    public void startCardRecording() { this.cardRecording = java.util.Collections.synchronizedList(new java.util.ArrayList<>()); }
 
     /**
      * 返回本轮录制并合流后的事件列表；关闭录制。无录制 → 空列表。
@@ -68,11 +68,12 @@ public final class EventStreamRenderer implements Renderer {
      * 录制关闭时与直接 writer.notify(method, p) 行为完全一致。
      */
     private void emit(String method, Map<String, Object> p) {
-        if (cardRecording != null && isCardMethod(method)) {
+        java.util.List<Map<String, Object>> buf = cardRecording; // read volatile field once into local
+        if (buf != null && isCardMethod(method)) {
             Map<String, Object> rec = new java.util.LinkedHashMap<>();
             rec.put("method", method);
             rec.put("params", new java.util.LinkedHashMap<>(p)); // 浅拷贝，防后续复用
-            cardRecording.add(rec);
+            buf.add(rec);
         }
         writer.notify(method, p);
     }
