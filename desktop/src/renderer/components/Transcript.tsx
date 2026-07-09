@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Item } from '../../shared/transcriptReducer'
+import type { RunMode } from '../../shared/types'
+import WorkingIndicator from './WorkingIndicator'
 import ThinkingBlock from './ThinkingBlock'
 import ToolCard from './ToolCard'
 import ToolGroup from './ToolGroup'
@@ -19,9 +21,11 @@ interface TranscriptProps {
   onResendMessage: (ordinal: number, text: string) => void
   /** 计划复审响应回调。 */
   onPlanReview: (reviewId: string, decision: 'execute' | 'supplement' | 'cancel', feedback?: string) => void
+  /** 当前轮次模式,用于"处理中"占位文案(正在规划/思考中/组建团队)。 */
+  mode: RunMode
 }
 
-export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview }: TranscriptProps): JSX.Element {
+export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode }: TranscriptProps): JSX.Element {
   let userOrdinal = 0 // 渲染期为 user 气泡计数(1-based),rewind 用
   const totalUsers = items.filter(i => i.type === 'user').length
   const containerRef = useRef<HTMLDivElement>(null)
@@ -99,6 +103,9 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
         }
         return null
       })}
+      {/* 处理中占位:轮次运行中且尚无任何输出(最后一项仍是刚发的 user 气泡)时显示,
+          任何真实内容(plan/team 卡片、thinking、message、tool)到达后 last 不再是 user,自动消失。 */}
+      {busy && items[items.length - 1]?.type === 'user' && <WorkingIndicator mode={mode} />}
     </div>
   )
 }
