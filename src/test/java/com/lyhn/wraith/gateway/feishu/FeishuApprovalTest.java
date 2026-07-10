@@ -49,6 +49,7 @@ class FeishuApprovalTest {
         FeishuApproval.Callback cb = FeishuApproval.parse(value("approve", "always", "sess-2"));
         assertNotNull(cb);
         assertTrue(cb.result().isApproved());
+        assertTrue(cb.result().isApprovedAll());
     }
 
     @Test
