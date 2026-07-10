@@ -671,9 +671,14 @@ ipcMain.handle('wraith:automationsRuns', async (_e, taskId?: string) => {
 // ---------------------------------------------------------------------------
 // IM 网关(QQ)—— Phase F
 // ---------------------------------------------------------------------------
-ipcMain.handle('wraith:gatewayGetConfig', async () => {
+ipcMain.handle('wraith:gatewayGetConfig', async (_e, platform?: string) => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('gateway.config.get', {})
+  return client.request('gateway.config.get', platform ? { platform } : {})
+})
+ipcMain.handle('wraith:gatewaySetFeishuConfig', async (_e, fields: Record<string, string>) => {
+  if (!client) throw new Error('Backend not connected')
+  await client.request('gateway.config.set', { platform: 'feishu', ...fields })
+  return { ok: true }
 })
 ipcMain.handle('wraith:gatewaySetSecret', async (_e, secret: string) => {
   if (!client) throw new Error('Backend not connected')

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView } from '../shared/types'
-import type { GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
+import type { FeishuConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -76,7 +76,8 @@ export interface WraithApi {
   deleteSkill(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   skillExistsInScope(scope: 'user' | 'project', name: string): Promise<{ exists: boolean }>
   forkSkill(name: string): Promise<{ ok: boolean; name: string }>
-  gatewayGetConfig(): Promise<GatewayConfigView>
+  gatewayGetConfig(platform?: string): Promise<GatewayConfigView>
+  gatewaySetFeishuConfig(fields: FeishuConfigFields): Promise<{ ok: boolean }>
   gatewaySetSecret(secret: string): Promise<{ ok: boolean }>
   gatewaySetWorkspace(workspace: string): Promise<{ ok: boolean }>
   gatewayPickWorkspace(): Promise<string | null>
@@ -350,8 +351,11 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:forkSkill', name) as Promise<{ ok: boolean; name: string }>
   },
 
-  gatewayGetConfig() {
-    return ipcRenderer.invoke('wraith:gatewayGetConfig') as Promise<GatewayConfigView>
+  gatewayGetConfig(platform?: string) {
+    return ipcRenderer.invoke('wraith:gatewayGetConfig', platform) as Promise<GatewayConfigView>
+  },
+  gatewaySetFeishuConfig(fields: FeishuConfigFields) {
+    return ipcRenderer.invoke('wraith:gatewaySetFeishuConfig', fields) as Promise<{ ok: boolean }>
   },
   gatewaySetSecret(secret) {
     return ipcRenderer.invoke('wraith:gatewaySetSecret', secret) as Promise<{ ok: boolean }>

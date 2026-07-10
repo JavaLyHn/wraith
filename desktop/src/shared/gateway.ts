@@ -16,6 +16,16 @@ export interface GatewayConfigView {
   appId: string | null
   ownerOpenid: string | null
   workspace: string | null
+  region?: string | null   // 飞书专用;QQ 视图无此字段
+}
+
+/** 飞书配置写入字段(全可选;空字段调用方应省略以免覆盖已存值)。 */
+export interface FeishuConfigFields {
+  appId?: string
+  appSecret?: string
+  ownerOpenid?: string
+  region?: string
+  workspace?: string
 }
 
 export type GatewayBindPhase = 'scanning' | 'bound' | 'secret-invalid' | 'failed' | 'cancelled'
