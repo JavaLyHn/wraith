@@ -38,6 +38,7 @@ public final class QqProvider implements ImProvider {
     private final QqPendingStore qqPending;
     private final Runnable wsLoop;
     private volatile Thread thread;
+    private final java.util.concurrent.ExecutorService pool;
 
     /**
      * 生产构造:建 api/ws/投递/会话路由/被动窗口,并组好阻塞的 WS 连接回路。
@@ -67,7 +68,7 @@ public final class QqProvider implements ImProvider {
 
         Authorizer authz = new Authorizer(qq.getOwnerOpenid());
         Dedup dedup = new Dedup(1000);
-        ExecutorService pool = Executors.newCachedThreadPool();
+        this.pool = Executors.newCachedThreadPool();
 
         // LlmClient 只建一次(daemon 传入),经 factory 闭包共享给每个 openid 的会话。
         SessionRouter router = new SessionRouter(openid ->
@@ -87,7 +88,7 @@ public final class QqProvider implements ImProvider {
             } catch (IOException e) {
                 System.err.println("[gateway] 回复发送失败: " + e.getClass().getSimpleName());
             }
-        }, pool);
+        }, this.pool);
 
         final QqDeliveryAdapter qqDeliverRef = this.qqDeliver;
         QqWsClient ws = new QqWsClient(api, http);
@@ -133,6 +134,7 @@ public final class QqProvider implements ImProvider {
         this.qqDeliver = qqDeliver;
         this.qqPending = qqPending;
         this.wsLoop = wsLoop;
+        this.pool = null;
     }
 
     @Override
@@ -168,6 +170,9 @@ public final class QqProvider implements ImProvider {
         Thread t = this.thread;
         if (t != null) {
             t.interrupt();
+        }
+        if (pool != null) {
+            pool.shutdownNow();
         }
     }
 }
