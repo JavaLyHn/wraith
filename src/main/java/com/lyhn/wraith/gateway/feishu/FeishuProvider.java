@@ -230,8 +230,8 @@ public final class FeishuProvider implements ImProvider {
         }
     }
 
-    /** 「已收到,处理中」回执用的表情 emoji_type(👍)。飞书表情 key,见开放平台表情文档。 */
-    private static final String REACTION_ACK = "THUMBSUP";
+    /** 「已收到,处理中」回执用的表情 emoji_type。GET = 飞书「[了解]」表情(黄底 GET 徽标)。 */
+    private static final String REACTION_ACK = "GET";
 
     /**
      * 给指定消息贴表情回复(reaction),作为「已收到、正在处理」的即时回执。
