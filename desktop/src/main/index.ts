@@ -458,6 +458,11 @@ ipcMain.handle('wraith:mcpConfigUpsert', async (_e, payload: unknown) => {
   return client.request('mcp.config.upsert', payload as Record<string, unknown>)
 })
 
+ipcMain.handle('wraith:mcpTest', async (_e, payload: unknown) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('mcp.test', payload as Record<string, unknown>)
+})
+
 ipcMain.handle('wraith:mcpConfigRemove', async (_e, scope: string, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.config.remove', { scope, name })

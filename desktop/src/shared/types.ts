@@ -223,6 +223,14 @@ export interface McpUpsertPayload {
   env: Record<string, string>
 }
 
+/** mcp.test 回包:临时进程探测结果(绝不含 env 值)。 */
+export interface McpTestResult {
+  ok: boolean
+  toolCount?: number
+  latencyMs?: number
+  error?: string
+}
+
 // ---------------------------------------------------------------------------
 // Task 5: model/provider management
 // ---------------------------------------------------------------------------

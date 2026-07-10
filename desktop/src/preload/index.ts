@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView } from '../shared/types'
 import type { GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -44,6 +44,7 @@ export interface WraithApi {
   mcpResources(name?: string): Promise<{ resources: McpResourceView[] }>
   mcpPrompts(name: string): Promise<{ text: string }>
   mcpConfigUpsert(payload: McpUpsertPayload): Promise<{ ok: boolean }>
+  mcpTest(payload: McpUpsertPayload): Promise<McpTestResult>
   mcpConfigRemove(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   onEvent(cb: (evt: BackendEvent) => void): () => void
   automationList(): Promise<{ tasks: AutomationTask[] }>
@@ -228,6 +229,10 @@ const wraith: WraithApi = {
 
   mcpConfigUpsert(payload) {
     return ipcRenderer.invoke('wraith:mcpConfigUpsert', payload) as Promise<{ ok: boolean }>
+  },
+
+  mcpTest(payload) {
+    return ipcRenderer.invoke('wraith:mcpTest', payload) as Promise<McpTestResult>
   },
 
   mcpConfigRemove(scope, name) {
