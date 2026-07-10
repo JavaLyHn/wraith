@@ -57,7 +57,7 @@ public final class WecomProvider implements ImProvider {
         SessionRouter router = new SessionRouter(userid ->
                 new GatewaySession(userid, cfg.getWorkspace(), client,
                         sessKey -> {
-                            if (ownerChatId != null)
+                            if (ownerChatId != null && !ownerChatId.isBlank())
                                 ws.sendCard(ownerChatId,
                                         WecomApproval.cardJson(sessKey, "⚠️ 需要审批(点按钮同意/拒绝)"));
                         }));
@@ -120,7 +120,7 @@ public final class WecomProvider implements ImProvider {
         SessionRouter router = new SessionRouter(userid ->
                 new GatewaySession(userid, null, null,
                         sessKey -> {
-                            if (ownerChatId != null)
+                            if (ownerChatId != null && !ownerChatId.isBlank())
                                 ws.sendCard(ownerChatId,
                                         WecomApproval.cardJson(sessKey, "⚠️ 需要审批(点按钮同意/拒绝)"));
                         }));
@@ -142,7 +142,7 @@ public final class WecomProvider implements ImProvider {
         };
     }
 
-    /** 包私:测试驱动 onEvent handler。 */
+    /** 包私:测试驱动 onEvent handler。仅测试构造设置 onEventHandler;生产构造为 null,生产路径不调用本方法。 */
     private WecomWsClient.OnEvent onEventHandler;
 
     void triggerOnEventForTest(WecomFrames.CardEvent ce) {
@@ -155,7 +155,7 @@ public final class WecomProvider implements ImProvider {
 
     @Override
     public void surfaceScheduledApproval(String approvalId, String toolName, String suggestion) {
-        if (ownerChatId == null) return; // 主人尚未与 bot 建会话,无法主动推送
+        if (ownerChatId == null || ownerChatId.isBlank()) return; // 主人尚未与 bot 建会话,无法主动推送
         ws.sendCard(ownerChatId, WecomApproval.cardJson(approvalId, "⏰ 定时任务需审批:" + toolName));
     }
 
