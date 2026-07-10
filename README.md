@@ -4,13 +4,13 @@
 [![Downloads](https://img.shields.io/github/downloads/JavaLyHn/wraith/total?color=6d5df6)](https://github.com/JavaLyHn/wraith/releases)
 [![macOS Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-000?logo=apple)](https://github.com/JavaLyHn/wraith/releases/latest)
 
-一个成熟的 Java Agent CLI 产品，从第一期的 `ReAct` 单代理循环逐步演进到第十六期的 `TUI 产品化`。
+一个成熟的 Java Agent 产品：从第一期的 `ReAct` 单代理循环，演进到第十六期的 `TUI 产品化`，再到桌面 App 与常驻 IM 网关（QQ / 飞书 单聊 bot）。核心引擎（ReAct / Plan / Multi-Agent / RAG / MCP / Skill / HITL）在 CLI、桌面、IM 三种形态间复用同一套 Java 内核。
 
 ## 下载
 
 桌面版（macOS · Apple Silicon）：前往 **[Releases](https://github.com/JavaLyHn/wraith/releases/latest)** 下载 `Wraith-<version>-arm64.dmg`。自包含内置 JRE，无需系统 Java；本版本未签名，首次启动请在「应用程序」里右键 → 打开。
 
-当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP。
+当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP、第 24 期 `IM 网关`（QQ / 飞书 单聊 bot + 桌面配置面板 + 定时任务投递）。
 
 ## 测试策略
 
@@ -251,6 +251,18 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 - 微信侧用户消息会回显到 Wraith CLI 终端 transcript；Wraith CLI 终端继续显示 thinking / 工具调用过程，微信侧只接收 assistant 正文。iLink 协议层仍是 `text_item.text` 文本消息，没有显式 Markdown parse mode；Wraith CLI 会保留 ClawBot 稳定支持的 Markdown 子集（列表、引用、粗体、行内代码、真实代码块），把标题转成粗体标题、把表格转成移动端更稳的键值/列表，并过滤图片 Markdown / H5-H6 / 中文斜体等兼容性差的标记；非代码类 fenced block（流程说明、长中文箭头链）会解包并换行，避免微信侧出现横向滚动代码块。iLink 不提供真正 SSE 或改单条消息能力。
 - 微信通道使用非交互式默认拒绝策略：只读工具默认允许，`write_file` / `create_project` 继续受 workspace PathGuard 限制，`execute_command` 必须精确命中命令白名单，`mcp__*` 必须命中 MCP 白名单，`revert_turn` 和浏览器会话切换默认拒绝
 - 当前文本 MVP 会保留图片 / 文件消息的媒体元数据提示，但 CDN 下载解密、图片块输入和 `/send` 文件推送仍待后续媒体链路补齐
+
+### 第二十四期：IM 网关（QQ / 飞书 单聊 bot + 桌面配置面板 + 定时任务投递）
+
+把 Wraith 接成常驻 IM bot：一个本地 Java 守护进程 `wraith gateway` 收发消息、跑 Agent 回合、把 HITL 审批推到 IM 端。全内置工具 + MCP + Skill + 记忆在 IM 形态下同样可用。
+
+- **多平台 provider 架构**（`gateway/spi/ImProvider`）：SPI 定义 `platform / start / stop / deliveryAdapter / surfaceScheduledApproval`；daemon 遍历已配置的 provider，各自跑在守护线程上，主线程阻塞常驻。会话核心（`SessionRouter` / `ImTurnDriver` / `GatewaySession` / `GatewayRenderer` / `Authorizer` / `Dedup`）平台无关、由各 provider 复用；每个 provider 自带独立会话路由，互不串号。加第三个平台是纯增量。
+- **QQ 单聊**（`gateway/qq`）：官方个人 bot，`wraith gateway bind` 走 openclaw 扫码绑定拿 appId / 密钥，WS 网关直连 + REST 回发；HITL 走 QQ inline keyboard 三按钮；受 QQ 被动回复窗口约束（60 分钟 / 每 msg_id ≤4 条），投递用「待发队列 + 下次入站冲刷」。
+- **飞书 / Lark 单聊**（`gateway/feishu`）：官方 Java SDK（`com.larksuite.oapi:oapi-sdk`）**长连接**收事件——只需出网、免公网 URL，贴合本地 daemon；REST `im.message.create` 回发，统一用 `open_id`（鉴权 / 会话 key / 回发目标一体）；HITL 走飞书**交互式卡片按钮**（`card.action.trigger` 回调经同一条长连接送达）；飞书可随时主动发消息，结果投递与审批卡即时下发（无待发队列）。凭据在飞书开放平台建自建应用后手填；主人身份走 fail-closed + open_id 配对回显（首次私聊 bot 回显你的 open_id，填入桌面即绑定）。飞书 / Lark 双区域可切换。
+- **鉴权**：deny-all，仅放行绑定的主人 openid —— 入站消息与按钮回调都按平台认证的真实身份校验。
+- **桌面配置面板**：桌面端「IM 网关」屏可视化配置 —— 平台卡片切换、密钥手填（回包只报 `hasSecret`，**绝不回明文**）、启动 / 停止守护进程、结构化状态灯（守护进程输出 `WRAITH_GATEWAY_STATUS`，桌面点灯）、日志查看。后端 `AppServer` 的 `gateway.config.get/set` RPC 带 `platform` 参（默认 QQ，向后兼容），读写 `~/.wraith/config.json`。
+- **定时任务投递**（`automation/`）：常驻调度器（interval / daily / weekly）跑无人值守回合，`Deliverer` + `DeliveryAdapter` SPI 把结果投到桌面通知或 IM（`DesktopDeliveryAdapter` / `QqDeliveryAdapter` / `FeishuDeliveryAdapter`）；定时任务的 HITL 审批也能在 IM 端浮出并唤醒挂起回合。cron 独立于 IM——未配置任何 IM 时仅跑定时任务。
+- **密钥红线**：appId / clientSecret / appSecret 只落 `~/.wraith/config.json`（仓库外），绝不进日志或 RPC 回包；IM 环境值不出现在任何回传里。
 
 ### 第六期 HITL 增强（路径围栏 / 命令快速拒绝 / 操作审计）
 
@@ -756,6 +768,8 @@ Tips for getting started:
 - SQLite（向量与图谱持久化）
 - JavaParser（AST 分析）
 - Ollama（本地 Embedding）
+- 飞书开放平台 Java SDK（`com.larksuite.oapi:oapi-sdk`，IM 网关飞书长连接 + 卡片回调）
+- Electron + React + TypeScript（桌面 App，独立子工程 `desktop/`）
 
 ## 项目结构
 
@@ -822,7 +836,11 @@ src/main/java/com/lyhn/wraith
 ├── runtime/                    # 第20期 异步后台任务（SQLite 队列）+ Runtime HTTP API
 ├── image/                      # 第21期 图片输入：读取 / 压缩 / 缩放、@image: 解析
 ├── wechat/                     # 第23期 微信 iLink 通道（文本 MVP）
+├── gateway/                    # 第24期 IM 网关 daemon：ImProvider SPI（spi/）+ QQ（qq/）+ 飞书（feishu/）+ openclaw 绑定（bind/）+ 会话路由 / 驱动 / 鉴权
+├── automation/                 # 定时任务调度（Scheduler：interval/daily/weekly）+ Deliverer / DeliveryAdapter 投递（delivery/：desktop / QQ / 飞书）
 ├── render/                     # Renderer 接口 + inline 流式 / plain 实现、行内 diff、底部状态栏
 ├── tui/                        # lanterna 全屏 TUI、代码高亮、对话历史快照
 └── util/                       # AnsiStyle、Markdown 渲染等公共工具
 ```
+
+> 桌面 App（Electron + React + TypeScript）在独立子工程 `desktop/`：renderer 组件（会话 / 计划 / MCP / IM 网关 / 自动化面板）、preload `window.wraith` 桥、main 进程（Java app-server sidecar + 网关进程管理），经 JSON-RPC 复用同一套 Java 内核（`~/.wraith/wraith.jar`）。
