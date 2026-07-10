@@ -1,186 +1,149 @@
-# 个人微信(Weixin)IM 网关接入设计
+# 个人微信(Weixin)IM 网关接入设计(v2:复用现有 wechat 包)
 
-**日期:** 2026-07-10
+**日期:** 2026-07-10(v2 修订:发现仓库自带完整 iLink 实现,设计从「从零实现」改为「复用 + 网关化包装」)
 **分支:** feat/im-weixin-gateway(基于已合并飞书+企微的 main,8df0e82)
-**状态:** 待用户过目
+**状态:** 已获用户批准
 
 ## 问题 / 目标
 
-wraith 网关已支持 QQ、飞书、企业微信三个 IM provider。新增**个人微信**作为第四个 provider,
-对话式**单聊** bot。用户已拍板:HITL 走**文本审批 y/n**;分支从合并后的干净 main 开。
+wraith 网关已支持 QQ、飞书、企业微信三个 IM provider。新增**个人微信**作为第四个 provider:
+对话式**单聊** bot,进桌面 IM 网关屏、cron 投递、HITL 审批(**文本 y/a/n**,用户已拍板)。
 
 ## 通道确认(官方,非灰产)
 
-2026-03 腾讯开放个人微信首个官方 Bot API:**微信 ClawBot 功能**,底层协议 **iLink**。
-- 官方仓库:`github.com/Tencent/openclaw-weixin`(腾讯 GitHub org);官方 npm `@tencent-weixin/openclaw-weixin`。
-- 域名:`ilinkai.weixin.qq.com`(登录)+ 扫码后下发的 `baseurl`(收发)。
-- **纯 HTTP/JSON + 长轮询**,无需 SDK、无需 WebSocket、免公网——okhttp + Jackson 直接实现。
-- 有官方《微信ClawBot功能使用条款》背书;登录 = 用户本人手机微信扫码授权,合规路径。
-- 第三方 hook/逆向方案(封号风险)**不予考虑**。
+腾讯官方「微信 ClawBot」/ iLink 协议(`github.com/Tencent/openclaw-weixin` + npm `@tencent-weixin/*`),
+纯 HTTP/JSON + 长轮询,域名 `ilinkai.weixin.qq.com` + 扫码下发的 `baseurl`。登录 = 本人手机微信扫码授权。
+第三方 hook/逆向(封号风险)不予考虑。
 
-## 协议要点(来源:官方插件源码 + 社区协议文档 hao-ji-xing/openclaw-weixin/weixin-bot-api.md)
+## 关键前提:仓库已有完整 iLink 实现(PaiCLI 原生,`com.lyhn.wraith.wechat` 包,2353 行)
 
-### 登录(一次性,扫码换 token)
-```
-GET https://ilinkai.weixin.qq.com/ilink/bot/get_bot_qrcode?bot_type=3
-→ { "qrcode": "<二维码值>", "qrcode_img_content": "<图像内容(base64)>" }
+**直接复用(不动或微调):**
+- `IlinkClient`(249 行):扫码登录(`startQrLogin`/`pollQrStatus`)、`getUpdates(account, timeoutMs)`
+  (游标)、`sendText(account, toUserId, contextToken, text)`、`sendTyping`(打字指示器)、
+  `notifyStart/notifyStop`。请求头(AuthorizationType/X-WECHAT-UIN 随机 base64/Bearer)全对。
+- 模型:`WechatQrLogin` / `WechatLoginResult` / `WechatMessage(messageId, fromUserId, contextToken, text, mediaItems)`
+  / `WechatUpdate(ret, errmsg, nextSyncBuf, nextLongPollTimeoutMs, messages)` / `WechatMediaItem`。
+- `WechatAccountStore`:账号(token/accountId/baseUrl/**boundUserId**/workspace/**syncBuf**)持久化到
+  `~/.wraith/wechat/accounts/latest.json`(0600 权限)。
+- `TerminalQrRenderer`:终端渲染二维码。
+- 常量:token 失效 `ret == -14`(SESSION_EXPIRED,见 WechatMessageLoop)。
 
-GET https://ilinkai.weixin.qq.com/ilink/bot/get_qrcode_status?qrcode={qrcode}   (轮询)
-→ { "status": "confirmed", "bot_token": "<token>", "baseurl": "<收发服务器>" }
-```
+**不复用(保留原样、不共跑):** `WechatMessageLoop`/`WechatAgentSession`/`WechatCommandParser` 等
+—— 那是 `/wechat` REPL 通道的单机形态(自带队列/REPL 命令/独立 agent 会话),与网关 SPI 平行。
+本特性不动它们。
 
-### 请求头(登录后所有请求)
-```
-Content-Type: application/json
-AuthorizationType: ilink_bot_token
-X-WECHAT-UIN: <base64(random_uint32)>
-Authorization: Bearer {bot_token}
-```
+**⚠ 共存约束(文档级,v1 不做互斥锁):** 网关 weixin provider 与 REPL `/wechat` 消费同一
+getupdates 游标,**不能同时运行**,否则互抢消息。README/帮助文案注明。
 
-### 收消息(长轮询,35s hold + 游标)
-```
-POST {baseurl}/…/getupdates
-body: { "get_updates_buf": "<上次返回的游标,首次为空>", "base_info": { "channel_version": "1.0.2" } }
-→ { "ret": 0,
-    "msgs": [ { "from_user_id": "xxx@im.wechat", "to_user_id": "xxx@im.bot",
-                "message_type": 1, "message_state": 2, "context_token": "AAR...",
-                "item_list": [ { "type": 1, "text_item": { "text": "消息内容" } } ] } ],
-    "get_updates_buf": "<新游标>", "longpolling_timeout_ms": 35000 }
-```
-游标**必须**每次更新回带,否则重复收取。item type:1=文本、2=图片、3=语音、4=文件、5=视频。
+## 协议要点(已核对,与 IlinkClient 实现一致)
 
-### 发消息
-```
-POST {baseurl}/…/sendmessage
-body: { "msg": { "to_user_id": "<对方 user_id>", "message_type": 2, "message_state": 2,
-                 "context_token": "<从入站消息取,原样回带>",
-                 "item_list": [ { "type": 1, "text_item": { "text": "回复内容" } } ] } }
-```
-`context_token` 必须原样回带,否则不关联到对话窗口。
-
-### 已钉死的细节(据协议文档定向核对,2026-07-10)
-- **路径**:`POST {baseurl}/ilink/bot/getupdates`、`POST {baseurl}/ilink/bot/sendmessage`
-  (baseurl 取扫码响应;为空则回退 `https://ilinkai.weixin.qq.com`)。
-- **message_type = 方向标记**:1=用户入站、2=Bot 发出;发送恒填 2。
-- **群聊判别**:消息有 `group_id` 字段(群聊支持未文档化,可能需额外权限)→ v1 见 `group_id` 非空即 IGNORE。
-- **错误响应无文档** → 防御式:HTTP 401/403 或鉴权类失败 → 状态灯 `auth-failed`(提示重新扫码);
-  其余非 0 `ret`/异常 → warn 日志 + 退避重试。
-- **X-WECHAT-UIN**:随机 uint32 → 十进制字符串 → base64,**每次请求重新生成**(防重放)。
+- 路径:`POST {baseurl}/ilink/bot/getupdates`、`/ilink/bot/sendmessage`(baseurl 空则回退 ilinkai 域名)。
+- `message_type`:1=用户入站、2=Bot 发出(发送恒 2,IlinkClient 已如此)。
+- 群聊:有 `group_id` 字段、未文档化 → v1 仅处理 owner 单聊(fromUserId == boundUserId),其余 IGNORE。
+- 错误:HTTP 非 2xx 抛 IOException;`ret == -14` = token 失效 → 状态灯 `auth-failed`(提示重新扫码);
+  其余异常 → warn + 退避重连。
+- 游标 `syncBuf` 每次轮询更新并**持久化到账号店**(高频写,故 token/游标不进 config.json)。
+- 去重键:`WechatMessage.messageId`(message_id,缺省 seq)——不可用 context_token(关联会话窗口,可能复用)。
 
 ## 架构
 
 ```
-绑定(一次性,CLI/桌面): get_bot_qrcode → 存 ~/.wraith/weixin-qr.png 并自动打开
-   → 手机微信扫码确认 → 轮询 get_qrcode_status → {bot_token, baseurl} 写 config
-   (≈ QQ 的 openclaw bind 流程;token 不可手填)
+绑定(一次性): wraith gateway bind-weixin [--workspace <dir>]
+   IlinkClient.startQrLogin → TerminalQrRenderer 打终端二维码(+打印链接兜底)
+   → 手机微信扫码确认 → pollQrStatus → {token, accountId, baseUrl, ilink_user_id}
+   → WechatAccountStore.save(boundUserId = 扫码者 ilink_user_id ⇒ 扫码者即主人,无需配对回显)
 
-运行(常驻): WeixinProvider.start() → 守护线程跑长轮询回路
-   getupdates(游标) ─循环─▶ 每条 msg
-        │  WeixinFrames.parseUpdates → Inbound{fromUserId, contextToken, msgType, text, msgKey}
+运行(常驻): GatewayDaemon.buildProviders:latest.json 存在 ⇒ 构造 WeixinProvider
+   WeixinProvider.start() → 守护线程长轮询回路:
+   notifyStart → 循环 getUpdates(游标,35s)→ 持久化新游标 → 逐条:
+        │  WeixinInbound.classify(msg, isOwner, hasPendingApproval)
         ▼
-   WeixinInbound.classify(ownerBound, isOwner) → IGNORE / PAIRING_ECHO / NONTEXT_NOTICE
-        / APPROVAL_REPLY(有挂起审批且文本为 y/a/n) / PROCESS
-        │  PROCESS: dedup → ImTurnDriver.onMessage(InboundMsg{userId, text, contextToken, ts})
+   IGNORE / NONTEXT_NOTICE / APPROVAL_REPLY(y|a|n) / APPROVAL_NUDGE / PROCESS
+        │  PROCESS: dedup(messageId) → 更新 ownerLastContextToken → ImTurnDriver.onMessage
+        │           (InboundMsg.msgId = contextToken,经 Sender.replyTo 回带)
         ▼
-   runTurn → reply → sendmessage(context_token=InboundMsg.msgId 经 Sender.replyTo 回带)
-   回复纯文本:MarkdownLite.toPlainText(微信不渲染 markdown;QQ 同款)
+   runTurn(打字指示器开)→ reply → sendText(toPlainText 清洗,微信不渲染 markdown)
+   ret==-14 → 状态灯 auth-failed;异常 → 退避重连;stop() → notifyStop
 ```
 
-与 QQ/飞书/企微同构:自带独立 SessionRouter / ImTurnDriver / Authorizer / Dedup;
-会话 key = 裸 from_user_id;构造不触网;`GatewayDaemon.buildProviders` 加 weixin 分支。
+与 QQ/飞书/企微同构:独立 SessionRouter / ImTurnDriver / Dedup;会话 key = boundUserId;
+构造不触网。Authorizer 语义 = `fromUserId.equals(account.boundUserId())`(扫码即绑定,fail-closed)。
 
-## 组件(文件)
+## 新增组件(文件)
 
-### 1. `gateway/weixin/WeixinFrames.java`(纯函数,可单测)
-- `record Inbound(String fromUserId, String contextToken, int msgType, String text, String msgKey)`
-  —— msgKey 为去重键(实现期定:优先消息自带唯一 id,无则 contextToken)。
-- `static String updatesRequest(String cursor)` —— getupdates 请求体(Jackson)。
-- `record Updates(String cursor, java.util.List<Inbound> msgs)`
-- `static Updates parseUpdates(String json)` —— 解析响应;非法/ret!=0 → null。
-- `static String sendTextRequest(String toUserId, String contextToken, String text)` —— sendmessage 请求体。
-- 转义全交 Jackson(沿用 MessageText 230001 的教训)。
+### 1. `gateway/weixin/WeixinInbound.java`(纯函数)
+- `classify(WechatMessage m, String boundUserId, boolean hasPendingApproval)` →
+  `{IGNORE, NONTEXT_NOTICE, APPROVAL_REPLY, APPROVAL_NUDGE, PROCESS}`。
+- 规则依次:m/fromUserId 空 → IGNORE;fromUserId != boundUserId → IGNORE(fail-closed,无配对回显);
+  文本空且有媒体 → NONTEXT_NOTICE(「暂只支持文本消息」);挂起审批中:text(trim/小写)∈{y,a,n} →
+  APPROVAL_REPLY,否则 → APPROVAL_NUDGE;文本空 → IGNORE;其余 → PROCESS
+  (InboundMsg(boundUserId, text, contextToken, now);**去重由 provider 用 m.messageId 做,在 classify 之前**)。
 
-### 2. `gateway/weixin/WeixinHttp.java`(okhttp 外壳)
-- 构造 `(OkHttpClient, String baseUrl, String botToken)`;统一注入四个请求头。
-- `String pollUpdates(String cursorRequestBody)` —— 阻塞长轮询一跳(读超时 ≥ 45s)。
-- `void sendText(String requestBody)` —— 发送,失败打 code/msg 日志(resp 检查,静默吞是大忌)。
-- 登录静态方法(绑定流程用,走 ilinkai 域名):`fetchQrcode()` / `pollQrcodeStatus(qrcode)`。
-- 纯逻辑(头构造、URL 拼接)抽静态可测;真 socket 眼验。
-
-### 3. `gateway/weixin/WeixinInbound.java`(纯函数)
-- `classify(Inbound f, boolean ownerBound, boolean isOwner, boolean hasPendingApproval, long now)` →
-  `{IGNORE, PAIRING_ECHO, NONTEXT_NOTICE, APPROVAL_REPLY, APPROVAL_NUDGE, PROCESS}`。
-- 规则依次:fromUserId 空/非单聊形态 → IGNORE;非 owner → 未绑定 PAIRING_ECHO / 已绑定 IGNORE;
-  owner 非文本 → NONTEXT_NOTICE;owner 有挂起审批:文本(trim,忽略大小写)∈ {y,a,n} → APPROVAL_REPLY,
-  否则 → APPROVAL_NUDGE(provider 回「有待审批操作,请先回复 y 批准 / a 总是允许 / n 拒绝」,消息不投 turn);
-  owner 文本空 → IGNORE;owner 文本 → PROCESS(InboundMsg.msgId = contextToken,承载回带;
-  **去重用 frame.msgKey 而非 contextToken**——context_token 关联会话窗口,可能跨消息复用,不可作去重键)。
-
-### 4. `gateway/weixin/WeixinApproval.java`(纯函数,文本 HITL)
+### 2. `gateway/weixin/WeixinApproval.java`(纯函数,文本 HITL)
 - `static String promptText(String toolName)` → 「⚠️ 需要审批:<tool>。回复 y 批准 / a 总是允许 / n 拒绝」
-- `static ApprovalResult parse(String text)` → y→approve() / a→approveAll() / n→reject("用户在微信拒绝");
-  其它 → null。
+- `static ApprovalResult parse(String text)` → y→approve() / a→approveAll() / n→reject("用户在微信拒绝") / 其它→null。
 
-### 5. `gateway/weixin/WeixinProvider.java`(装配,implements ImProvider)
+### 3. `gateway/weixin/WeixinProvider.java`(装配,implements ImProvider)
+- 生产构造 `(WechatAccount account, LlmClient client, Map<String,CompletableFuture<ApprovalResult>> pendingApprovals)`
+  + 内建 `IlinkClient`、`WechatAccountStore`(游标持久化)。测试构造注入 stub 不触网。
 - platform() = `"weixin"`。
-- 文本 HITL 状态:`Map<String/*sessionKey*/, ?>` 挂起审批登记 + owner 的「当前挂起 sessionKey」
-  (v1 单聊单会话,一次一个挂起;新审批到来时旧挂起先 reject)。
-- approvalSurface 闭包:发 promptText 给 owner(用 owner 最近 context_token,见「投递」)+ 登记挂起。
-- APPROVAL_REPLY:`WeixinApproval.parse` → 定时审批(pendingApprovals 命中 complete)或
-  `driver.onApproval(sessionKey, result)`;清挂起。
-- `surfaceScheduledApproval`:同 approvalSurface(approvalId 为 sessionKey)。
-- 主人最近 context_token 捕获:owner 每条入站更新 `volatile String ownerLastContextToken`
-  (+ to_user_id 侧的 owner user_id 记录),供主动发送(审批提示/cron 投递)。无则跳过 + 日志。
-- 长轮询回路:循环 pollUpdates → parseUpdates → 逐条 classify 分发;游标持久于内存
-  (重启从空游标开始,靠 Dedup 兜重复);断连退避重连;401/token 失效 → 状态灯 auth-failed。
-- 状态灯:轮询正常 → `running`;断连重试 → `disconnected`;token 失效 → `auth-failed`
-  (复用现有 token 集,桌面分类器无需改)。
+- 文本 HITL 状态:`volatile String pendingSessionKey`(v1 单聊一次一个挂起;新审批到来先 reject 旧挂起);
+  approvalSurface 闭包 = 发 promptText(用 ownerLastContextToken)+ 登记挂起;
+  APPROVAL_REPLY → parse → pendingApprovals 命中 complete(定时审批)否则 driver.onApproval;清挂起;
+  `surfaceScheduledApproval` 同 approvalSurface(approvalId 为 sessionKey)。
+- `volatile String ownerLastContextToken`:owner 每条入站更新;主动发送(审批提示/cron 投递)用;
+  缺失 → 跳过 + warn(≈ QQ 被动窗口 / 企微 chatid 语义)。
+- 回复出口 Sender:`(userid, text, replyTo) -> ilink.sendText(account, userid, replyTo, MarkdownLite.toPlainText(text))`
+  + 发送前后打字指示器(best-effort,失败仅 debug 日志)。
+- 状态灯:`starting`(起回路)→ 轮询成功 `running`;IOException → `disconnected` + 退避(复用
+  backoffSeconds 模式);`ret==-14` → `auth-failed`(现有分类器 token 集已覆盖,无桌面改动)。
+- `deliveryAdapter()`:Phase B 起返回 WeixinDeliveryAdapter。
 
-### 6. `automation/delivery/WeixinDeliveryAdapter.java`
-- 复刻 Wecom 形态:`(Supplier<String> ownerContextTokenSupplier, Supplier<String> ownerUserIdSupplier, BiConsumer 发送口)`
-  —— 具体形态实现期照 FeishuDeliveryAdapter/WecomDeliveryAdapter 定;目标=owner,文本=toPlainText(结果)。
-  context_token 缺失(主人近期没发过消息)→ 跳过 + warn(同企微 chatid 语义)。
+### 4. `automation/delivery/WeixinDeliveryAdapter.java`(Phase B)
+- 复刻 Wecom 形态:`(Supplier<String> ownerContextToken, BiConsumer<String,String> sink)`;
+  目标 = boundUserId;文本 = 「⏰ <任务名>:\n<toPlainText(结果)>」;contextToken 缺失 → 跳过 + warn;
+  try/catch 守护。
 
-### 7. `config/WraithConfig.java`
-- `GatewayWeixinConfig { String botToken; String baseUrl; String ownerUserId; String workspace; }`。
-- botToken/baseUrl 由**绑定流程写入**,不手填;ownerUserId 桌面/手工填(经配对回显获得)。
+### 5. 绑定 CLI:`wraith gateway bind-weixin`(cli/Main.java gateway 路由加分支)
+- 非交互:`--workspace <dir>`(缺省当前目录绝对路径);复用 startQrLogin + TerminalQrRenderer +
+  waitWechatLogin 模式(限时 5 分钟)→ 写账号店 → 打印「✅ 微信绑定成功 账号:xxx」;
+  失败/超时打印可读原因(桌面 Phase C spawn 此命令解析输出,照 QQ bind 模式)。
 
-### 8. 绑定 CLI(`wraith gateway bind-weixin`)
-- fetchQrcode → `qrcode_img_content` 落 `~/.wraith/weixin-qr.png` → macOS `open` 自动打开 +
-  打印路径;轮询 get_qrcode_status(限时,~2 分钟)→ confirmed 则写 config(botToken/baseUrl)
-  → 打印「✅ 绑定成功」;超时/失败打印可读原因。桌面 Phase C 复用同一命令(spawn + 解析输出,照 QQ bind)。
+### 6. `runtime/appserver/AppServer.java`(Phase B)
+- `gateway.config.get` 加 `platform=weixin`:读 WechatAccountStore(非 config.json),视图
+  `{bound(token 非空), hasSecret(=bound), ownerUserid(=boundUserId, mask 由前端做), workspace}`,
+  **绝不回 token**。`gateway.config.set(weixin)`:只允许改 workspace(owner 由扫码定,token 归绑定流程)。
 
-### 9. `runtime/appserver/AppServer.java`
-- `gateway.config.get/set` 加 `platform=weixin`:视图 `{bound(hasToken), hasSecret(=hasToken), ownerUserId, workspace}`,
-  **绝不回 botToken**;set 只收 ownerUserId/workspace(token 归绑定流程)。
+### 7. `gateway/GatewayDaemon.java`
+- buildProviders 加 weixin 分支:`WechatAccountStore.createDefault().loadLatest()` 有值 ⇒ 构造
+  WeixinProvider(与 config.json 无关;此判据写注释说明)。
 
-### 10. 桌面 UI(Phase C)
-- `imPlatforms.ts` weixin → available;`ImGatewayPanel` 微信分支:「扫码绑定」按钮(spawn bind-weixin,
-  桌面内展示 `~/.wraith/weixin-qr.png`)+ 主人 userId / 工作目录表单;anyBound 并入 weixin。
+### 8. 桌面 UI(Phase C)
+- `imPlatforms.ts` weixin → available;`ImGatewayPanel` 微信分支:「扫码绑定」按钮(spawn
+  `gateway bind-weixin`,输出行解析绑定进度;二维码在终端/输出中呈现,桌面 v1 显示指引文案 +
+  绑定状态)+ 工作目录表单(owner 只读展示);anyBound 并入 weixin(经 config.get 视图)。
 
 ## 密钥红线
 
-**`bot_token` 即密钥**(等价个人微信登录态,比 appSecret 更敏感):只存 `~/.wraith/config.json`,
-绝不进日志 / RPC 回包 / renderer;仅进 `Authorization: Bearer` 头。qrcode 值与 PNG 为一次性凭据,
-绑定完成后 PNG 建议删除(bind CLI 收尾时 best-effort 删)。提交前照常红线扫描。
+**`bot_token` 即密钥**(等价个人微信登录态):只存 `~/.wraith/wechat/accounts/latest.json`(0600),
+绝不进日志 / RPC 回包 / renderer;仅进 `Authorization: Bearer` 头(IlinkClient 内部)。
+提交前照常红线扫描。
 
 ## YAGNI(v1 不做)
 
-- 群聊、图片/语音/文件/视频收发(含 AES-128-ECB 加密上传)、引用/@。
-- 游标持久化(重启重放靠 Dedup 兜)。
-- 多账号;token 自动续期(失效即提示重新扫码)。
+- 群聊、媒体收发(CDN AES 解密/上传)、引用/@、REPL `/wechat` 与网关的互斥锁、多账号、token 自动续期。
+- REPL `/wechat` 通道本身不动、不删、不重构。
 
 ## 测试
 
-- `WeixinFramesTest`:updatesRequest/sendTextRequest 构造(含转义);parseUpdates 提取字段/游标、
-  非法/ret!=0→null、非文本 item。
-- `WeixinInboundTest`:各分支(含 APPROVAL_REPLY 的 y/a/n 与非 y/a/n)。
-- `WeixinApprovalTest`:promptText 含工具名;parse y/a/n/大小写/其它→null。
-- `WeixinProviderTest`:platform、start 起线程、挂起审批登记/清除、deliveryAdapter(Phase B)。
-- `WeixinHttpTest`:头构造/URL 拼接纯逻辑。
-- 桌面(Phase C):payload/分类器用例照旧。
+- `WeixinInboundTest`:各分支(owner 判定、挂起审批 y/a/n 与 nudge、非文本、空文本)。
+- `WeixinApprovalTest`:promptText 含工具名;parse y/a/n/大小写/其它 null。
+- `WeixinProviderTest`(测试构造):platform、start 起线程、挂起登记/清除、
+  APPROVAL_REPLY 完成 pendingApprovals future、deliveryAdapter(Phase B)。
+- `WeixinDeliveryAdapterTest`(Phase B):contextToken 缺失跳过 / 正常发送 / sink 异常守护。
+- 现有 `IlinkClient` 无单测(触网),沿用「真机眼验」;不为其补测(YAGNI,已有 REPL 通道实战验证)。
 
 ## 交付节奏
 
-照企微:Phase A(config + frames + http + inbound + provider 单聊闭环 + bind-weixin CLI,可眼验)
-→ B(文本 HITL + cron 投递 + 配置 RPC)→ C(桌面 UI)。每阶段 SDD + opus 整支终审;真机眼验后合并。
+Phase A(bind-weixin CLI + WeixinInbound + WeixinProvider 单聊闭环 + buildProviders,可眼验)
+→ B(文本 HITL + cron 投递 + AppServer 视图)→ C(桌面 UI)。每阶段 SDD + opus 整支终审;真机眼验后合并。
