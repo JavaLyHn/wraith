@@ -53,6 +53,10 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
   const [wcWorkspace, setWcWorkspace] = useState('')
   const [wcBusy, setWcBusy] = useState(false)
   const [wcHint, setWcHint] = useState<string | null>(null)
+  // 微信表单输入(受控)
+  const [wxWorkspace, setWxWorkspace] = useState('')
+  const [wxBusy, setWxBusy] = useState(false)
+  const [wxHint, setWxHint] = useState<string | null>(null)
 
   const refreshConfig = useCallback(async () => {
     setConfig(null)
@@ -72,20 +76,25 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         setWcWorkspace(cfg.workspace ?? '')
         // secret 永不回填(后端只回 hasSecret);留空 = 保持已存密钥
       }
+      if (selectedPlatform === 'weixin') {
+        setWxWorkspace(cfg.workspace ?? '')
+      }
     } catch (err) {
       console.error('[wraith] gatewayGetConfig error:', err)
       if (selectedPlatform === 'feishu') setFsHint('读取配置失败')
       else if (selectedPlatform === 'wecom') setWcHint('读取配置失败')
+      else if (selectedPlatform === 'weixin') setWxHint('读取配置失败')
       else setHint('读取配置失败')
     }
     // 网关是全局进程:汇总所有平台绑定态,决定「启动网关」是否可点(与当前选中平台无关)。
     try {
-      const [qq, fs, wc] = await Promise.all([
+      const [qq, fs, wc, wx] = await Promise.all([
         window.wraith.gatewayGetConfig('qq'),
         window.wraith.gatewayGetConfig('feishu'),
         window.wraith.gatewayGetConfig('wecom'),
+        window.wraith.gatewayGetConfig('weixin'),
       ])
-      setAnyBound(!!qq?.bound || !!fs?.bound || !!wc?.bound)
+      setAnyBound(!!qq?.bound || !!fs?.bound || !!wc?.bound || !!wx?.bound)
     } catch {
       /* 忽略:失败则按钮保持禁用 */
     }
@@ -108,6 +117,17 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
     })
     return () => { unsub() }
   }, [refreshConfig, refreshStatus])
+
+  // 微信扫码绑定期间每 2s 拉日志(终端二维码在日志区呈现)
+  useEffect(() => {
+    if (selectedPlatform !== 'weixin' || bind?.phase !== 'scanning') return
+    setShowLogs(true)
+    const t = setInterval(async () => {
+      try { const { lines } = await window.wraith.gatewayLogs(); setLogs(lines) }
+      catch { /* ignore */ }
+    }, 2000)
+    return () => clearInterval(t)
+  }, [selectedPlatform, bind?.phase])
 
   const handleBind = useCallback(() => {
     setBind({ phase: 'scanning' })
@@ -165,6 +185,25 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
       setFsHint('保存失败')
     } finally {
       setFsBusy(false)
+    }
+  }
+
+  const handleBindWeixin = () => {
+    setBind({ phase: 'scanning' })
+    void window.wraith.gatewayBindWeixinStart(wxWorkspace.trim() || undefined)
+  }
+
+  const handleSaveWeixinWorkspace = async () => {
+    setWxBusy(true)
+    setWxHint(null)
+    try {
+      await window.wraith.gatewaySetWeixinConfig({ workspace: wxWorkspace.trim() })
+      setWxHint('已保存')
+      await refreshConfig()
+    } catch {
+      setWxHint('保存失败')
+    } finally {
+      setWxBusy(false)
     }
   }
 
@@ -234,6 +273,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
           <span className="h-px flex-1 bg-border" />
           {selectedPlatform === 'feishu' ? '飞书 / Lark · 机器人'
             : selectedPlatform === 'wecom' ? '企业微信 · 机器人'
+            : selectedPlatform === 'weixin' ? '微信 · 单聊(扫码)'
             : 'QQ · 单聊'}
           <span className="h-px flex-1 bg-border" />
         </div>
@@ -370,6 +410,48 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
               </button>
               {wcHint && <span className="text-xs text-fg-subtle">{wcHint}</span>}
             </div>
+          </section>
+        )}
+
+        {selectedPlatform === 'weixin' && (
+          <section className="rounded-lg border border-border p-4" data-testid="im-weixin-form">
+            <div className="mb-1 text-xs font-bold text-fg">个人微信(官方 ClawBot / iLink)</div>
+            <div className="text-2xs text-fg-subtle">
+              手机微信扫码即绑定,扫码者即主人;⚠ 与终端 /wechat 通道不可同时运行。
+            </div>
+            {bound ? (
+              <div className="mt-2 space-y-1 text-xs text-fg-muted">
+                <div>主人:<span className="text-fg">{maskId(config?.ownerUserid ?? null)}</span></div>
+                <div>工作目录:<span className="truncate text-fg">{config?.workspace ?? '—'}</span></div>
+              </div>
+            ) : (
+              <div className="mt-2 text-xs text-fg-subtle">
+                未绑定——点「扫码绑定」,二维码会出现在下方日志区(自动展开);若有 http 链接会同时在浏览器打开。
+              </div>
+            )}
+            <label className="mt-2 block text-xs text-fg-muted">
+              工作目录{!bound && <span className="text-3xs text-fg-subtle">(未绑定时随扫码绑定一并设置)</span>}
+              <input data-testid="im-wx-workspace" value={wxWorkspace} onChange={e => setWxWorkspace(e.target.value)}
+                placeholder="/path/to/workspace" className={INPUT} />
+            </label>
+            <div className="mt-2 flex items-center gap-2">
+              <button data-testid="im-wx-bind" onClick={handleBindWeixin}
+                className={bound ? BTN_SECONDARY : BTN_PRIMARY}>{bound ? '重新扫码绑定' : '扫码绑定'}</button>
+              {bind?.phase === 'scanning' && (
+                <button onClick={() => void window.wraith.gatewayBindCancel()} className={BTN_SECONDARY}>取消</button>
+              )}
+              <button data-testid="im-wx-save" disabled={wxBusy || !bound}
+                onClick={() => void handleSaveWeixinWorkspace()} className={BTN_SECONDARY}>
+                {wxBusy ? '保存中…' : '保存工作目录'}
+              </button>
+              {wxHint && <span className="text-xs text-fg-subtle">{wxHint}</span>}
+            </div>
+            {bind && selectedPlatform === 'weixin' && (
+              <div data-testid="im-wx-bind-status"
+                className={'mt-2 text-xs ' + (bind.phase === 'bound' ? 'text-success' : bind.phase === 'failed' ? 'text-danger' : 'text-fg-muted')}>
+                {bindPhaseLabel(bind.phase, bind.message)}
+              </div>
+            )}
           </section>
         )}
 
