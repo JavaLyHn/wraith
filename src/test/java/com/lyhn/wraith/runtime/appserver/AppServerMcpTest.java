@@ -112,6 +112,36 @@ class AppServerMcpTest {
     }
 
     @Test
+    void listIncludesToolParametersWhenSchemaPresent(@TempDir Path ws) throws Exception {
+        McpServerConfig cfg = new McpServerConfig();
+        cfg.setCommand("npx");
+        McpServer srv = new McpServer("schema-srv", cfg);
+        com.fasterxml.jackson.databind.node.ObjectNode schema =
+                com.fasterxml.jackson.databind.node.JsonNodeFactory.instance.objectNode();
+        schema.put("type", "object");
+        srv.tools(List.of(
+                new com.lyhn.wraith.mcp.protocol.McpToolDescriptor(
+                        "schema-srv", "read", "mcp__schema-srv__read", "读取", schema),
+                new com.lyhn.wraith.mcp.protocol.McpToolDescriptor(
+                        "schema-srv", "ping", "mcp__schema-srv__ping", "探活", null)));
+
+        AppServerMcp mcp = new AppServerMcp((reg, dir) -> new FakeManager(reg, dir) {
+            @Override public java.util.Collection<McpServer> servers() { return List.of(srv); }
+        });
+        mcp.ensureFor(ws.toString(), registry(ws), null);
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> servers = (List<Map<String, Object>>) mcp.list().get("servers");
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> tools = (List<Map<String, Object>>) servers.get(0).get("tools");
+        assertEquals(2, tools.size());
+        assertEquals("read", tools.get(0).get("name"));
+        assertEquals(schema, tools.get(0).get("parameters"), "带 schema 的工具应回传 parameters");
+        assertEquals("ping", tools.get(1).get("name"));
+        assertFalse(tools.get(1).containsKey("parameters"), "inputSchema 为 null 时应省略 parameters 字段");
+    }
+
+    @Test
     void configUpsertProjectScopeWritesUnderWorkspace(@TempDir Path ws) throws Exception {
         AtomicInteger reloads = new AtomicInteger();
         AppServerMcp mcp = new AppServerMcp((reg, dir) -> new FakeManager(reg, dir) {

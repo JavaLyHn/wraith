@@ -123,8 +123,15 @@ public final class AppServerMcp implements McpOps {
             e.put("shadowed", "project".equals(scope) && userNames.contains(s.name()));
             e.put("transport", s.transportName());
             List<Map<String, Object>> tools = new ArrayList<>();
-            s.tools().forEach(t -> tools.add(Map.of(
-                    "name", t.name(), "description", t.description() == null ? "" : t.description())));
+            s.tools().forEach(t -> {
+                Map<String, Object> tv = new LinkedHashMap<>();
+                tv.put("name", t.name());
+                tv.put("description", t.description() == null ? "" : t.description());
+                if (t.inputSchema() != null) {
+                    tv.put("parameters", t.inputSchema()); // sanitized JSON schema;null(仅防御)时省略
+                }
+                tools.add(tv);
+            });
             e.put("tools", tools);
             // McpServerConfig.getEnv() confirmed — getter is getEnv()
             List<String> envKeys = s.config() != null && s.config().getEnv() != null
