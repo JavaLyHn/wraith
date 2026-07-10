@@ -66,10 +66,13 @@ public class WraithConfig {
     public static class GatewayConfig {
         private GatewayQqConfig qq;
         private GatewayFeishuConfig feishu;
+        private GatewayWecomConfig wecom;
         public GatewayQqConfig getQq() { return qq; }
         public void setQq(GatewayQqConfig qq) { this.qq = qq; }
         public GatewayFeishuConfig getFeishu() { return feishu; }
         public void setFeishu(GatewayFeishuConfig feishu) { this.feishu = feishu; }
+        public GatewayWecomConfig getWecom() { return wecom; }
+        public void setWecom(GatewayWecomConfig wecom) { this.wecom = wecom; }
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -92,6 +95,18 @@ public class WraithConfig {
         public String getAppSecret() { return appSecret; }        public void setAppSecret(String v){ appSecret=v; }
         public String getOwnerOpenid() { return ownerOpenid; }    public void setOwnerOpenid(String v){ ownerOpenid=v; }
         public String getRegion() { return region; }             public void setRegion(String v){ region=v; }
+        public String getWorkspace() { return workspace; }       public void setWorkspace(String v){ workspace=v; }
+    }
+
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class GatewayWecomConfig {
+        private String botId;
+        private String secret;
+        private String ownerUserid;
+        private String workspace;
+        public String getBotId() { return botId; }               public void setBotId(String v){ botId=v; }
+        public String getSecret() { return secret; }             public void setSecret(String v){ secret=v; }
+        public String getOwnerUserid() { return ownerUserid; }   public void setOwnerUserid(String v){ ownerUserid=v; }
         public String getWorkspace() { return workspace; }       public void setWorkspace(String v){ workspace=v; }
     }
 
