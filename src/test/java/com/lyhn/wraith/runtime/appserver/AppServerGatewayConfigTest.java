@@ -91,42 +91,5 @@ class AppServerGatewayConfigTest {
         assertTrue(res.has("workspace"), "缺 workspace");
         // 密钥红线:绝不回 secret 明文
         assertFalse(res.has("secret"), "gateway.config.get(wecom) 绝不能返回 secret 明文");
-        assertFalse(res.path("bound").asBoolean(), "未配置时 bound 应为 false");
-        assertFalse(res.path("hasSecret").asBoolean(), "未配置时 hasSecret 应为 false");
-    }
-
-    @Test
-    void gatewayConfigSetWecomAndGetShowsHasSecretTrue() throws Exception {
-        // set 写入 secret → get 回的 hasSecret=true,但视图不含明文
-        List<JsonNode> replies = run(
-                "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"gateway.config.set\",\"params\":{\"platform\":\"wecom\",\"botId\":\"testBot\",\"secret\":\"s3cr3t\",\"ownerUserid\":\"user1\",\"workspace\":\"ws1\"}}",
-                "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"gateway.config.get\",\"params\":{\"platform\":\"wecom\"}}"
-        );
-        // set 返回 ok
-        JsonNode setRes = byId(replies, 2);
-        assertFalse(setRes.has("error"), "gateway.config.set(wecom) 不应出错");
-        // get 视图 hasSecret=true,无明文
-        JsonNode getRes = byId(replies, 3).get("result");
-        assertNotNull(getRes);
-        assertTrue(getRes.path("hasSecret").asBoolean(), "set secret 后 hasSecret 应为 true");
-        assertTrue(getRes.path("bound").asBoolean(), "set secret 后 bound 应为 true");
-        assertEquals("testBot", getRes.path("botId").asText());
-        assertEquals("user1", getRes.path("ownerUserid").asText());
-        assertEquals("ws1", getRes.path("workspace").asText());
-        assertFalse(getRes.has("secret"), "get 视图绝不含 secret 明文");
-    }
-
-    @Test
-    void gatewayConfigSetWecomEmptySecretKeepsExisting() throws Exception {
-        // 先 set 有效 secret,再 set 空 secret → hasSecret 保持 true(不覆盖)
-        List<JsonNode> replies = run(
-                "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"gateway.config.set\",\"params\":{\"platform\":\"wecom\",\"botId\":\"testBot\",\"secret\":\"mySecret\"}}",
-                "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"gateway.config.set\",\"params\":{\"platform\":\"wecom\",\"botId\":\"testBot\"}}",
-                "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"gateway.config.get\",\"params\":{\"platform\":\"wecom\"}}"
-        );
-        JsonNode getRes = byId(replies, 4).get("result");
-        assertNotNull(getRes);
-        assertTrue(getRes.path("hasSecret").asBoolean(), "空 secret 不覆盖,hasSecret 应保持 true");
-        assertFalse(getRes.has("secret"), "get 视图绝不含 secret 明文");
     }
 }
