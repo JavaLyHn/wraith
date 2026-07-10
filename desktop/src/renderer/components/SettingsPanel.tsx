@@ -1,13 +1,14 @@
 import { useState } from 'react'
+import { User, Palette, Info, type LucideIcon } from 'lucide-react'
 import SettingsInterface from './SettingsInterface'
 import SettingsMe from './SettingsMe'
 import SettingsAbout from './SettingsAbout'
 
 type Section = 'me' | 'interface' | 'about'
-const NAV: { key: Section; label: string }[] = [
-  { key: 'me', label: '👤 我' },
-  { key: 'interface', label: '🎨 界面' },
-  { key: 'about', label: 'ℹ️ 关于' },
+const NAV: { key: Section; label: string; Icon: LucideIcon }[] = [
+  { key: 'me', label: '我', Icon: User },
+  { key: 'interface', label: '界面', Icon: Palette },
+  { key: 'about', label: '关于', Icon: Info },
 ]
 
 export default function SettingsPanel({ onBack, onOpenProviders }: { onBack: () => void; onOpenProviders: () => void }): JSX.Element {
@@ -24,9 +25,9 @@ export default function SettingsPanel({ onBack, onOpenProviders }: { onBack: () 
         <div className="w-36 shrink-0 border-r border-border p-2">
           {NAV.map((n) => (
             <button key={n.key} data-testid={`settings-nav-${n.key}`} onClick={() => setActive(n.key)}
-              className={'mb-1 block w-full rounded-lg px-3 py-2 text-left text-xs ' +
+              className={'mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs ' +
                 (active === n.key ? 'bg-accent/12 font-semibold text-accent' : 'text-fg-muted hover:bg-surface')}>
-              {n.label}
+              <n.Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{n.label}
             </button>
           ))}
         </div>

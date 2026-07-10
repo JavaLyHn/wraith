@@ -5,6 +5,11 @@ import {
   TooltipContent,
   TooltipProvider,
 } from './ui/tooltip'
+import {
+  Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen,
+  Star, ListTree, List, Pencil, Trash2, Check, Settings,
+  Shield, ShieldAlert, ShieldCheck,
+} from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
 import Logo from './Logo'
 import { filterSidebar } from '../lib/sidebarSearch'
@@ -69,20 +74,22 @@ function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDe
       </button>
       <button data-testid="session-star" title={s.starred ? '取消重点' : '标记重点'}
         onClick={() => onToggleStar(s.id, !s.starred)}
-        className={'shrink-0 px-1 text-xs ' + (s.starred ? 'text-warning' : 'text-fg-subtle opacity-0 group-hover:opacity-100')}>
-        {s.starred ? '★' : '☆'}
+        className={'shrink-0 px-1 ' + (s.starred ? 'text-warning' : 'text-fg-subtle opacity-0 hover:text-fg group-hover:opacity-100')}>
+        <Star className="h-3 w-3" strokeWidth={1.5} fill={s.starred ? 'currentColor' : 'none'} />
       </button>
       <button data-testid="session-rename" title="改名"
         onClick={startEdit}
-        className="shrink-0 px-1 text-xs text-fg-subtle opacity-0 group-hover:opacity-100">✎</button>
+        className="shrink-0 px-1 text-fg-subtle opacity-0 hover:text-fg group-hover:opacity-100">
+        <Pencil className="h-3 w-3" strokeWidth={1.5} />
+      </button>
       <button data-testid="session-delete"
         title={running ? '会话进行中,不可删除' : (confirmDel ? '确认删除?' : '删除')}
         disabled={running}
         onClick={() => { if (!confirmDel) { setConfirmDel(true); return } onDelete(s.id) }}
-        className={'shrink-0 px-1 text-xs opacity-0 group-hover:opacity-100 ' +
+        className={'shrink-0 px-1 opacity-0 group-hover:opacity-100 ' +
           (running ? 'disabled:cursor-not-allowed disabled:opacity-40' : '') +
-          (confirmDel ? ' text-danger opacity-100' : ' text-fg-subtle')}>
-        {confirmDel ? '✓' : '🗑'}
+          (confirmDel ? ' text-danger opacity-100' : ' text-fg-subtle hover:text-fg')}>
+        {confirmDel ? <Check className="h-3 w-3" strokeWidth={1.5} /> : <Trash2 className="h-3 w-3" strokeWidth={1.5} />}
       </button>
     </div>
   )
@@ -208,7 +215,7 @@ export default function Sidebar({
             onClick={onNewConversation}
             className="w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-left text-xs text-fg hover:border-accent hover:text-accent"
           >
-            ＋ 新对话
+            <span className="flex items-center gap-2"><Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />新对话</span>
           </button>
         </div>
 
@@ -221,7 +228,7 @@ export default function Sidebar({
               onClick={handleSearchActivate}
               className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60"
             >
-              🔍 搜索
+              <span className="flex items-center gap-2"><Search className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />搜索</span>
             </button>
           ) : (
             <div className="flex items-center gap-1 rounded-lg border border-border bg-surface/60 px-2 py-1">
@@ -240,7 +247,7 @@ export default function Sidebar({
                 onClick={handleSearchClear}
                 className="shrink-0 text-fg-muted hover:text-fg"
               >
-                ✕
+                <X className="h-3.5 w-3.5" strokeWidth={1.5} />
               </button>
             </div>
           )}
@@ -252,7 +259,7 @@ export default function Sidebar({
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
               (activeNav === 'plugins' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
-            🧩 MCP
+            <span className="flex items-center gap-2"><Blocks className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />MCP</span>
           </button>
 
           {/* automations — enabled */}
@@ -262,8 +269,8 @@ export default function Sidebar({
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
               (activeNav === 'automations' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
-            <span className="flex items-center">
-              ⏰ 自动化
+            <span className="flex items-center gap-2">
+              <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />自动化
               {automationBadge && (
                 <span data-testid="nav-automations-badge" className="relative ml-auto flex h-2 w-2 shrink-0">
                   <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75 motion-reduce:hidden" />
@@ -280,7 +287,7 @@ export default function Sidebar({
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
               (activeNav === 'im-gateway' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
-            💬 IM 网关
+            <span className="flex items-center gap-2"><MessageSquare className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />IM 网关</span>
           </button>
 
           {/* Provider 配置 — enabled */}
@@ -290,7 +297,7 @@ export default function Sidebar({
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
               (activeNav === 'providers' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
-            🔌 Provider 配置
+            <span className="flex items-center gap-2"><Plug className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />Provider 配置</span>
           </button>
 
           {/* skills — enabled */}
@@ -300,7 +307,7 @@ export default function Sidebar({
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
               (activeNav === 'skills' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
-            📚 技能
+            <span className="flex items-center gap-2"><BookOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />技能</span>
           </button>
         </nav>
 
@@ -356,7 +363,7 @@ export default function Sidebar({
                   <>
                     {sessions.length === 0 && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
                     {starred.length > 0 && <>
-                      <div className={headerCls}>⭐ 重点</div>
+                      <div className={headerCls + ' flex items-center gap-1'}><Star className="h-3 w-3 shrink-0" strokeWidth={1.5} />重点</div>
                       <div className="px-2">{renderRows(starred)}</div>
                     </>}
                     {rest.length > 0 && <>
@@ -369,7 +376,9 @@ export default function Sidebar({
                           aria-label={groupMode === 'time' ? '切换为最新平铺' : '切换为按时间分组'}
                           className="ml-auto rounded px-1 text-xs leading-none text-fg-muted transition-colors hover:text-accent"
                         >
-                          {groupMode === 'time' ? '🗂' : '≡'}
+                          {groupMode === 'time'
+                            ? <ListTree className="h-3 w-3" strokeWidth={1.5} />
+                            : <List className="h-3 w-3" strokeWidth={1.5} />}
                         </button>
                       </div>
                       {groupMode === 'time'
@@ -395,17 +404,21 @@ export default function Sidebar({
             onClick={onOpenSettings}
             className="mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-fg-muted hover:bg-surface hover:text-accent"
           >
-            <span aria-hidden>⚙</span><span>设置</span>
+            <Settings aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} /><span>设置</span>
           </button>
           <div
             data-testid="sandbox-badge"
             className={
-              'mt-2 truncate text-2xs ' +
+              'mt-2 flex items-center gap-1 truncate text-2xs ' +
               (sandbox === 'none' ? 'text-danger' : 'text-fg-subtle')
             }
             title={sandbox === 'none' ? '命令未在沙箱内执行' : sandbox === 'macos-seatbelt' ? '命令在 Seatbelt 沙箱内执行' : '沙箱状态未知'}
           >
-            {sandbox === 'none' ? '⚠ 沙箱未启用' : sandbox === 'macos-seatbelt' ? '🛡 沙箱: Seatbelt' : '沙箱: —'}
+            {sandbox === 'none'
+              ? <><ShieldAlert className="h-3 w-3 shrink-0" strokeWidth={1.5} />沙箱未启用</>
+              : sandbox === 'macos-seatbelt'
+                ? <><ShieldCheck className="h-3 w-3 shrink-0" strokeWidth={1.5} />沙箱: Seatbelt</>
+                : <><Shield className="h-3 w-3 shrink-0" strokeWidth={1.5} />沙箱: —</>}
           </div>
         </div>
       </aside>
