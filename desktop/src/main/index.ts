@@ -527,6 +527,10 @@ ipcMain.handle('wraith:memorySave', async (_e, fact: string, scope: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.save', { fact, scope })
 })
+ipcMain.handle('wraith:memoryInitProject', async (_e, force: boolean) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.initProject', { force: !!force })
+})
 
 // side-git 快照时间线 + 恢复(转发 AppServer snapshot.* RPC)
 ipcMain.handle('wraith:snapshotList', async (_e, limit?: number) => {

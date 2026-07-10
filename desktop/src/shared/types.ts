@@ -277,6 +277,15 @@ export interface MemoryEntryView {
 export interface MemoryListResult {
   project: string
   entries: MemoryEntryView[]
+  wraithMdExists?: boolean
+  wraithMdPath?: string
+}
+
+/** WRAITH.md 生成结果(AppServer memory.initProject 回包)。 */
+export interface ProjectMemoryInitResult {
+  written: boolean
+  path: string
+  message: string
 }
 
 /** side-git 快照条目视图(AppServer snapshot.* 回包)。 */

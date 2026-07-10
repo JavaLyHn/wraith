@@ -160,6 +160,10 @@ public final class AppServer {
         default java.util.Map<String, Object> memorySave(String fact, String scope) {
             throw new UnsupportedOperationException("memorySave not implemented");
         }
+        /** 生成/重写项目级记忆 WRAITH.md(force 覆盖已存在),返回 {written,path,message}。默认抛出。 */
+        default java.util.Map<String, Object> memoryInitProject(boolean force) {
+            throw new UnsupportedOperationException("memoryInitProject not implemented");
+        }
         /** 列出 side-git 快照时间线(新→旧,含全相位;每条附 preTurnOffset)。默认抛出。 */
         default java.util.Map<String, Object> snapshotList(int limit) {
             throw new UnsupportedOperationException("snapshotList not implemented");
@@ -472,6 +476,14 @@ public final class AppServer {
                 String scope = (p != null && p.hasNonNull("scope")) ? p.get("scope").asText() : "project";
                 try { writer.result(msg.id(), session.memorySave(fact, scope)); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.initProject" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                boolean force = p != null && p.hasNonNull("force") && p.get("force").asBoolean();
+                try { writer.result(msg.id(), session.memoryInitProject(force)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "snapshot.list" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }

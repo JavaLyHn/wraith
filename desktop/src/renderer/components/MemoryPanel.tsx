@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Brain, Search, Trash2, Plus, X } from 'lucide-react'
+import { Brain, Search, Trash2, Plus, X, FileText } from 'lucide-react'
 import type { MemoryEntryView } from '../../shared/types'
 import { scopeLabel, relativeTime } from '../lib/memoryView'
 
@@ -11,15 +11,33 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
   const [query, setQuery] = useState('')
   const [draft, setDraft] = useState('')
   const [draftScope, setDraftScope] = useState<'project' | 'global'>('project')
+  const [wraithMd, setWraithMd] = useState<{ exists: boolean; path: string }>({ exists: false, path: '' })
+  const [initNotice, setInitNotice] = useState<string | null>(null)
 
   const load = useCallback(async (q?: string): Promise<void> => {
     setBusy(true)
     try {
-      const r = q && q.trim() ? await window.wraith.memorySearch(q.trim()) : await window.wraith.memoryList()
-      setEntries(r.entries); setProject(r.project); setError(null)
+      if (q && q.trim()) {
+        const r = await window.wraith.memorySearch(q.trim())
+        setEntries(r.entries); setProject(r.project); setError(null)
+      } else {
+        const r = await window.wraith.memoryList()
+        setEntries(r.entries); setProject(r.project); setError(null)
+        setWraithMd({ exists: !!r.wraithMdExists, path: r.wraithMdPath ?? '' })
+      }
     } catch (err) { setError((err as Error).message) }
     finally { setBusy(false) }
   }, [])
+
+  const doInitWraithMd = useCallback(async (): Promise<void> => {
+    if (wraithMd.exists && !window.confirm('WRAITH.md 已存在,重写会覆盖当前内容(基于 README/AGENTS 重新生成)。继续?')) return
+    setInitNotice(null)
+    try {
+      const r = await window.wraith.memoryInitProject(wraithMd.exists)
+      setInitNotice((r.written ? '✅ ' : 'ℹ️ ') + r.message)
+      void load()
+    } catch (err) { setError((err as Error).message) }
+  }, [wraithMd.exists, load])
 
   useEffect(() => { void load() }, [load])
 
@@ -50,6 +68,20 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
         </span>
         {project && <span className="ml-auto truncate text-xs text-fg-subtle">项目作用域:{project}</span>}
       </div>
+
+      {/* 项目记忆 WRAITH.md */}
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
+        <FileText className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.5} />
+        <span className="shrink-0 text-xs text-fg-muted">项目记忆 WRAITH.md</span>
+        <span className="min-w-0 flex-1 truncate text-3xs text-fg-subtle" title={wraithMd.path}>
+          {wraithMd.exists ? `已生成 · ${wraithMd.path}` : '未生成(会注入 system prompt 的 Project Context)'}
+        </span>
+        <button onClick={() => void doInitWraithMd()}
+          className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent">
+          {wraithMd.exists ? '重写' : '生成'}
+        </button>
+      </div>
+      {initNotice && <div className="shrink-0 px-4 py-1 text-3xs text-fg-subtle">{initNotice}</div>}
 
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
         <div className="flex flex-1 items-center gap-2 rounded-lg border border-border px-2 py-1">

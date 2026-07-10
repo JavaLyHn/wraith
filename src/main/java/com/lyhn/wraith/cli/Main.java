@@ -1397,7 +1397,25 @@ public class Main {
                         java.util.Map<String, Object> r = new java.util.LinkedHashMap<>();
                         r.put("project", agent.getMemoryManager().getCurrentProject());
                         r.put("entries", entries);
+                        String projPath = agent.getToolRegistry().getProjectPath();
+                        java.nio.file.Path wm = projPath != null ? java.nio.file.Path.of(projPath).resolve("WRAITH.md") : null;
+                        r.put("wraithMdExists", wm != null && java.nio.file.Files.exists(wm));
+                        r.put("wraithMdPath", wm != null ? wm.toString() : "");
                         return r;
+                    }
+                    public java.util.Map<String, Object> memoryInitProject(boolean force) {
+                        String projPath = agent.getToolRegistry().getProjectPath();
+                        if (projPath == null || projPath.isBlank()) return java.util.Map.of("written", false, "path", "", "message", "无项目工作区");
+                        try {
+                            ProjectMemoryInitializer.InitResult res = ProjectMemoryInitializer.initialize(java.nio.file.Path.of(projPath), force);
+                            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                            m.put("written", res.written());
+                            m.put("path", res.path() != null ? res.path().toString() : "");
+                            m.put("message", res.message() != null ? res.message() : "");
+                            return m;
+                        } catch (Exception e) {
+                            return java.util.Map.of("written", false, "path", "", "message", "生成失败: " + e.getClass().getSimpleName());
+                        }
                     }
                     public java.util.Map<String, Object> memorySearch(String query) {
                         java.util.List<java.util.Map<String, Object>> entries = new java.util.ArrayList<>();
