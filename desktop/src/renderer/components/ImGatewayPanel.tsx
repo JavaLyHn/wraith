@@ -239,9 +239,10 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
               <div className="mb-1 text-xs font-bold text-fg">机器人密钥（手填兜底）</div>
               <div className="text-2xs text-fg-subtle">openclaw 偶发返回失效密钥;可到 q.qq.com 后台复制「机器人密钥」直接填入。</div>
               <label className="mt-2 block text-xs text-fg-muted">
-                AppSecret
+                AppSecret {config?.hasSecret && <span className="text-3xs text-success">(已存,留空则保持)</span>}
                 <input data-testid="im-secret" type="password" value={secretInput}
-                  onChange={e => setSecretInput(e.target.value)} placeholder="粘贴机器人密钥"
+                  onChange={e => setSecretInput(e.target.value)}
+                  placeholder={config?.hasSecret ? '••••••(留空保持已存)' : '粘贴机器人密钥'}
                   className={INPUT} />
               </label>
               <div className="mt-2 flex items-center gap-2">
