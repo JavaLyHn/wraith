@@ -680,6 +680,11 @@ ipcMain.handle('wraith:gatewaySetFeishuConfig', async (_e, fields: Record<string
   await client.request('gateway.config.set', { platform: 'feishu', ...fields })
   return { ok: true }
 })
+ipcMain.handle('wraith:gatewaySetWecomConfig', async (_e, fields: Record<string, string | undefined>) => {
+  if (!client) throw new Error('Backend not connected')
+  await client.request('gateway.config.set', { platform: 'wecom', ...fields })
+  return { ok: true }
+})
 ipcMain.handle('wraith:gatewaySetSecret', async (_e, secret: string) => {
   if (!client) throw new Error('Backend not connected')
   await client.request('gateway.config.set', { clientSecret: secret })
