@@ -29,6 +29,12 @@ public final class FeishuDeliveryAdapter implements DeliveryAdapter {
 
     @Override
     public void deliver(DeliveryTarget target, AutomationTask task, AutomationRunner.RunResult result) {
-        sink.send(ownerOpenid, "⏰ " + task.name + ":\n" + result.answer());
+        // target 有意忽略:飞书投递恒发给 ownerOpenid(非 per-target 路由)。
+        try {
+            sink.send(ownerOpenid, "⏰ " + task.name + ":\n" + result.answer());
+        } catch (Exception e) {
+            // DeliveryAdapter 契约:deliver 不得外抛。sink 通常已内部吞异常,此处再兜一层。
+            System.err.println("[gateway] 飞书投递失败: " + e.getClass().getSimpleName());
+        }
     }
 }
