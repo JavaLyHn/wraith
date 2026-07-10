@@ -675,7 +675,7 @@ ipcMain.handle('wraith:gatewayGetConfig', async (_e, platform?: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('gateway.config.get', platform ? { platform } : {})
 })
-ipcMain.handle('wraith:gatewaySetFeishuConfig', async (_e, fields: Record<string, string>) => {
+ipcMain.handle('wraith:gatewaySetFeishuConfig', async (_e, fields: Record<string, string | undefined>) => {
   if (!client) throw new Error('Backend not connected')
   await client.request('gateway.config.set', { platform: 'feishu', ...fields })
   return { ok: true }
