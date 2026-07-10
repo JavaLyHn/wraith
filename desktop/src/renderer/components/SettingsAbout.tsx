@@ -65,7 +65,12 @@ export default function SettingsAbout(): JSX.Element {
             </button>
             {result && (
               <span className="text-xs">
-                {result.error ? <span className="text-danger">检查失败:{result.error}</span>
+                {result.error ? (
+                  <span>
+                    <span className="text-danger">检查失败:{result.error}</span>
+                    {result.url && <button className="ml-2 text-accent" onClick={() => result.url && void window.wraith.openExternal(result.url)}>打开 Releases 页 ↗</button>}
+                  </span>
+                )
                   : result.hasUpdate
                     ? <button className="text-accent" onClick={() => result.url && void window.wraith.openExternal(result.url)}>有新版 v{result.latest} · 打开下载 ↗</button>
                     : <span className="text-fg-subtle">已是最新(v{result.current})</span>}

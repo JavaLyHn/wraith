@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeUpdate, semverCompare } from '../src/main/updateCheck'
+import { computeUpdate, semverCompare, describeHttpError } from '../src/main/updateCheck'
 
 const rel = (tag: string, prerelease = false, draft = false) =>
   ({ tag_name: tag, html_url: `https://x/${tag}`, prerelease, draft })
@@ -34,5 +34,31 @@ describe('computeUpdate', () => {
   })
   it('空列表 → latest null', () => {
     expect(computeUpdate('0.1.0', [], false).latest).toBeNull()
+  })
+})
+
+describe('describeHttpError', () => {
+  const now = 1_000_000_000_000 // 固定基准,避免依赖真实时钟
+
+  it('403 + remaining 0 + 有 reset → 限流文案含剩余分钟(向上取整)', () => {
+    const reset = String(Math.floor(now / 1000) + 5 * 60) // 5 分钟后重置
+    expect(describeHttpError(403, '0', reset, now)).toBe('GitHub 接口访问频繁(匿名限流),请约 5 分钟后再试')
+  })
+
+  it('403 限流但已到/过重置点 → 至少显示 1 分钟', () => {
+    const reset = String(Math.floor(now / 1000) - 10) // 已过
+    expect(describeHttpError(403, '0', reset, now)).toBe('GitHub 接口访问频繁(匿名限流),请约 1 分钟后再试')
+  })
+
+  it('403 限流但 reset 头缺失 → 通用限流文案', () => {
+    expect(describeHttpError(403, '0', null, now)).toBe('GitHub 接口访问频繁(匿名限流),请稍后再试')
+  })
+
+  it('403 但 remaining 非 0(非限流 403)→ 回落 HTTP 码', () => {
+    expect(describeHttpError(403, '42', null, now)).toBe('HTTP 403')
+  })
+
+  it('其它状态码 → HTTP 码', () => {
+    expect(describeHttpError(500, null, null, now)).toBe('HTTP 500')
   })
 })

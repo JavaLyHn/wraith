@@ -6,7 +6,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import readline from 'readline'
 import { JsonRpcClient } from '../shared/jsonRpcClient'
 import { resolveBackendCommand, defaultJarPath } from './backend'
-import { computeUpdate, type GhRelease } from './updateCheck'
+import { computeUpdate, describeHttpError, type GhRelease } from './updateCheck'
 import fs from 'fs'
 import {
   resolvePersistedWorkspace,
@@ -724,17 +724,22 @@ ipcMain.handle('wraith:appInfo', () => ({
   dataDir: path.join(os.homedir(), '.wraith'),
 }))
 
+const RELEASES_URL = 'https://github.com/JavaLyHn/wraith/releases'
 ipcMain.handle('wraith:checkUpdate', async (_e, beta: boolean) => {
   const current = app.getVersion()
   try {
     const res = await fetch('https://api.github.com/repos/JavaLyHn/wraith/releases', {
       headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'wraith-desktop' },
     })
-    if (!res.ok) return { current, latest: null, hasUpdate: false, url: null, isPrerelease: false, error: `HTTP ${res.status}` }
+    if (!res.ok) {
+      const error = describeHttpError(res.status, res.headers.get('x-ratelimit-remaining'), res.headers.get('x-ratelimit-reset'), Date.now())
+      // 失败时给 Releases 页兜底,渲染层可让用户手动去看
+      return { current, latest: null, hasUpdate: false, url: RELEASES_URL, isPrerelease: false, error }
+    }
     const releases = (await res.json()) as GhRelease[]
     return computeUpdate(current, releases, !!beta)
   } catch (e) {
-    return { current, latest: null, hasUpdate: false, url: null, isPrerelease: false, error: (e as Error).message }
+    return { current, latest: null, hasUpdate: false, url: RELEASES_URL, isPrerelease: false, error: (e as Error).message }
   }
 })
 
