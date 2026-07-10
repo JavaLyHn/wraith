@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { McpServerView, McpResourceView, BuiltinToolView } from '../../shared/types'
 import McpServerForm, { type McpFormValue, type McpPrefill } from './McpServerForm'
 import { BUILTIN_CAPABILITIES, RECOMMENDED_MCP } from '../lib/pluginShowcase'
-import { joinBuiltinTools, type BuiltinToolRow } from '../lib/builtinCapabilityDetail'
+import { joinBuiltinTools } from '../lib/builtinCapabilityDetail'
+import ToolDetailRow from './ToolDetailRow'
 
 interface PluginsPanelProps {
   servers: McpServerView[]
@@ -33,32 +34,6 @@ type Tab = 'tools' | 'resources' | 'prompts' | 'logs'
 /** 左列顶部「能力概览」的哨兵选中值(非某个 server)。 */
 const OVERVIEW = '__overview__'
 
-/** 内置工具的一行:真名 + 描述 + 可折叠参数(JSON schema);missing 则淡色标记。 */
-function BuiltinToolRowView({ row }: { row: BuiltinToolRow }): JSX.Element {
-  const [expanded, setExpanded] = useState(false)
-  const hasParams = row.parameters != null && typeof row.parameters === 'object'
-    && Object.keys(row.parameters as object).length > 0
-  return (
-    <div className="rounded-lg bg-surface/60 px-3 py-2">
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-xs text-fg">{row.name}</span>
-        {row.missing && <span className="text-3xs text-fg-subtle">定义缺失 / 当前不可用</span>}
-        {hasParams && (
-          <button type="button" onClick={() => setExpanded(v => !v)}
-            className="ml-auto shrink-0 text-3xs text-fg-subtle hover:text-fg-muted">
-            {expanded ? '▼ 参数' : '▶ 参数'}
-          </button>
-        )}
-      </div>
-      {row.description && <div className="mt-0.5 text-xs text-fg-muted">{row.description}</div>}
-      {hasParams && expanded && (
-        <pre className="mt-1 max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded bg-bg px-2 py-1 text-2xs text-fg-subtle">
-{JSON.stringify(row.parameters, null, 2)}
-        </pre>
-      )}
-    </div>
-  )
-}
 
 export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
   const { servers, configError, busy, onBack, onRefresh } = props
@@ -210,7 +185,8 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
               ) : (
                 <div className="flex flex-col gap-1">
                   {joinBuiltinTools(selectedBuiltin.tools, builtinCatalog ?? []).map(row => (
-                    <BuiltinToolRowView key={row.name} row={row} />
+                    <ToolDetailRow key={row.name} name={row.name} description={row.description}
+                      parameters={row.parameters} missing={row.missing} />
                   ))}
                 </div>
               )}
