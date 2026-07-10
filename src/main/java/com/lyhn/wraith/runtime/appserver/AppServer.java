@@ -428,6 +428,15 @@ public final class AppServer {
                     r.put("ownerOpenid", fs == null ? null : fs.getOwnerOpenid());
                     r.put("region", fs == null ? null : fs.getRegion());
                     r.put("workspace", fs == null ? null : fs.getWorkspace());
+                } else if ("wecom".equals(platform)) {
+                    WraithConfig.GatewayWecomConfig wecom = gw == null ? null : gw.getWecom();
+                    boolean hasSecret = wecom != null && wecom.getSecret() != null && !wecom.getSecret().isBlank();
+                    r.put("bound", hasSecret);
+                    r.put("hasSecret", hasSecret);
+                    r.put("botId", wecom == null ? null : wecom.getBotId());
+                    r.put("ownerUserid", wecom == null ? null : wecom.getOwnerUserid());
+                    r.put("workspace", wecom == null ? null : wecom.getWorkspace());
+                    // 注意:绝不 put secret 明文,只报 hasSecret
                 } else {
                     WraithConfig.GatewayQqConfig qq = gw == null ? null : gw.getQq();
                     boolean hasSecret = qq != null && qq.getClientSecret() != null && !qq.getClientSecret().isBlank();
@@ -454,6 +463,15 @@ public final class AppServer {
                         if (p != null && p.hasNonNull("ownerOpenid")) fs.setOwnerOpenid(p.get("ownerOpenid").asText());
                         if (p != null && p.hasNonNull("region")) fs.setRegion(p.get("region").asText());
                         if (p != null && p.hasNonNull("workspace")) fs.setWorkspace(p.get("workspace").asText());
+                    } else if ("wecom".equals(platform)) {
+                        WraithConfig.GatewayWecomConfig wecom = gw.getWecom();
+                        if (wecom == null) { wecom = new WraithConfig.GatewayWecomConfig(); gw.setWecom(wecom); }
+                        if (p != null && p.hasNonNull("botId")) wecom.setBotId(p.get("botId").asText());
+                        // secret 仅当非空才写,空则保持已存,不覆盖
+                        if (p != null && p.hasNonNull("secret") && !p.get("secret").asText().isBlank())
+                            wecom.setSecret(p.get("secret").asText());
+                        if (p != null && p.hasNonNull("ownerUserid")) wecom.setOwnerUserid(p.get("ownerUserid").asText());
+                        if (p != null && p.hasNonNull("workspace")) wecom.setWorkspace(p.get("workspace").asText());
                     } else {
                         WraithConfig.GatewayQqConfig qq = gw.getQq();
                         if (qq == null) { qq = new WraithConfig.GatewayQqConfig(); gw.setQq(qq); }
