@@ -41,9 +41,21 @@ wraith 网关已支持 QQ、飞书两个 IM provider。新增**企业微信**作
 - **鉴权密钥**:BotID + Secret(长连接专用,与回调模式的 Token/EncodingAESKey 不同;模式二选一,切换使连接失效)。
 - **限频**:30 条/分钟、1000 条/小时;普通回复 24h 窗口内可回。
 
-> **实现期第一步需从官方 Python SDK client 源码钉死的细节**(不影响架构):(a)订阅成功/失败的响应帧字段
-> (用于状态灯区分 subscribed vs auth-failed);(b)`aibot_respond_msg` markdown body 的精确键名;
-> (c)ack 帧格式与串行等待。以官方 SDK 源码为准,如与本 spec 示例不符以源码为准并更新 spec。
+### 已从官方 Node SDK 类型定义(@wecom/aibot-node-sdk 1.0.7 index.d.ts)钉死
+
+- **帧信封**:`{cmd?, headers:{req_id}, body?, errcode?, errmsg?}`。响应帧带 `errcode`/`errmsg` →
+  **订阅成功/失败据此判**:errcode==0(或缺省)= subscribed,非 0 = auth-failed(errmsg 落日志)。
+- **cmd 常量**:`aibot_subscribe` / `ping`(心跳)/ `aibot_respond_msg`(回复)/ `aibot_msg_callback`(收消息)/
+  `aibot_event_callback`(事件)/ `aibot_send_msg`(主动推送)。
+- **收消息 body**:`{msgid, aibotid, chatid?, chattype:'single'|'group', from:{userid}, create_time?,
+  response_url?, msgtype, quote?}`;text 时 `text:{content}`。
+- **回复 markdown body**:`{msgtype:'markdown', markdown:{content:'...'}}`(与下方示例一致,确认)。
+- **HITL 按钮回调**:走 `aibot_event_callback`,`msgtype:'event'`,event 类型 `template_card_event`
+  (另有 `enter_chat`/`feedback_event`/`disconnected_event`)。
+- **ack/串行**:回复帧发出后,企微以匹配 req_id 的响应帧回执(带 errcode)。v1 单聊低频 → 发送后读回执
+  errcode 落日志即可,不做严格串行阻塞。
+
+（Python README 取源 404;以上 Node 类型定义为权威真相源。实现期若个别键名有出入,以实测/SDK 源码为准并回填。）
 
 ## 架构
 
