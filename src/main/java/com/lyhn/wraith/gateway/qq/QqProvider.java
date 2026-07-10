@@ -9,6 +9,7 @@ import com.lyhn.wraith.gateway.Authorizer;
 import com.lyhn.wraith.gateway.GatewaySession;
 import com.lyhn.wraith.gateway.ImTurnDriver;
 import com.lyhn.wraith.gateway.SessionRouter;
+import com.lyhn.wraith.gateway.format.MarkdownLite;
 import com.lyhn.wraith.gateway.spi.ImProvider;
 import com.lyhn.wraith.hitl.ApprovalResult;
 import com.lyhn.wraith.llm.LlmClient;
@@ -82,9 +83,10 @@ public final class QqProvider implements ImProvider {
                     }
                 }));
 
+        // QQ 不渲染 Markdown → 清洗成整洁纯文本(去 **/#/反引号,链接→文字(URL))。
         ImTurnDriver driver = new ImTurnDriver(router, (openid, text, replyTo) -> {
             try {
-                api.sendC2C(openid, text, replyTo);
+                api.sendC2C(openid, MarkdownLite.toPlainText(text), replyTo);
             } catch (IOException e) {
                 System.err.println("[gateway] 回复发送失败: " + e.getClass().getSimpleName());
             }

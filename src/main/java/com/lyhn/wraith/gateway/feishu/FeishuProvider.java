@@ -65,8 +65,9 @@ public final class FeishuProvider implements ImProvider {
                         sessKey -> sendCard(rest, openid,
                                 FeishuApproval.cardJson(sessKey, "⚠️ 需要审批(点按钮同意/拒绝):"))));
 
+        // agent 回复走 post 富文本(内联加粗/斜体/链接);系统短文案仍走 sendText。
         ImTurnDriver driver = new ImTurnDriver(router,
-                (openid, text, replyTo) -> sendText(rest, openid, text), this.pool);
+                (openid, text, replyTo) -> sendPost(rest, openid, FeishuPost.contentJson(text)), this.pool);
 
         // 消息 handler:提取 getter → FeishuInbound.classify → 执行结果
         ImService.P2MessageReceiveV1Handler msgHandler = new ImService.P2MessageReceiveV1Handler() {
@@ -207,6 +208,26 @@ public final class FeishuProvider implements ImProvider {
             }
         } catch (Exception e) {
             log.warn("[gateway] 飞书文本发送异常: {}", e.toString());
+        }
+    }
+
+    private static void sendPost(com.lark.oapi.Client rest, String openId, String postContentJson) {
+        try {
+            com.lark.oapi.service.im.v1.model.CreateMessageResp resp =
+                    rest.im().v1().message().create(CreateMessageReq.newBuilder()
+                            .receiveIdType("open_id")
+                            .createMessageReqBody(CreateMessageReqBody.newBuilder()
+                                    .receiveId(openId)
+                                    .msgType("post")
+                                    .content(postContentJson)
+                                    .build())
+                            .build());
+            if (resp == null || !resp.success()) {
+                log.warn("[gateway] 飞书富文本发送失败: code={} msg={} openId={}",
+                        resp == null ? -1 : resp.getCode(), resp == null ? "null-resp" : resp.getMsg(), openId);
+            }
+        } catch (Exception e) {
+            log.warn("[gateway] 飞书富文本发送异常: {}", e.toString());
         }
     }
 
