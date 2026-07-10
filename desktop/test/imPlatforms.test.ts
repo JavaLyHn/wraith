@@ -9,10 +9,16 @@ describe('IM_PLATFORMS', () => {
     expect(qq!.note).toBe('单聊')
   })
 
-  it('QQ 之外全部为 soon 占位', () => {
-    for (const p of IM_PLATFORMS) {
-      if (p.id !== 'qq') expect(p.status).toBe('soon')
-    }
+  it('非 available 的平台一律为 soon 占位', () => {
+    IM_PLATFORMS.filter(p => p.status !== 'available').forEach(p => {
+      expect(p.status).toBe('soon')
+    })
+  })
+
+  it('飞书已可用', () => {
+    const fs = IM_PLATFORMS.find(p => p.id === 'feishu')
+    expect(fs).toBeDefined()
+    expect(fs?.status).toBe('available')
   })
 
   it('id 唯一,每条有 name 与 icon,status 合法', () => {
