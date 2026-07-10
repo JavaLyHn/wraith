@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView } from '../shared/types'
-import type { FeishuConfigFields, WecomConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
+import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -79,6 +79,8 @@ export interface WraithApi {
   gatewayGetConfig(platform?: string): Promise<GatewayConfigView>
   gatewaySetFeishuConfig(fields: FeishuConfigFields): Promise<{ ok: boolean }>
   gatewaySetWecomConfig(fields: WecomConfigFields): Promise<{ ok: boolean }>
+  gatewayBindWeixinStart(workspace?: string): Promise<void>
+  gatewaySetWeixinConfig(fields: WeixinConfigFields): Promise<{ ok: boolean }>
   gatewaySetSecret(secret: string): Promise<{ ok: boolean }>
   gatewaySetWorkspace(workspace: string): Promise<{ ok: boolean }>
   gatewayPickWorkspace(): Promise<string | null>
@@ -360,6 +362,12 @@ const wraith: WraithApi = {
   },
   gatewaySetWecomConfig(fields: WecomConfigFields) {
     return ipcRenderer.invoke('wraith:gatewaySetWecomConfig', fields) as Promise<{ ok: boolean }>
+  },
+  gatewayBindWeixinStart(workspace?: string) {
+    return ipcRenderer.invoke('wraith:gatewayBindWeixinStart', workspace) as Promise<void>
+  },
+  gatewaySetWeixinConfig(fields: WeixinConfigFields) {
+    return ipcRenderer.invoke('wraith:gatewaySetWeixinConfig', fields) as Promise<{ ok: boolean }>
   },
   gatewaySetSecret(secret) {
     return ipcRenderer.invoke('wraith:gatewaySetSecret', secret) as Promise<{ ok: boolean }>

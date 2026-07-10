@@ -38,6 +38,11 @@ export interface WecomConfigFields {
   workspace?: string
 }
 
+/** 微信配置写入字段:仅 workspace 可改(token/owner 由扫码绑定写入账号店)。 */
+export interface WeixinConfigFields {
+  workspace?: string
+}
+
 export type GatewayBindPhase = 'scanning' | 'bound' | 'secret-invalid' | 'failed' | 'cancelled'
 
 export type GatewayEvent =

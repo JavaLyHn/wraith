@@ -685,6 +685,14 @@ ipcMain.handle('wraith:gatewaySetWecomConfig', async (_e, fields: Record<string,
   await client.request('gateway.config.set', { platform: 'wecom', ...fields })
   return { ok: true }
 })
+ipcMain.handle('wraith:gatewayBindWeixinStart', (_e, workspace?: string) => {
+  gatewayManager?.bindWeixinStart(workspace)
+})
+ipcMain.handle('wraith:gatewaySetWeixinConfig', async (_e, fields: Record<string, string | undefined>) => {
+  if (!client) throw new Error('Backend not connected')
+  await client.request('gateway.config.set', { platform: 'weixin', ...fields })
+  return { ok: true }
+})
 ipcMain.handle('wraith:gatewaySetSecret', async (_e, secret: string) => {
   if (!client) throw new Error('Backend not connected')
   await client.request('gateway.config.set', { clientSecret: secret })
