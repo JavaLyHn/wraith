@@ -243,6 +243,14 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                 <span className="text-sm font-bold text-fg">{current.name}</span>
                 <span className="text-xs text-fg-subtle">{STATE_LABEL[current.state]} · {current.transport} · {SCOPE_LABEL[current.scope]}</span>
               </div>
+              {current.transport === 'stdio' && current.command && (
+                <div data-testid="mcp-command-echo" className="mb-3 rounded-lg bg-surface/60 px-3 py-2">
+                  <div className="mb-0.5 text-3xs uppercase tracking-wider text-fg-subtle">启动命令</div>
+                  <div className="select-text break-all font-mono text-xs text-fg-muted">
+                    {[current.command, ...(current.args ?? [])].join(' ')}
+                  </div>
+                </div>
+              )}
               {current.error && (
                 <div className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{current.error}</div>
               )}
@@ -294,10 +302,8 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                 <div className="flex flex-col gap-1">
                   {current.tools.length === 0 && <div className="text-xs text-fg-subtle">无工具(未就绪或空)</div>}
                   {current.tools.map(t => (
-                    <div key={t.name} className="rounded-lg bg-surface/60 px-3 py-2">
-                      <div className="font-mono text-xs text-fg">{t.name}</div>
-                      {t.description && <div className="mt-0.5 text-xs text-fg-muted">{t.description}</div>}
-                    </div>
+                    <ToolDetailRow key={t.name} name={t.name} description={t.description}
+                      parameters={t.parameters} />
                   ))}
                 </div>
               )}

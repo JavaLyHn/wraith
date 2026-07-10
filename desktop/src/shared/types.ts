@@ -184,6 +184,8 @@ export interface ProjectView {
 export interface McpToolView {
   name: string
   description: string
+  /** 工具入参 JSON schema(mcp.list 回传;后端 sanitize 过;可缺省) */
+  parameters?: unknown
 }
 
 export interface McpServerView {
