@@ -6,7 +6,7 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import {
-  Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen,
+  Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain,
   Star, ListTree, List, Pencil, Trash2, Check, Settings,
   Shield, ShieldAlert, ShieldCheck,
 } from 'lucide-react'
@@ -112,12 +112,13 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'settings' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
   onOpenProviders: () => void
   onOpenSkills: () => void
+  onOpenMemory: () => void
   onOpenSettings: () => void
   automationBadge: boolean
 }
@@ -145,6 +146,7 @@ export default function Sidebar({
   onOpenImGateway,
   onOpenProviders,
   onOpenSkills,
+  onOpenMemory,
   onOpenSettings,
   automationBadge,
 }: SidebarProps): JSX.Element {
@@ -308,6 +310,15 @@ export default function Sidebar({
               (activeNav === 'skills' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
             <span className="flex items-center gap-2"><BookOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />技能</span>
+          </button>
+          {/* memory */}
+          <button
+            data-testid="nav-memory"
+            onClick={onOpenMemory}
+            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+              (activeNav === 'memory' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+          >
+            <span className="flex items-center gap-2"><Brain className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />记忆</span>
           </button>
         </nav>
 

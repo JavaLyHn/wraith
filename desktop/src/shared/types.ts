@@ -264,6 +264,21 @@ export interface SkillListResult {
   skills: SkillView[]
 }
 
+/** 长期记忆条目视图(AppServer memory.* 回包)。 */
+export interface MemoryEntryView {
+  id: string
+  content: string
+  scope: string // 'project' | 'global'
+  type: string  // MemoryEntry.MemoryType 枚举名(FACT/CONVERSATION/…)
+  timestampMs: number
+  tokenCount: number
+}
+
+export interface MemoryListResult {
+  project: string
+  entries: MemoryEntryView[]
+}
+
 export interface SkillDetail extends SkillView {
   body: string
 }

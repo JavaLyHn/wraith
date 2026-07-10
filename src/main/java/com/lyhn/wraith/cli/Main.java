@@ -1381,6 +1381,39 @@ public class Main {
                     public String beginTurn(String input) {
                         return sessionStore.beginTurn(input);
                     }
+                    private java.util.Map<String, Object> memoryEntryJson(com.lyhn.wraith.memory.MemoryEntry e) {
+                        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                        m.put("id", e.getId());
+                        m.put("content", e.getContent());
+                        m.put("scope", e.getMetadata() != null ? e.getMetadata().getOrDefault("scope", "project") : "project");
+                        m.put("type", e.getType() != null ? e.getType().name() : "FACT");
+                        m.put("timestampMs", e.getTimestamp() != null ? e.getTimestamp().toEpochMilli() : 0L);
+                        m.put("tokenCount", e.getTokenCount());
+                        return m;
+                    }
+                    public java.util.Map<String, Object> memoryList() {
+                        java.util.List<java.util.Map<String, Object>> entries = new java.util.ArrayList<>();
+                        for (com.lyhn.wraith.memory.MemoryEntry e : agent.getMemoryManager().listLongTerm()) entries.add(memoryEntryJson(e));
+                        java.util.Map<String, Object> r = new java.util.LinkedHashMap<>();
+                        r.put("project", agent.getMemoryManager().getCurrentProject());
+                        r.put("entries", entries);
+                        return r;
+                    }
+                    public java.util.Map<String, Object> memorySearch(String query) {
+                        java.util.List<java.util.Map<String, Object>> entries = new java.util.ArrayList<>();
+                        for (com.lyhn.wraith.memory.MemoryEntry e : agent.getMemoryManager().searchLongTerm(query, 50)) entries.add(memoryEntryJson(e));
+                        java.util.Map<String, Object> r = new java.util.LinkedHashMap<>();
+                        r.put("project", agent.getMemoryManager().getCurrentProject());
+                        r.put("entries", entries);
+                        return r;
+                    }
+                    public java.util.Map<String, Object> memoryDelete(String id) {
+                        return java.util.Map.of("ok", agent.getMemoryManager().deleteLongTerm(id));
+                    }
+                    public java.util.Map<String, Object> memorySave(String fact, String scope) {
+                        agent.getMemoryManager().storeFact(fact, scope);
+                        return java.util.Map.of("ok", true);
+                    }
                     public java.util.Map<String, Object> skillsList() {
                         java.util.List<java.util.Map<String, Object>> list = new java.util.ArrayList<>();
                         java.util.Set<String> disabled = skillRegistry.stateStore().disabled();

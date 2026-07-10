@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -72,6 +72,10 @@ export interface WraithApi {
   skillsList(): Promise<SkillListResult>
   setSkillEnabled(name: string, enabled: boolean): Promise<{ ok: boolean }>
   getSkill(name: string): Promise<SkillDetail>
+  memoryList(): Promise<MemoryListResult>
+  memorySearch(query: string): Promise<MemoryListResult>
+  memoryDelete(id: string): Promise<{ ok: boolean }>
+  memorySave(fact: string, scope: string): Promise<{ ok: boolean }>
   upsertSkill(payload: SkillUpsertPayload): Promise<{ ok: boolean }>
   deleteSkill(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   skillExistsInScope(scope: 'user' | 'project', name: string): Promise<{ exists: boolean }>
@@ -333,6 +337,18 @@ const wraith: WraithApi = {
 
   skillsList() {
     return ipcRenderer.invoke('wraith:skillsList') as Promise<SkillListResult>
+  },
+  memoryList() {
+    return ipcRenderer.invoke('wraith:memoryList') as Promise<MemoryListResult>
+  },
+  memorySearch(query) {
+    return ipcRenderer.invoke('wraith:memorySearch', query) as Promise<MemoryListResult>
+  },
+  memoryDelete(id) {
+    return ipcRenderer.invoke('wraith:memoryDelete', id) as Promise<{ ok: boolean }>
+  },
+  memorySave(fact, scope) {
+    return ipcRenderer.invoke('wraith:memorySave', fact, scope) as Promise<{ ok: boolean }>
   },
 
   setSkillEnabled(name, enabled) {

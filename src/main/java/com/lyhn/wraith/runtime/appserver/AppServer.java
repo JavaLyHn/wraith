@@ -144,6 +144,22 @@ public final class AppServer {
         default java.util.Map<String, Object> sttTranscribe(String audioBase64, String mime) {
             throw new UnsupportedOperationException("sttTranscribe not implemented");
         }
+        /** 列出长期记忆(当前项目可见 + 全局)。默认抛出。 */
+        default java.util.Map<String, Object> memoryList() {
+            throw new UnsupportedOperationException("memoryList not implemented");
+        }
+        /** 搜索长期记忆(关键词,limit 由实现定)。默认抛出。 */
+        default java.util.Map<String, Object> memorySearch(String query) {
+            throw new UnsupportedOperationException("memorySearch not implemented");
+        }
+        /** 按 id 删除单条长期记忆,返回 {ok}。默认抛出。 */
+        default java.util.Map<String, Object> memoryDelete(String id) {
+            throw new UnsupportedOperationException("memoryDelete not implemented");
+        }
+        /** 手动保存一条长期记忆事实,scope ∈ project|global,返回 {ok}。默认抛出。 */
+        default java.util.Map<String, Object> memorySave(String fact, String scope) {
+            throw new UnsupportedOperationException("memorySave not implemented");
+        }
         /**
          * 读取指定会话的 card 事件列表(供 resume 回放 plan/team 卡片)。
          * 每条记录为 {@code {turnOrdinal, events}} JsonNode。默认空列表(向后兼容)。
@@ -412,6 +428,34 @@ public final class AppServer {
                 catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.list" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.memoryList()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.search" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String query = textParam(msg.params(), "query");
+                if (query == null || query.isBlank()) { writer.error(msg.id(), -32602, "缺 query"); return true; }
+                try { writer.result(msg.id(), session.memorySearch(query)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.delete" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String id = textParam(msg.params(), "id");
+                if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                try { writer.result(msg.id(), session.memoryDelete(id)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.save" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String fact = textParam(p, "fact");
+                if (fact == null || fact.isBlank()) { writer.error(msg.id(), -32602, "缺 fact"); return true; }
+                String scope = (p != null && p.hasNonNull("scope")) ? p.get("scope").asText() : "project";
+                try { writer.result(msg.id(), session.memorySave(fact, scope)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "gateway.config.get" -> {
                 JsonNode p = msg.params();

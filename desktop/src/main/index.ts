@@ -510,6 +510,24 @@ ipcMain.handle('wraith:skillsList', async () => {
   return client.request('skills.list', {})
 })
 
+// 长期记忆查看/管理(转发 AppServer memory.* RPC)
+ipcMain.handle('wraith:memoryList', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.list', {})
+})
+ipcMain.handle('wraith:memorySearch', async (_e, query: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.search', { query })
+})
+ipcMain.handle('wraith:memoryDelete', async (_e, id: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.delete', { id })
+})
+ipcMain.handle('wraith:memorySave', async (_e, fact: string, scope: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.save', { fact, scope })
+})
+
 ipcMain.handle('wraith:setSkillEnabled', async (_e, name: string, enabled: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.setEnabled', { name, enabled })
