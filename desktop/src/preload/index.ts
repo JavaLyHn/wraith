@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -81,6 +81,8 @@ export interface WraithApi {
   snapshotRestore(offset: number): Promise<SnapshotRestoreResult>
   policyStatus(): Promise<PolicyStatusView>
   auditList(limit?: number): Promise<AuditListResult>
+  sandboxGet(): Promise<SandboxState>
+  sandboxSet(networkAllowed: boolean): Promise<SandboxState>
   upsertSkill(payload: SkillUpsertPayload): Promise<{ ok: boolean }>
   deleteSkill(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   skillExistsInScope(scope: 'user' | 'project', name: string): Promise<{ exists: boolean }>
@@ -369,6 +371,12 @@ const wraith: WraithApi = {
   },
   auditList(limit) {
     return ipcRenderer.invoke('wraith:auditList', limit) as Promise<AuditListResult>
+  },
+  sandboxGet() {
+    return ipcRenderer.invoke('wraith:sandboxGet') as Promise<SandboxState>
+  },
+  sandboxSet(networkAllowed) {
+    return ipcRenderer.invoke('wraith:sandboxSet', networkAllowed) as Promise<SandboxState>
   },
 
   setSkillEnabled(name, enabled) {

@@ -180,6 +180,14 @@ public final class AppServer {
         default java.util.Map<String, Object> auditList(int limit) {
             throw new UnsupportedOperationException("auditList not implemented");
         }
+        /** 命令沙箱状态 {available, networkAllowed}。默认抛出。 */
+        default java.util.Map<String, Object> sandboxGet() {
+            throw new UnsupportedOperationException("sandboxGet not implemented");
+        }
+        /** 运行时切换命令沙箱联网(session 级,不持久化),回读新状态。默认抛出。 */
+        default java.util.Map<String, Object> sandboxSet(boolean networkAllowed) {
+            throw new UnsupportedOperationException("sandboxSet not implemented");
+        }
         /**
          * 读取指定会话的 card 事件列表(供 resume 回放 plan/team 卡片)。
          * 每条记录为 {@code {turnOrdinal, events}} JsonNode。默认空列表(向后兼容)。
@@ -512,6 +520,20 @@ public final class AppServer {
                 JsonNode p = msg.params();
                 int limit = (p != null && p.hasNonNull("limit")) ? p.get("limit").asInt() : 20;
                 try { writer.result(msg.id(), session.auditList(limit)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "sandbox.get" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.sandboxGet()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "sandbox.set" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                boolean net = p != null && p.hasNonNull("networkAllowed") && p.get("networkAllowed").asBoolean();
+                try { writer.result(msg.id(), session.sandboxSet(net)); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

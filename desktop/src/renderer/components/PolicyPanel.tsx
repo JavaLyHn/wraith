@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ShieldCheck, RefreshCw } from 'lucide-react'
-import type { PolicyStatusView, AuditEntryView } from '../../shared/types'
+import type { PolicyStatusView, AuditEntryView, SandboxState } from '../../shared/types'
 import { outcomeLabel, approverLabel, formatAuditTime } from '../lib/policyView'
 
 const FIXED_POLICY = [
@@ -18,6 +18,7 @@ function outcomeClass(outcome: string): string {
 export default function PolicyPanel({ onBack }: { onBack: () => void }): JSX.Element {
   const [policy, setPolicy] = useState<PolicyStatusView | null>(null)
   const [entries, setEntries] = useState<AuditEntryView[]>([])
+  const [sandbox, setSandbox] = useState<SandboxState | null>(null)
   const [limit, setLimit] = useState(20)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -25,11 +26,17 @@ export default function PolicyPanel({ onBack }: { onBack: () => void }): JSX.Ele
   const load = useCallback(async (n: number): Promise<void> => {
     setBusy(true)
     try {
-      const [p, a] = await Promise.all([window.wraith.policyStatus(), window.wraith.auditList(n)])
-      setPolicy(p); setEntries(a.entries); setError(null)
+      const [p, a, s] = await Promise.all([window.wraith.policyStatus(), window.wraith.auditList(n), window.wraith.sandboxGet()])
+      setPolicy(p); setEntries(a.entries); setSandbox(s); setError(null)
     } catch (err) { setError((err as Error).message) }
     finally { setBusy(false) }
   }, [])
+
+  const toggleSandbox = useCallback(async (): Promise<void> => {
+    if (!sandbox) return
+    try { setSandbox(await window.wraith.sandboxSet(!sandbox.networkAllowed)) }
+    catch (err) { setError((err as Error).message) }
+  }, [sandbox])
 
   useEffect(() => { void load(limit) }, [load, limit])
 
@@ -62,6 +69,25 @@ export default function PolicyPanel({ onBack }: { onBack: () => void }): JSX.Ele
               {(policy?.dangerousTools ?? []).map((t) => <span key={t} className="rounded bg-surface px-1.5 py-0.5 text-3xs text-fg-muted">{t}</span>)}
               <span className="rounded bg-surface px-1.5 py-0.5 text-3xs text-fg-muted">mcp__*</span>
             </span>
+          </div>
+          <div className={row}>
+            <span className="min-w-0 flex-1">
+              <span className="text-fg-muted">命令沙箱联网</span>
+              <span className="mt-0.5 block text-3xs text-fg-subtle">
+                {sandbox && !sandbox.available
+                  ? '当前无沙箱(非 macOS 或不可用),命令不受网络限制'
+                  : '关=禁止 agent 命令联网(默认更安全);开=本次运行放行,重启恢复禁网'}
+              </span>
+            </span>
+            <button
+              data-testid="sandbox-net-toggle"
+              onClick={() => void toggleSandbox()}
+              disabled={!sandbox || !sandbox.available}
+              aria-label="命令沙箱联网"
+              className={'relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-40 ' + (sandbox?.networkAllowed ? 'bg-accent' : 'bg-border')}
+            >
+              <span className={'absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white transition-transform ' + (sandbox?.networkAllowed ? 'translate-x-4' : 'translate-x-0')} />
+            </button>
           </div>
         </div>
         <div className="mb-4 rounded-lg border border-border bg-surface/40 px-3 py-2 text-3xs leading-relaxed text-fg-subtle">

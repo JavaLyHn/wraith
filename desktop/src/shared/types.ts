@@ -337,6 +337,12 @@ export interface AuditListResult {
   entries: AuditEntryView[]
 }
 
+/** 命令沙箱状态(AppServer sandbox.get/set 回包)。 */
+export interface SandboxState {
+  available: boolean
+  networkAllowed: boolean
+}
+
 export interface SkillDetail extends SkillView {
   body: string
 }

@@ -551,6 +551,14 @@ ipcMain.handle('wraith:auditList', async (_e, limit?: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('audit.list', { limit: limit ?? 20 })
 })
+ipcMain.handle('wraith:sandboxGet', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('sandbox.get', {})
+})
+ipcMain.handle('wraith:sandboxSet', async (_e, networkAllowed: boolean) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('sandbox.set', { networkAllowed: !!networkAllowed })
+})
 
 ipcMain.handle('wraith:setSkillEnabled', async (_e, name: string, enabled: boolean) => {
   if (!client) throw new Error('Backend not connected')

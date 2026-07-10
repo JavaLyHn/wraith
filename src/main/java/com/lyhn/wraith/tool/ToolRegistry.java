@@ -1418,6 +1418,10 @@ public class ToolRegistry {
         this.commandSandbox = commandSandbox;
     }
 
+    public CommandSandbox getCommandSandbox() {
+        return commandSandbox;
+    }
+
     /** HITL 批准「本次放行网络」后调用(仅影响下一条 execute_command)。 */
     public void grantNetworkOnce() { this.networkOnceGrant = true; }
 

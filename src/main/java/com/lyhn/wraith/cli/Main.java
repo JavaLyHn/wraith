@@ -1501,6 +1501,19 @@ public class Main {
                         }
                         return java.util.Map.of("entries", out);
                     }
+                    public java.util.Map<String, Object> sandboxGet() {
+                        com.lyhn.wraith.policy.sandbox.CommandSandbox cs = agent.getToolRegistry().getCommandSandbox();
+                        return java.util.Map.of(
+                                "available", com.lyhn.wraith.policy.sandbox.CommandSandbox.available(),
+                                "networkAllowed", cs != null && cs.networkAllowed());
+                    }
+                    public java.util.Map<String, Object> sandboxSet(boolean networkAllowed) {
+                        agent.getToolRegistry().setCommandSandbox(new com.lyhn.wraith.policy.sandbox.CommandSandbox(networkAllowed));
+                        com.lyhn.wraith.policy.sandbox.CommandSandbox cs = agent.getToolRegistry().getCommandSandbox();
+                        return java.util.Map.of(
+                                "available", com.lyhn.wraith.policy.sandbox.CommandSandbox.available(),
+                                "networkAllowed", cs != null && cs.networkAllowed());
+                    }
                     public java.util.Map<String, Object> skillsList() {
                         java.util.List<java.util.Map<String, Object>> list = new java.util.ArrayList<>();
                         java.util.Set<String> disabled = skillRegistry.stateStore().disabled();
