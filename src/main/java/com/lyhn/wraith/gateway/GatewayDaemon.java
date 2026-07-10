@@ -193,6 +193,10 @@ public final class GatewayDaemon {
             providers.add(new com.lyhn.wraith.gateway.feishu.FeishuProvider(
                     gw.getFeishu(), client, pendingApprovals));
         }
+        if (gw != null && gw.getWecom() != null) {
+            providers.add(new com.lyhn.wraith.gateway.wecom.WecomProvider(
+                    gw.getWecom(), client, pendingApprovals));
+        }
         return providers;
     }
 }
