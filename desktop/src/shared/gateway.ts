@@ -1,5 +1,5 @@
-// IM 网关(QQ)共享类型 —— main / preload / renderer 三端共用。
-// ⚠ 密钥红线:clientSecret 明文绝不出现在任何发往 renderer 的结构里。
+// IM 网关共享类型(QQ / 飞书)—— main / preload / renderer 三端共用。
+// ⚠ 密钥红线:clientSecret / appSecret 明文绝不出现在任何发往 renderer 的结构里。
 
 export type GatewayState = 'stopped' | 'starting' | 'running' | 'error'
 

@@ -73,7 +73,7 @@ describe('classifyBindLine', () => {
 
 describe('classifyGatewayStderr', () => {
   it('maps known startup errors to readable causes', () => {
-    expect(classifyGatewayStderr('[gateway] 未配置 gateway.qq；请先运行 wraith gateway bind')).toBe('未绑定——请先扫码绑定')
+    expect(classifyGatewayStderr('[gateway] 未配置任何 IM 平台;仅运行定时任务(cron)')).toBe('未配置任何 IM 平台——仅运行定时任务(cron)')
     expect(classifyGatewayStderr('[gateway] 无可用 LLM provider（缺 API key）')).toBe('缺可用 LLM provider(请先配置 provider)')
     expect(classifyGatewayStderr('普通日志行')).toBeNull()
   })
@@ -83,7 +83,7 @@ describe('classifyGatewayStatusLine', () => {
   it('maps each machine-readable status marker to a GatewayStatus', () => {
     expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS connecting')).toEqual({
       state: 'starting',
-      message: '连接 QQ 中…',
+      message: '连接中…',
     })
     expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS connected')).toEqual({ state: 'running' })
     expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS disconnected')).toEqual({

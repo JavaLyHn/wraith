@@ -59,7 +59,7 @@ export function classifyBindLine(line: string): GatewayBindPhase | null {
 
 /** 把网关 stderr 行归类为可读错误原因(null = 非已知错误)。 */
 export function classifyGatewayStderr(line: string): string | null {
-  if (line.includes('未配置 gateway.qq')) return '未绑定——请先扫码绑定'
+  if (line.includes('未配置任何 IM 平台')) return '未配置任何 IM 平台——仅运行定时任务(cron)'
   if (line.includes('无可用 LLM provider')) return '缺可用 LLM provider(请先配置 provider)'
   return null
 }
@@ -75,7 +75,7 @@ export function classifyGatewayStatusLine(line: string): GatewayStatus | null {
   if (!m) return null
   switch (m[1]) {
     case 'connecting':
-      return { state: 'starting', message: '连接 QQ 中…' }
+      return { state: 'starting', message: '连接中…' }
     case 'connected':
       return { state: 'running' }
     case 'disconnected':

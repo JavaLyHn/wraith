@@ -168,33 +168,46 @@ public final class FeishuProvider implements ImProvider {
         this.pool = null;
     }
 
+    private static final org.slf4j.Logger log =
+            org.slf4j.LoggerFactory.getLogger(FeishuProvider.class);
+
     private static void sendText(com.lark.oapi.Client rest, String openId, String text) {
         try {
-            rest.im().v1().message().create(CreateMessageReq.newBuilder()
-                    .receiveIdType("open_id")
-                    .createMessageReqBody(CreateMessageReqBody.newBuilder()
-                            .receiveId(openId)
-                            .msgType("text")
-                            .content(MessageText.newBuilder().text(text).build())
-                            .build())
-                    .build());
+            com.lark.oapi.service.im.v1.model.CreateMessageResp resp =
+                    rest.im().v1().message().create(CreateMessageReq.newBuilder()
+                            .receiveIdType("open_id")
+                            .createMessageReqBody(CreateMessageReqBody.newBuilder()
+                                    .receiveId(openId)
+                                    .msgType("text")
+                                    .content(MessageText.newBuilder().text(text).build())
+                                    .build())
+                            .build());
+            if (resp == null || !resp.success()) {
+                log.warn("[gateway] 飞书文本发送失败: code={} msg={} openId={}",
+                        resp == null ? -1 : resp.getCode(), resp == null ? "null-resp" : resp.getMsg(), openId);
+            }
         } catch (Exception e) {
-            System.err.println("[gateway] 飞书发送失败: " + e.getClass().getSimpleName());
+            log.warn("[gateway] 飞书文本发送异常: {}", e.toString());
         }
     }
 
     private static void sendCard(com.lark.oapi.Client rest, String openId, String cardJson) {
         try {
-            rest.im().v1().message().create(CreateMessageReq.newBuilder()
-                    .receiveIdType("open_id")
-                    .createMessageReqBody(CreateMessageReqBody.newBuilder()
-                            .receiveId(openId)
-                            .msgType("interactive")
-                            .content(cardJson)
-                            .build())
-                    .build());
+            com.lark.oapi.service.im.v1.model.CreateMessageResp resp =
+                    rest.im().v1().message().create(CreateMessageReq.newBuilder()
+                            .receiveIdType("open_id")
+                            .createMessageReqBody(CreateMessageReqBody.newBuilder()
+                                    .receiveId(openId)
+                                    .msgType("interactive")
+                                    .content(cardJson)
+                                    .build())
+                            .build());
+            if (resp == null || !resp.success()) {
+                log.warn("[gateway] 飞书卡片发送失败: code={} msg={} openId={}",
+                        resp == null ? -1 : resp.getCode(), resp == null ? "null-resp" : resp.getMsg(), openId);
+            }
         } catch (Exception e) {
-            System.err.println("[gateway] 飞书卡片发送失败: " + e.getClass().getSimpleName());
+            log.warn("[gateway] 飞书卡片发送异常: {}", e.toString());
         }
     }
 

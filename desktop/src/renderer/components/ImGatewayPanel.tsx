@@ -35,6 +35,8 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
   const [logs, setLogs] = useState<string[]>([])
   const [showLogs, setShowLogs] = useState(false)
   const [selectedPlatform, setSelectedPlatform] = useState<string>('qq')
+  // 网关是全局单进程:任一平台已配置即可启动;anyBound 汇总所有平台的绑定态。
+  const [anyBound, setAnyBound] = useState(false)
   // 飞书表单输入(受控)
   const [fsAppId, setFsAppId] = useState('')
   const [fsAppSecret, setFsAppSecret] = useState('')
@@ -60,6 +62,16 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
       console.error('[wraith] gatewayGetConfig error:', err)
       if (selectedPlatform === 'feishu') setFsHint('读取配置失败')
       else setHint('读取配置失败')
+    }
+    // 网关是全局进程:汇总所有平台绑定态,决定「启动网关」是否可点(与当前选中平台无关)。
+    try {
+      const [qq, fs] = await Promise.all([
+        window.wraith.gatewayGetConfig('qq'),
+        window.wraith.gatewayGetConfig('feishu'),
+      ])
+      setAnyBound(!!qq?.bound || !!fs?.bound)
+    } catch {
+      /* 忽略:失败则按钮保持禁用 */
     }
   }, [selectedPlatform])
 
@@ -289,7 +301,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         {/* 守护进程开关 + 状态 */}
         <section className="rounded-lg border border-border p-4">
           <div className="mb-2 flex items-center gap-2">
-            <span className="text-xs font-bold text-fg">网关守护进程</span>
+            <span className="text-xs font-bold text-fg">网关守护进程（所有已配置平台共用）</span>
             <span data-testid="im-status" className={'text-xs ' + STATUS_COLOR[status.state]}>
               ● {STATUS_LABEL[status.state]}
             </span>
@@ -297,14 +309,14 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
           {status.message && <div className="mb-2 text-xs text-danger">{status.message}</div>}
           <div className="flex items-center gap-2">
             <button data-testid="im-toggle" onClick={handleToggleDaemon}
-              disabled={!bound} className={running ? BTN_SECONDARY : BTN_PRIMARY}>
+              disabled={!anyBound} className={running ? BTN_SECONDARY : BTN_PRIMARY}>
               {running ? '停止网关' : '启动网关'}
             </button>
             <button onClick={() => void handleShowLogs()} className={BTN_SECONDARY}>
               {showLogs ? '隐藏日志' : '查看日志'}
             </button>
           </div>
-          {!bound && <div className="mt-2 text-2xs text-fg-subtle">先完成绑定再启动网关。</div>}
+          {!anyBound && <div className="mt-2 text-2xs text-fg-subtle">先配置并保存至少一个平台，再启动网关（一个进程服务所有已配置平台）。</div>}
           {showLogs && (
             <pre data-testid="im-logs"
               className="mt-3 max-h-48 overflow-auto rounded-lg border border-border bg-bg p-2 text-3xs text-fg-muted">
