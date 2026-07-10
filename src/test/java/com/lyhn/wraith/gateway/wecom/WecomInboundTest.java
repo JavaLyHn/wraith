@@ -6,7 +6,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class WecomInboundTest {
     private WecomFrames.Inbound f(String userid, String chatType, String msgType, String text) {
-        return new WecomFrames.Inbound("REQ1", userid, chatType, msgType, "MSG1", text);
+        return new WecomFrames.Inbound("REQ1", userid, chatType, "C1", msgType, "MSG1", text);
     }
 
     @Test

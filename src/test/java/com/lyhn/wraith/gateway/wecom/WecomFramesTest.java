@@ -77,4 +77,62 @@ class WecomFramesTest {
         assertEquals(WecomFrames.SubResult.UNKNOWN, WecomFrames.parseSubscribeResult(other, "S"));
         assertEquals(WecomFrames.SubResult.UNKNOWN, WecomFrames.parseSubscribeResult("not json", "S"));
     }
+
+    @Test
+    void parseCallbackExtractsChatId() {
+        String json = "{\"cmd\":\"aibot_msg_callback\",\"headers\":{\"req_id\":\"R\"},"
+            + "\"body\":{\"msgid\":\"M\",\"chatid\":\"C1\",\"chattype\":\"single\","
+            + "\"from\":{\"userid\":\"U\"},\"msgtype\":\"text\",\"text\":{\"content\":\"hi\"}}}";
+        WecomFrames.Inbound in = WecomFrames.parseCallback(json);
+        assertEquals("C1", in.chatId());
+    }
+
+    @Test
+    void parseCardEventExtractsKeyTaskOperator() {
+        String json = "{\"cmd\":\"aibot_event_callback\",\"headers\":{\"req_id\":\"R\"},"
+            + "\"body\":{\"msgtype\":\"event\",\"from\":{\"userid\":\"OP\"},"
+            + "\"event\":{\"eventtype\":\"template_card_event\",\"event_key\":\"approve_once\",\"task_id\":\"S1\"}}}";
+        WecomFrames.CardEvent ev = WecomFrames.parseCardEvent(json);
+        assertNotNull(ev);
+        assertEquals("approve_once", ev.eventKey());
+        assertEquals("S1", ev.taskId());
+        assertEquals("OP", ev.operatorUserid());
+    }
+
+    @Test
+    void parseCardEventNonEventReturnsNull() {
+        assertNull(WecomFrames.parseCardEvent("{\"cmd\":\"aibot_msg_callback\",\"headers\":{\"req_id\":\"R\"}}"));
+        assertNull(WecomFrames.parseCardEvent("not json"));
+        assertNull(WecomFrames.parseCardEvent(null));
+    }
+
+    @Test
+    void respondCardFrameEmbedsCardObjectReusingReqId() throws Exception {
+        String card = "{\"card_type\":\"button_interaction\",\"task_id\":\"S1\"}";
+        JsonNode n = M.readTree(WecomFrames.respondCardFrame("rX", card));
+        assertEquals("aibot_respond_msg", n.get("cmd").asText());
+        assertEquals("rX", n.path("headers").path("req_id").asText());
+        assertEquals("template_card", n.path("body").path("msgtype").asText());
+        assertEquals("button_interaction", n.path("body").path("template_card").path("card_type").asText());
+    }
+
+    @Test
+    void sendMarkdownFrameTargetsChatId() throws Exception {
+        JsonNode n = M.readTree(WecomFrames.sendMarkdownFrame("C9", "文本"));
+        assertEquals("aibot_send_msg", n.get("cmd").asText());
+        assertEquals("C9", n.path("body").path("chatid").asText());
+        assertEquals("markdown", n.path("body").path("msgtype").asText());
+        assertEquals("文本", n.path("body").path("markdown").path("content").asText());
+        assertFalse(n.path("headers").path("req_id").asText().isEmpty());
+    }
+
+    @Test
+    void sendCardFrameTargetsChatIdEmbedsCard() throws Exception {
+        String card = "{\"card_type\":\"button_interaction\"}";
+        JsonNode n = M.readTree(WecomFrames.sendCardFrame("C9", card));
+        assertEquals("aibot_send_msg", n.get("cmd").asText());
+        assertEquals("C9", n.path("body").path("chatid").asText());
+        assertEquals("template_card", n.path("body").path("msgtype").asText());
+        assertEquals("button_interaction", n.path("body").path("template_card").path("card_type").asText());
+    }
 }

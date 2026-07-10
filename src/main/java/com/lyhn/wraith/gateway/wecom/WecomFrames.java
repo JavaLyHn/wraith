@@ -16,7 +16,7 @@ public final class WecomFrames {
     private WecomFrames() {}
 
     /** 入站文本消息的关键字段;msgType!=text 时 text 为 null。 */
-    public record Inbound(String reqId, String userid, String chatType,
+    public record Inbound(String reqId, String userid, String chatType, String chatId,
                           String msgType, String msgId, String text) {}
 
     public enum SubResult { SUBSCRIBED, AUTH_FAILED, UNKNOWN }
@@ -61,10 +61,11 @@ public final class WecomFrames {
             String reqId = n.path("headers").path("req_id").asText(null);
             String userid = body.path("from").path("userid").asText(null);
             String chatType = body.path("chattype").asText(null);
+            String chatId = body.path("chatid").asText(null);
             String msgType = body.path("msgtype").asText(null);
             String msgId = body.path("msgid").asText(null);
             String text = "text".equals(msgType) ? body.path("text").path("content").asText(null) : null;
-            return new Inbound(reqId, userid, chatType, msgType, msgId, text);
+            return new Inbound(reqId, userid, chatType, chatId, msgType, msgId, text);
         } catch (Exception e) {
             return null;
         }
@@ -81,6 +82,65 @@ public final class WecomFrames {
             return n.path("errcode").asInt(-1) == 0 ? SubResult.SUBSCRIBED : SubResult.AUTH_FAILED;
         } catch (Exception e) {
             return SubResult.UNKNOWN;
+        }
+    }
+
+    public record CardEvent(String eventKey, String taskId, String operatorUserid) {}
+
+    public static CardEvent parseCardEvent(String json) {
+        if (json == null) return null;
+        try {
+            JsonNode n = M.readTree(json);
+            if (!"aibot_event_callback".equals(n.path("cmd").asText())) return null;
+            JsonNode ev = n.path("body").path("event");
+            if (!"template_card_event".equals(ev.path("eventtype").asText())) return null;
+            return new CardEvent(
+                    ev.path("event_key").asText(null),
+                    ev.path("task_id").asText(null),
+                    n.path("body").path("from").path("userid").asText(null));
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    public static String respondCardFrame(String reqId, String cardJson) {
+        ObjectNode root = M.createObjectNode();
+        root.put("cmd", "aibot_respond_msg");
+        root.putObject("headers").put("req_id", reqId);
+        ObjectNode body = root.putObject("body");
+        body.put("msgtype", "template_card");
+        body.set("template_card", cardNode(cardJson));
+        return write(root, "{}");
+    }
+
+    public static String sendMarkdownFrame(String chatId, String content) {
+        ObjectNode root = M.createObjectNode();
+        root.put("cmd", "aibot_send_msg");
+        root.putObject("headers").put("req_id", java.util.UUID.randomUUID().toString());
+        ObjectNode body = root.putObject("body");
+        body.put("chatid", chatId);
+        body.put("msgtype", "markdown");
+        body.putObject("markdown").put("content", content == null ? "" : content);
+        return write(root, "{}");
+    }
+
+    public static String sendCardFrame(String chatId, String cardJson) {
+        ObjectNode root = M.createObjectNode();
+        root.put("cmd", "aibot_send_msg");
+        root.putObject("headers").put("req_id", java.util.UUID.randomUUID().toString());
+        ObjectNode body = root.putObject("body");
+        body.put("chatid", chatId);
+        body.put("msgtype", "template_card");
+        body.set("template_card", cardNode(cardJson));
+        return write(root, "{}");
+    }
+
+    /** 把卡片 JSON 串解析为对象节点嵌入帧;失败则空对象。 */
+    private static JsonNode cardNode(String cardJson) {
+        try {
+            return M.readTree(cardJson == null ? "{}" : cardJson);
+        } catch (Exception e) {
+            return M.createObjectNode();
         }
     }
 
