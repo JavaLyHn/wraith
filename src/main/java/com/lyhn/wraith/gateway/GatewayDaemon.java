@@ -28,6 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.Optional;
 
 /**
  * 网关守护进程装配:构造共享的 LLM / 存储 / 调度器 / 投递器 / 审批登记,遍历已配置
@@ -196,6 +197,15 @@ public final class GatewayDaemon {
         if (gw != null && gw.getWecom() != null) {
             providers.add(new com.lyhn.wraith.gateway.wecom.WecomProvider(
                     gw.getWecom(), client, pendingApprovals));
+        }
+        // weixin: 判据是 wechat 账号店(~/.wraith/wechat/accounts/latest.json)有绑定账号,
+        // 而非 config.json —— token/游标由账号店管理(游标高频写,不进 config)。
+        try {
+            com.lyhn.wraith.wechat.WechatAccountStore.createDefault().loadLatest()
+                    .ifPresent(acc -> providers.add(
+                            new com.lyhn.wraith.gateway.weixin.WeixinProvider(acc, client, pendingApprovals)));
+        } catch (Exception e) {
+            log.warn("[gateway] 读取微信账号失败,跳过 weixin provider: {}", e.getMessage());
         }
         return providers;
     }
