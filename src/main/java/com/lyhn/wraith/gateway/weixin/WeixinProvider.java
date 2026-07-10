@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -55,16 +56,16 @@ public final class WeixinProvider implements ImProvider {
         this.pool = Executors.newCachedThreadPool();
 
         Dedup dedup = new Dedup(1000);
-        // account 随游标推进而更新;仅回路线程写,Sender 读(volatile 容器)
-        final WechatAccount[] accountRef = {initialAccount};
+        // account 随游标推进而更新;回路线程写、Sender/池线程读,AtomicReference 保证可见性
+        final AtomicReference<WechatAccount> accountRef = new AtomicReference<>(initialAccount);
 
         SessionRouter router = new SessionRouter(userid ->
                 new GatewaySession(userid, initialAccount.workspace(), client, sessKey -> { /* HITL: Phase B */ }));
 
         ImTurnDriver driver = new ImTurnDriver(router, (userid, text, replyTo) -> {
             try {
-                ilink.sendText(accountRef[0], userid, replyTo, MarkdownLite.toPlainText(text));
-                typing(ilink, accountRef[0], userid, replyTo, 2); // 回复完成,停打字指示
+                ilink.sendText(accountRef.get(), userid, replyTo, MarkdownLite.toPlainText(text));
+                typing(ilink, accountRef.get(), userid, replyTo, 2); // 回复完成,停打字指示
             } catch (Exception e) {
                 log.warn("[gateway] 微信回复发送失败: {}", e.toString());
             }
@@ -72,13 +73,13 @@ public final class WeixinProvider implements ImProvider {
 
         this.pollLoop = () -> {
             System.out.println("WRAITH_GATEWAY_STATUS starting");
-            try { ilink.notifyStart(accountRef[0]); } catch (Exception e) { log.warn("[gateway] 微信 notifyStart 失败: {}", e.toString()); }
+            try { ilink.notifyStart(accountRef.get()); } catch (Exception e) { log.warn("[gateway] 微信 notifyStart 失败: {}", e.toString()); }
             long timeoutMs = 35_000;
             int attempt = 0;
             boolean running = false;
             while (!stopping && !Thread.currentThread().isInterrupted()) {
                 try {
-                    WechatUpdate update = ilink.getUpdates(accountRef[0], timeoutMs);
+                    WechatUpdate update = ilink.getUpdates(accountRef.get(), timeoutMs);
                     if (update.ret() == SESSION_EXPIRED) {
                         System.out.println("WRAITH_GATEWAY_STATUS auth-failed");
                         System.err.println("[gateway] 微信登录态失效,请重新运行 wraith gateway bind-weixin");
@@ -90,11 +91,11 @@ public final class WeixinProvider implements ImProvider {
                         timeoutMs = update.nextLongPollTimeoutMs();
                     }
                     if (update.nextSyncBuf() != null && !update.nextSyncBuf().isBlank()) {
-                        accountRef[0] = accountRef[0].withSyncBuf(update.nextSyncBuf());
-                        store.save(accountRef[0]);
+                        accountRef.set(accountRef.get().withSyncBuf(update.nextSyncBuf()));
+                        store.save(accountRef.get());
                     }
                     for (WechatMessage m : update.messages()) {
-                        handleInbound(ilink, accountRef[0], dedup, driver, m);
+                        handleInbound(ilink, accountRef.get(), dedup, driver, m);
                     }
                 } catch (Exception e) {
                     log.warn("[gateway] 微信轮询异常: {}", e.toString());
@@ -106,7 +107,7 @@ public final class WeixinProvider implements ImProvider {
                     }
                 }
             }
-            try { ilink.notifyStop(accountRef[0]); } catch (Exception ignored) { /* best-effort */ }
+            try { ilink.notifyStop(accountRef.get()); } catch (Exception ignored) { /* best-effort */ }
         };
     }
 
