@@ -94,7 +94,10 @@ public final class FeishuProvider implements ImProvider {
                         case NONTEXT_NOTICE -> sendText(rest, openId, "暂只支持文本消息。");
                         case PROCESS -> {
                             InboundMsg msg = r.msg();
-                            if (!dedup.seen(msg.msgId())) driver.onMessage(msg);
+                            if (!dedup.seen(msg.msgId())) {
+                                sendReaction(rest, msg.msgId(), REACTION_ACK); // 「已收到,处理中」即时回执
+                                driver.onMessage(msg);
+                            }
                         }
                     }
                 } catch (Exception e) {
@@ -224,6 +227,35 @@ public final class FeishuProvider implements ImProvider {
             }
         } catch (Exception e) {
             log.warn("[gateway] 飞书卡片发送异常: {}", e.toString());
+        }
+    }
+
+    /** 「已收到,处理中」回执用的表情 emoji_type(👍)。飞书表情 key,见开放平台表情文档。 */
+    private static final String REACTION_ACK = "THUMBSUP";
+
+    /**
+     * 给指定消息贴表情回复(reaction),作为「已收到、正在处理」的即时回执。
+     * 失败仅日志、绝不阻塞正文回复;需应用具备 im:message 读写域,缺权限会回非 0 code。
+     */
+    private static void sendReaction(com.lark.oapi.Client rest, String messageId, String emojiType) {
+        if (messageId == null || messageId.isBlank()) return;
+        try {
+            com.lark.oapi.service.im.v1.model.CreateMessageReactionResp resp =
+                    rest.im().v1().messageReaction().create(
+                            com.lark.oapi.service.im.v1.model.CreateMessageReactionReq.newBuilder()
+                                    .messageId(messageId)
+                                    .createMessageReactionReqBody(
+                                            com.lark.oapi.service.im.v1.model.CreateMessageReactionReqBody.newBuilder()
+                                                    .reactionType(com.lark.oapi.service.im.v1.model.Emoji.newBuilder()
+                                                            .emojiType(emojiType).build())
+                                                    .build())
+                                    .build());
+            if (resp == null || !resp.success()) {
+                log.warn("[gateway] 飞书表情回执失败: code={} msg={} messageId={}",
+                        resp == null ? -1 : resp.getCode(), resp == null ? "null-resp" : resp.getMsg(), messageId);
+            }
+        } catch (Exception e) {
+            log.warn("[gateway] 飞书表情回执异常: {}", e.toString());
         }
     }
 
