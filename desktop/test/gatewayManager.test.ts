@@ -104,4 +104,13 @@ describe('classifyGatewayStatusLine', () => {
     expect(classifyGatewayStatusLine('普通日志行')).toBeNull()
     expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS bogus')).toBeNull()
   })
+  it('认飞书 running token → running', () => {
+    expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS running')?.state).toBe('running')
+  })
+  it('认飞书 error token → error', () => {
+    expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS error')?.state).toBe('error')
+  })
+  it('认飞书 starting token → starting', () => {
+    expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS starting')?.state).toBe('starting')
+  })
 })

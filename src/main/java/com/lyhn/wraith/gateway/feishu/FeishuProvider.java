@@ -148,6 +148,7 @@ public final class FeishuProvider implements ImProvider {
         // ws.start() 阻塞(内部自带重连);包 try/catch 防致命异常杀 daemon,状态灯打点。
         this.wsLoop = () -> {
             System.out.println("WRAITH_GATEWAY_STATUS starting");
+            System.out.println("WRAITH_GATEWAY_STATUS running");
             try {
                 ws.start();
             } catch (Throwable t) {
