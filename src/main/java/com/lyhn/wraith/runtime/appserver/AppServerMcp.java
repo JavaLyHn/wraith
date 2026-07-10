@@ -215,6 +215,79 @@ public final class AppServerMcp implements McpOps {
         return removed;
     }
 
+    @Override public Map<String, Object> test(String scope, String name, String command,
+                                              List<String> args, Map<String, String> env) {
+        Map<String, String> merged = mergeEnvForTest(env, savedEntryOrNull(scope, name));
+        long t0 = System.currentTimeMillis();
+        com.lyhn.wraith.mcp.transport.StdioTransport transport = null;
+        com.lyhn.wraith.mcp.McpClient client = null;
+        try {
+            java.nio.file.Path workDir = currentWorkspace != null
+                    ? java.nio.file.Path.of(currentWorkspace) : java.nio.file.Path.of(".");
+            transport = new com.lyhn.wraith.mcp.transport.StdioTransport(command, args, merged, workDir);
+            client = new com.lyhn.wraith.mcp.McpClient("__test__", transport);
+            client.initialize();
+            int toolCount = client.listTools().size();
+            Map<String, Object> ok = new LinkedHashMap<>();
+            ok.put("ok", true);
+            ok.put("toolCount", toolCount);
+            ok.put("latencyMs", System.currentTimeMillis() - t0);
+            return ok;
+        } catch (Exception ex) {
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("ok", false);
+            err.put("error", buildTestError(ex, transport)); // 绝不含 env 值
+            return err;
+        } finally {
+            // 临时进程绝不残留:client 建成走级联关闭,否则直接关 transport
+            if (client != null) client.close();
+            else if (transport != null) try { transport.close(); } catch (Exception ignore) { }
+        }
+    }
+
+    /** 读 scope 配置里 name 的已存条目(供测试 env 合并);任何失败按"无存值"返 null。 */
+    private JsonNode savedEntryOrNull(String scope, String name) {
+        try {
+            java.nio.file.Path fp = scopePath(scope);
+            if (!Files.exists(fp)) return null;
+            JsonNode servers = MAPPER.readTree(fp.toFile()).get("mcpServers");
+            return servers == null ? null : servers.get(name);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 测试用 env 合并:空串=沿用已存值(与 McpConfigWriter.upsert 密钥编辑语义一致);无存值保持空串。 */
+    static Map<String, String> mergeEnvForTest(Map<String, String> formEnv, JsonNode savedEntry) {
+        JsonNode savedEnv = savedEntry != null && savedEntry.has("env") && savedEntry.get("env").isObject()
+                ? savedEntry.get("env") : null;
+        Map<String, String> out = new LinkedHashMap<>();
+        for (Map.Entry<String, String> e : formEnv.entrySet()) {
+            String v = e.getValue();
+            if (v != null && v.isEmpty() && savedEnv != null && savedEnv.hasNonNull(e.getKey())) {
+                out.put(e.getKey(), savedEnv.get(e.getKey()).asText());
+            } else {
+                out.put(e.getKey(), v == null ? "" : v);
+            }
+        }
+        return out;
+    }
+
+    /** 组测试失败报文:异常消息 + stderr 尾部(≤5 行),总长截断 500 字符。 */
+    private static String buildTestError(Exception ex, com.lyhn.wraith.mcp.transport.StdioTransport transport) {
+        StringBuilder sb = new StringBuilder(
+                ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
+        if (transport != null) {
+            List<String> lines = transport.stderrLines();
+            if (lines != null && !lines.isEmpty()) {
+                List<String> tail = lines.subList(Math.max(0, lines.size() - 5), lines.size());
+                sb.append('\n').append(String.join("\n", tail));
+            }
+        }
+        String s = sb.toString();
+        return s.length() > 500 ? s.substring(0, 500) + "…" : s;
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────────
 
     private Path scopePath(String scope) {

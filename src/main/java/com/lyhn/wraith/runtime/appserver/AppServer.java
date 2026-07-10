@@ -247,6 +247,18 @@ public final class AppServer {
                     ok(msg);
                 } catch (IOException e) { writer.error(msg.id(), -32000, "配置写入失败: " + e.getMessage()); }
             });
+            case "mcp.test" -> handleMcp(msg, ops -> {
+                JsonNode p = msg.params();
+                String scope = textParam(p, "scope"); String name = textParam(p, "name"); String command = textParam(p, "command");
+                if (scope == null || name == null || command == null) { writer.error(msg.id(), -32602, "缺 scope/name/command"); return; }
+                List<String> args = new ArrayList<>();
+                if (p.has("args") && p.get("args").isArray()) p.get("args").forEach(a -> args.add(a.asText()));
+                Map<String, String> env = new LinkedHashMap<>();
+                if (p.has("env") && p.get("env").isObject())
+                    p.get("env").fields().forEachRemaining(e -> env.put(e.getKey(), e.getValue().asText()));
+                try { writer.result(msg.id(), ops.test(scope, name, command, args, env)); }
+                catch (IOException e) { writer.error(msg.id(), -32000, "测试失败: " + e.getMessage()); }
+            });
             case "model.list" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
                 java.util.Map<String, Object> listResult = session.modelList();

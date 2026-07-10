@@ -18,4 +18,10 @@ public interface McpOps {
     String prompts(String name);
     void configUpsert(String scope, String name, String command, List<String> args, Map<String, String> env) throws IOException;
     boolean configRemove(String scope, String name) throws IOException;
+
+    /** 用给定配置拉临时 MCP 进程探连通(握手+tools/list)。回包 {ok,toolCount?,latencyMs?,error?},绝不含 env 值。 */
+    default Map<String, Object> test(String scope, String name, String command,
+                                     List<String> args, Map<String, String> env) throws IOException {
+        throw new UnsupportedOperationException("mcp test not implemented");
+    }
 }

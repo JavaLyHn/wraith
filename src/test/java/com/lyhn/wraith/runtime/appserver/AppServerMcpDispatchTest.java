@@ -167,4 +167,34 @@ class AppServerMcpDispatchTest {
             "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"mcp.list\",\"params\":{}}");
         assertEquals(-32000, byId(r, 2).get("error").get("code").asInt());
     }
+
+    @Test
+    void testDispatchesToOpsAndReturnsResult() throws Exception {
+        List<String> got = new ArrayList<>();
+        McpOps ops = new McpOps() {
+            public Map<String, Object> list() { return Map.of("servers", List.of()); }
+            public void enable(String n) { }
+            public void disable(String n) { }
+            public void restart(String n) { }
+            public String logs(String n) { return ""; }
+            public List<Map<String, Object>> resources(String n) { return List.of(); }
+            public String prompts(String n) { return ""; }
+            public void configUpsert(String sc, String n, String c, List<String> a, Map<String, String> e) { }
+            public boolean configRemove(String sc, String n) { return true; }
+            @Override public Map<String, Object> test(String sc, String n, String c,
+                                                      List<String> a, Map<String, String> e) {
+                got.add("test:" + sc + ":" + n + ":" + c + ":" + a + ":" + e.keySet());
+                return Map.of("ok", true, "toolCount", 7, "latencyMs", 123);
+            }
+        };
+        List<JsonNode> replies = run(new ArrayList<>(), ops,
+            "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"mcp.test\",\"params\":{\"scope\":\"user\",\"name\":\"fs\",\"command\":\"npx\",\"args\":[\"-y\",\"pkg\"],\"env\":{\"K\":\"v\"}}}");
+        JsonNode res = replies.stream().filter(x -> x.path("id").asInt(-1) == 2 && x.has("result"))
+            .findFirst().orElseThrow().get("result");
+        assertTrue(res.get("ok").asBoolean());
+        assertEquals(7, res.get("toolCount").asInt());
+        assertEquals(123, res.get("latencyMs").asInt());
+        assertEquals(1, got.size());
+        assertTrue(got.get(0).startsWith("test:user:fs:npx:[-y, pkg]"), got.get(0));
+    }
 }

@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.lyhn.wraith.runtime.appserver.JsonRpc;
 import static org.junit.jupiter.api.Assertions.*;
 
 class AppServerMcpTest {
@@ -326,5 +328,32 @@ class AppServerMcpTest {
         // disable 实际工作在执行器上串行于慢 enable 之后:轮询等其 DISABLED 生效(慢 enable 3s + 余量)。
         awaitStatus(mcp, "other", McpServerStatus.DISABLED, 10_000);
         assertEquals(1, mgr[0].disableCalls.get(), "disable 最终执行一次");
+    }
+
+    @Test
+    void testOpReportsFailureForNonexistentCommand(@TempDir Path ws) throws Exception {
+        AppServerMcp mcp = new AppServerMcp((reg, dir) -> new FakeManager(reg, dir));
+        mcp.ensureFor(ws.toString(), registry(ws), null);
+        Map<String, Object> r = mcp.test("user", "ghost", "/nonexistent-cmd-xyz-12345",
+                List.of(), Map.of());
+        assertEquals(Boolean.FALSE, r.get("ok"), "不存在的命令应报 ok:false");
+        assertNotNull(r.get("error"));
+        assertFalse(String.valueOf(r.get("error")).isBlank(), "error 应含具体信息");
+    }
+
+    @Test
+    void mergeEnvForTestBlankValueUsesSavedElseKeepsBlank() {
+        com.fasterxml.jackson.databind.node.ObjectNode entry = JsonRpc.MAPPER.createObjectNode();
+        entry.putObject("env").put("TOKEN", "saved-v");
+        Map<String, String> form = new java.util.LinkedHashMap<>();
+        form.put("TOKEN", "");   // 空串+有存值 → 合并
+        form.put("OTHER", "");   // 空串+无存值 → 保持空
+        form.put("SET", "x");    // 非空 → 原样
+        Map<String, String> merged = AppServerMcp.mergeEnvForTest(form, entry);
+        assertEquals("saved-v", merged.get("TOKEN"));
+        assertEquals("", merged.get("OTHER"));
+        assertEquals("x", merged.get("SET"));
+        // savedEntry 为 null(新增场景)→ 全部保持原样
+        assertEquals("", AppServerMcp.mergeEnvForTest(Map.of("TOKEN", ""), null).get("TOKEN"));
     }
 }
