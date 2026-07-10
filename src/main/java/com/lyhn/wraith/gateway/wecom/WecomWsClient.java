@@ -28,6 +28,7 @@ public final class WecomWsClient {
 
     public interface OnInbound { void onMessage(WecomFrames.Inbound m); }
     public interface OnStatus { void onStatus(String wireToken); }
+    public interface OnEvent { void onEvent(WecomFrames.CardEvent ev); }
 
     private final OkHttpClient http;
     private final String botId;
@@ -54,6 +55,11 @@ public final class WecomWsClient {
 
     /** 阻塞重连循环。放守护线程跑。 */
     public void connect(OnInbound onInbound, OnStatus onStatus) {
+        connect(onInbound, onStatus, ev -> {});
+    }
+
+    /** 阻塞重连循环(带事件回调)。放守护线程跑。 */
+    public void connect(OnInbound onInbound, OnStatus onStatus, OnEvent onEvent) {
         int attempt = 0;
         while (!stopping) {
             final CountDownLatch closed = new CountDownLatch(1);
@@ -66,7 +72,7 @@ public final class WecomWsClient {
                     startHeartbeat(webSocket);
                 }
                 @Override public void onMessage(@NotNull WebSocket webSocket, @NotNull String text) {
-                    try { handleFrame(text, onInbound, onStatus); }
+                    try { handleFrame(text, onInbound, onStatus, onEvent); }
                     catch (Exception e) { log.warn("[gateway] 企微帧处理异常: {}", e.toString()); }
                 }
                 @Override public void onClosing(@NotNull WebSocket webSocket, int code, @NotNull String reason) {
@@ -90,11 +96,13 @@ public final class WecomWsClient {
         stopHeartbeat();
     }
 
-    /** 收帧分发:订阅结果 → 状态灯;aibot_msg_callback → onInbound。 */
-    void handleFrame(String text, OnInbound onInbound, OnStatus onStatus) {
+    /** 收帧分发:订阅结果 → 状态灯;卡片事件 → onEvent;aibot_msg_callback → onInbound。 */
+    void handleFrame(String text, OnInbound onInbound, OnStatus onStatus, OnEvent onEvent) {
         WecomFrames.SubResult sub = WecomFrames.parseSubscribeResult(text, subscribeReqId);
         if (sub == WecomFrames.SubResult.SUBSCRIBED) { onStatus.onStatus("subscribed"); return; }
         if (sub == WecomFrames.SubResult.AUTH_FAILED) { onStatus.onStatus("auth-failed"); return; }
+        WecomFrames.CardEvent ce = WecomFrames.parseCardEvent(text);
+        if (ce != null) { onEvent.onEvent(ce); return; }
         WecomFrames.Inbound in = WecomFrames.parseCallback(text);
         if (in != null) onInbound.onMessage(in);
     }
@@ -103,6 +111,24 @@ public final class WecomWsClient {
     public void respondMarkdown(String reqId, String content) {
         WebSocket w = this.ws;
         if (w != null) w.send(WecomFrames.respondMarkdownFrame(reqId, content));
+    }
+
+    /** 回复卡片(复用入站 reqId)。 */
+    public void respondCard(String reqId, String cardJson) {
+        WebSocket w = this.ws;
+        if (w != null) w.send(WecomFrames.respondCardFrame(reqId, cardJson));
+    }
+
+    /** 主动推送 markdown。 */
+    public void sendMarkdown(String chatId, String content) {
+        WebSocket w = this.ws;
+        if (w != null) w.send(WecomFrames.sendMarkdownFrame(chatId, content));
+    }
+
+    /** 主动推送卡片。 */
+    public void sendCard(String chatId, String cardJson) {
+        WebSocket w = this.ws;
+        if (w != null) w.send(WecomFrames.sendCardFrame(chatId, cardJson));
     }
 
     public void stop() {

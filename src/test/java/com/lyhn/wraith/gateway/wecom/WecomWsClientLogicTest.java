@@ -18,7 +18,7 @@ class WecomWsClientLogicTest {
         String cb = "{\"cmd\":\"aibot_msg_callback\",\"headers\":{\"req_id\":\"R\"},"
             + "\"body\":{\"msgid\":\"M\",\"chattype\":\"single\",\"from\":{\"userid\":\"U\"},"
             + "\"msgtype\":\"text\",\"text\":{\"content\":\"hi\"}}}";
-        client().handleFrame(cb, got::add, t -> {});
+        client().handleFrame(cb, got::add, t -> {}, ev -> {});
         assertEquals(1, got.size());
         assertEquals("U", got.get(0).userid());
     }
@@ -30,7 +30,7 @@ class WecomWsClientLogicTest {
         WecomWsClient c = client();
         c.setSubscribeReqIdForTest("S");
         List<String> status = new ArrayList<>();
-        c.handleFrame("{\"headers\":{\"req_id\":\"S\"},\"errcode\":40001,\"errmsg\":\"bad\"}", m -> {}, status::add);
+        c.handleFrame("{\"headers\":{\"req_id\":\"S\"},\"errcode\":40001,\"errmsg\":\"bad\"}", m -> {}, status::add, ev -> {});
         assertTrue(status.contains("auth-failed"), "订阅失败应打 auth-failed");
     }
 
@@ -39,7 +39,7 @@ class WecomWsClientLogicTest {
         WecomWsClient c = client();
         c.setSubscribeReqIdForTest("S");
         List<String> status = new ArrayList<>();
-        c.handleFrame("{\"headers\":{\"req_id\":\"S\"},\"errcode\":0}", m -> {}, status::add);
+        c.handleFrame("{\"headers\":{\"req_id\":\"S\"},\"errcode\":0}", m -> {}, status::add, ev -> {});
         assertTrue(status.contains("subscribed"));
     }
 
@@ -47,8 +47,20 @@ class WecomWsClientLogicTest {
     void handleFrameIgnoresUnrelated() {
         List<WecomFrames.Inbound> got = new ArrayList<>();
         List<String> status = new ArrayList<>();
-        client().handleFrame("{\"cmd\":\"ping\",\"headers\":{\"req_id\":\"x\"}}", got::add, status::add);
+        client().handleFrame("{\"cmd\":\"ping\",\"headers\":{\"req_id\":\"x\"}}", got::add, status::add, ev -> {});
         assertTrue(got.isEmpty() && status.isEmpty());
+    }
+
+    @Test
+    void handleFrameDispatchesCardEventToOnEvent() {
+        java.util.List<WecomFrames.CardEvent> got = new java.util.ArrayList<>();
+        String ev = "{\"cmd\":\"aibot_event_callback\",\"headers\":{\"req_id\":\"R\"},"
+            + "\"body\":{\"msgtype\":\"event\",\"from\":{\"userid\":\"OP\"},"
+            + "\"event\":{\"eventtype\":\"template_card_event\",\"event_key\":\"deny\",\"task_id\":\"S1\"}}}";
+        client().handleFrame(ev, m -> {}, t -> {}, got::add);
+        assertEquals(1, got.size());
+        assertEquals("deny", got.get(0).eventKey());
+        assertEquals("S1", got.get(0).taskId());
     }
 
     @Test
