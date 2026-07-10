@@ -49,6 +49,28 @@ export function parseConnectUrl(line: string): string | null {
   return m ? m[0] : null
 }
 
+/** 微信绑定命令 = 网关命令 + `bind-weixin` [+ --workspace <dir>]。 */
+export function resolveBindWeixinCommand(
+  env: NodeJS.ProcessEnv,
+  defaultJar: string,
+  packaged?: { resourcesPath: string },
+  workspace?: string,
+): { cmd: string; args: string[] } {
+  const g = resolveGatewayCommand(env, defaultJar, packaged)
+  const args = [...g.args, 'bind-weixin']
+  if (workspace && workspace.trim()) args.push('--workspace', workspace.trim())
+  return { cmd: g.cmd, args }
+}
+
+/** 从 bind-weixin 输出行提取扫码兜底链接;仅 http(s) 才返回(防 openExternal 误开非 URL 内容)。 */
+export function parseWeixinQrUrl(line: string): string | null {
+  const marker = '扫码失败时可打开链接:'
+  const idx = line.indexOf(marker)
+  if (idx < 0) return null
+  const url = line.slice(idx + marker.length).trim()
+  return /^https?:\/\/\S+$/.test(url) ? url : null
+}
+
 /** 把 bind 输出行归类为绑定阶段(null = 无关行)。 */
 export function classifyBindLine(line: string): GatewayBindPhase | null {
   if (line.includes('绑定成功')) return 'bound'
@@ -259,6 +281,56 @@ export class GatewayManager {
           kind: 'bind',
           phase: 'failed',
           message: resolvedPhase === 'failed' ? '绑定失败或超时,请重试' : `绑定进程退出(code=${code})`
+        })
+      }
+    })
+  }
+
+  /** 一次性微信扫码绑定。spawn `... gateway bind-weixin`;二维码在输出(日志区可见),http 链接兜底打开。 */
+  bindWeixinStart(workspace?: string): void {
+    if (this.bindProc) return
+    const { cmd, args } = resolveBindWeixinCommand(this.env, this.jarPath, this.packaged, workspace)
+
+    let proc: ChildProcessWithoutNullStreams
+    try {
+      proc = spawn(cmd, args, { stdio: ['pipe', 'pipe', 'pipe'] }) as ChildProcessWithoutNullStreams
+    } catch (e) {
+      this.onEvent({ kind: 'bind', phase: 'failed', message: '启动微信绑定失败: ' + (e as Error).message })
+      return
+    }
+    this.bindProc = proc
+
+    let resolvedPhase: GatewayBindPhase | null = null
+    let cancelled = false
+
+    const handleLine = (l: string): void => {
+      this.pushLog(l)
+      if (l.includes('请用目标微信扫描二维码')) {
+        this.onEvent({ kind: 'bind', phase: 'scanning' })
+      }
+      const url = parseWeixinQrUrl(l)
+      if (url) this.openExternal(url)
+      const phase = classifyBindLine(l)
+      if (phase) resolvedPhase = phase
+    }
+    readline.createInterface({ input: proc.stdout }).on('line', handleLine)
+    readline.createInterface({ input: proc.stderr }).on('line', handleLine)
+
+    this.cancelBindImpl = () => { cancelled = true }
+
+    proc.on('exit', (code) => {
+      if (this.bindProc !== proc) return
+      this.bindProc = null
+      this.cancelBindImpl = null
+      if (cancelled) {
+        this.onEvent({ kind: 'bind', phase: 'cancelled' })
+      } else if (resolvedPhase === 'bound') {
+        this.onEvent({ kind: 'bind', phase: 'bound' })
+      } else {
+        this.onEvent({
+          kind: 'bind',
+          phase: 'failed',
+          message: resolvedPhase === 'failed' ? '绑定失败/超时/二维码过期,请重试' : `绑定进程退出(code=${code})`
         })
       }
     })

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   resolveGatewayCommand,
   resolveBindCommand,
+  resolveBindWeixinCommand,
   parseConnectUrl,
+  parseWeixinQrUrl,
   classifyBindLine,
   classifyGatewayStderr,
   classifyGatewayStatusLine,
@@ -115,5 +117,38 @@ describe('classifyGatewayStatusLine', () => {
   })
   it('认企微 subscribed token → running', () => {
     expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS subscribed')?.state).toBe('running')
+  })
+})
+
+describe('resolveBindWeixinCommand', () => {
+  it('appends bind-weixin to the gateway command', () => {
+    expect(resolveBindWeixinCommand({}, '/j/wraith.jar')).toEqual({
+      cmd: 'java',
+      args: ['-jar', '/j/wraith.jar', 'gateway', 'bind-weixin'],
+    })
+  })
+  it('appends --workspace when provided', () => {
+    expect(resolveBindWeixinCommand({}, '/j.jar', undefined, '/ws')).toEqual({
+      cmd: 'java',
+      args: ['-jar', '/j.jar', 'gateway', 'bind-weixin', '--workspace', '/ws'],
+    })
+  })
+})
+
+describe('parseWeixinQrUrl', () => {
+  it('extracts http(s) url after 打开链接 marker', () => {
+    expect(parseWeixinQrUrl('扫码失败时可打开链接:https://x.y/qr?z=1')).toBe('https://x.y/qr?z=1')
+  })
+  it('rejects non-http content and unrelated lines', () => {
+    expect(parseWeixinQrUrl('扫码失败时可打开链接:weixin://xyz')).toBeNull()
+    expect(parseWeixinQrUrl('普通行')).toBeNull()
+  })
+})
+
+describe('classifyBindLine — weixin 输出', () => {
+  it('认微信绑定成功/二维码过期/超时', () => {
+    expect(classifyBindLine('✅ 微信绑定成功,账号: acc1')).toBe('bound')
+    expect(classifyBindLine('[gateway] 二维码已过期,请重试 wraith gateway bind-weixin')).toBe('failed')
+    expect(classifyBindLine('[gateway] 绑定超时(未在限定时间内完成扫码),请重试')).toBe('failed')
   })
 })
