@@ -146,14 +146,27 @@ public final class GatewayDaemon {
         if (providers.isEmpty()) {
             System.err.println("[gateway] 未配置任何 IM 平台;仅运行定时任务(cron)");
         }
+        int started = 0;
         for (ImProvider p : providers) {
             try {
                 p.start();
+                started++;
                 log.info("[gateway] IM provider 已启动: {}", p.platform());
             } catch (Exception e) {
                 log.error("[gateway] IM provider 启动失败: {} — {}", p.platform(), e.getMessage());
             }
         }
+        if (!providers.isEmpty() && started == 0) {
+            System.err.println("[gateway] 所有 IM provider 启动失败;退化为仅 cron 模式");
+        }
+
+        // shutdown 时尽力停止各 provider(让 stop() 的线程/线程池清理生效)。
+        List<ImProvider> providersRef = providers;
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            for (ImProvider p : providersRef) {
+                try { p.stop(); } catch (Exception ignored) { /* best-effort */ }
+            }
+        }, "wraith-gateway-shutdown"));
 
         // ── Step 12: 阻塞常驻(provider 与调度器均在守护线程,须显式阻塞防 JVM 退出)
         try {
@@ -175,6 +188,10 @@ public final class GatewayDaemon {
         WraithConfig.GatewayConfig gw = cfg.getGateway();
         if (gw != null && gw.getQq() != null) {
             providers.add(new QqProvider(gw.getQq(), client, wraithDir, pendingApprovals));
+        }
+        if (gw != null && gw.getFeishu() != null) {
+            providers.add(new com.lyhn.wraith.gateway.feishu.FeishuProvider(
+                    gw.getFeishu(), client, pendingApprovals));
         }
         return providers;
     }

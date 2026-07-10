@@ -57,4 +57,38 @@ class GatewayDaemonProvidersTest {
                 GatewayDaemon.buildProviders(cfg, null, dir, pending);
         assertTrue(providers.isEmpty());
     }
+
+    private WraithConfig cfgWithFeishu() {
+        WraithConfig cfg = new WraithConfig();
+        WraithConfig.GatewayFeishuConfig fs = new WraithConfig.GatewayFeishuConfig();
+        fs.setAppId("cli_x");
+        fs.setAppSecret("sec_x");
+        fs.setOwnerOpenid("ou_owner");
+        fs.setRegion("feishu");
+        fs.setWorkspace("/tmp/ws");
+        WraithConfig.GatewayConfig gw = new WraithConfig.GatewayConfig();
+        gw.setFeishu(fs);
+        cfg.setGateway(gw);
+        return cfg;
+    }
+
+    @Test
+    void buildsFeishuProviderWhenFeishuConfigured(@TempDir Path dir) {
+        Map<String, CompletableFuture<ApprovalResult>> pending = new ConcurrentHashMap<>();
+        List<ImProvider> providers = GatewayDaemon.buildProviders(cfgWithFeishu(), null, dir, pending);
+        assertEquals(1, providers.size());
+        assertEquals("feishu", providers.get(0).platform());
+        assertTrue(providers.get(0).deliveryAdapter().isPresent());
+    }
+
+    @Test
+    void buildsBothProvidersWhenBothConfigured(@TempDir Path dir) {
+        WraithConfig cfg = cfgWithQq();
+        cfg.getGateway().setFeishu(cfgWithFeishu().getGateway().getFeishu());
+        Map<String, CompletableFuture<ApprovalResult>> pending = new ConcurrentHashMap<>();
+        List<ImProvider> providers = GatewayDaemon.buildProviders(cfg, null, dir, pending);
+        assertEquals(2, providers.size());
+        assertEquals("qq", providers.get(0).platform());     // QQ 在前
+        assertEquals("feishu", providers.get(1).platform());
+    }
 }
