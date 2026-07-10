@@ -40,7 +40,7 @@ public final class WecomFrames {
         ObjectNode body = root.putObject("body");
         body.put("msgtype", "markdown");
         body.putObject("markdown").put("content", content == null ? "" : content);
-        return write(root, "{\"cmd\":\"aibot_respond_msg\",\"headers\":{\"req_id\":\"" + reqId + "\"}}");
+        return write(root, "{}");
     }
 
     /** 心跳帧:ping。 */
