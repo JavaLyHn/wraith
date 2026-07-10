@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { McpServerView } from '../../shared/types'
 import { buildFormValue, envRowsFromKeys, type EnvRow, type McpFormValue } from '../../shared/mcpFormValue'
+import { formatMcpTestResult } from '../lib/mcpTestResultText'
 
 export type { McpFormValue } from '../../shared/mcpFormValue'
 
@@ -31,6 +32,11 @@ export default function McpServerForm({ mode, initial, prefill, busy, onCancel, 
   )
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null)
+
+  // 任意字段变更 → 旧测试结果对新配置无效,清空
+  useEffect(() => { setTestResult(null) }, [name, command, argsText, scope, envRows])
 
   const setRow = (i: number, patch: Partial<EnvRow>): void =>
     setEnvRows(rows => rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
@@ -42,6 +48,20 @@ export default function McpServerForm({ mode, initial, prefill, busy, onCancel, 
     const ok = await onSubmit(v)
     setSubmitting(false)
     if (!ok) setError('保存失败,查看控制台')
+  }
+
+  const handleTest = async (): Promise<void> => {
+    const v = buildFormValue(scope, name, command, argsText, envRows)
+    if (!v.name || !v.command) { setError('name 与 command 必填'); return }
+    setTesting(true); setError(null); setTestResult(null)
+    try {
+      const r = await window.wraith.mcpTest(v)   // 临时进程探测,不落盘
+      setTestResult(formatMcpTestResult(r))
+    } catch (err) {
+      console.error('[wraith] mcpTest error:', err)
+      setTestResult({ kind: 'err', text: '❌ 连接失败:后端未连接或测试请求失败' })
+    }
+    setTesting(false)
   }
 
   return (
@@ -97,13 +117,25 @@ export default function McpServerForm({ mode, initial, prefill, busy, onCancel, 
 
       {error && <div className="text-xs text-danger">{error}</div>}
 
+      {testResult && (
+        <div data-testid="mcp-form-test-result"
+          className={'whitespace-pre-wrap break-words font-mono text-xs ' +
+            (testResult.kind === 'ok' ? 'text-success' : 'text-danger')}>
+          {testResult.text}
+        </div>
+      )}
+
       <div className="flex gap-2">
-        <button data-testid="mcp-form-submit" disabled={busy || submitting} onClick={() => void handleSubmit()}
+        <button data-testid="mcp-form-submit" disabled={busy || submitting || testing} onClick={() => void handleSubmit()}
           className="rounded-lg bg-accent px-4 py-2 text-xs text-white disabled:opacity-60">
           {submitting ? '保存中…' : '保存'}
         </button>
-        <button data-testid="mcp-form-cancel" onClick={onCancel}
-          className="rounded-lg border border-border px-4 py-2 text-xs text-fg-muted">取消</button>
+        <button data-testid="mcp-form-test" disabled={busy || submitting || testing} onClick={() => void handleTest()}
+          className="rounded-lg border border-border px-4 py-2 text-xs text-fg hover:border-accent disabled:opacity-60">
+          {testing ? '测试中…' : '测试'}
+        </button>
+        <button data-testid="mcp-form-cancel" disabled={testing} onClick={onCancel}
+          className="rounded-lg border border-border px-4 py-2 text-xs text-fg-muted disabled:opacity-60">取消</button>
       </div>
     </div>
   )
