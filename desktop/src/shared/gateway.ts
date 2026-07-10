@@ -17,6 +17,8 @@ export interface GatewayConfigView {
   ownerOpenid: string | null
   workspace: string | null
   region?: string | null   // 飞书专用;QQ 视图无此字段
+  botId?: string | null        // 企微专用;QQ/飞书视图无此字段
+  ownerUserid?: string | null  // 企微专用
 }
 
 /** 飞书配置写入字段(全可选;空字段调用方应省略以免覆盖已存值)。 */
@@ -25,6 +27,14 @@ export interface FeishuConfigFields {
   appSecret?: string
   ownerOpenid?: string
   region?: string
+  workspace?: string
+}
+
+/** 企微配置写入字段(全可选;空字段调用方应省略以免覆盖已存值)。 */
+export interface WecomConfigFields {
+  botId?: string
+  secret?: string
+  ownerUserid?: string
   workspace?: string
 }
 
