@@ -96,6 +96,7 @@ export interface WraithApi {
   checkUpdate(beta: boolean): Promise<UpdateResult>
   openExternal(url: string): Promise<void>
   openPath(path: string): Promise<void>
+  saveTextFile(defaultName: string, content: string): Promise<{ ok: boolean; path?: string }>
   transcribe(audioBase64: string, mime: string): Promise<{ text: string }>
 }
 
@@ -415,6 +416,9 @@ const wraith: WraithApi = {
   },
   openPath(path) {
     return ipcRenderer.invoke('wraith:openPath', path) as Promise<void>
+  },
+  saveTextFile(defaultName, content) {
+    return ipcRenderer.invoke('wraith:saveTextFile', defaultName, content) as Promise<{ ok: boolean; path?: string }>
   },
   transcribe(audioBase64, mime) {
     return ipcRenderer.invoke('wraith:transcribe', audioBase64, mime) as Promise<{ text: string }>

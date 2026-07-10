@@ -746,6 +746,18 @@ ipcMain.handle('wraith:checkUpdate', async (_e, beta: boolean) => {
 ipcMain.handle('wraith:openExternal', (_e, url: string) => { void shell.openExternal(url) })
 ipcMain.handle('wraith:openPath', (_e, p: string) => shell.openPath(p))
 
+// 导出对话:渲染层把序列化好的 Markdown 传来,弹保存对话框写盘(纯 Electron 主进程,不经 Java 后端)
+ipcMain.handle('wraith:saveTextFile', async (_e, defaultName: string, content: string) => {
+  const opts = {
+    defaultPath: defaultName,
+    filters: [{ name: 'Markdown', extensions: ['md'] }, { name: '所有文件', extensions: ['*'] }],
+  }
+  const result = mainWindow ? await dialog.showSaveDialog(mainWindow, opts) : await dialog.showSaveDialog(opts)
+  if (result.canceled || !result.filePath) return { ok: false }
+  await fs.promises.writeFile(result.filePath, content, 'utf8')
+  return { ok: true, path: result.filePath }
+})
+
 // ---------------------------------------------------------------------------
 // Part C: 启动一次性迁移(legacy automations.json → daemon)
 // ---------------------------------------------------------------------------

@@ -26,6 +26,8 @@ import { messagesToItems } from '../shared/messagesToItems'
 import { spliceCards } from '../shared/spliceCards'
 import { lastUserMessage } from './lib/resend'
 import { pendingModeAfterSubmit } from './lib/nextPendingMode'
+import { transcriptToMarkdown } from './lib/transcriptMarkdown'
+import { Download } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -737,6 +739,21 @@ export default function App(): JSX.Element {
     turn: state.turn,
   })
 
+  // 导出当前对话为 Markdown(纯前端序列化 + Electron 保存对话框,不经 Java 后端)
+  const handleExport = useCallback(async (): Promise<void> => {
+    const items = pv.items
+    if (!items.length) return
+    const firstUser = items.find((i) => i.type === 'user') as { text: string } | undefined
+    const rawTitle = (firstUser?.text ?? 'Wraith 对话').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Wraith 对话'
+    const d = new Date()
+    const p = (n: number): string => String(n).padStart(2, '0')
+    const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+    const md = transcriptToMarkdown(items, { title: rawTitle, model: state.model, workspace: state.workspace, exportedAt: stamp })
+    const safeName = rawTitle.replace(/[/\\:*?"<>|]/g, '_').slice(0, 30) || 'wraith-对话'
+    const fileStamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
+    await window.wraith.saveTextFile(`${safeName}-${fileStamp}.md`, md)
+  }, [pv.items, state.model, state.workspace])
+
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-fg">
       <Sidebar
@@ -845,6 +862,17 @@ export default function App(): JSX.Element {
             )
             return !pv.showWelcome ? (
               <>
+                <div className="flex shrink-0 items-center justify-end border-b border-border px-4 py-1.5">
+                  <button
+                    data-testid="chat-export"
+                    onClick={() => void handleExport()}
+                    disabled={!pv.items.length}
+                    title="导出当前对话为 Markdown"
+                    className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />导出
+                  </button>
+                </div>
                 <Transcript
                   items={pv.items}
                   busy={pv.transcriptBusy}
