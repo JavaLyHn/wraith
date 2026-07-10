@@ -16,6 +16,7 @@ import java.util.Base64;
  *       {@link Openclaw#createBindTask} → 打印扫码指引 → 轮询 {@link Openclaw#pollBindResult}
  *       直到 COMPLETED → {@link Openclaw#decryptSecret} → 把 {@code gateway.qq} 写入
  *       {@code ~/.wraith/config.json}。（EYE-VERIFY：需真机扫码，此处不做自动化测试。）</li>
+ *   <li>{@code wraith gateway bind-weixin [--workspace <dir>]} → 微信 iLink 扫码绑定(终端二维码;EYE-VERIFY)。</li>
  *   <li>{@code wraith gateway}（无 bind）→ {@link GatewayDaemon#start} 常驻。</li>
  * </ul>
  *
@@ -30,6 +31,10 @@ public final class BindCommand {
     private static final long POLL_INTERVAL_MS = 3_000L;
 
     public static void dispatch(String[] args) {
+        if (args != null && args.length >= 2 && "bind-weixin".equals(args[1])) {
+            WeixinBind.run(args);
+            return;
+        }
         if (args != null && args.length >= 2 && "bind".equals(args[1])) {
             runBind();
         } else {
