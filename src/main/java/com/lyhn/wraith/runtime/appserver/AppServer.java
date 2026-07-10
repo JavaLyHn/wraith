@@ -414,28 +414,52 @@ public final class AppServer {
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "gateway.config.get" -> {
+                JsonNode p = msg.params();
+                String platform = (p != null && p.hasNonNull("platform")) ? p.get("platform").asText() : "qq";
                 WraithConfig cfg = WraithConfig.load();
                 WraithConfig.GatewayConfig gw = cfg.getGateway();
-                WraithConfig.GatewayQqConfig qq = gw == null ? null : gw.getQq();
-                boolean hasSecret = qq != null && qq.getClientSecret() != null && !qq.getClientSecret().isBlank();
                 Map<String, Object> r = new LinkedHashMap<>();
-                r.put("bound", hasSecret);
-                r.put("hasSecret", hasSecret);
-                r.put("appId", qq == null ? null : qq.getAppId());
-                r.put("ownerOpenid", qq == null ? null : qq.getOwnerOpenid());
-                r.put("workspace", qq == null ? null : qq.getWorkspace());
-                writer.result(msg.id(), r); // 注意:绝不回传 clientSecret 明文，只报 hasSecret
+                if ("feishu".equals(platform)) {
+                    WraithConfig.GatewayFeishuConfig fs = gw == null ? null : gw.getFeishu();
+                    boolean hasSecret = fs != null && fs.getAppSecret() != null && !fs.getAppSecret().isBlank();
+                    r.put("bound", hasSecret);
+                    r.put("hasSecret", hasSecret);
+                    r.put("appId", fs == null ? null : fs.getAppId());
+                    r.put("ownerOpenid", fs == null ? null : fs.getOwnerOpenid());
+                    r.put("region", fs == null ? null : fs.getRegion());
+                    r.put("workspace", fs == null ? null : fs.getWorkspace());
+                } else {
+                    WraithConfig.GatewayQqConfig qq = gw == null ? null : gw.getQq();
+                    boolean hasSecret = qq != null && qq.getClientSecret() != null && !qq.getClientSecret().isBlank();
+                    r.put("bound", hasSecret);
+                    r.put("hasSecret", hasSecret);
+                    r.put("appId", qq == null ? null : qq.getAppId());
+                    r.put("ownerOpenid", qq == null ? null : qq.getOwnerOpenid());
+                    r.put("workspace", qq == null ? null : qq.getWorkspace());
+                }
+                writer.result(msg.id(), r); // 注意:绝不回传 secret 明文,只报 hasSecret
             }
             case "gateway.config.set" -> {
                 JsonNode p = msg.params();
+                String platform = (p != null && p.hasNonNull("platform")) ? p.get("platform").asText() : "qq";
                 try {
                     WraithConfig cfg = WraithConfig.load();
                     WraithConfig.GatewayConfig gw = cfg.getGateway();
                     if (gw == null) { gw = new WraithConfig.GatewayConfig(); cfg.setGateway(gw); }
-                    WraithConfig.GatewayQqConfig qq = gw.getQq();
-                    if (qq == null) { qq = new WraithConfig.GatewayQqConfig(); gw.setQq(qq); }
-                    if (p != null && p.hasNonNull("clientSecret")) qq.setClientSecret(p.get("clientSecret").asText());
-                    if (p != null && p.hasNonNull("workspace")) qq.setWorkspace(p.get("workspace").asText());
+                    if ("feishu".equals(platform)) {
+                        WraithConfig.GatewayFeishuConfig fs = gw.getFeishu();
+                        if (fs == null) { fs = new WraithConfig.GatewayFeishuConfig(); gw.setFeishu(fs); }
+                        if (p != null && p.hasNonNull("appId")) fs.setAppId(p.get("appId").asText());
+                        if (p != null && p.hasNonNull("appSecret")) fs.setAppSecret(p.get("appSecret").asText());
+                        if (p != null && p.hasNonNull("ownerOpenid")) fs.setOwnerOpenid(p.get("ownerOpenid").asText());
+                        if (p != null && p.hasNonNull("region")) fs.setRegion(p.get("region").asText());
+                        if (p != null && p.hasNonNull("workspace")) fs.setWorkspace(p.get("workspace").asText());
+                    } else {
+                        WraithConfig.GatewayQqConfig qq = gw.getQq();
+                        if (qq == null) { qq = new WraithConfig.GatewayQqConfig(); gw.setQq(qq); }
+                        if (p != null && p.hasNonNull("clientSecret")) qq.setClientSecret(p.get("clientSecret").asText());
+                        if (p != null && p.hasNonNull("workspace")) qq.setWorkspace(p.get("workspace").asText());
+                    }
                     cfg.save();
                     ok(msg);
                 } catch (Exception e) {

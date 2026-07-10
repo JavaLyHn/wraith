@@ -52,4 +52,29 @@ class AppServerGatewayConfigTest {
         // 密钥红线:安全视图绝不能包含明文 clientSecret
         assertFalse(res.has("clientSecret"), "gateway.config.get 绝不能返回 clientSecret 明文");
     }
+
+    @Test
+    void gatewayConfigGetFeishuReturnsSafeViewWithoutSecret() throws Exception {
+        List<JsonNode> r = run("{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"gateway.config.get\",\"params\":{\"platform\":\"feishu\"}}");
+        JsonNode res = byId(r, 2).get("result");
+        assertNotNull(res, "gateway.config.get(feishu) 应返回 result");
+        assertTrue(res.has("bound"), "缺 bound");
+        assertTrue(res.has("hasSecret"), "缺 hasSecret");
+        assertTrue(res.has("appId"), "缺 appId");
+        assertTrue(res.has("ownerOpenid"), "缺 ownerOpenid");
+        assertTrue(res.has("region"), "缺 region");
+        assertTrue(res.has("workspace"), "缺 workspace");
+        // 密钥红线:绝不回 appSecret 明文
+        assertFalse(res.has("appSecret"), "gateway.config.get(feishu) 绝不能返回 appSecret 明文");
+    }
+
+    @Test
+    void gatewayConfigGetDefaultsToQqWhenNoPlatform() throws Exception {
+        // 无 platform 参 → 沿用 QQ 视图(向后兼容,QQ 现有桌面面板不受影响)
+        List<JsonNode> r = run("{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"gateway.config.get\",\"params\":{}}");
+        JsonNode res = byId(r, 2).get("result");
+        assertTrue(res.has("workspace"));
+        assertFalse(res.has("clientSecret"), "QQ 视图也绝不回 clientSecret");
+        assertFalse(res.has("region"), "QQ 视图不含 region 字段");
+    }
 }
