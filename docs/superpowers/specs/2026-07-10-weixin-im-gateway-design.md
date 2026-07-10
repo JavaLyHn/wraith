@@ -58,13 +58,14 @@ body: { "msg": { "to_user_id": "<对方 user_id>", "message_type": 2, "message_s
 ```
 `context_token` 必须原样回带,否则不关联到对话窗口。
 
-### 实现期需从官方插件源码钉死的细节(不影响架构)
-- getupdates / sendmessage 相对 `baseurl` 的**精确路径**;
-- `message_type` 语义(示例中收=1、发=2,按源码核对);
-- 群聊与单聊的判别(from_user_id 后缀?v1 仅处理可确认的单聊形态,其余 IGNORE);
-- token 失效的错误码/表现(→ 状态灯 auth-failed,提示重新扫码)、频控表现;
-- `X-WECHAT-UIN` 的生成细节。
-以官方 `@tencent-weixin/openclaw-weixin` 源码为准,如与本 spec 示例不符以源码为准并回填。
+### 已钉死的细节(据协议文档定向核对,2026-07-10)
+- **路径**:`POST {baseurl}/ilink/bot/getupdates`、`POST {baseurl}/ilink/bot/sendmessage`
+  (baseurl 取扫码响应;为空则回退 `https://ilinkai.weixin.qq.com`)。
+- **message_type = 方向标记**:1=用户入站、2=Bot 发出;发送恒填 2。
+- **群聊判别**:消息有 `group_id` 字段(群聊支持未文档化,可能需额外权限)→ v1 见 `group_id` 非空即 IGNORE。
+- **错误响应无文档** → 防御式:HTTP 401/403 或鉴权类失败 → 状态灯 `auth-failed`(提示重新扫码);
+  其余非 0 `ret`/异常 → warn 日志 + 退避重试。
+- **X-WECHAT-UIN**:随机 uint32 → 十进制字符串 → base64,**每次请求重新生成**(防重放)。
 
 ## 架构
 
