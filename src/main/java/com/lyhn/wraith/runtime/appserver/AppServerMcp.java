@@ -257,15 +257,20 @@ public final class AppServerMcp implements McpOps {
         }
     }
 
-    /** 测试用 env 合并:空串=沿用已存值(与 McpConfigWriter.upsert 密钥编辑语义一致);无存值保持空串。 */
+    /** 测试用 env 合并:空串=沿用已存值,无存值则丢弃该 key(与 McpConfigWriter.upsert 保存语义一致,
+     *  使测试忠实模拟"保存后真实运行"的子进程环境)。 */
     static Map<String, String> mergeEnvForTest(Map<String, String> formEnv, JsonNode savedEntry) {
         JsonNode savedEnv = savedEntry != null && savedEntry.has("env") && savedEntry.get("env").isObject()
                 ? savedEntry.get("env") : null;
         Map<String, String> out = new LinkedHashMap<>();
         for (Map.Entry<String, String> e : formEnv.entrySet()) {
             String v = e.getValue();
-            if (v != null && v.isEmpty() && savedEnv != null && savedEnv.hasNonNull(e.getKey())) {
-                out.put(e.getKey(), savedEnv.get(e.getKey()).asText());
+            if (v != null && v.isEmpty()) {
+                // 空串 = 沿用已存值;无存值则丢弃该 key(与 McpConfigWriter.upsert 保存语义一致,
+                // 使测试忠实模拟"保存后真实运行"的子进程环境)
+                if (savedEnv != null && savedEnv.hasNonNull(e.getKey())) {
+                    out.put(e.getKey(), savedEnv.get(e.getKey()).asText());
+                }
             } else {
                 out.put(e.getKey(), v == null ? "" : v);
             }

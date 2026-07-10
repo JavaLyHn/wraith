@@ -342,18 +342,18 @@ class AppServerMcpTest {
     }
 
     @Test
-    void mergeEnvForTestBlankValueUsesSavedElseKeepsBlank() {
+    void mergeEnvForTestBlankValueUsesSavedElseDropsKey() {
         com.fasterxml.jackson.databind.node.ObjectNode entry = JsonRpc.MAPPER.createObjectNode();
         entry.putObject("env").put("TOKEN", "saved-v");
         Map<String, String> form = new java.util.LinkedHashMap<>();
         form.put("TOKEN", "");   // 空串+有存值 → 合并
-        form.put("OTHER", "");   // 空串+无存值 → 保持空
+        form.put("OTHER", "");   // 空串+无存值 → 丢弃
         form.put("SET", "x");    // 非空 → 原样
         Map<String, String> merged = AppServerMcp.mergeEnvForTest(form, entry);
         assertEquals("saved-v", merged.get("TOKEN"));
-        assertEquals("", merged.get("OTHER"));
+        assertFalse(merged.containsKey("OTHER"), "空串+无存值 → 丢弃该 key(与保存一致)");
         assertEquals("x", merged.get("SET"));
-        // savedEntry 为 null(新增场景)→ 全部保持原样
-        assertEquals("", AppServerMcp.mergeEnvForTest(Map.of("TOKEN", ""), null).get("TOKEN"));
+        // savedEntry 为 null(新增场景)→ 空串无存值则丢弃
+        assertFalse(AppServerMcp.mergeEnvForTest(Map.of("TOKEN", ""), null).containsKey("TOKEN"));
     }
 }

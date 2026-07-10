@@ -247,6 +247,8 @@ public final class AppServer {
                     ok(msg);
                 } catch (IOException e) { writer.error(msg.id(), -32000, "配置写入失败: " + e.getMessage()); }
             });
+            // mcp.test 在 reader 线程同步执行:最坏阻塞 ≈ initialize 超时 + tools/list 30s。
+            // 单用户桌面 + 表单单飞行(测试中按钮禁用)可接受;若未来多会话并发,再 offload 到独立线程。
             case "mcp.test" -> handleMcp(msg, ops -> {
                 JsonNode p = msg.params();
                 String scope = textParam(p, "scope"); String name = textParam(p, "name"); String command = textParam(p, "command");
