@@ -437,6 +437,21 @@ public final class AppServer {
                     r.put("ownerUserid", wecom == null ? null : wecom.getOwnerUserid());
                     r.put("workspace", wecom == null ? null : wecom.getWorkspace());
                     // 注意:绝不 put secret 明文,只报 hasSecret
+                } else if ("weixin".equals(platform)) {
+                    // 微信:读 wechat 账号店(token/游标高频写,不进 config.json);绝不回 token
+                    boolean bound = false; String owner = null; String ws = null;
+                    try {
+                        var acc = com.lyhn.wraith.wechat.WechatAccountStore.createDefault().loadLatest();
+                        if (acc.isPresent()) {
+                            bound = acc.get().token() != null && !acc.get().token().isBlank();
+                            owner = acc.get().boundUserId();
+                            ws = acc.get().workspace();
+                        }
+                    } catch (Exception e) { /* 账号店缺失/损坏 → 按未绑定视图 */ }
+                    r.put("bound", bound);
+                    r.put("hasSecret", bound);
+                    r.put("ownerUserid", owner);
+                    r.put("workspace", ws);
                 } else {
                     WraithConfig.GatewayQqConfig qq = gw == null ? null : gw.getQq();
                     boolean hasSecret = qq != null && qq.getClientSecret() != null && !qq.getClientSecret().isBlank();
@@ -472,6 +487,15 @@ public final class AppServer {
                             wecom.setSecret(p.get("secret").asText());
                         if (p != null && p.hasNonNull("ownerUserid")) wecom.setOwnerUserid(p.get("ownerUserid").asText());
                         if (p != null && p.hasNonNull("workspace")) wecom.setWorkspace(p.get("workspace").asText());
+                    } else if ("weixin".equals(platform)) {
+                        // 只允许改 workspace;token/owner 由 bind-weixin 扫码流程写入账号店
+                        if (p != null && p.hasNonNull("workspace")) {
+                            try {
+                                var store = com.lyhn.wraith.wechat.WechatAccountStore.createDefault();
+                                store.loadLatest().ifPresent(acc ->
+                                        store.save(acc.withWorkspace(p.get("workspace").asText())));
+                            } catch (Exception e) { /* 账号店缺失/损坏,忽略 */ }
+                        }
                     } else {
                         WraithConfig.GatewayQqConfig qq = gw.getQq();
                         if (qq == null) { qq = new WraithConfig.GatewayQqConfig(); gw.setQq(qq); }

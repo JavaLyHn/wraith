@@ -92,4 +92,18 @@ class AppServerGatewayConfigTest {
         // 密钥红线:绝不回 secret 明文
         assertFalse(res.has("secret"), "gateway.config.get(wecom) 绝不能返回 secret 明文");
     }
+
+    @Test
+    void gatewayConfigGetWeixinReturnsSafeViewWithoutToken() throws Exception {
+        List<JsonNode> r = run("{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"gateway.config.get\",\"params\":{\"platform\":\"weixin\"}}");
+        JsonNode res = byId(r, 2).get("result");
+        assertNotNull(res, "gateway.config.get(weixin) 应返回 result");
+        assertTrue(res.has("bound"));
+        assertTrue(res.has("hasSecret"));
+        assertTrue(res.has("ownerUserid"));
+        assertTrue(res.has("workspace"));
+        // 密钥红线:绝不回 token(任何命名)
+        assertFalse(res.has("token"), "绝不能返回 token");
+        assertFalse(res.has("botToken"), "绝不能返回 botToken");
+    }
 }
