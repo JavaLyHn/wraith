@@ -168,6 +168,14 @@ public final class AppServer {
         default java.util.Map<String, Object> snapshotRestore(int offset) {
             throw new UnsupportedOperationException("snapshotRestore not implemented");
         }
+        /** 安全策略状态(项目根/审计目录/危险工具集)。默认抛出。 */
+        default java.util.Map<String, Object> policyStatus() {
+            throw new UnsupportedOperationException("policyStatus not implemented");
+        }
+        /** 最近 limit 条危险工具审计记录(按天存)。默认抛出。 */
+        default java.util.Map<String, Object> auditList(int limit) {
+            throw new UnsupportedOperationException("auditList not implemented");
+        }
         /**
          * 读取指定会话的 card 事件列表(供 resume 回放 plan/team 卡片)。
          * 每条记录为 {@code {turnOrdinal, events}} JsonNode。默认空列表(向后兼容)。
@@ -478,6 +486,20 @@ public final class AppServer {
                 JsonNode p = msg.params();
                 int offset = (p != null && p.hasNonNull("offset")) ? p.get("offset").asInt() : 1;
                 try { writer.result(msg.id(), session.snapshotRestore(offset)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "policy.status" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.policyStatus()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "audit.list" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                int limit = (p != null && p.hasNonNull("limit")) ? p.get("limit").asInt() : 20;
+                try { writer.result(msg.id(), session.auditList(limit)); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

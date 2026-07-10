@@ -538,6 +538,16 @@ ipcMain.handle('wraith:snapshotRestore', async (_e, offset: number) => {
   return client.request('snapshot.restore', { offset })
 })
 
+// 安全策略状态 + 危险工具审计(只读,转发 AppServer policy.status / audit.list)
+ipcMain.handle('wraith:policyStatus', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('policy.status', {})
+})
+ipcMain.handle('wraith:auditList', async (_e, limit?: number) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('audit.list', { limit: limit ?? 20 })
+})
+
 ipcMain.handle('wraith:setSkillEnabled', async (_e, name: string, enabled: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.setEnabled', { name, enabled })

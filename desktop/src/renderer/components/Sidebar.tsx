@@ -112,7 +112,7 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'settings' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
@@ -120,6 +120,7 @@ interface SidebarProps {
   onOpenSkills: () => void
   onOpenMemory: () => void
   onOpenSnapshots: () => void
+  onOpenPolicy: () => void
   onOpenSettings: () => void
   automationBadge: boolean
 }
@@ -149,6 +150,7 @@ export default function Sidebar({
   onOpenSkills,
   onOpenMemory,
   onOpenSnapshots,
+  onOpenPolicy,
   onOpenSettings,
   automationBadge,
 }: SidebarProps): JSX.Element {
@@ -330,6 +332,15 @@ export default function Sidebar({
               (activeNav === 'snapshots' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
             <span className="flex items-center gap-2"><History className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />快照</span>
+          </button>
+          {/* policy + audit */}
+          <button
+            data-testid="nav-policy"
+            onClick={onOpenPolicy}
+            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+              (activeNav === 'policy' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+          >
+            <span className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />安全</span>
           </button>
         </nav>
 

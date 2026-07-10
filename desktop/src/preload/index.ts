@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, SnapshotListResult, SnapshotRestoreResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -78,6 +78,8 @@ export interface WraithApi {
   memorySave(fact: string, scope: string): Promise<{ ok: boolean }>
   snapshotList(limit?: number): Promise<SnapshotListResult>
   snapshotRestore(offset: number): Promise<SnapshotRestoreResult>
+  policyStatus(): Promise<PolicyStatusView>
+  auditList(limit?: number): Promise<AuditListResult>
   upsertSkill(payload: SkillUpsertPayload): Promise<{ ok: boolean }>
   deleteSkill(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   skillExistsInScope(scope: 'user' | 'project', name: string): Promise<{ exists: boolean }>
@@ -357,6 +359,12 @@ const wraith: WraithApi = {
   },
   snapshotRestore(offset) {
     return ipcRenderer.invoke('wraith:snapshotRestore', offset) as Promise<SnapshotRestoreResult>
+  },
+  policyStatus() {
+    return ipcRenderer.invoke('wraith:policyStatus') as Promise<PolicyStatusView>
+  },
+  auditList(limit) {
+    return ipcRenderer.invoke('wraith:auditList', limit) as Promise<AuditListResult>
   },
 
   setSkillEnabled(name, enabled) {

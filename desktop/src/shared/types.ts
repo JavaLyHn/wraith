@@ -303,6 +303,31 @@ export interface SnapshotRestoreResult {
   removedCount: number
 }
 
+/** 安全策略状态视图(AppServer policy.status 回包)。 */
+export interface PolicyStatusView {
+  projectRoot: string
+  auditDir: string
+  dangerousTools: string[]
+}
+
+/** 单条危险工具审计记录(AppServer audit.list 回包)。 */
+export interface AuditEntryView {
+  timestamp: string // ISO-8601
+  tool: string
+  args: string
+  outcome: string // allow | deny | error
+  reason?: string | null
+  approver?: string | null // hitl | policy | none | mention
+  durationMs: number
+  browserMode?: string
+  sensitive?: boolean
+  targetUrl?: string
+}
+
+export interface AuditListResult {
+  entries: AuditEntryView[]
+}
+
 export interface SkillDetail extends SkillView {
   body: string
 }

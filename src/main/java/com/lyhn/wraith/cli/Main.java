@@ -1454,6 +1454,35 @@ public class Main {
                             return java.util.Map.of("ok", false, "message", "恢复失败: " + e.getClass().getSimpleName());
                         }
                     }
+                    public java.util.Map<String, Object> policyStatus() {
+                        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                        m.put("projectRoot", agent.getToolRegistry().getProjectPath());
+                        m.put("auditDir", String.valueOf(agent.getToolRegistry().getAuditLog().getAuditDir()));
+                        m.put("dangerousTools", new java.util.ArrayList<>(com.lyhn.wraith.hitl.ApprovalPolicy.getDangerousTools()));
+                        return m;
+                    }
+                    public java.util.Map<String, Object> auditList(int limit) {
+                        int n = limit <= 0 ? 20 : limit;
+                        java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+                        for (com.lyhn.wraith.policy.AuditLog.AuditEntry e : agent.getToolRegistry().getAuditLog().readRecent(n)) {
+                            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                            m.put("timestamp", e.timestamp());
+                            m.put("tool", e.tool());
+                            m.put("args", e.args());
+                            m.put("outcome", e.outcome());
+                            m.put("reason", e.reason());
+                            m.put("approver", e.approver());
+                            m.put("durationMs", e.durationMs());
+                            com.lyhn.wraith.browser.BrowserAuditMetadata meta = e.metadata();
+                            if (meta != null) {
+                                m.put("browserMode", meta.browserMode());
+                                m.put("sensitive", meta.sensitive());
+                                m.put("targetUrl", meta.targetUrl());
+                            }
+                            out.add(m);
+                        }
+                        return java.util.Map.of("entries", out);
+                    }
                     public java.util.Map<String, Object> skillsList() {
                         java.util.List<java.util.Map<String, Object>> list = new java.util.ArrayList<>();
                         java.util.Set<String> disabled = skillRegistry.stateStore().disabled();
