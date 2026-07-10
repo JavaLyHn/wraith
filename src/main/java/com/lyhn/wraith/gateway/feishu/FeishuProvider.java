@@ -230,8 +230,9 @@ public final class FeishuProvider implements ImProvider {
         }
     }
 
-    /** 「已收到,处理中」回执用的表情 emoji_type。GET = 飞书「[了解]」表情(黄底 GET 徽标)。 */
-    private static final String REACTION_ACK = "GET";
+    /** 「已收到,处理中」回执用的表情 emoji_type。Get = 飞书「[了解]」表情(黄底 GET 徽标);
+     *  ⚠ emoji_type 区分大小写,全大写 GET 会被 code=231001 reaction type is invalid 拒。 */
+    private static final String REACTION_ACK = "Get";
 
     /**
      * 给指定消息贴表情回复(reaction),作为「已收到、正在处理」的即时回执。
