@@ -21,7 +21,7 @@ export const IM_PLATFORMS: ImPlatform[] = [
   { id: 'qq', name: 'QQ', icon: '🐧', status: 'available', note: '单聊' },
   // 国内
   { id: 'weixin', name: '微信', icon: '💬', status: 'soon' },
-  { id: 'wecom', name: '企业微信', icon: '🏢', status: 'soon' },
+  { id: 'wecom', name: '企业微信', icon: '🏢', status: 'available', note: '机器人' },
   { id: 'feishu', name: '飞书 / Lark', icon: '🛰️', status: 'available', note: '机器人' },
   { id: 'dingtalk', name: '钉钉', icon: '📌', status: 'soon' },
   { id: 'yuanbao', name: '元宝', icon: '💎', status: 'soon' },

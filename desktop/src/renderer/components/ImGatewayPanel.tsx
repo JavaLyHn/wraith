@@ -3,6 +3,7 @@ import type { GatewayBindPhase, GatewayConfigView, GatewayState, GatewayStatus }
 import { maskId, bindPhaseLabel } from '../lib/gatewayLabels'
 import { IM_PLATFORMS } from '../lib/imPlatforms'
 import { feishuConfigPayload } from '../lib/feishuConfigPayload'
+import { wecomConfigPayload } from '../lib/wecomConfigPayload'
 
 interface ImGatewayPanelProps {
   onBack: () => void
@@ -45,6 +46,13 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
   const [fsWorkspace, setFsWorkspace] = useState('')
   const [fsBusy, setFsBusy] = useState(false)
   const [fsHint, setFsHint] = useState<string | null>(null)
+  // 企微表单输入(受控)
+  const [wcBotId, setWcBotId] = useState('')
+  const [wcSecret, setWcSecret] = useState('')
+  const [wcOwner, setWcOwner] = useState('')
+  const [wcWorkspace, setWcWorkspace] = useState('')
+  const [wcBusy, setWcBusy] = useState(false)
+  const [wcHint, setWcHint] = useState<string | null>(null)
 
   const refreshConfig = useCallback(async () => {
     setConfig(null)
@@ -58,18 +66,26 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         setFsWorkspace(cfg.workspace ?? '')
         // appSecret 永不回填(后端只回 hasSecret);留空 = 保持已存密钥
       }
+      if (selectedPlatform === 'wecom') {
+        setWcBotId(cfg.botId ?? '')
+        setWcOwner(cfg.ownerUserid ?? '')
+        setWcWorkspace(cfg.workspace ?? '')
+        // secret 永不回填(后端只回 hasSecret);留空 = 保持已存密钥
+      }
     } catch (err) {
       console.error('[wraith] gatewayGetConfig error:', err)
       if (selectedPlatform === 'feishu') setFsHint('读取配置失败')
+      else if (selectedPlatform === 'wecom') setWcHint('读取配置失败')
       else setHint('读取配置失败')
     }
     // 网关是全局进程:汇总所有平台绑定态,决定「启动网关」是否可点(与当前选中平台无关)。
     try {
-      const [qq, fs] = await Promise.all([
+      const [qq, fs, wc] = await Promise.all([
         window.wraith.gatewayGetConfig('qq'),
         window.wraith.gatewayGetConfig('feishu'),
+        window.wraith.gatewayGetConfig('wecom'),
       ])
-      setAnyBound(!!qq?.bound || !!fs?.bound)
+      setAnyBound(!!qq?.bound || !!fs?.bound || !!wc?.bound)
     } catch {
       /* 忽略:失败则按钮保持禁用 */
     }
@@ -152,6 +168,24 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
     }
   }
 
+  const handleSaveWecom = async () => {
+    setWcBusy(true)
+    setWcHint(null)
+    try {
+      const payload = wecomConfigPayload({
+        botId: wcBotId, secret: wcSecret, ownerUserid: wcOwner, workspace: wcWorkspace,
+      })
+      await window.wraith.gatewaySetWecomConfig(payload)
+      setWcSecret('')                 // 保存后清空密钥输入(不回显)
+      setWcHint('已保存')
+      await refreshConfig()
+    } catch (err) {
+      setWcHint('保存失败')
+    } finally {
+      setWcBusy(false)
+    }
+  }
+
   const bound = config?.bound ?? false
   const running = status.state === 'running' || status.state === 'starting'
 
@@ -198,7 +232,9 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         {/* 当前平台配置分隔 */}
         <div className="flex items-center gap-2 text-3xs uppercase tracking-wider text-fg-subtle">
           <span className="h-px flex-1 bg-border" />
-          {selectedPlatform === 'feishu' ? '飞书 / Lark · 机器人' : 'QQ · 单聊'}
+          {selectedPlatform === 'feishu' ? '飞书 / Lark · 机器人'
+            : selectedPlatform === 'wecom' ? '企业微信 · 机器人'
+            : 'QQ · 单聊'}
           <span className="h-px flex-1 bg-border" />
         </div>
 
@@ -295,6 +331,44 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
                 {fsBusy ? '保存中…' : '保存飞书配置'}
               </button>
               {fsHint && <span className="text-xs text-fg-subtle">{fsHint}</span>}
+            </div>
+          </section>
+        )}
+
+        {selectedPlatform === 'wecom' && (
+          <section className="rounded-lg border border-border p-4" data-testid="im-wecom-form">
+            <div className="mb-1 text-xs font-bold text-fg">企业微信智能机器人</div>
+            <div className="text-2xs text-fg-subtle">
+              在 企业微信管理后台 建智能机器人,API 接收模式选「长连接」,把 BotID / Secret 填这里(与回调模式的 Token/AESKey 不同)。
+            </div>
+            <label className="mt-2 block text-xs text-fg-muted">
+              BotID
+              <input data-testid="im-wc-botid" value={wcBotId} onChange={e => setWcBotId(e.target.value)}
+                placeholder="机器人 BotID" className={INPUT} />
+            </label>
+            <label className="mt-2 block text-xs text-fg-muted">
+              Secret {config?.hasSecret && <span className="text-3xs text-success">(已存,留空则保持)</span>}
+              <input data-testid="im-wc-secret" type="password" value={wcSecret} onChange={e => setWcSecret(e.target.value)}
+                placeholder={config?.hasSecret ? '••••••(留空保持已存)' : '粘贴长连接 Secret'} className={INPUT} />
+            </label>
+            <label className="mt-2 block text-xs text-fg-muted">
+              主人 userid
+              <input data-testid="im-wc-owner" value={wcOwner} onChange={e => setWcOwner(e.target.value)}
+                placeholder="留空:先私聊 bot 拿回显" className={INPUT} />
+            </label>
+            <div className="mt-1 text-3xs text-fg-subtle">
+              未填主人时,启动网关后私聊 bot,它会回显你的 userid;填进来再重启即绑定。主动推送(审批卡/定时投递)需要你先给 bot 发过消息。
+            </div>
+            <label className="mt-2 block text-xs text-fg-muted">
+              工作目录
+              <input data-testid="im-wc-workspace" value={wcWorkspace} onChange={e => setWcWorkspace(e.target.value)}
+                placeholder="/path/to/workspace" className={INPUT} />
+            </label>
+            <div className="mt-2 flex items-center gap-2">
+              <button data-testid="im-wc-save" disabled={wcBusy} onClick={() => void handleSaveWecom()} className={BTN_PRIMARY}>
+                {wcBusy ? '保存中…' : '保存企微配置'}
+              </button>
+              {wcHint && <span className="text-xs text-fg-subtle">{wcHint}</span>}
             </div>
           </section>
         )}
