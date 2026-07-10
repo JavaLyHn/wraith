@@ -10,7 +10,7 @@ export default function StatusChip({ status }: { status: StatusData | null | und
       <TooltipTrigger asChild>
         <span
           data-testid="status-chip"
-          className="cursor-default rounded-lg border border-border px-2 py-1 text-xs text-fg-muted"
+          className="shrink-0 cursor-default whitespace-nowrap rounded-lg border border-border px-2 py-1 text-xs text-fg-muted"
         >
           ◓ {pct}%
         </span>

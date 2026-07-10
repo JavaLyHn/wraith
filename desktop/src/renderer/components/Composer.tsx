@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Plus, X, Folder } from 'lucide-react'
 import { Switch } from './ui/switch'
 import {
   TooltipProvider,
@@ -346,9 +347,9 @@ export default function Composer({
             disabled={running}
             aria-label="附件"
             onClick={onPickAttachments}
-            className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
           >
-            +
+            <Plus className="h-3.5 w-3.5" strokeWidth={1.5} />
           </button>
 
           {/* 语音听写 */}
@@ -359,23 +360,25 @@ export default function Composer({
               aria-label="语音输入"
               title="按一下开始说话,再按停止转写"
               onClick={() => void startRec()}
-              className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
             >
               <VoiceBars active={false} streamRef={streamRef} />
             </button>
           )}
           {recording && (
-            <div className="flex items-center gap-1">
+            <div className="flex shrink-0 items-center gap-1">
               <button data-testid="stt-stop" onClick={stopRec} aria-label="停止并转写"
-                className="flex h-7 items-center gap-1.5 rounded-lg bg-danger/10 px-2 text-xs text-danger">
+                className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-danger/10 px-2 text-xs text-danger">
                 <VoiceBars active streamRef={streamRef} /> 停止
               </button>
               <button data-testid="stt-cancel" onClick={cancelRec} aria-label="取消"
-                className="flex h-7 w-7 items-center justify-center rounded-lg text-fg-subtle hover:text-fg">×</button>
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:text-fg">
+                <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+              </button>
             </div>
           )}
           {transcribing && (
-            <span data-testid="stt-transcribing" className="text-xs text-fg-muted">转写中…</span>
+            <span data-testid="stt-transcribing" className="shrink-0 whitespace-nowrap text-xs text-fg-muted">转写中…</span>
           )}
 
           {/* model chip — interactive switcher */}
@@ -390,9 +393,10 @@ export default function Composer({
             onClick={onSwitchWorkspace}
             disabled={running}
             title="重选工作目录"
-            className="max-w-[180px] truncate rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex min-w-0 max-w-[180px] items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
           >
-            📁 {baseName(workspace)}
+            <Folder className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+            <span className="truncate">{baseName(workspace)}</span>
           </button>
 
           <div className="flex-1" />
@@ -401,7 +405,7 @@ export default function Composer({
           <ModeSwitcher mode={mode} onModeChange={onModeChange} running={running} />
 
           {/* approve-mode toggle — functional */}
-          <label className="flex select-none items-center gap-1.5 text-xs text-fg-muted">
+          <label className="flex shrink-0 select-none items-center gap-1.5 whitespace-nowrap text-xs text-fg-muted">
             替我审批
             <Switch
               data-testid="approval-toggle"
@@ -414,7 +418,7 @@ export default function Composer({
             <button
               data-testid="interrupt"
               onClick={onInterrupt}
-              className="rounded-lg border border-danger px-3 py-1 text-xs text-danger hover:bg-danger/10"
+              className="shrink-0 whitespace-nowrap rounded-lg border border-danger px-3 py-1 text-xs text-danger hover:bg-danger/10"
             >
               中断
             </button>
@@ -423,7 +427,7 @@ export default function Composer({
           <button
             onClick={onSubmit}
             disabled={running || recording || transcribing || !value.trim()}
-            className="rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-accent-fg disabled:cursor-not-allowed disabled:opacity-40"
+            className="shrink-0 whitespace-nowrap rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-accent-fg disabled:cursor-not-allowed disabled:opacity-40"
           >
             发送
           </button>

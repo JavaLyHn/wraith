@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { GatewayBindPhase, GatewayConfigView, GatewayState, GatewayStatus } from '../../shared/gateway'
 import { maskId, bindPhaseLabel } from '../lib/gatewayLabels'
 import { IM_PLATFORMS } from '../lib/imPlatforms'
+import { PlatformIcon } from '../lib/imPlatformIcons'
 import { feishuConfigPayload } from '../lib/feishuConfigPayload'
 import { wecomConfigPayload } from '../lib/wecomConfigPayload'
 
@@ -259,7 +260,9 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
                       : 'cursor-not-allowed border-border opacity-50')
                   }
                 >
-                  <span className="text-xl leading-none">{p.icon}</span>
+                  <span className={'flex h-5 items-center justify-center ' + (isSelected ? 'text-accent' : 'text-fg-muted')}>
+                    {PlatformIcon({ id: p.id, className: 'h-5 w-5' }) ?? <span className="text-xl leading-none">{p.icon}</span>}
+                  </span>
                   <span className="max-w-full truncate text-2xs text-fg">{p.name}</span>
                   <span className={'text-3xs ' + (isSelected && bound ? 'text-success' : 'text-fg-subtle')}>{statusText}</span>
                 </div>

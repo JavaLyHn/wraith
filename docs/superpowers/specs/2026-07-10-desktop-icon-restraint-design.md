@@ -46,3 +46,21 @@
 ## 验证
 
 typecheck / vitest 全绿 / build 成功;肉眼:默认中性灰、hover/选中随既有类提亮。
+
+## 附录(同日第二波,用户追加)
+
+### 平台卡真实品牌图标
+- 新依赖 `react-icons`(simple-icons/remix/bootstrap 子集,tree-shake 按需引)。
+- 映射:QQ=SiQq 微信=SiWechat 钉钉=RiDingdingFill Slack=RiSlackFill Teams=BsMicrosoftTeams
+  元宝=@lobehub/icons Yuanbao **Mono 深路径**(barrel 会连带未装 peer @lobehub/ui 炸 build,
+  与 ProviderIcon.tsx 同一模式)其余走 si;**企微/飞书全网开源集无品牌标(商标)**→
+  lucide 兜底:Building2 / Send(纸飞机贴飞书意象)。
+- 渲染:单色 currentColor,默认 text-fg-muted、选中 text-accent;`imPlatforms.ts` 数据层不动
+  (emoji 留作 fallback,测试零改)。新文件 `lib/imPlatformIcons.tsx`。
+
+### Composer 底排「文字下沉」修复
+- 病因:底排 flex 无 nowrap/shrink 约束,窄窗时中文在项内折行(停止/转写中/替我审批/发送/模型名全折两行)。
+- 修法:固定控件(± 语音/停止/转写中/替我审批/中断/发送/模式 chip/状态 chip)一律
+  `whitespace-nowrap shrink-0`;可伸缩项(模型 chip max-w-160 / 目录 chip max-w-180)`min-w-0 + truncate`
+  ——空间不够时先收缩 spacer、再截断长名,**任何项内不再折行**。
+- 顺手清底排残留 emoji/字符钮:＋→Plus ×→X 📁→Folder;ModeSwitcher ⚡📋🤝→Zap/ClipboardList/Users。

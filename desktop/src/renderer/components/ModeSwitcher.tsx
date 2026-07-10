@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react'
+import { Zap, ClipboardList, Users, type LucideIcon } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover'
 import type { RunMode } from '../../shared/types'
 
@@ -13,16 +14,16 @@ interface ModeSwitcherProps {
 
 interface ModeDef {
   id: RunMode
-  icon: string
+  Icon: LucideIcon
   label: string
   desc: string
 }
 
-// 可选模式(react / plan / team)。icon 用 emoji,与工具条其余 chip 的风格一致。
+// 可选模式(react / plan / team)。icon 用 lucide 线性图标,与工具条整体的克制风格一致。
 const MODES: ModeDef[] = [
-  { id: 'react', icon: '⚡', label: 'ReAct', desc: '边想边做 · 单 Agent 推理与工具调用的即时循环' },
-  { id: 'plan', icon: '📋', label: 'Plan', desc: '先规划后执行 · 生成计划、复审,逐步推进' },
-  { id: 'team', icon: '🤝', label: 'Team', desc: '多 Agent 协作 · 规划-并行执行-复查' },
+  { id: 'react', Icon: Zap, label: 'ReAct', desc: '边想边做 · 单 Agent 推理与工具调用的即时循环' },
+  { id: 'plan', Icon: ClipboardList, label: 'Plan', desc: '先规划后执行 · 生成计划、复审,逐步推进' },
+  { id: 'team', Icon: Users, label: 'Team', desc: '多 Agent 协作 · 规划-并行执行-复查' },
 ]
 
 /**
@@ -46,9 +47,9 @@ export default function ModeSwitcher({ mode, onModeChange, running = false }: Mo
           data-testid="mode-chip"
           disabled={running}
           title="执行模式"
-          className="flex cursor-pointer items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <span>{current.icon}</span>
+          <current.Icon className="h-3 w-3 shrink-0" strokeWidth={1.5} />
           <span>{current.label}</span>
         </button>
       </PopoverTrigger>
@@ -65,7 +66,7 @@ export default function ModeSwitcher({ mode, onModeChange, running = false }: Mo
                 (isCurrent ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')
               }
             >
-              <span className="mt-0.5 shrink-0">{m.icon}</span>
+              <m.Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center gap-1">
                   <span className="font-medium">{m.label}</span>
