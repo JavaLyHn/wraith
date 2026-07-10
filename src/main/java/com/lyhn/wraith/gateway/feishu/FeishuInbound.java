@@ -3,6 +3,7 @@ package com.lyhn.wraith.gateway.feishu;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lyhn.wraith.gateway.qq.InboundMsg;
+import java.io.IOException;
 
 /**
  * 飞书入站消息分类(纯逻辑)。把「忽略 / 配对回显 / 非文本提示 / 正常处理」的决策与
@@ -46,7 +47,7 @@ public final class FeishuInbound {
             JsonNode n = M.readTree(contentJson);
             JsonNode t = n.get("text");
             return t == null ? null : t.asText();
-        } catch (Exception e) {
+        } catch (IOException e) {
             return null;
         }
     }
