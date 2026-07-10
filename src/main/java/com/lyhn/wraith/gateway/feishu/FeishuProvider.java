@@ -9,7 +9,7 @@ import com.lark.oapi.service.im.ImService;
 import com.lark.oapi.service.im.v1.model.CreateMessageReq;
 import com.lark.oapi.service.im.v1.model.CreateMessageReqBody;
 import com.lark.oapi.service.im.v1.model.P2MessageReceiveV1;
-import com.lark.oapi.service.im.v1.model.ext.MessageText;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lyhn.wraith.automation.delivery.DeliveryAdapter;
 import com.lyhn.wraith.automation.delivery.FeishuDeliveryAdapter;
 import com.lyhn.wraith.config.WraithConfig;
@@ -171,6 +171,22 @@ public final class FeishuProvider implements ImProvider {
     private static final org.slf4j.Logger log =
             org.slf4j.LoggerFactory.getLogger(FeishuProvider.class);
 
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    /**
+     * 文本消息 content 必须是一段 JSON 字符串 {@code {"text":"..."}}。
+     * ⚠ 不能用 SDK 的 {@code MessageText.newBuilder().text(t).build()}——它是裸 StringBuilder 拼接,
+     * 不转义换行/引号/反斜杠,含这些字符的答案会拼出坏 JSON,飞书回 code=230001
+     * "content is not a string in json format" 并静默丢弃(用户收不到回复)。这里用 Jackson 保证转义。
+     */
+    static String textContentJson(String text) {
+        try {
+            return JSON.writeValueAsString(java.util.Collections.singletonMap("text", text == null ? "" : text));
+        } catch (Exception e) {
+            return "{\"text\":\"\"}";
+        }
+    }
+
     private static void sendText(com.lark.oapi.Client rest, String openId, String text) {
         try {
             com.lark.oapi.service.im.v1.model.CreateMessageResp resp =
@@ -179,7 +195,7 @@ public final class FeishuProvider implements ImProvider {
                             .createMessageReqBody(CreateMessageReqBody.newBuilder()
                                     .receiveId(openId)
                                     .msgType("text")
-                                    .content(MessageText.newBuilder().text(text).build())
+                                    .content(textContentJson(text))
                                     .build())
                             .build());
             if (resp == null || !resp.success()) {

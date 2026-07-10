@@ -1,5 +1,7 @@
 package com.lyhn.wraith.gateway.feishu;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lyhn.wraith.automation.delivery.FeishuDeliveryAdapter;
 import org.junit.jupiter.api.Test;
 
@@ -45,6 +47,21 @@ class FeishuProviderTest {
         List<String[]> cards = new ArrayList<>();
         provider("", cards, () -> {}).surfaceScheduledApproval("run1#1", "shell", "跑个脚本");
         assertTrue(cards.isEmpty(), "owner 未绑定时不应发审批卡");
+    }
+
+    @Test
+    void textContentJsonIsValidJsonAndEscapesSpecialChars() throws Exception {
+        // 回归 code=230001:含换行/引号/反斜杠的答案必须拼成合法 JSON 且原文完整还原。
+        String tricky = "第一行\n带\"引号\"和\\反斜杠";
+        String content = FeishuProvider.textContentJson(tricky);
+        JsonNode node = new ObjectMapper().readTree(content); // 非法 JSON 会在此抛出
+        assertEquals(tricky, node.get("text").asText(), "text 字段应无损还原");
+    }
+
+    @Test
+    void textContentJsonNullTextBecomesEmptyString() throws Exception {
+        JsonNode node = new ObjectMapper().readTree(FeishuProvider.textContentJson(null));
+        assertEquals("", node.get("text").asText());
     }
 
     @Test
