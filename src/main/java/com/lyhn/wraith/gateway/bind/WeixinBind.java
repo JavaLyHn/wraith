@@ -59,7 +59,8 @@ public final class WeixinBind {
             Thread.currentThread().interrupt();
             System.err.println("[gateway] 绑定被中断");
         } catch (Exception e) {
-            System.err.println("[gateway] 微信绑定失败: " + e.getMessage());
+            // 不打印 e.getMessage()(IlinkClient 的 IOException 携带完整响应体,绑定期可能含 bot_token),只报异常类型。
+            System.err.println("[gateway] 微信绑定失败: " + e.getClass().getSimpleName());
         }
     }
 
