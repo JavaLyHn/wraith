@@ -45,6 +45,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
   const [fsHint, setFsHint] = useState<string | null>(null)
 
   const refreshConfig = useCallback(async () => {
+    setConfig(null)
     try {
       const cfg = await window.wraith.gatewayGetConfig(selectedPlatform)
       setConfig(cfg)
@@ -56,7 +57,9 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         // appSecret 永不回填(后端只回 hasSecret);留空 = 保持已存密钥
       }
     } catch (err) {
-      setHint('读取配置失败')
+      console.error('[wraith] gatewayGetConfig error:', err)
+      if (selectedPlatform === 'feishu') setFsHint('读取配置失败')
+      else setHint('读取配置失败')
     }
   }, [selectedPlatform])
 
