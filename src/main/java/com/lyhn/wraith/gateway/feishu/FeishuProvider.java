@@ -73,27 +73,32 @@ public final class FeishuProvider implements ImProvider {
             @Override
             public void handle(P2MessageReceiveV1 event) throws Exception {
                 var ev = event.getEvent();
-                var senderId = ev.getSender() == null ? null : ev.getSender().getSenderId();
-                String openId = senderId == null ? null : senderId.getOpenId();
-                var m = ev.getMessage();
-                FeishuInbound.Result r = FeishuInbound.classify(
-                        openId,
-                        m == null ? null : m.getChatType(),
-                        m == null ? null : m.getMessageType(),
-                        m == null ? null : m.getMessageId(),
-                        m == null ? null : m.getContent(),
-                        ownerBound,
-                        authz.isAllowed(openId),
-                        System.currentTimeMillis());
-                switch (r.kind()) {
-                    case IGNORE -> { /* no-op */ }
-                    case PAIRING_ECHO -> sendText(rest, openId,
-                            "你的 open_id 是 " + openId + ";若这是你,请到桌面端把它绑定为主人。");
-                    case NONTEXT_NOTICE -> sendText(rest, openId, "暂只支持文本消息。");
-                    case PROCESS -> {
-                        InboundMsg msg = r.msg();
-                        if (!dedup.seen(msg.msgId())) driver.onMessage(msg);
+                if (ev == null) return;
+                try {
+                    var senderId = ev.getSender() == null ? null : ev.getSender().getSenderId();
+                    String openId = senderId == null ? null : senderId.getOpenId();
+                    var m = ev.getMessage();
+                    FeishuInbound.Result r = FeishuInbound.classify(
+                            openId,
+                            m == null ? null : m.getChatType(),
+                            m == null ? null : m.getMessageType(),
+                            m == null ? null : m.getMessageId(),
+                            m == null ? null : m.getContent(),
+                            ownerBound,
+                            authz.isAllowed(openId),
+                            System.currentTimeMillis());
+                    switch (r.kind()) {
+                        case IGNORE -> { /* no-op */ }
+                        case PAIRING_ECHO -> sendText(rest, openId,
+                                "你的 open_id 是 " + openId + ";若这是你,请到桌面端把它绑定为主人。");
+                        case NONTEXT_NOTICE -> sendText(rest, openId, "暂只支持文本消息。");
+                        case PROCESS -> {
+                            InboundMsg msg = r.msg();
+                            if (!dedup.seen(msg.msgId())) driver.onMessage(msg);
+                        }
                     }
+                } catch (Exception e) {
+                    System.err.println("[gateway] 飞书消息处理异常: " + e.getClass().getSimpleName());
                 }
             }
         };
@@ -103,24 +108,30 @@ public final class FeishuProvider implements ImProvider {
             @Override
             public P2CardActionTriggerResponse handle(P2CardActionTrigger event) throws Exception {
                 var ev = event.getEvent();
-                String operator = ev.getOperator() == null ? null : ev.getOperator().getOpenId();
-                if (!authz.isAllowed(operator)) return null; // deny-all
-                Map<String, Object> value = ev.getAction() == null ? null : ev.getAction().getValue();
-                FeishuApproval.Callback cb = FeishuApproval.parse(value);
-                if (cb != null) {
-                    boolean scheduled = pendingApprovals.containsKey(cb.sessionKey());
-                    if (scheduled) {
-                        CompletableFuture<ApprovalResult> f = pendingApprovals.remove(cb.sessionKey());
-                        if (f != null) {
-                            f.complete(cb.result().isApproved()
-                                    ? ApprovalResult.approve()
-                                    : ApprovalResult.reject("feishu rejected"));
+                if (ev == null) return null;
+                try {
+                    String operator = ev.getOperator() == null ? null : ev.getOperator().getOpenId();
+                    if (!authz.isAllowed(operator)) return null; // deny-all
+                    Map<String, Object> value = ev.getAction() == null ? null : ev.getAction().getValue();
+                    FeishuApproval.Callback cb = FeishuApproval.parse(value);
+                    if (cb != null) {
+                        boolean scheduled = pendingApprovals.containsKey(cb.sessionKey());
+                        if (scheduled) {
+                            CompletableFuture<ApprovalResult> f = pendingApprovals.remove(cb.sessionKey());
+                            if (f != null) {
+                                f.complete(cb.result().isApproved()
+                                        ? ApprovalResult.approve()
+                                        : ApprovalResult.reject("feishu rejected"));
+                            }
+                            return null;
                         }
-                        return null;
+                        driver.onApproval(cb.sessionKey(), cb.result());
                     }
-                    driver.onApproval(cb.sessionKey(), cb.result());
+                    return null; // v1 不回更新卡;按钮已完成 HITL,重复点安全(future 已 remove)
+                } catch (Exception e) {
+                    System.err.println("[gateway] 飞书卡片处理异常: " + e.getClass().getSimpleName());
+                    return null;
                 }
-                return null; // v1 不回更新卡;按钮已完成 HITL,重复点安全(future 已 remove)
             }
         };
 
