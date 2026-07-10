@@ -160,6 +160,14 @@ public final class AppServer {
         default java.util.Map<String, Object> memorySave(String fact, String scope) {
             throw new UnsupportedOperationException("memorySave not implemented");
         }
+        /** 列出 side-git 快照时间线(新→旧,含全相位;每条附 preTurnOffset)。默认抛出。 */
+        default java.util.Map<String, Object> snapshotList(int limit) {
+            throw new UnsupportedOperationException("snapshotList not implemented");
+        }
+        /** 恢复工作区到「最近第 offset 个 pre-turn 快照」,返回 {ok,message,…}。默认抛出。 */
+        default java.util.Map<String, Object> snapshotRestore(int offset) {
+            throw new UnsupportedOperationException("snapshotRestore not implemented");
+        }
         /**
          * 读取指定会话的 card 事件列表(供 resume 回放 plan/team 卡片)。
          * 每条记录为 {@code {turnOrdinal, events}} JsonNode。默认空列表(向后兼容)。
@@ -456,6 +464,22 @@ public final class AppServer {
                 String scope = (p != null && p.hasNonNull("scope")) ? p.get("scope").asText() : "project";
                 try { writer.result(msg.id(), session.memorySave(fact, scope)); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "snapshot.list" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                int limit = (p != null && p.hasNonNull("limit")) ? p.get("limit").asInt() : 0;
+                try { writer.result(msg.id(), session.snapshotList(limit)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "snapshot.restore" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                int offset = (p != null && p.hasNonNull("offset")) ? p.get("offset").asInt() : 1;
+                try { writer.result(msg.id(), session.snapshotRestore(offset)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "gateway.config.get" -> {
                 JsonNode p = msg.params();

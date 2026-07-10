@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, SnapshotListResult, SnapshotRestoreResult } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -76,6 +76,8 @@ export interface WraithApi {
   memorySearch(query: string): Promise<MemoryListResult>
   memoryDelete(id: string): Promise<{ ok: boolean }>
   memorySave(fact: string, scope: string): Promise<{ ok: boolean }>
+  snapshotList(limit?: number): Promise<SnapshotListResult>
+  snapshotRestore(offset: number): Promise<SnapshotRestoreResult>
   upsertSkill(payload: SkillUpsertPayload): Promise<{ ok: boolean }>
   deleteSkill(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   skillExistsInScope(scope: 'user' | 'project', name: string): Promise<{ exists: boolean }>
@@ -349,6 +351,12 @@ const wraith: WraithApi = {
   },
   memorySave(fact, scope) {
     return ipcRenderer.invoke('wraith:memorySave', fact, scope) as Promise<{ ok: boolean }>
+  },
+  snapshotList(limit) {
+    return ipcRenderer.invoke('wraith:snapshotList', limit) as Promise<SnapshotListResult>
+  },
+  snapshotRestore(offset) {
+    return ipcRenderer.invoke('wraith:snapshotRestore', offset) as Promise<SnapshotRestoreResult>
   },
 
   setSkillEnabled(name, enabled) {

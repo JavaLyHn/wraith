@@ -279,6 +279,30 @@ export interface MemoryListResult {
   entries: MemoryEntryView[]
 }
 
+/** side-git 快照条目视图(AppServer snapshot.* 回包)。 */
+export interface SnapshotEntryView {
+  commitId: string
+  shortId: string
+  phase: string // PRE_TURN | POST_TURN | PRE_RESTORE
+  turnId: string
+  summary: string
+  createdAtMs: number
+  preTurnOffset: number // >0 表示可恢复的 pre-turn 快照(其 restore offset);0 = 非 pre-turn
+}
+
+export interface SnapshotListResult {
+  enabled: boolean
+  snapshots: SnapshotEntryView[]
+}
+
+export interface SnapshotRestoreResult {
+  ok: boolean
+  message: string
+  commitId: string
+  restoredCount: number
+  removedCount: number
+}
+
 export interface SkillDetail extends SkillView {
   body: string
 }

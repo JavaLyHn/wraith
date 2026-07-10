@@ -528,6 +528,16 @@ ipcMain.handle('wraith:memorySave', async (_e, fact: string, scope: string) => {
   return client.request('memory.save', { fact, scope })
 })
 
+// side-git 快照时间线 + 恢复(转发 AppServer snapshot.* RPC)
+ipcMain.handle('wraith:snapshotList', async (_e, limit?: number) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('snapshot.list', { limit: limit ?? 0 })
+})
+ipcMain.handle('wraith:snapshotRestore', async (_e, offset: number) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('snapshot.restore', { offset })
+})
+
 ipcMain.handle('wraith:setSkillEnabled', async (_e, name: string, enabled: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.setEnabled', { name, enabled })

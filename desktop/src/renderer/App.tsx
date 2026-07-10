@@ -44,6 +44,7 @@ import ImGatewayPanel from './components/ImGatewayPanel'
 import ProvidersPanel from './components/ProvidersPanel'
 import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
+import SnapshotPanel from './components/SnapshotPanel'
 import SettingsPanel from './components/SettingsPanel'
 import { useSettings } from './settings/SettingsContext'
 
@@ -141,7 +142,7 @@ export default function App(): JSX.Element {
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
-  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'settings'>('chat')
+  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'settings'>('chat')
   const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
   const [automationBadge, setAutomationBadge] = useState(false)
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
@@ -781,6 +782,7 @@ export default function App(): JSX.Element {
         onOpenProviders={() => setView('providers')}
         onOpenSkills={() => setView('skills')}
         onOpenMemory={() => setView('memory')}
+        onOpenSnapshots={() => setView('snapshots')}
         onOpenSettings={() => setView('settings')}
         automationBadge={automationBadge}
       />
@@ -837,6 +839,8 @@ export default function App(): JSX.Element {
           <SkillsPanel onBack={() => setView('chat')} />
         ) : view === 'memory' ? (
           <MemoryPanel onBack={() => setView('chat')} />
+        ) : view === 'snapshots' ? (
+          <SnapshotPanel onBack={() => setView('chat')} />
         ) : view === 'settings' ? (
           <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} />
         ) : (

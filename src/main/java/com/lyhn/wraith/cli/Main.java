@@ -1414,6 +1414,46 @@ public class Main {
                         agent.getMemoryManager().storeFact(fact, scope);
                         return java.util.Map.of("ok", true);
                     }
+                    public java.util.Map<String, Object> snapshotList(int limit) {
+                        com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
+                        if (svc == null) return java.util.Map.of("enabled", false, "snapshots", java.util.List.of());
+                        java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+                        try {
+                            int preTurnSeen = 0;
+                            for (com.lyhn.wraith.snapshot.TurnSnapshot s : svc.listSnapshots(limit)) {
+                                boolean isPre = s.phase() == com.lyhn.wraith.snapshot.SnapshotPhase.PRE_TURN;
+                                if (isPre) preTurnSeen++;
+                                java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                                m.put("commitId", s.commitId());
+                                m.put("shortId", s.shortCommitId());
+                                m.put("phase", s.phase() != null ? s.phase().name() : "");
+                                m.put("turnId", s.turnId());
+                                m.put("summary", s.summary() != null ? s.summary() : "");
+                                m.put("createdAtMs", s.createdAt() != null ? s.createdAt().toEpochMilli() : 0L);
+                                m.put("preTurnOffset", isPre ? preTurnSeen : 0);
+                                out.add(m);
+                            }
+                        } catch (Exception e) {
+                            return java.util.Map.of("enabled", false, "snapshots", java.util.List.of(), "error", e.getClass().getSimpleName());
+                        }
+                        return java.util.Map.of("enabled", true, "snapshots", out);
+                    }
+                    public java.util.Map<String, Object> snapshotRestore(int offset) {
+                        com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
+                        if (svc == null) return java.util.Map.of("ok", false, "message", "快照功能不可用");
+                        try {
+                            com.lyhn.wraith.snapshot.RestoreResult r = svc.restorePreTurn(offset);
+                            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                            m.put("ok", r.success());
+                            m.put("message", r.message() != null ? r.message() : "");
+                            m.put("commitId", r.commitId() != null ? r.commitId() : "");
+                            m.put("restoredCount", r.restoredFiles() != null ? r.restoredFiles().size() : 0);
+                            m.put("removedCount", r.removedFiles() != null ? r.removedFiles().size() : 0);
+                            return m;
+                        } catch (Exception e) {
+                            return java.util.Map.of("ok", false, "message", "恢复失败: " + e.getClass().getSimpleName());
+                        }
+                    }
                     public java.util.Map<String, Object> skillsList() {
                         java.util.List<java.util.Map<String, Object>> list = new java.util.ArrayList<>();
                         java.util.Set<String> disabled = skillRegistry.stateStore().disabled();
