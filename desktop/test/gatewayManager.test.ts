@@ -113,4 +113,7 @@ describe('classifyGatewayStatusLine', () => {
   it('认飞书 starting token → starting', () => {
     expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS starting')?.state).toBe('starting')
   })
+  it('认企微 subscribed token → running', () => {
+    expect(classifyGatewayStatusLine('WRAITH_GATEWAY_STATUS subscribed')?.state).toBe('running')
+  })
 })

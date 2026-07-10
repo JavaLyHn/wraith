@@ -77,6 +77,8 @@ export function classifyGatewayStatusLine(line: string): GatewayStatus | null {
     case 'connecting':
       return { state: 'starting', message: '连接中…' }
     case 'connected':
+    case 'running':
+    case 'subscribed':
       return { state: 'running' }
     case 'disconnected':
       return { state: 'starting', message: '连接断开,重连中…' }
@@ -84,8 +86,6 @@ export function classifyGatewayStatusLine(line: string): GatewayStatus | null {
       return { state: 'error', message: '认证失败——凭证可能失效,请检查机器人密钥' }
     case 'starting':
       return { state: 'starting', message: '连接中…' }
-    case 'running':
-      return { state: 'running' }
     case 'error':
       return { state: 'error', message: '连接失败' }
     default:
