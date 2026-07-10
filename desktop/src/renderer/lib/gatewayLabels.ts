@@ -10,7 +10,7 @@ export function maskId(s: string | null): string {
 /** 绑定阶段 → 可读提示。 */
 export function bindPhaseLabel(phase: GatewayBindPhase, message?: string): string {
   switch (phase) {
-    case 'scanning': return '已在浏览器打开扫码页,请用手机 QQ 扫码授权…'
+    case 'scanning': return '等待扫码授权…'
     case 'bound': return '✅ 绑定成功'
     case 'secret-invalid': return message ?? 'openclaw 返回的密钥无法换取 token,请手填机器人密钥'
     case 'cancelled': return '已取消绑定'
