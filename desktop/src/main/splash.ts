@@ -13,14 +13,14 @@ export function shouldDismissSplash(
   return elapsedMs >= capMs || (connected && elapsedMs >= floorMs)
 }
 
-/** 自包含启动页:透明背景、居中 logo、幽灵浮现入场 + 辉光呼吸 + 散去动画;含 __dismiss 钩子。 */
+/** 自包含启动页:透明背景(透出窗体毛玻璃)、居中 logo、幽灵浮现入场 + 辉光呼吸 + 散去动画;含 __dismiss 钩子。 */
 export function buildSplashHtml(logoDataUri: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><style>
   html,body{margin:0;height:100vh;background:transparent;overflow:hidden}
   body{display:flex;align-items:center;justify-content:center;-webkit-user-select:none;cursor:default}
   .wrap{animation:ghostIn 900ms cubic-bezier(.22,.61,.36,1) both}
-  .wrap img{width:132px;height:132px;display:block;
-    filter:drop-shadow(0 0 22px rgba(150,195,255,.55));
+  .wrap img{width:148px;height:148px;display:block;
+    filter:drop-shadow(0 0 26px rgba(150,195,255,.50));
     animation:glowPulse 2.6s ease-in-out 900ms infinite}
   body.dismiss .wrap{animation:ghostOut 450ms ease-in both}
   body.dismiss .wrap img{animation:none}

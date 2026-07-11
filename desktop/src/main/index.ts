@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Notification, shell, session } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Notification, shell, session, screen } from 'electron'
 import path from 'path'
 import os from 'os'
 import { fileURLToPath } from 'url'
@@ -32,7 +32,7 @@ import { resolveInterruptTurnId } from './interruptTurnId'
 import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from './notificationFilter'
 import { GatewayManager } from './gatewayManager'
 import type { GatewayEvent } from '../shared/gateway'
-import { shouldDismissSplash, buildSplashHtml, SPLASH_EXIT_MS, SPLASH_SIZE } from './splash'
+import { shouldDismissSplash, buildSplashHtml, SPLASH_EXIT_MS } from './splash'
 import { SPLASH_LOGO_DATA_URI } from './splashLogo'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
@@ -266,14 +266,23 @@ function showMainWindow(): void {
   }
 }
 
-/** 创建透明无边框启动窗;失败返回 null(绝不阻塞启动)。 */
+/**
+ * 创建无边框启动窗:铺满主显示器工作区(菜单栏下、Dock 上),macOS 毛玻璃背景(vibrancy),
+ * logo 居中。失败返回 null(绝不阻塞启动)。
+ */
 function createSplash(): BrowserWindow | null {
   try {
+    const isMac = process.platform === 'darwin'
+    const { x, y, width, height } = screen.getPrimaryDisplay().workArea
     const win = new BrowserWindow({
-      width: SPLASH_SIZE, height: SPLASH_SIZE, center: true,
-      transparent: true, frame: false, backgroundColor: '#00000000',
+      x, y, width, height,
+      frame: false, roundedCorners: true,
       alwaysOnTop: true, hasShadow: false, resizable: false, movable: false,
       skipTaskbar: true, focusable: false,
+      // macOS:毛玻璃(能透出模糊桌面);其它平台退回透明 + CSS 淡色
+      ...(isMac
+        ? { vibrancy: 'fullscreen-ui' as const, visualEffectState: 'active' as const }
+        : { transparent: true, backgroundColor: '#00000000' }),
       webPreferences: { contextIsolation: true, nodeIntegration: false },
     })
     win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(buildSplashHtml(SPLASH_LOGO_DATA_URI)))
@@ -284,18 +293,32 @@ function createSplash(): BrowserWindow | null {
   }
 }
 
-/** 散去 splash(幂等):触发页内淡出 → SPLASH_EXIT_MS 后关窗并显示主窗。 */
+/** 在 ms 内把整窗透明度 1→0,然后关闭并回调(用于毛玻璃整窗淡出)。 */
+function fadeOutAndClose(win: BrowserWindow, ms: number, onDone: () => void): void {
+  const steps = 15
+  const stepMs = Math.max(1, Math.floor(ms / steps))
+  let i = 0
+  const timer = setInterval(() => {
+    i++
+    if (!win.isDestroyed()) win.setOpacity(Math.max(0, 1 - i / steps))
+    if (i >= steps) {
+      clearInterval(timer)
+      if (!win.isDestroyed()) win.close()
+      onDone()
+    }
+  }, stepMs)
+}
+
+/** 散去 splash(幂等):主窗先现身于 splash 之下 → logo 幽灵散去 + 整窗淡出 → 关闭。 */
 let splashDismissed = false
 function dismissSplash(): void {
   if (splashDismissed) return
   splashDismissed = true
   const s = splashWindow
   if (s && !s.isDestroyed()) {
+    showMainWindow()   // 主窗在毛玻璃 splash 之下就位,随 splash 淡出被揭开
     s.webContents.executeJavaScript('window.__dismiss && window.__dismiss()').catch(() => {})
-    setTimeout(() => {
-      if (s && !s.isDestroyed()) s.close()
-      showMainWindow()
-    }, SPLASH_EXIT_MS)
+    fadeOutAndClose(s, SPLASH_EXIT_MS, () => {})
   } else {
     showMainWindow()
   }
