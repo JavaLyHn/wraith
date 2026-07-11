@@ -6,18 +6,19 @@ import { fileURLToPath } from 'node:url'
 
 const DIR = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(DIR, '..')
-const SRC = path.join(ROOT, 'src/renderer/assets/logo-light.png') // 透明底浅色标
+const SRC = path.join(ROOT, 'src/renderer/assets/logo-dark.png') // 透明底深色标
 const BUILD = path.join(ROOT, 'build')
 const ICONSET = path.join(BUILD, 'icon.iconset')
 
-const CANVAS = 1024, TILE = 824, RADIUS = 185, MARK = 560, TILE_COLOR = '#1C1B2A'
+// 浅色圆角瓷砖 + 深色标(与 splash 的 logo-dark 视觉一致)
+const CANVAS = 1024, TILE = 824, RADIUS = 185, MARK = 560, TILE_COLOR = '#F5F5F7'
 const off = Math.round((CANVAS - TILE) / 2)
 
 mkdirSync(BUILD, { recursive: true })
 rmSync(ICONSET, { recursive: true, force: true })
 mkdirSync(ICONSET, { recursive: true })
 
-// 深色圆角瓷砖(居中于 1024 透明画布)
+// 浅色圆角瓷砖(居中于 1024 透明画布)
 const tileSvg = Buffer.from(
   `<svg xmlns="http://www.w3.org/2000/svg" width="${CANVAS}" height="${CANVAS}">
      <rect x="${off}" y="${off}" width="${TILE}" height="${TILE}" rx="${RADIUS}" ry="${RADIUS}" fill="${TILE_COLOR}"/>
