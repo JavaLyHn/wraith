@@ -17,7 +17,7 @@ export function formatTokens(n: number): string {
 
 /** 压缩结果 → 给用户看的中文提示。 */
 export function compactionNotice(r: CompactionView): string {
-  if (r.error) return `❌ 整理失败:${r.error}`
-  if (!r.compacted) return '上下文未超阈值,无需整理'
-  return `✅ 已整理上下文:${formatTokens(r.beforeTokens)} → ${formatTokens(r.afterTokens)} tokens`
+  if (r.error) return `❌ 压缩失败:${r.error}`
+  if (!r.compacted) return '上下文未超阈值,无需压缩'
+  return `✅ 已压缩上下文:${formatTokens(r.beforeTokens)} → ${formatTokens(r.afterTokens)} tokens`
 }

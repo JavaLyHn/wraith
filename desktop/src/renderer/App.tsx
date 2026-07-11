@@ -768,7 +768,7 @@ export default function App(): JSX.Element {
     turn: state.turn,
   })
 
-  // 手动整理上下文(压缩当前对话历史,释放上下文窗口;可见 transcript 不变)
+  // 手动压缩上下文(压缩当前对话历史,释放上下文窗口;可见 transcript 不变)
   const [compactBusy, setCompactBusy] = useState(false)
   const [compactNotice, setCompactNotice] = useState<string | null>(null)
   const handleCompact = useCallback(async (): Promise<void> => {
@@ -777,7 +777,7 @@ export default function App(): JSX.Element {
     try {
       setCompactNotice(compactionNotice(await window.wraith.compactHistory()))
     } catch (err) {
-      setCompactNotice('❌ 整理失败:' + ((err as Error).message || '未知错误'))
+      setCompactNotice('❌ 压缩失败:' + ((err as Error).message || '未知错误'))
     } finally {
       setCompactBusy(false)
     }
@@ -935,10 +935,10 @@ export default function App(): JSX.Element {
                     data-testid="chat-compact"
                     onClick={() => void handleCompact()}
                     disabled={compactBusy || state.turn === 'running' || !pv.items.length}
-                    title="整理上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
+                    title="压缩上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
                     className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface hover:text-fg disabled:cursor-not-allowed disabled:opacity-40'}
                   >
-                    <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '整理中…' : '整理'}
+                    <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '压缩中…' : '压缩'}
                   </button>
                   <button
                     data-testid="chat-export"
