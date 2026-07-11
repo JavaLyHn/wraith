@@ -188,6 +188,22 @@ public final class AppServer {
         default java.util.Map<String, Object> sandboxSet(boolean networkAllowed) {
             throw new UnsupportedOperationException("sandboxSet not implemented");
         }
+        /** 浏览器状态(模式/连接/CDP 探活)文本。默认抛出。 */
+        default java.util.Map<String, Object> browserStatus() {
+            throw new UnsupportedOperationException("browserStatus not implemented");
+        }
+        /** 连接本机 Chrome(port 为空=自动;否则按端口),返回结果文本。默认抛出。 */
+        default java.util.Map<String, Object> browserConnect(String port) {
+            throw new UnsupportedOperationException("browserConnect not implemented");
+        }
+        /** 断开、切回隔离模式,返回结果文本。默认抛出。 */
+        default java.util.Map<String, Object> browserDisconnect() {
+            throw new UnsupportedOperationException("browserDisconnect not implemented");
+        }
+        /** 列出共享浏览器标签页,返回结果文本。默认抛出。 */
+        default java.util.Map<String, Object> browserTabs() {
+            throw new UnsupportedOperationException("browserTabs not implemented");
+        }
         /**
          * 读取指定会话的 card 事件列表(供 resume 回放 plan/team 卡片)。
          * 每条记录为 {@code {turnOrdinal, events}} JsonNode。默认空列表(向后兼容)。
@@ -534,6 +550,32 @@ public final class AppServer {
                 JsonNode p = msg.params();
                 boolean net = p != null && p.hasNonNull("networkAllowed") && p.get("networkAllowed").asBoolean();
                 try { writer.result(msg.id(), session.sandboxSet(net)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "browser.status" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.browserStatus()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "browser.connect" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String port = (p != null && p.hasNonNull("port")) ? p.get("port").asText() : null;
+                try { writer.result(msg.id(), session.browserConnect(port)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "browser.disconnect" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.browserDisconnect()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "browser.tabs" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.browserTabs()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

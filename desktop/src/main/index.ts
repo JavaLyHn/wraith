@@ -560,6 +560,24 @@ ipcMain.handle('wraith:sandboxSet', async (_e, networkAllowed: boolean) => {
   return client.request('sandbox.set', { networkAllowed: !!networkAllowed })
 })
 
+// 浏览器会话管理(转发 AppServer browser.* RPC;文本直通)
+ipcMain.handle('wraith:browserStatus', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('browser.status', {})
+})
+ipcMain.handle('wraith:browserConnect', async (_e, port?: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('browser.connect', { port: port ?? null })
+})
+ipcMain.handle('wraith:browserDisconnect', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('browser.disconnect', {})
+})
+ipcMain.handle('wraith:browserTabs', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('browser.tabs', {})
+})
+
 ipcMain.handle('wraith:setSkillEnabled', async (_e, name: string, enabled: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.setEnabled', { name, enabled })

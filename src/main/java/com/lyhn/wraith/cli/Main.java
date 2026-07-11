@@ -1201,6 +1201,16 @@ public class Main {
                 final java.util.concurrent.atomic.AtomicReference<int[]> pendingCardOrdinal = new java.util.concurrent.atomic.AtomicReference<>();
                 final java.util.concurrent.atomic.AtomicReference<String> pendingCardEventsJson = new java.util.concurrent.atomic.AtomicReference<>();
 
+                // 浏览器子系统装配(复刻交互路径):让 agent 的 browser_* 工具生效 + 供 browser.* RPC 复用
+                final com.lyhn.wraith.browser.BrowserSession browserSession = new com.lyhn.wraith.browser.BrowserSession();
+                final com.lyhn.wraith.browser.BrowserConnectivityCheck browserConnectivityCheck = new com.lyhn.wraith.browser.BrowserConnectivityCheck();
+                registry.setBrowserGuard(new com.lyhn.wraith.browser.BrowserGuard(browserSession, new com.lyhn.wraith.browser.SensitivePagePolicy()));
+                registry.setBrowserConnector(new com.lyhn.wraith.browser.BrowserConnector() {
+                    public String status() { return appServerBrowserCmd("status", browserSession, browserConnectivityCheck, appServerMcp.manager(), registry, hitl); }
+                    public String connectDefault() { return appServerBrowserCmd("connect", browserSession, browserConnectivityCheck, appServerMcp.manager(), registry, hitl); }
+                    public String disconnect() { return appServerBrowserCmd("disconnect", browserSession, browserConnectivityCheck, appServerMcp.manager(), registry, hitl); }
+                });
+
                 return new com.lyhn.wraith.runtime.appserver.AppServer.SessionRunner() {
                     public com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer() { return renderer; }
                     public String runTurn(String input) throws Exception {
@@ -1513,6 +1523,19 @@ public class Main {
                         return java.util.Map.of(
                                 "available", com.lyhn.wraith.policy.sandbox.CommandSandbox.available(),
                                 "networkAllowed", cs != null && cs.networkAllowed());
+                    }
+                    public java.util.Map<String, Object> browserStatus() {
+                        return java.util.Map.of("text", appServerBrowserCmd("status", browserSession, browserConnectivityCheck, appServerMcp.manager(), registry, hitl));
+                    }
+                    public java.util.Map<String, Object> browserConnect(String port) {
+                        String payload = (port == null || port.isBlank()) ? "connect" : "connect " + port.trim();
+                        return java.util.Map.of("text", appServerBrowserCmd(payload, browserSession, browserConnectivityCheck, appServerMcp.manager(), registry, hitl));
+                    }
+                    public java.util.Map<String, Object> browserDisconnect() {
+                        return java.util.Map.of("text", appServerBrowserCmd("disconnect", browserSession, browserConnectivityCheck, appServerMcp.manager(), registry, hitl));
+                    }
+                    public java.util.Map<String, Object> browserTabs() {
+                        return java.util.Map.of("text", appServerBrowserCmd("tabs", browserSession, browserConnectivityCheck, appServerMcp.manager(), registry, hitl));
                     }
                     public java.util.Map<String, Object> skillsList() {
                         java.util.List<java.util.Map<String, Object>> list = new java.util.ArrayList<>();
@@ -3228,6 +3251,19 @@ public class Main {
         out.println("   命令执行上限: 60 秒，输出 8KB（截断）");
         out.println("   审计目录: " + reactAgent.getToolRegistry().getAuditLog().getAuditDir());
         out.println();
+    }
+
+    /** app-server 用:null-guard 包装 handleBrowserCommand(MCP 未就绪时给友好文本,不 NPE)。 */
+    static String appServerBrowserCmd(String payload,
+                                      BrowserSession browserSession,
+                                      BrowserConnectivityCheck connectivityCheck,
+                                      com.lyhn.wraith.mcp.McpServerManager mcpServerManager,
+                                      HitlToolRegistry registry,
+                                      HitlHandler hitlHandler) {
+        if (mcpServerManager == null) {
+            return "MCP 尚未就绪,请稍候重试(chrome-devtools 会在 MCP 初始化后可用)。";
+        }
+        return handleBrowserCommand(payload, browserSession, connectivityCheck, mcpServerManager, registry, hitlHandler);
     }
 
     static String handleBrowserCommand(String payload,

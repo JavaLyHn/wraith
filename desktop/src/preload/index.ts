@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -83,6 +83,10 @@ export interface WraithApi {
   auditList(limit?: number): Promise<AuditListResult>
   sandboxGet(): Promise<SandboxState>
   sandboxSet(networkAllowed: boolean): Promise<SandboxState>
+  browserStatus(): Promise<BrowserCmdResult>
+  browserConnect(port?: string): Promise<BrowserCmdResult>
+  browserDisconnect(): Promise<BrowserCmdResult>
+  browserTabs(): Promise<BrowserCmdResult>
   upsertSkill(payload: SkillUpsertPayload): Promise<{ ok: boolean }>
   deleteSkill(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   skillExistsInScope(scope: 'user' | 'project', name: string): Promise<{ exists: boolean }>
@@ -377,6 +381,18 @@ const wraith: WraithApi = {
   },
   sandboxSet(networkAllowed) {
     return ipcRenderer.invoke('wraith:sandboxSet', networkAllowed) as Promise<SandboxState>
+  },
+  browserStatus() {
+    return ipcRenderer.invoke('wraith:browserStatus') as Promise<BrowserCmdResult>
+  },
+  browserConnect(port) {
+    return ipcRenderer.invoke('wraith:browserConnect', port) as Promise<BrowserCmdResult>
+  },
+  browserDisconnect() {
+    return ipcRenderer.invoke('wraith:browserDisconnect') as Promise<BrowserCmdResult>
+  },
+  browserTabs() {
+    return ipcRenderer.invoke('wraith:browserTabs') as Promise<BrowserCmdResult>
   },
 
   setSkillEnabled(name, enabled) {

@@ -6,7 +6,7 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import {
-  Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History,
+  Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe,
   Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown,
   Shield, ShieldAlert, ShieldCheck,
 } from 'lucide-react'
@@ -112,7 +112,7 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'settings' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
@@ -121,6 +121,7 @@ interface SidebarProps {
   onOpenMemory: () => void
   onOpenSnapshots: () => void
   onOpenPolicy: () => void
+  onOpenBrowser: () => void
   onOpenSettings: () => void
   automationBadge: boolean
 }
@@ -151,6 +152,7 @@ export default function Sidebar({
   onOpenMemory,
   onOpenSnapshots,
   onOpenPolicy,
+  onOpenBrowser,
   onOpenSettings,
   automationBadge,
 }: SidebarProps): JSX.Element {
@@ -377,6 +379,15 @@ export default function Sidebar({
               (activeNav === 'policy' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
             <span className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />安全</span>
+          </button>
+          {/* browser */}
+          <button
+            data-testid="nav-browser"
+            onClick={onOpenBrowser}
+            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+              (activeNav === 'browser' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+          >
+            <span className="flex items-center gap-2"><Globe className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />浏览器</span>
           </button>
           </div>
           )}

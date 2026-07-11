@@ -343,6 +343,11 @@ export interface SandboxState {
   networkAllowed: boolean
 }
 
+/** 浏览器命令结果(AppServer browser.* 回包,文本直通)。 */
+export interface BrowserCmdResult {
+  text: string
+}
+
 export interface SkillDetail extends SkillView {
   body: string
 }

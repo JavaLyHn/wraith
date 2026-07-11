@@ -46,6 +46,7 @@ import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
 import SnapshotPanel from './components/SnapshotPanel'
 import PolicyPanel from './components/PolicyPanel'
+import BrowserPanel from './components/BrowserPanel'
 import SettingsPanel from './components/SettingsPanel'
 import { useSettings } from './settings/SettingsContext'
 
@@ -143,7 +144,7 @@ export default function App(): JSX.Element {
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
-  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'settings'>('chat')
+  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'settings'>('chat')
   const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
   const [automationBadge, setAutomationBadge] = useState(false)
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
@@ -785,6 +786,7 @@ export default function App(): JSX.Element {
         onOpenMemory={() => setView('memory')}
         onOpenSnapshots={() => setView('snapshots')}
         onOpenPolicy={() => setView('policy')}
+        onOpenBrowser={() => setView('browser')}
         onOpenSettings={() => setView('settings')}
         automationBadge={automationBadge}
       />
@@ -845,6 +847,8 @@ export default function App(): JSX.Element {
           <SnapshotPanel onBack={() => setView('chat')} />
         ) : view === 'policy' ? (
           <PolicyPanel onBack={() => setView('chat')} />
+        ) : view === 'browser' ? (
+          <BrowserPanel onBack={() => setView('chat')} />
         ) : view === 'settings' ? (
           <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} />
         ) : (
