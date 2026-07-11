@@ -169,11 +169,26 @@ export default function Sidebar({
     return next
   })
   const inputRef = useRef<HTMLInputElement>(null)
+  const asideRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     if (searchActive) {
       inputRef.current?.focus()
     }
+  }, [searchActive])
+
+  // 搜索激活时:点击侧栏之外(正文/编辑区等)即收起搜索、恢复原状。
+  // 用 mousedown + 「在 aside 之内不关」避免与「点搜索结果」竞态(结果在 aside 内)。
+  useEffect(() => {
+    if (!searchActive) return
+    const onDown = (e: MouseEvent): void => {
+      if (asideRef.current && !asideRef.current.contains(e.target as Node)) {
+        setSearchQuery('')
+        setSearchActive(false)
+      }
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
   }, [searchActive])
 
   const handleSearchActivate = () => {
@@ -199,6 +214,7 @@ export default function Sidebar({
   return (
     <TooltipProvider delayDuration={200}>
       <aside
+        ref={asideRef}
         data-testid="sidebar"
         className="sidebar-gradient flex h-full w-60 flex-col border-r border-border"
       >
@@ -381,7 +397,7 @@ export default function Sidebar({
                     <button
                       key={s.id}
                       data-testid="conversation-item"
-                      onClick={() => onSelectSession(s.id)}
+                      onClick={() => { onSelectSession(s.id); handleSearchClear() }}
                       className={
                         'mb-0.5 flex w-full items-center gap-1 truncate rounded-lg px-3 py-2 text-left text-xs ' +
                         (s.id === activeSessionId ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')
