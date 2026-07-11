@@ -329,7 +329,8 @@ export class GatewayManager {
         this.onEvent({ kind: 'bind', phase: 'scanning' })
       }
       const url = parseWeixinQrUrl(l)
-      if (url) this.openExternal(url)
+      // 不再自动开浏览器:二维码已在桌面渲染成图片,把兜底链接交给面板做可点链接。
+      if (url) this.onEvent({ kind: 'bind', phase: 'scanning', url })
       const phase = classifyBindLine(l)
       if (phase) resolvedPhase = phase
     }

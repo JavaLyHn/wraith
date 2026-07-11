@@ -30,7 +30,7 @@ const BTN_SECONDARY = 'rounded-lg border border-border px-4 py-2 text-xs text-fg
 export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Element {
   const [config, setConfig] = useState<GatewayConfigView | null>(null)
   const [status, setStatus] = useState<GatewayStatus>({ state: 'stopped' })
-  const [bind, setBind] = useState<{ phase: GatewayBindPhase; message?: string; qr?: string } | null>(null)
+  const [bind, setBind] = useState<{ phase: GatewayBindPhase; message?: string; qr?: string; url?: string } | null>(null)
   const [secretInput, setSecretInput] = useState('')
   const [secretBusy, setSecretBusy] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
@@ -112,12 +112,13 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
     const unsub = window.wraith.onGatewayEvent(evt => {
       if (evt.kind === 'status') setStatus(evt.status)
       else if (evt.kind === 'bind') {
-        // 微信扫码:先来一条无 qr 的「请扫码」行(phase=scanning),再来一条带 qr 的图片行(也 scanning)。
-        // 保留已拿到的二维码,避免第二条把图冲掉;非 scanning 阶段清空 qr。
+        // 微信扫码:scanning 阶段会分几条来(「请扫码」行、带 qr 的图片行、带 url 的兜底链接行)。
+        // 逐条到达时保留已拿到的 qr / url,避免后一条把前一条冲掉;非 scanning 阶段清空。
         setBind(prev => ({
           phase: evt.phase,
           message: evt.message,
           qr: evt.qr ?? (evt.phase === 'scanning' ? prev?.qr : undefined),
+          url: evt.url ?? (evt.phase === 'scanning' ? prev?.url : undefined),
         }))
         if (evt.phase === 'bound' || evt.phase === 'secret-invalid') void refreshConfig()
       }
@@ -434,7 +435,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
               </div>
             ) : (
               <div className="mt-2 text-xs text-fg-subtle">
-                未绑定——点「扫码绑定」,二维码会显示在下方;若有 http 链接会同时在浏览器打开。
+                未绑定——点「扫码绑定」,二维码会显示在下方;扫不出可点卡片里的链接在浏览器打开。
               </div>
             )}
             <label className="mt-2 block text-xs text-fg-muted">
@@ -475,6 +476,13 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
                   </div>
                 )}
                 <div className="text-3xs text-fg-subtle">扫码后在手机微信确认;二维码约 5 分钟过期</div>
+                {bind.url && (
+                  <button data-testid="im-wx-qr-link"
+                    onClick={() => void window.wraith.openExternal(bind.url!)}
+                    className="text-3xs text-accent hover:underline">
+                    扫不出?点此在浏览器打开链接
+                  </button>
+                )}
               </div>
             )}
           </section>
