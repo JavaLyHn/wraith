@@ -1817,7 +1817,10 @@ public class Main {
                     public java.util.Map<String,Object> skillsFork(String name) {
                         com.lyhn.wraith.skill.Skill s = skillRegistry.findAnySkill(name);
                         if (s == null) throw new IllegalArgumentException("技能不存在: " + name);
-                        try { skillStore.upsert("user", s.name(), s.description(), s.version(), s.author(), s.tags(), s.body()); }
+                        try {
+                            skillStore.upsert("user", s.name(), s.description(), s.version(), s.author(), s.tags(), s.body());
+                            skillStore.copyReferences("user", s.name(), s.referencesDir()); // fork 保留 references/
+                        }
                         catch (java.io.IOException e) { throw new RuntimeException("复制技能失败: " + e.getMessage(), e); }
                         skillRegistry.reload();
                         return java.util.Map.of("ok", true, "name", s.name());

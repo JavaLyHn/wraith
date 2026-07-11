@@ -47,6 +47,30 @@ public final class SkillStore {
         }
     }
 
+    /**
+     * 把源技能的 references/ 递归复制到 &lt;scopeDir&gt;/&lt;name&gt;/references/(fork 时保留参考文件)。
+     * srcReferencesDir 为 null / 非目录则 no-op。
+     */
+    public void copyReferences(String scope, String name, Path srcReferencesDir) throws IOException {
+        if (srcReferencesDir == null || !Files.isDirectory(srcReferencesDir)) {
+            return;
+        }
+        Path dir = resolveScopeDir(scope);
+        String safe = requireSafeName(name);
+        Path destRefs = dir.resolve(safe).resolve("references");
+        try (var walk = Files.walk(srcReferencesDir)) {
+            for (Path src : walk.toList()) {
+                Path dst = destRefs.resolve(srcReferencesDir.relativize(src).toString());
+                if (Files.isDirectory(src)) {
+                    Files.createDirectories(dst);
+                } else {
+                    Files.createDirectories(dst.getParent());
+                    Files.copy(src, dst, StandardCopyOption.REPLACE_EXISTING);
+                }
+            }
+        }
+    }
+
     /** 删除 &lt;scopeDir&gt;/&lt;name&gt;/ 整个目录,幂等(不存在即 no-op)。 */
     public void delete(String scope, String name) throws IOException {
         Path dir = resolveScopeDir(scope);
