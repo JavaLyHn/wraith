@@ -48,6 +48,7 @@ import ProvidersPanel from './components/ProvidersPanel'
 import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
 import SnapshotPanel from './components/SnapshotPanel'
+import TaskPanel from './components/TaskPanel'
 import PolicyPanel from './components/PolicyPanel'
 import BrowserPanel from './components/BrowserPanel'
 import RagPanel from './components/RagPanel'
@@ -148,7 +149,7 @@ export default function App(): JSX.Element {
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
-  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'settings'>('chat')
+  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'settings'>('chat')
   const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
   const [automationBadge, setAutomationBadge] = useState(false)
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
@@ -825,6 +826,7 @@ export default function App(): JSX.Element {
         onOpenSkills={() => setView('skills')}
         onOpenMemory={() => setView('memory')}
         onOpenSnapshots={() => setView('snapshots')}
+        onOpenTasks={() => setView('tasks')}
         onOpenPolicy={() => setView('policy')}
         onOpenBrowser={() => setView('browser')}
         onOpenRag={() => setView('rag')}
@@ -886,6 +888,8 @@ export default function App(): JSX.Element {
           <MemoryPanel onBack={() => setView('chat')} />
         ) : view === 'snapshots' ? (
           <SnapshotPanel onBack={() => setView('chat')} />
+        ) : view === 'tasks' ? (
+          <TaskPanel onBack={() => setView('chat')} />
         ) : view === 'policy' ? (
           <PolicyPanel onBack={() => setView('chat')} />
         ) : view === 'browser' ? (

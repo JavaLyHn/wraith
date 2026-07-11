@@ -593,6 +593,24 @@ ipcMain.handle('wraith:compactHistory', async () => {
   return client.request('session.compact', {})
 })
 
+// 后台任务(转发 AppServer task.*;与 CLI /task 共享 ~/.wraith/tasks/tasks.db)
+ipcMain.handle('wraith:taskList', async (_e, limit: number) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('task.list', { limit: limit ?? 20 })
+})
+ipcMain.handle('wraith:taskAdd', async (_e, prompt: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('task.add', { prompt })
+})
+ipcMain.handle('wraith:taskGet', async (_e, id: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('task.get', { id })
+})
+ipcMain.handle('wraith:taskCancel', async (_e, id: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('task.cancel', { id })
+})
+
 // 安全策略状态 + 危险工具审计(只读,转发 AppServer policy.status / audit.list)
 ipcMain.handle('wraith:policyStatus', async () => {
   if (!client) throw new Error('Backend not connected')

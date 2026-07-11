@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -130,6 +130,11 @@ export interface WraithApi {
   transcribe(audioBase64: string, mime: string): Promise<{ text: string }>
   /** 手动压缩当前对话历史,释放上下文窗口。 */
   compactHistory(): Promise<{ compacted: boolean; beforeTokens: number; afterTokens: number; error?: string | null }>
+  /** 后台任务:列表 / 提交 / 取详情 / 取消(与 CLI /task 共享 ~/.wraith/tasks/tasks.db)。 */
+  taskList(limit?: number): Promise<TaskListResult>
+  taskAdd(prompt: string): Promise<{ ok: boolean; id?: string; message?: string }>
+  taskGet(id: string): Promise<DurableTaskView>
+  taskCancel(id: string): Promise<{ ok: boolean }>
 }
 
 const wraith: WraithApi = {
@@ -541,6 +546,18 @@ const wraith: WraithApi = {
   },
   compactHistory() {
     return ipcRenderer.invoke('wraith:compactHistory') as Promise<{ compacted: boolean; beforeTokens: number; afterTokens: number; error?: string | null }>
+  },
+  taskList(limit) {
+    return ipcRenderer.invoke('wraith:taskList', limit ?? 20) as Promise<TaskListResult>
+  },
+  taskAdd(prompt) {
+    return ipcRenderer.invoke('wraith:taskAdd', prompt) as Promise<{ ok: boolean; id?: string; message?: string }>
+  },
+  taskGet(id) {
+    return ipcRenderer.invoke('wraith:taskGet', id) as Promise<DurableTaskView>
+  },
+  taskCancel(id) {
+    return ipcRenderer.invoke('wraith:taskCancel', id) as Promise<{ ok: boolean }>
   },
 }
 

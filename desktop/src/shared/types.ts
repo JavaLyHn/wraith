@@ -304,6 +304,23 @@ export interface SnapshotListResult {
   snapshots: SnapshotEntryView[]
 }
 
+/** 后台任务视图(AppServer task.* 回包)。 */
+export interface DurableTaskView {
+  id: string
+  status: string // enqueued | running | completed | failed | canceled
+  prompt: string
+  createdAtMs: number
+  durationMs: number
+  result?: string
+  error?: string | null
+  found?: boolean
+}
+export interface TaskListResult {
+  enabled: boolean
+  tasks: DurableTaskView[]
+  error?: string
+}
+
 export interface SnapshotRestoreResult {
   ok: boolean
   message: string

@@ -188,6 +188,22 @@ public final class AppServer {
         default java.util.Map<String, Object> compactHistory() {
             throw new UnsupportedOperationException("compactHistory not implemented");
         }
+        /** 后台任务列表(最近 limit 条,不含 result)。默认抛出。 */
+        default java.util.Map<String, Object> taskList(int limit) {
+            throw new UnsupportedOperationException("taskList not implemented");
+        }
+        /** 提交后台任务,返回 {ok,id}。默认抛出。 */
+        default java.util.Map<String, Object> taskAdd(String prompt) {
+            throw new UnsupportedOperationException("taskAdd not implemented");
+        }
+        /** 取单个后台任务完整信息(含 result/error),{found,...}。默认抛出。 */
+        default java.util.Map<String, Object> taskGet(String id) {
+            throw new UnsupportedOperationException("taskGet not implemented");
+        }
+        /** 取消后台任务,返回 {ok}。默认抛出。 */
+        default java.util.Map<String, Object> taskCancel(String id) {
+            throw new UnsupportedOperationException("taskCancel not implemented");
+        }
         /** 安全策略状态(项目根/审计目录/危险工具集)。默认抛出。 */
         default java.util.Map<String, Object> policyStatus() {
             throw new UnsupportedOperationException("policyStatus not implemented");
@@ -385,6 +401,34 @@ public final class AppServer {
                 // 压缩会调一次 LLM 生成摘要,耗时 → 后台线程,避免占用单线程分发循环
                 final SessionRunner s = session;
                 dispatchAsync(msg.id(), s::compactHistory);
+            }
+            case "task.list" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                int limit = (p != null && p.hasNonNull("limit")) ? p.get("limit").asInt() : 20;
+                try { writer.result(msg.id(), session.taskList(limit)); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "task.add" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String prompt = textParam(msg.params(), "prompt");
+                if (prompt == null || prompt.isBlank()) { writer.error(msg.id(), -32602, "缺 prompt"); return true; }
+                try { writer.result(msg.id(), session.taskAdd(prompt)); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "task.get" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String id = textParam(msg.params(), "id");
+                if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                try { writer.result(msg.id(), session.taskGet(id)); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "task.cancel" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String id = textParam(msg.params(), "id");
+                if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                try { writer.result(msg.id(), session.taskCancel(id)); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "config.setDefaultProvider" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }

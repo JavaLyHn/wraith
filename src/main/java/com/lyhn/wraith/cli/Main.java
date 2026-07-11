@@ -1123,6 +1123,25 @@ public class Main {
             System.exit(1);
         }
 
+        // 后台任务管理器:与 CLI 复用同一 ~/.wraith/tasks/tasks.db(互通);
+        // task runner 在「活跃会话根」跑(taskRoot 由会话工厂 set),独立 headless agent。
+        final java.util.concurrent.atomic.AtomicReference<String> taskRoot =
+                new java.util.concurrent.atomic.AtomicReference<>(
+                        java.nio.file.Path.of(".").toAbsolutePath().normalize().toString());
+        final com.lyhn.wraith.llm.LlmClient taskClient = client;
+        com.lyhn.wraith.runtime.task.DurableTaskManager taskManagerTmp;
+        try {
+            taskManagerTmp = com.lyhn.wraith.runtime.task.DurableTaskManager.openDefault(
+                    prompt -> runHeadlessTaskAt(prompt, taskClient, taskRoot.get()));
+            taskManagerTmp.start();
+            Runtime.getRuntime().addShutdownHook(
+                    new Thread(taskManagerTmp::close, "wraith-appserver-task-shutdown"));
+        } catch (Exception e) {
+            System.err.println("app-server: 后台任务管理器初始化失败: " + e.getClass().getSimpleName());
+            taskManagerTmp = null;
+        }
+        final com.lyhn.wraith.runtime.task.DurableTaskManager taskManager = taskManagerTmp;
+
         com.lyhn.wraith.runtime.appserver.AppServerMcp appServerMcp =
                 new com.lyhn.wraith.runtime.appserver.AppServerMcp();
 
@@ -1141,6 +1160,7 @@ public class Main {
                 String root = (workspaceDir != null && !workspaceDir.isBlank())
                         ? workspaceDir
                         : java.nio.file.Path.of(".").toAbsolutePath().normalize().toString();
+                taskRoot.set(root); // 后台任务在当前活跃会话根跑
                 appServerMcp.ensureFor(root, registry, renderer);
                 registry.setProjectPath(root);
                 registry.setWriteFileObserver((path, ba) -> renderer.appendDiff(path, ba[0], ba[1]));
@@ -1505,6 +1525,57 @@ public class Main {
                             return java.util.Map.of("compacted", false, "beforeTokens", 0, "afterTokens", 0,
                                     "error", e.getClass().getSimpleName());
                         }
+                    }
+                    private java.util.Map<String, Object> taskRow(com.lyhn.wraith.runtime.task.DurableTask t, boolean full) {
+                        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                        m.put("id", t.id());
+                        m.put("status", t.status() != null ? t.status().value() : "enqueued");
+                        m.put("prompt", t.prompt() != null ? t.prompt() : "");
+                        m.put("createdAtMs", t.createdAt() != null ? t.createdAt().toEpochMilli() : 0L);
+                        m.put("durationMs", t.durationMs());
+                        if (full) {
+                            m.put("result", t.result() != null ? t.result() : "");
+                            m.put("error", t.error());
+                        }
+                        return m;
+                    }
+                    public java.util.Map<String, Object> taskList(int limit) {
+                        if (taskManager == null) return java.util.Map.of("enabled", false, "tasks", java.util.List.of());
+                        try {
+                            java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+                            for (com.lyhn.wraith.runtime.task.DurableTask t : taskManager.list(limit)) out.add(taskRow(t, false));
+                            return java.util.Map.of("enabled", true, "tasks", out);
+                        } catch (Exception e) {
+                            return java.util.Map.of("enabled", false, "tasks", java.util.List.of(), "error", e.getClass().getSimpleName());
+                        }
+                    }
+                    public java.util.Map<String, Object> taskAdd(String prompt) {
+                        if (taskManager == null) return java.util.Map.of("ok", false, "message", "后台任务不可用");
+                        try {
+                            com.lyhn.wraith.runtime.task.DurableTask t = taskManager.enqueue(prompt);
+                            return java.util.Map.of("ok", true, "id", t.id());
+                        } catch (IllegalArgumentException e) {
+                            return java.util.Map.of("ok", false, "message", e.getMessage() != null ? e.getMessage() : "任务内容无效");
+                        } catch (Exception e) {
+                            return java.util.Map.of("ok", false, "message", "提交失败: " + e.getClass().getSimpleName());
+                        }
+                    }
+                    public java.util.Map<String, Object> taskGet(String id) {
+                        if (taskManager == null) return java.util.Map.of("found", false);
+                        try {
+                            return taskManager.find(id).<java.util.Map<String, Object>>map(t -> {
+                                java.util.Map<String, Object> m = taskRow(t, true);
+                                m.put("found", true);
+                                return m;
+                            }).orElse(java.util.Map.of("found", false));
+                        } catch (Exception e) {
+                            return java.util.Map.of("found", false, "error", e.getClass().getSimpleName());
+                        }
+                    }
+                    public java.util.Map<String, Object> taskCancel(String id) {
+                        if (taskManager == null) return java.util.Map.of("ok", false);
+                        try { return java.util.Map.of("ok", taskManager.cancel(id)); }
+                        catch (Exception e) { return java.util.Map.of("ok", false, "error", e.getClass().getSimpleName()); }
                     }
                     public java.util.Map<String, Object> snapshotRestoreCommit(String commitId) {
                         com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
@@ -1994,8 +2065,14 @@ public class Main {
     }
 
     private static String runHeadlessTask(String prompt, LlmClient llmClient) {
+        return runHeadlessTaskAt(prompt, llmClient, Path.of(".").toAbsolutePath().normalize().toString());
+    }
+
+    /** headless 后台任务:全新 registry+agent 在指定项目根跑,不共享交互会话上下文。 */
+    private static String runHeadlessTaskAt(String prompt, LlmClient llmClient, String root) {
         ToolRegistry registry = new ToolRegistry();
-        registry.setProjectPath(Path.of(".").toAbsolutePath().normalize().toString());
+        registry.setProjectPath(root == null || root.isBlank()
+                ? Path.of(".").toAbsolutePath().normalize().toString() : root);
         Agent agent = new Agent(llmClient, registry);
         return agent.run(prompt);
     }

@@ -1,7 +1,9 @@
 # 桌面「后台任务」面板(补齐 CLI /task)
 
 - 日期:2026-07-11
-- 状态:draft(方案待评审,未实现)
+- 状态:**已实现**(2026-07-11)。注:`DurableTaskManager` 已有 `find(id)`,无需新增 `get(id)`;
+  task 运行目录用共享 `AtomicReference<String> taskRoot`(会话工厂设为当前会话 root),
+  经 `runHeadlessTaskAt(prompt, client, root)` 执行。
 - 关联:CLI `/task list/add/cancel/log`(`Main.java` case TASK → `TaskCommandFormatter.handle(taskManager, …)`)、`DurableTaskManager`、`DurableTask`
 
 ## 背景 / 动机

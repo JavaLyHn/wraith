@@ -8,7 +8,7 @@ import {
 import {
   Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
   Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown,
-  Shield, ShieldAlert, ShieldCheck,
+  Shield, ShieldAlert, ShieldCheck, ListTodo,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
 import Logo from './Logo'
@@ -114,7 +114,7 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'settings' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
@@ -122,6 +122,7 @@ interface SidebarProps {
   onOpenSkills: () => void
   onOpenMemory: () => void
   onOpenSnapshots: () => void
+  onOpenTasks: () => void
   onOpenPolicy: () => void
   onOpenBrowser: () => void
   onOpenRag: () => void
@@ -155,6 +156,7 @@ export default function Sidebar({
   onOpenSkills,
   onOpenMemory,
   onOpenSnapshots,
+  onOpenTasks,
   onOpenPolicy,
   onOpenBrowser,
   onOpenRag,
@@ -381,6 +383,15 @@ export default function Sidebar({
               (activeNav === 'snapshots' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
             <span className="flex items-center gap-2"><History className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />快照</span>
+          </button>
+          {/* background tasks */}
+          <button
+            data-testid="nav-tasks"
+            onClick={onOpenTasks}
+            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+              (activeNav === 'tasks' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+          >
+            <span className="flex items-center gap-2"><ListTodo className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />后台任务</span>
           </button>
           {/* policy + audit */}
           <button
