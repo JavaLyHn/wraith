@@ -232,9 +232,16 @@ function spawnBackend(): void {
 function createWindow(): void {
   const preloadPath = path.join(__dirname, '../preload/index.cjs')
 
+  // 首页开局铺满主显示器工作区(菜单栏下、Dock 上),与 splash 一致的"满屏"观感;
+  // 仍是普通可缩放/可移动窗口(保留窗口控制)。E2E 用固定尺寸,避免受运行环境屏幕影响。
+  const isE2E = process.env['WRAITH_E2E'] === '1'
+  const wa = screen.getPrimaryDisplay().workArea
+  const bounds = isE2E
+    ? { width: 1200, height: 800 }
+    : { x: wa.x, y: wa.y, width: wa.width, height: wa.height }
+
   mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    ...bounds,
     show: false,
     // dev: show WR icon instead of Electron atom; packaged macOS: dock icon comes from .icns
     icon: app.isPackaged ? undefined : path.join(__dirname, '../../build/icon-512.png'),
