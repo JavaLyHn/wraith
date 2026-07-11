@@ -31,6 +31,7 @@ import type { SkillUpsertPayload } from '../shared/types'
 import { resolveInterruptTurnId } from './interruptTurnId'
 import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from './notificationFilter'
 import { GatewayManager } from './gatewayManager'
+import { PtyManager } from './pty'
 import type { GatewayEvent } from '../shared/gateway'
 import { shouldDismissSplash, buildSplashHtml, SPLASH_EXIT_MS } from './splash'
 import { SPLASH_LOGO_DATA_URI } from './splashLogo'
@@ -78,6 +79,7 @@ let notifyPollLastSeen = Date.now()
 let notifyPollTimer: ReturnType<typeof setInterval> | null = null
 
 let gatewayManager: GatewayManager | null = null
+let ptyManager: PtyManager | null = null
 
 function pushGateway(evt: GatewayEvent): void {
   try {
@@ -990,6 +992,11 @@ ipcMain.handle('wraith:checkUpdate', async (_e, beta: boolean) => {
 ipcMain.handle('wraith:openExternal', (_e, url: string) => { void shell.openExternal(url) })
 ipcMain.handle('wraith:openPath', (_e, p: string) => shell.openPath(p))
 
+ipcMain.handle('wraith:ptyCreate', (_e, opts?: { cwd?: string; cols?: number; rows?: number }) => ptyManager?.create(opts ?? {}) ?? { id: '' })
+ipcMain.handle('wraith:ptyInput', (_e, id: string, data: string) => { ptyManager?.write(id, data) })
+ipcMain.handle('wraith:ptyResize', (_e, id: string, cols: number, rows: number) => { ptyManager?.resize(id, cols, rows) })
+ipcMain.handle('wraith:ptyKill', (_e, id: string) => { ptyManager?.kill(id) })
+
 // 导出对话:渲染层把序列化好的 Markdown 传来,弹保存对话框写盘(纯 Electron 主进程,不经 Java 后端)
 ipcMain.handle('wraith:saveTextFile', async (_e, defaultName: string, content: string) => {
   const opts = {
@@ -1120,6 +1127,13 @@ app.whenReady().then(() => {
     app.isPackaged ? { resourcesPath: process.resourcesPath } : undefined
   )
 
+  ptyManager = new PtyManager(
+    (id, data) => { mainWindow?.webContents.send('wraith:pty-data', { id, data }) },
+    (id, code) => { mainWindow?.webContents.send('wraith:pty-exit', { id, code }) },
+    process.env,
+    os.homedir(),
+  )
+
   // 仅放行麦克风(媒体)权限,供语音听写用
   session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
     callback(permission === 'media')
@@ -1192,6 +1206,11 @@ app.on('will-quit', () => {
   }
   try {
     gatewayManager?.dispose()
+  } catch {
+    // best-effort
+  }
+  try {
+    ptyManager?.killAll()
   } catch {
     // best-effort
   }

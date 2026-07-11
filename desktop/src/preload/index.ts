@@ -135,6 +135,12 @@ export interface WraithApi {
   taskAdd(prompt: string): Promise<{ ok: boolean; id?: string; message?: string }>
   taskGet(id: string): Promise<DurableTaskView>
   taskCancel(id: string): Promise<{ ok: boolean }>
+  ptyCreate(opts?: { cwd?: string; cols?: number; rows?: number }): Promise<{ id: string }>
+  ptyInput(id: string, data: string): Promise<void>
+  ptyResize(id: string, cols: number, rows: number): Promise<void>
+  ptyKill(id: string): Promise<void>
+  onPtyData(cb: (p: { id: string; data: string }) => void): () => void
+  onPtyExit(cb: (p: { id: string; code: number }) => void): () => void
 }
 
 const wraith: WraithApi = {
@@ -558,6 +564,20 @@ const wraith: WraithApi = {
   },
   taskCancel(id) {
     return ipcRenderer.invoke('wraith:taskCancel', id) as Promise<{ ok: boolean }>
+  },
+  ptyCreate(opts) { return ipcRenderer.invoke('wraith:ptyCreate', opts) as Promise<{ id: string }> },
+  ptyInput(id, data) { return ipcRenderer.invoke('wraith:ptyInput', id, data) as Promise<void> },
+  ptyResize(id, cols, rows) { return ipcRenderer.invoke('wraith:ptyResize', id, cols, rows) as Promise<void> },
+  ptyKill(id) { return ipcRenderer.invoke('wraith:ptyKill', id) as Promise<void> },
+  onPtyData(cb) {
+    const l = (_e: Electron.IpcRendererEvent, p: { id: string; data: string }) => cb(p)
+    ipcRenderer.on('wraith:pty-data', l)
+    return () => { ipcRenderer.removeListener('wraith:pty-data', l) }
+  },
+  onPtyExit(cb) {
+    const l = (_e: Electron.IpcRendererEvent, p: { id: string; code: number }) => cb(p)
+    ipcRenderer.on('wraith:pty-exit', l)
+    return () => { ipcRenderer.removeListener('wraith:pty-exit', l) }
   },
 }
 

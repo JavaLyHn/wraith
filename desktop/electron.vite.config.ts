@@ -7,7 +7,8 @@ export default defineConfig({
   main: {
     build: {
       rollupOptions: {
-        input: 'src/main/index.ts'
+        input: 'src/main/index.ts',
+        external: ['node-pty']
       }
     }
   },

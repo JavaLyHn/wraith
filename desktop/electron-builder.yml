@@ -15,3 +15,5 @@ extraResources:
     to: wraith.jar
   - from: resources/runtime
     to: runtime
+asarUnpack:
+  - "**/node_modules/node-pty/**"
