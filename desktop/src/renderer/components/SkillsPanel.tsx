@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { SkillView, SkillDetail } from '../../shared/types'
 import { groupSkillsBySource } from '../lib/skillsView'
 import SkillEditor from './SkillEditor'
+import SkillViewer from './SkillViewer'
 
 const SOURCE_BADGE: Record<SkillView['source'], string> = { builtin: '内置', user: '用户', project: '项目' }
 const EMPTY_HINT: Record<SkillView['source'], string> = {
@@ -10,7 +11,7 @@ const EMPTY_HINT: Record<SkillView['source'], string> = {
   project: '把 SKILL.md 放到 <项目>/.wraith/skills/<名>/ 即可被加载',
 }
 
-type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; detail: SkillDetail }
+type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; detail: SkillDetail } | { kind: 'view'; detail: SkillDetail }
 
 export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Element {
   const [skills, setSkills] = useState<SkillView[]>([])
@@ -38,6 +39,11 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
     catch (err) { setError((err as Error).message) }
   }, [])
 
+  const openView = useCallback(async (name: string): Promise<void> => {
+    try { const detail = await window.wraith.getSkill(name); setMode({ kind: 'view', detail }) }
+    catch (err) { setError((err as Error).message) }
+  }, [])
+
   const doDelete = useCallback(async (s: SkillView): Promise<void> => {
     if (s.source === 'builtin') return
     if (!window.confirm(`删除技能「${s.name}」?此操作不可撤销。`)) return
@@ -61,6 +67,9 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
     return <SkillEditor initial={mode.detail} lockName lockScope={false}
       onSaved={() => { setMode({ kind: 'list' }); void refresh() }}
       onCancel={() => setMode({ kind: 'list' })} />
+  }
+  if (mode.kind === 'view') {
+    return <SkillViewer detail={mode.detail} onBack={() => setMode({ kind: 'list' })} />
   }
 
   const groups = groupSkillsBySource(skills)
@@ -101,6 +110,8 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
                       <span className="shrink-0 text-3xs text-fg-subtle">{[s.version, s.author].filter(Boolean).join(' · ')}</span>
                     )}
                     <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                      <button data-testid="skill-view" onClick={() => void openView(s.name)}
+                        className="rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent">查看</button>
                       {s.source === 'builtin' ? (
                         <button data-testid="skill-fork" onClick={() => void doFork(s)}
                           className="rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent">复制为用户技能</button>

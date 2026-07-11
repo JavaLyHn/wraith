@@ -1769,6 +1769,33 @@ public class Main {
                         v.put("source", s.displaySource());
                         v.put("enabled", !skillRegistry.stateStore().disabled().contains(s.name()));
                         v.put("body", s.body());
+                        // references/ 下的参考文件(递归,相对路径,单文件 256KB 截断)
+                        java.util.List<java.util.Map<String, Object>> refs = new java.util.ArrayList<>();
+                        java.nio.file.Path rdir = s.referencesDir();
+                        if (rdir != null && java.nio.file.Files.isDirectory(rdir)) {
+                            try (java.util.stream.Stream<java.nio.file.Path> walk = java.nio.file.Files.walk(rdir)) {
+                                java.util.List<java.nio.file.Path> files = walk
+                                        .filter(java.nio.file.Files::isRegularFile)
+                                        .filter(p -> !p.getFileName().toString().startsWith("."))
+                                        .sorted()
+                                        .collect(java.util.stream.Collectors.toList());
+                                for (java.nio.file.Path f : files) {
+                                    String rel = rdir.relativize(f).toString().replace('\\', '/');
+                                    String content;
+                                    try {
+                                        byte[] bytes = java.nio.file.Files.readAllBytes(f);
+                                        content = bytes.length > 256 * 1024
+                                                ? new String(bytes, 0, 256 * 1024, java.nio.charset.StandardCharsets.UTF_8) + "\n…(已截断)"
+                                                : new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
+                                    } catch (Exception e) { content = "(读取失败: " + e.getClass().getSimpleName() + ")"; }
+                                    java.util.Map<String, Object> rm = new java.util.LinkedHashMap<>();
+                                    rm.put("path", rel);
+                                    rm.put("content", content);
+                                    refs.add(rm);
+                                }
+                            } catch (Exception ignored) { /* 目录读取失败 → 空 references */ }
+                        }
+                        v.put("references", refs);
                         return v;
                     }
                     public java.util.Map<String,Object> skillsUpsert(String scope, String name, String description,

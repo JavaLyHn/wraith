@@ -413,8 +413,13 @@ export interface RagGraphResult {
   error?: string
 }
 
+export interface SkillReference {
+  path: string
+  content: string
+}
 export interface SkillDetail extends SkillView {
   body: string
+  references?: SkillReference[]
 }
 
 export interface SkillUpsertPayload {
