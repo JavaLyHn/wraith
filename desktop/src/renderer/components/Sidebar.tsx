@@ -7,7 +7,7 @@ import {
 } from './ui/tooltip'
 import {
   Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History,
-  Star, ListTree, List, Pencil, Trash2, Check, Settings,
+  Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown,
   Shield, ShieldAlert, ShieldCheck,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
@@ -156,6 +156,9 @@ export default function Sidebar({
 }: SidebarProps): JSX.Element {
   const [searchActive, setSearchActive] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [toolsExpanded, setToolsExpanded] = useState(false)
+  // 进入某工具页时强制展开(高亮可见);否则由用户折叠状态决定
+  const showTools = toolsExpanded || activeNav !== null
   // 会话列表分组模式:recent=最新平铺(默认)/ time=按时间分组;记忆在 localStorage
   const [groupMode, setGroupMode] = useState<'recent' | 'time'>(() => {
     try { return localStorage.getItem('wraith.sidebar.sessionGroupMode') === 'time' ? 'time' : 'recent' } catch { return 'recent' }
@@ -258,6 +261,23 @@ export default function Sidebar({
             </div>
           )}
 
+          {/* 工具组(可折叠;进入工具页自动展开)*/}
+          <button
+            data-testid="nav-tools-toggle"
+            onClick={() => setToolsExpanded(v => !v)}
+            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60"
+          >
+            <Wrench className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />工具
+            {!showTools && automationBadge && (
+              <span data-testid="nav-tools-badge" className="relative ml-1 flex h-2 w-2 shrink-0">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75 motion-reduce:hidden" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-danger" />
+              </span>
+            )}
+            <ChevronDown className={'ml-auto h-3.5 w-3.5 shrink-0 transition-transform ' + (showTools ? '' : '-rotate-90')} strokeWidth={1.5} />
+          </button>
+          {showTools && (
+          <div className="flex flex-col gap-0.5 pl-2">
           {/* plugins — enabled */}
           <button
             data-testid="nav-plugins"
@@ -342,6 +362,8 @@ export default function Sidebar({
           >
             <span className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />安全</span>
           </button>
+          </div>
+          )}
         </nav>
 
         {/* conversations list */}
