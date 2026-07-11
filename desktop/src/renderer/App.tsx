@@ -30,7 +30,7 @@ import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { compactionNotice } from './lib/compactView'
-import { Download, Wand2 } from 'lucide-react'
+import { Download, SquareTerminal, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -53,6 +53,7 @@ import PolicyPanel from './components/PolicyPanel'
 import BrowserPanel from './components/BrowserPanel'
 import RagPanel from './components/RagPanel'
 import SettingsPanel from './components/SettingsPanel'
+import TerminalDrawer from './components/TerminalDrawer'
 import { useSettings } from './settings/SettingsContext'
 
 // ---------------------------------------------------------------------------
@@ -160,6 +161,7 @@ export default function App(): JSX.Element {
   const { prefs: appPrefs } = useSettings()
   const [updateNotice, setUpdateNotice] = useState<{ latest: string; url: string } | null>(null)
   const [pendingMode, setPendingMode] = useState<RunMode>('react')
+  const [terminalOpen, setTerminalOpen] = useState(false)
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
@@ -949,6 +951,11 @@ export default function App(): JSX.Element {
                   >
                     <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />导出
                   </button>
+                  <button data-testid="terminal-toggle" onClick={() => setTerminalOpen(v => !v)}
+                    className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (terminalOpen ? 'text-accent' : 'text-fg-muted')}
+                    title="终端">
+                    <SquareTerminal className="h-4 w-4" strokeWidth={1.5} />
+                  </button>
                 </div>
                 <Transcript
                   items={pv.items}
@@ -959,6 +966,9 @@ export default function App(): JSX.Element {
                   onPlanReview={handlePlanReview}
                   mode={pendingMode}
                 />
+                {terminalOpen && (
+                  <TerminalDrawer cwd={state.workspace ?? null} onClose={() => setTerminalOpen(false)} />
+                )}
                 <div className="shrink-0 px-4 py-3">{composer}</div>
               </>
             ) : (
