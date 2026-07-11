@@ -102,6 +102,8 @@ interface SidebarProps {
   sessions: SessionMeta[]
   activeSessionId: string
   runningSessionId: string
+  /** 当前是尚未落桩的空白新会话:侧栏顶部显示一条「新对话」草稿行并高亮。 */
+  newDraftActive: boolean
   onNewConversation: () => void
   onSelectSession: (id: string) => void
   onToggleStar: (id: string, starred: boolean) => void
@@ -134,6 +136,7 @@ export default function Sidebar({
   sessions,
   activeSessionId,
   runningSessionId,
+  newDraftActive,
   onNewConversation,
   onSelectSession,
   onToggleStar,
@@ -222,10 +225,16 @@ export default function Sidebar({
         data-testid="sidebar"
         className="sidebar-gradient flex h-full w-60 flex-col border-r border-border"
       >
-        <div className="flex items-center gap-2 px-4 py-4">
+        <button
+          type="button"
+          data-testid="brand-home"
+          onClick={onNewConversation}
+          title="回到新对话首页"
+          className="flex w-full select-none items-center gap-2 px-4 py-4 text-left transition-opacity hover:opacity-80"
+        >
           <Logo className="h-7 w-7 object-contain" />
           <span className="text-sm font-bold tracking-wide text-fg">WRAITH</span>
-        </div>
+        </button>
 
         <ProjectSwitcher
           projects={projects}
@@ -441,6 +450,18 @@ export default function Sidebar({
           ) : (
             /* 非激活态:⭐重点分区 + 对话分区 */
             <>
+              {newDraftActive && (
+                <button
+                  type="button"
+                  data-testid="session-draft"
+                  onClick={onNewConversation}
+                  title="当前新对话(发送消息后自动保存到列表)"
+                  className="mt-2 flex w-full items-center gap-2 rounded-lg bg-surface px-3 py-1.5 text-left text-xs text-fg"
+                >
+                  <span className="truncate">新对话</span>
+                  <span className="ml-auto shrink-0 text-3xs text-fg-subtle">草稿</span>
+                </button>
+              )}
               {(() => {
                 const { starred, rest } = partitionStarred(sessions)
                 const renderRows = (list: SessionMeta[]): JSX.Element[] => list.map(s => (

@@ -790,6 +790,7 @@ export default function App(): JSX.Element {
         sessions={sessions}
         activeSessionId={pv.activeSessionId}
         runningSessionId={pv.runningSessionId}
+        newDraftActive={!pv.activeSessionId}
         onNewConversation={handleNewConversation}
         onSelectSession={handleSelectSession}
         onToggleStar={handleToggleStar}
