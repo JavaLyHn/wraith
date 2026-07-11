@@ -21,10 +21,11 @@ App 打开时呈现一个**独立、无边框、背景全透明**的启动窗,lo
 2. logo 播「幽灵浮现」:opacity 虚→实淡入 + 轻微上浮(translateY 12→0)+ 一圈柔和辉光
    缓慢呼吸。
 3. 何时散去由 `shouldDismissSplash(elapsedMs, connected, floorMs, capMs)` 决定:
-   - `connected`:监听现有后端 `connection: connected` 事件(真·就绪信号)。
+   - `connected`:取现有后端 `connection: connected` 事件。
    - **地板** `floorMs = 1200`:动画至少放完、不闪。
-   - **天花板** `capMs = 4000`:后端慢/失败也强制散去,不卡住启动。
+   - **天花板** `capMs = 4000`:安全上限,后端慢/失败也强制散去、不卡启动。
    - 语义:`elapsedMs >= capMs || (connected && elapsedMs >= floorMs)` → 散去。
+   - **决定(终审 [I2],2026-07-11)**:现有 `connection: connected` 事件是**乐观信号**——在子进程 fork 时即置位,并非 JVM/RPC 真就绪;且它在定时器启动前置位。故实践中本动画退化为**固定 ~1.2s 浮现**(地板即触发,天花板/就绪门为安全兜底,非常态路径)。这是有意选择:主窗自带连接态提示,快而稳的固定浮现优于让 splash 等冷启动 JVM(可能停留至 4s)。若日后要覆盖真实初始化,把 `backendConnected` 改由首次 `initialize`/`session.start` 成功置位即可(并在断连时重置)。
 4. 散去:splash **淡出 + 轻微放大"散去"**(~450ms);淡出完成后关闭 splash 并 `mainWindow.show()`
    (小窗浮于桌面 → 淡出 → 主窗现身,短暂露出桌面与"桌面悬浮"美学一致)。
 
