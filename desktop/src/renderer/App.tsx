@@ -21,6 +21,7 @@ import {
   markPlanReviewResolved,
   type TranscriptState,
   type Item,
+  type AttachmentRef,
 } from '../shared/transcriptReducer'
 import { messagesToItems } from '../shared/messagesToItems'
 import { spliceCards } from '../shared/spliceCards'
@@ -63,7 +64,7 @@ type LocalAction =
   | { type: 'setApprovalMode'; mode: 'ask' | 'auto' }
   | { type: 'setWorkspace'; ws: string }
   | { type: 'resetSession'; ws: string }
-  | { type: 'addUserItem'; text: string }
+  | { type: 'addUserItem'; text: string; attachments?: AttachmentRef[] }
   | { type: 'loadHistory'; items: Item[] }
   | { type: 'setSessionId'; sessionId: string }
   | { type: 'setSandbox'; sandbox: 'macos-seatbelt' | 'none' | 'unknown' }
@@ -99,7 +100,7 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
     return resetSession(state, action.ws)
   }
   if ('type' in action && action.type === 'addUserItem') {
-    return addUserItem(state, action.text)
+    return addUserItem(state, action.text, action.attachments)
   }
   if ('type' in action && action.type === 'loadHistory') {
     return loadHistory(state, action.items)
@@ -455,7 +456,7 @@ export default function App(): JSX.Element {
     const pendingAttachments = attachments
     setAttachments([])
     dispatch({ type: 'markStarted' })
-    dispatch({ type: 'addUserItem', text })
+    dispatch({ type: 'addUserItem', text, attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined })
     try {
       await window.wraith.submitTurn(text, pendingAttachments.length > 0 ? pendingAttachments.map(a => ({ path: a.path, kind: a.kind })) : undefined, pendingMode)
       setPendingMode(pendingModeAfterSubmit(pendingMode))

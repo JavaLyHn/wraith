@@ -74,6 +74,7 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
             <UserMessage
               key={`user-${userOrdinal}`}
               text={item.text}
+              attachments={item.attachments}
               ordinal={userOrdinal}
               isLastUser={userOrdinal === totalUsers}
               busy={busy}
@@ -85,6 +86,14 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
         }
         if (item.type === 'message') {
           return <AgentMessage key={`msg-${originalIdx}`} text={item.text} />
+        }
+        if (item.type === 'error') {
+          return (
+            <div key={`err-${originalIdx}`} data-testid="turn-error"
+              className="self-start max-w-[85%] rounded-2xl border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">
+              ⚠️ 这一轮出错了:{item.text}
+            </div>
+          )
         }
         if (item.type === 'thinking') {
           return <ThinkingBlock key={`think-${originalIdx}`} label={item.label} text={item.text} done={item.done} />

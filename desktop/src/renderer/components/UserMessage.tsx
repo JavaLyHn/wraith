@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useSettings } from '../settings/SettingsContext'
 import { userAvatarGlyph } from '../lib/chatIdentity'
+import type { AttachmentRef } from '../../shared/transcriptReducer'
 
 interface UserMessageProps {
   text: string
+  /** 随该条消息发出的附件(图片显示缩略图,其它显示文件名)。 */
+  attachments?: AttachmentRef[]
   /** 该气泡是第几条用户消息(1-based),rewind 用。 */
   ordinal: number
   /** 是否为最后一条用户消息:是则重发一键直发(重新生成),否则两击确认(丢弃其后内容)。 */
@@ -16,13 +19,26 @@ interface UserMessageProps {
 }
 
 /** 用户气泡:hover 浮现编辑/删除;编辑就地展开;删除二次点击确认(真回溯,裁掉之后全部)。 */
-export default function UserMessage({ text, ordinal, isLastUser, busy, onEdit, onDelete, onResend }: UserMessageProps): JSX.Element {
+export default function UserMessage({ text, attachments, ordinal, isLastUser, busy, onEdit, onDelete, onResend }: UserMessageProps): JSX.Element {
   const { prefs } = useSettings()
   const glyph = userAvatarGlyph(prefs.profile)
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(text)
   const [confirming, setConfirming] = useState(false)
   const [resendConfirming, setResendConfirming] = useState(false)
+  const [previews, setPreviews] = useState<Record<string, string>>({})
+
+  // 图片附件按需拉缩略图 data:URL(临时文件在会话内始终可读)
+  useEffect(() => {
+    let cancelled = false
+    for (const a of attachments ?? []) {
+      if (a.kind !== 'image' || previews[a.path]) continue
+      void window.wraith.readImageDataUrl(a.path).then(url => {
+        if (!cancelled && url) setPreviews(prev => ({ ...prev, [a.path]: url }))
+      }).catch(() => { /* 读失败:退回文件名 */ })
+    }
+    return () => { cancelled = true }
+  }, [attachments, previews])
 
   if (editing) {
     return (
@@ -62,8 +78,11 @@ export default function UserMessage({ text, ordinal, isLastUser, busy, onEdit, o
     )
   }
 
+  const imgs = (attachments ?? []).filter(a => a.kind === 'image')
+  const files = (attachments ?? []).filter(a => a.kind !== 'image')
+
   return (
-    <div className="group flex items-center justify-end gap-1.5 self-end max-w-[85%]">
+    <div className="group flex items-start justify-end gap-1.5 self-end max-w-[85%]">
       {!busy && (
         <span className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <button
@@ -111,8 +130,29 @@ export default function UserMessage({ text, ordinal, isLastUser, busy, onEdit, o
           </button>
         </span>
       )}
-      <div data-testid="user-msg" className="rounded-2xl bg-accent px-3 py-2 text-sm text-accent-fg shadow-sm">
-        {text}
+      <div className="flex min-w-0 flex-col items-end gap-1.5">
+        {(imgs.length > 0 || files.length > 0) && (
+          <div data-testid="user-attachments" className="flex flex-wrap justify-end gap-1.5">
+            {imgs.map((a, i) => (
+              previews[a.path]
+                ? <img key={a.path + i} data-testid="user-attach-thumb" src={previews[a.path]} alt={a.name} title={a.name}
+                    className="h-20 w-20 rounded-lg border border-border object-cover" />
+                : <span key={a.path + i} title={a.name}
+                    className="flex h-20 w-20 items-center justify-center rounded-lg border border-border bg-bg text-3xs text-fg-subtle">🖼 {a.name}</span>
+            ))}
+            {files.map((a, i) => (
+              <span key={a.path + i} title={a.name}
+                className="flex max-w-[160px] items-center gap-1 rounded-md border border-border bg-bg px-2 py-1 text-xs text-fg">
+                <span className="truncate">📄 {a.name}</span>
+              </span>
+            ))}
+          </div>
+        )}
+        {text && (
+          <div data-testid="user-msg" className="rounded-2xl bg-accent px-3 py-2 text-sm text-accent-fg shadow-sm">
+            {text}
+          </div>
+        )}
       </div>
       <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-xs font-medium text-fg" aria-hidden>{glyph}</div>
     </div>

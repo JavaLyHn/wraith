@@ -86,9 +86,13 @@ export interface TeamItem {
   plannerOutput?: string
 }
 
+/** 用户消息里附带的附件引用(仅展示用:路径/名字/类型)。 */
+export interface AttachmentRef { path: string; name: string; kind: string }
+
 export type Item =
-  | { type: 'user'; text: string }
+  | { type: 'user'; text: string; attachments?: AttachmentRef[] }
   | { type: 'message'; text: string }
+  | { type: 'error'; text: string }
   | { type: 'thinking'; label: string; text: string; done: boolean }
   | { type: 'tool'; card: ToolCard }
   | { type: 'diff'; filePath: string; before: string; after: string }
@@ -235,8 +239,13 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
       const sid = typeof p['sessionId'] === 'string' ? p['sessionId'] : ''
       return { ...state, turn: 'idle', ...(sid ? { sessionId: sid } : {}) }
     }
-    case 'turn.failed':
+    case 'turn.failed': {
+      const err = sanitizeErrorText(typeof p['error'] === 'string' ? p['error'] : '')
+      if (err) {
+        return { ...state, turn: 'idle', _messageOpen: false, items: [...state.items, { type: 'error', text: err }] }
+      }
       return { ...state, turn: 'idle' }
+    }
 
     // ── message streaming ───────────────────────────────────────────────────
     case 'message.delta': {
@@ -721,8 +730,26 @@ export function freshState(): TranscriptState {
 }
 
 /** 提交时 echo 一条 user 气泡(封口当前 message)。 */
-export function addUserItem(state: TranscriptState, text: string): TranscriptState {
-  return { ...state, items: [...state.items, { type: 'user', text }], _messageOpen: false }
+export function addUserItem(state: TranscriptState, text: string, attachments?: AttachmentRef[]): TranscriptState {
+  const item: Item = attachments && attachments.length > 0
+    ? { type: 'user', text, attachments }
+    : { type: 'user', text }
+  return { ...state, items: [...state.items, item], _messageOpen: false }
+}
+
+/**
+ * turn.failed 的错误文案净化:剥 URL / sk- / Bearer token,压平空白,截断到 300 字符。
+ * 防止把长内部路径或潜在敏感串带进对话气泡。纯函数,可测。
+ */
+export function sanitizeErrorText(raw: string): string {
+  if (!raw) return ''
+  const cleaned = raw
+    .replace(/https?:\/\/\S+/g, '[url]')
+    .replace(/sk-[A-Za-z0-9_-]+/g, '[key]')
+    .replace(/Bearer\s+\S+/gi, 'Bearer [key]')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned.length > 300 ? cleaned.slice(0, 300) + '…' : cleaned
 }
 
 /** 真回溯的本地裁剪:裁掉第 ordinal 个 user 项(1-based,含)及之后全部;超界/无效原样返回。 */

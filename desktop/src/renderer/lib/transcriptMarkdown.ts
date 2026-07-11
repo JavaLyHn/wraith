@@ -43,6 +43,8 @@ function renderItem(item: Item): string | null {
       return `## 👤 用户\n\n${item.text.trim()}`
     case 'message':
       return `## 🤖 助手\n\n${item.text.trim()}`
+    case 'error':
+      return `## ⚠️ 出错\n\n${item.text.trim()}`
     case 'thinking': {
       const body = item.text.trim()
       if (!body) return null
