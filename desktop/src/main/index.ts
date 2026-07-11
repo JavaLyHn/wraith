@@ -32,6 +32,8 @@ import { resolveInterruptTurnId } from './interruptTurnId'
 import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from './notificationFilter'
 import { GatewayManager } from './gatewayManager'
 import type { GatewayEvent } from '../shared/gateway'
+import { shouldDismissSplash, buildSplashHtml, SPLASH_EXIT_MS, SPLASH_SIZE } from './splash'
+import { SPLASH_LOGO_DATA_URI } from './splashLogo'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -58,6 +60,8 @@ if (process.env['WRAITH_E2E_USERDATA']) {
 // ---------------------------------------------------------------------------
 
 let mainWindow: BrowserWindow | null = null
+let splashWindow: BrowserWindow | null = null
+let backendConnected = false
 let child: ChildProcessWithoutNullStreams | null = null
 let client: JsonRpcClient | null = null
 
@@ -204,6 +208,7 @@ function spawnBackend(): void {
 
   // Announce connected.
   sendEvent({ kind: 'connection', state: 'connected' })
+  backendConnected = true
 
   // Disconnect handlers — all paths must reject pending + notify renderer.
   function handleDisconnect(): void {
@@ -230,6 +235,7 @@ function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    show: false,
     // dev: show WR icon instead of Electron atom; packaged macOS: dock icon comes from .icns
     icon: app.isPackaged ? undefined : path.join(__dirname, '../../build/icon-512.png'),
     webPreferences: {
@@ -251,6 +257,48 @@ function createWindow(): void {
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+}
+
+/** 显示主窗(幂等):splash 散去后调用。 */
+function showMainWindow(): void {
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+    mainWindow.show()
+  }
+}
+
+/** 创建透明无边框启动窗;失败返回 null(绝不阻塞启动)。 */
+function createSplash(): BrowserWindow | null {
+  try {
+    const win = new BrowserWindow({
+      width: SPLASH_SIZE, height: SPLASH_SIZE, center: true,
+      transparent: true, frame: false, backgroundColor: '#00000000',
+      alwaysOnTop: true, hasShadow: false, resizable: false, movable: false,
+      skipTaskbar: true, focusable: false,
+      webPreferences: { contextIsolation: true, nodeIntegration: false },
+    })
+    win.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(buildSplashHtml(SPLASH_LOGO_DATA_URI)))
+    win.on('closed', () => { splashWindow = null })
+    return win
+  } catch {
+    return null
+  }
+}
+
+/** 散去 splash(幂等):触发页内淡出 → SPLASH_EXIT_MS 后关窗并显示主窗。 */
+let splashDismissed = false
+function dismissSplash(): void {
+  if (splashDismissed) return
+  splashDismissed = true
+  const s = splashWindow
+  if (s && !s.isDestroyed()) {
+    s.webContents.executeJavaScript('window.__dismiss && window.__dismiss()').catch(() => {})
+    setTimeout(() => {
+      if (s && !s.isDestroyed()) s.close()
+      showMainWindow()
+    }, SPLASH_EXIT_MS)
+  } else {
+    showMainWindow()
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1044,8 +1092,29 @@ app.whenReady().then(() => {
     callback(permission === 'media')
   })
 
-  createWindow()
-  spawnBackend()
+  if (process.env['WRAITH_E2E'] === '1') {
+    // E2E 绕过:不建 splash,立即显示主窗,避免 firstWindow() 拿到 splash 或窗口延迟显示干扰用例
+    createWindow()
+    showMainWindow()
+    spawnBackend()
+  } else {
+    const splashStartedAt = Date.now()
+    splashWindow = createSplash()
+    createWindow()
+    spawnBackend()
+
+    if (!splashWindow) {
+      // 无动画:直接显示主窗,不阻塞
+      showMainWindow()
+    } else {
+      const splashTimer = setInterval(() => {
+        if (shouldDismissSplash(Date.now() - splashStartedAt, backendConnected)) {
+          clearInterval(splashTimer)
+          dismissSplash()
+        }
+      }, 150)
+    }
+  }
 
   // Part C: 启动一次性迁移(daemon 就绪后执行,defer 500ms 等 RPC 握手完成)
   if (process.env['WRAITH_E2E'] !== '1') {
