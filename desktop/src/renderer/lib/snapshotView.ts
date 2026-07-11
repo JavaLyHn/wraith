@@ -31,3 +31,27 @@ export function absTime(ms: number): string {
   const p = (n: number): string => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
+
+/** epoch 毫秒 → 相对时间「刚刚 / N 分钟前 / N 小时前 / N 天前 / N 个月前」;0/无效返回空串。 */
+export function relativeTime(ms: number, nowMs: number = Date.now()): string {
+  if (!ms || Number.isNaN(ms)) return ''
+  const diff = nowMs - ms
+  if (diff < 60_000) return '刚刚'
+  const min = Math.floor(diff / 60_000)
+  if (min < 60) return `${min} 分钟前`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr} 小时前`
+  const day = Math.floor(hr / 24)
+  if (day < 30) return `${day} 天前`
+  return `${Math.floor(day / 30)} 个月前`
+}
+
+/**
+ * 从快照 summary(形如 `mode=team\ninput=帮我改下登录逻辑`)提取当时的输入正文。
+ * 没有 input= 段则返回空串。
+ */
+export function summaryInput(summary: string): string {
+  if (!summary) return ''
+  const m = summary.match(/input=([\s\S]*)$/)
+  return m ? m[1].trim() : ''
+}
