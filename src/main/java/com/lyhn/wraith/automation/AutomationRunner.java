@@ -184,6 +184,7 @@ public final class AutomationRunner {
                         root,
                         client.getProviderName(),
                         client.getModelName());
+                store.markOrigin(SessionStore.ORIGIN_AUTOMATION);  // 无头运行:标记来源,使其不进主对话侧栏
                 store.startNew();
 
                 // ── tail-swap HITL delegate (same order as GatewaySession) ────

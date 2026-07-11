@@ -43,6 +43,29 @@ class SessionStoreTest {
     }
 
     @Test
+    void automationOriginExcludedFromListButResumableById(@TempDir Path home) {
+        SessionStore store = SessionStore.open(home, "/proj/a", "p", "m");
+        // 一条交互式会话
+        store.persist(sampleHistory());
+        // 一条自动化无头运行会话
+        store.startNew();
+        store.markOrigin(SessionStore.ORIGIN_AUTOMATION);
+        store.persist(List.of(
+                LlmClient.Message.user("定时任务 prompt"),
+                LlmClient.Message.assistant("已执行")));
+        String autoId = store.currentId();
+
+        // list() 只应回交互式那条,自动化会话被过滤
+        List<SessionMeta> metas = store.list(10);
+        assertEquals(1, metas.size(), "自动化会话不应出现在列表");
+        assertTrue(metas.stream().noneMatch(m -> autoId.equals(m.id())));
+
+        // 但仍能按 id resume(运行历史照常打开)+ meta 带 origin 标记
+        assertEquals(2, store.resume(autoId).size(), "自动化会话仍可按 id resume");
+        assertEquals(SessionStore.ORIGIN_AUTOMATION, store.meta(autoId).origin());
+    }
+
+    @Test
     void startNewCreatesSeparateSession(@TempDir Path home) {
         SessionStore store = SessionStore.open(home, "/proj/a", "p", "m");
         store.persist(sampleHistory());

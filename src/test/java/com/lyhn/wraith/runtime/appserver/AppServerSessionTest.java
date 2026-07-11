@@ -26,7 +26,7 @@ class AppServerSessionTest {
                 public EventStreamRenderer renderer() { return r; }
                 public String runTurn(String input) { r.appendAssistantContentDelta("ok"); r.finishAssistantContent(); return "ok"; }
                 public List<SessionMeta> listSessions() {
-                    return List.of(new SessionMeta("s1", "/p", "c", "u", "prov", "mod", "hello world", 3, false, null));
+                    return List.of(new SessionMeta("s1", "/p", "c", "u", "prov", "mod", "hello world", 3, false, null, null));
                 }
                 public List<LlmClient.Message> resume(String id) {
                     return List.of(

@@ -39,6 +39,9 @@ public final class SessionStore {
     private static final DateTimeFormatter ID_TIME =
             DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss").withZone(ZoneId.systemDefault());
 
+    /** 会话来源标记:定时任务无头运行的会话。从 {@link #list(int)} 过滤,不进主对话侧栏。 */
+    public static final String ORIGIN_AUTOMATION = "automation";
+
     private final ObjectMapper mapper = new ObjectMapper();
     private final Path dir;
     private final String cwd;
@@ -51,6 +54,8 @@ public final class SessionStore {
     private String title;
     private boolean starred;
     private String name;
+    // 本 store 创建的新会话的来源(null=交互式);由 AutomationRunner 置为 ORIGIN_AUTOMATION。
+    private String origin;
 
     private SessionStore(Path dir, String cwd, String provider, String model) {
         this.dir = dir;
@@ -84,6 +89,14 @@ public final class SessionStore {
         if (model != null && !model.isBlank()) this.model = model;
     }
 
+    /**
+     * 标记本 store 后续新建会话的来源(如 {@link #ORIGIN_AUTOMATION})。
+     * 影响 persist/beginTurn 写入的 meta.origin;被标记的会话从 {@link #list(int)} 过滤。
+     */
+    public synchronized void markOrigin(String origin) {
+        this.origin = (origin == null || origin.isBlank()) ? null : origin;
+    }
+
     /** 把当前对话历史整体落盘(剔除 system / 空对话)。首次写入惰性分配会话 ID。 */
     public synchronized void persist(List<LlmClient.Message> history) {
         if (history == null) {
@@ -113,7 +126,7 @@ public final class SessionStore {
             }
         }
         try {
-            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, turns, starred, name), convo);
+            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, turns, starred, name, origin), convo);
         } catch (IOException e) {
             // 持久化失败不致命:本轮不写,下轮再试
         }
@@ -146,7 +159,7 @@ public final class SessionStore {
             title = deriveTitle(stub);
         }
         try {
-            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, 1, starred, name), stub);
+            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, 1, starred, name, origin), stub);
         } catch (IOException e) {
             // 非致命:桩写失败则该会话要等轮末 persist 才出现在列表(退回旧行为),不影响本轮执行
         }
@@ -187,14 +200,14 @@ public final class SessionStore {
     /** 给指定会话加/去星。找不到该会话返回 false。 */
     public synchronized boolean setStarred(String id, boolean starredFlag) {
         return rewriteMeta(id, m -> new SessionMeta(m.id(), m.cwd(), m.createdAt(), m.updatedAt(),
-                m.provider(), m.model(), m.title(), m.turns(), starredFlag, m.name()));
+                m.provider(), m.model(), m.title(), m.turns(), starredFlag, m.name(), m.origin()));
     }
 
     /** 给指定会话设自定义名;name 为 null/空白 → 清除(回落 title)。找不到返回 false。 */
     public synchronized boolean rename(String id, String newName) {
         String nm = (newName == null || newName.isBlank()) ? null : newName.strip();
         return rewriteMeta(id, m -> new SessionMeta(m.id(), m.cwd(), m.createdAt(), m.updatedAt(),
-                m.provider(), m.model(), m.title(), m.turns(), m.starred(), nm));
+                m.provider(), m.model(), m.title(), m.turns(), m.starred(), nm, m.origin()));
     }
 
     // ---------------- sidecar cards ----------------
@@ -264,6 +277,7 @@ public final class SessionStore {
         title = rec.meta().title();
         starred = rec.meta().starred();
         name = rec.meta().name();
+        origin = rec.meta().origin();   // 续接时保留来源,后续 persist 不丢标记
         return rec.messages();
     }
 
@@ -301,7 +315,9 @@ public final class SessionStore {
                     .collect(Collectors.toList());
             for (Path p : jsonl) {
                 SessionMeta m = readMeta(p);
-                if (m != null) {
+                // 过滤掉自动化无头运行的会话:它们只属于「运行历史」,不进主对话列表
+                // (仍可按 id resume/peek——运行历史照常按 id 打开)。
+                if (m != null && !ORIGIN_AUTOMATION.equals(m.origin())) {
                     metas.add(m);
                 }
             }
@@ -333,7 +349,7 @@ public final class SessionStore {
                     text(n, "provider"), text(n, "model"), text(n, "title"),
                     n.has("turns") ? n.get("turns").asInt() : 0,
                     n.has("starred") && n.get("starred").asBoolean(),
-                    text(n, "name"));
+                    text(n, "name"), text(n, "origin"));
         } catch (Exception e) {
             return null;
         }
@@ -404,6 +420,9 @@ public final class SessionStore {
         n.put("starred", m.starred());
         if (m.name() != null) {
             n.put("name", m.name());
+        }
+        if (m.origin() != null) {
+            n.put("origin", m.origin());
         }
         return mapper.writeValueAsString(n);
     }

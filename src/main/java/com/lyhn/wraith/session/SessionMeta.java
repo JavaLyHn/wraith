@@ -13,6 +13,8 @@ package com.lyhn.wraith.session;
  * @param turns     用户轮数
  * @param starred   用户标记的重点会话
  * @param name      用户自定义名;显示优先于 title
+ * @param origin    会话来源:null/"user"=交互式(默认);"automation"=定时任务无头运行
+ *                  (后者从 {@code list()} 过滤,不进主对话侧栏,但仍可按 id resume/peek)
  */
 public record SessionMeta(
         String id,
@@ -24,5 +26,6 @@ public record SessionMeta(
         String title,
         int turns,
         boolean starred,
-        String name) {
+        String name,
+        String origin) {
 }
