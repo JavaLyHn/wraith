@@ -204,6 +204,30 @@ public final class AppServer {
         default java.util.Map<String, Object> browserTabs() {
             throw new UnsupportedOperationException("browserTabs not implemented");
         }
+        /** 读 embedding 后端配置(key 不回,只回 hasKey)。默认抛出。 */
+        default java.util.Map<String, Object> embeddingGet() {
+            throw new UnsupportedOperationException("embeddingGet not implemented");
+        }
+        /** 写 embedding 后端配置(apiKey 空=保留旧)。默认抛出。 */
+        default java.util.Map<String, Object> embeddingSet(String provider, String model, String baseUrl, String apiKey) {
+            throw new UnsupportedOperationException("embeddingSet not implemented");
+        }
+        /** RAG 索引状态 {indexed, chunkCount, relationCount}。默认抛出。 */
+        default java.util.Map<String, Object> ragStatus() {
+            throw new UnsupportedOperationException("ragStatus not implemented");
+        }
+        /** 建立/重建当前 workspace 的 RAG 索引(耗时,走后台线程)。默认抛出。 */
+        default java.util.Map<String, Object> ragIndex() {
+            throw new UnsupportedOperationException("ragIndex not implemented");
+        }
+        /** 语义+关键词混合检索,返回 {results:[...]}。默认抛出。 */
+        default java.util.Map<String, Object> ragSearch(String query, int topK) {
+            throw new UnsupportedOperationException("ragSearch not implemented");
+        }
+        /** 代码关系图谱查询,返回 {relations:[...]}。默认抛出。 */
+        default java.util.Map<String, Object> ragGraph(String name) {
+            throw new UnsupportedOperationException("ragGraph not implemented");
+        }
         /**
          * 读取指定会话的 card 事件列表(供 resume 回放 plan/team 卡片)。
          * 每条记录为 {@code {turnOrdinal, events}} JsonNode。默认空列表(向后兼容)。
@@ -576,6 +600,52 @@ public final class AppServer {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
                 final SessionRunner s = session;
                 dispatchAsync(msg.id(), s::browserTabs);
+            }
+            case "config.getEmbedding" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.embeddingGet()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.setEmbedding" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String provider = textParam(p, "provider");
+                String model = (p != null && p.hasNonNull("model")) ? p.get("model").asText() : "";
+                String baseUrl = (p != null && p.hasNonNull("baseUrl")) ? p.get("baseUrl").asText() : "";
+                String apiKey = (p != null && p.hasNonNull("apiKey")) ? p.get("apiKey").asText() : "";
+                try { writer.result(msg.id(), session.embeddingSet(provider, model, baseUrl, apiKey)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "rag.status" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.ragStatus()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "rag.index" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                final SessionRunner s = session;
+                dispatchAsync(msg.id(), s::ragIndex);   // 索引耗时(逐块调 embedding),后台跑
+            }
+            case "rag.search" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                final SessionRunner s = session;
+                JsonNode p = msg.params();
+                final String query = textParam(p, "query");
+                if (query == null || query.isBlank()) { writer.error(msg.id(), -32602, "缺 query"); return true; }
+                final int topK = (p != null && p.hasNonNull("topK")) ? p.get("topK").asInt() : 8;
+                dispatchAsync(msg.id(), () -> s.ragSearch(query, topK));   // 查询含 1 次 embedding,后台跑防阻塞
+            }
+            case "rag.graph" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String name = textParam(p, "name");
+                if (name == null || name.isBlank()) { writer.error(msg.id(), -32602, "缺 name"); return true; }
+                try { writer.result(msg.id(), session.ragGraph(name)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "gateway.config.get" -> {
                 JsonNode p = msg.params();

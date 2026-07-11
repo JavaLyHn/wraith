@@ -6,7 +6,7 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import {
-  Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe,
+  Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
   Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown,
   Shield, ShieldAlert, ShieldCheck,
 } from 'lucide-react'
@@ -112,7 +112,7 @@ interface SidebarProps {
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'settings' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
@@ -122,6 +122,7 @@ interface SidebarProps {
   onOpenSnapshots: () => void
   onOpenPolicy: () => void
   onOpenBrowser: () => void
+  onOpenRag: () => void
   onOpenSettings: () => void
   automationBadge: boolean
 }
@@ -153,6 +154,7 @@ export default function Sidebar({
   onOpenSnapshots,
   onOpenPolicy,
   onOpenBrowser,
+  onOpenRag,
   onOpenSettings,
   automationBadge,
 }: SidebarProps): JSX.Element {
@@ -388,6 +390,15 @@ export default function Sidebar({
               (activeNav === 'browser' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
           >
             <span className="flex items-center gap-2"><Globe className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />浏览器</span>
+          </button>
+          {/* rag / code search */}
+          <button
+            data-testid="nav-rag"
+            onClick={onOpenRag}
+            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+              (activeNav === 'rag' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+          >
+            <span className="flex items-center gap-2"><ScanSearch className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />代码检索</span>
           </button>
           </div>
           )}

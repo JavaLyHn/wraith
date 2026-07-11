@@ -1537,6 +1537,90 @@ public class Main {
                     public java.util.Map<String, Object> browserTabs() {
                         return java.util.Map.of("text", appServerBrowserCmd("tabs", browserSession, browserConnectivityCheck, appServerMcp.manager(), registry, hitl));
                     }
+                    private com.lyhn.wraith.rag.EmbeddingClient ragEmbeddingClient() {
+                        com.lyhn.wraith.config.WraithConfig.EmbeddingConfig e = com.lyhn.wraith.config.WraithConfig.load().getEmbedding();
+                        if (e == null) return new com.lyhn.wraith.rag.EmbeddingClient();
+                        return com.lyhn.wraith.rag.EmbeddingClient.of(e.getProvider(), e.getModel(), e.getBaseUrl(), e.getApiKey());
+                    }
+                    public java.util.Map<String, Object> embeddingGet() {
+                        com.lyhn.wraith.config.WraithConfig.EmbeddingConfig e = com.lyhn.wraith.config.WraithConfig.load().getEmbedding();
+                        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                        m.put("provider", e != null && e.getProvider() != null ? e.getProvider() : "");
+                        m.put("model", e != null && e.getModel() != null ? e.getModel() : "");
+                        m.put("baseUrl", e != null && e.getBaseUrl() != null ? e.getBaseUrl() : "");
+                        m.put("hasKey", e != null && e.getApiKey() != null && !e.getApiKey().isBlank());
+                        return m;
+                    }
+                    public java.util.Map<String, Object> embeddingSet(String provider, String model, String baseUrl, String apiKey) {
+                        com.lyhn.wraith.config.WraithConfig cfg = com.lyhn.wraith.config.WraithConfig.load();
+                        com.lyhn.wraith.config.WraithConfig.EmbeddingConfig e = cfg.getEmbedding();
+                        if (e == null) { e = new com.lyhn.wraith.config.WraithConfig.EmbeddingConfig(); cfg.setEmbedding(e); }
+                        e.setProvider(provider); e.setModel(model); e.setBaseUrl(baseUrl);
+                        if (apiKey != null && !apiKey.isBlank()) e.setApiKey(apiKey); // 空=保留旧 key
+                        cfg.save();
+                        return java.util.Map.of("ok", true);
+                    }
+                    public java.util.Map<String, Object> ragStatus() {
+                        try (com.lyhn.wraith.rag.CodeRetriever r = new com.lyhn.wraith.rag.CodeRetriever(root, ragEmbeddingClient())) {
+                            com.lyhn.wraith.rag.VectorStore.IndexStats s = r.getStats();
+                            return java.util.Map.of("indexed", s.chunkCount() > 0, "chunkCount", s.chunkCount(), "relationCount", s.relationCount());
+                        } catch (Exception ex) {
+                            return java.util.Map.of("indexed", false, "chunkCount", 0, "relationCount", 0, "error", ex.getClass().getSimpleName());
+                        }
+                    }
+                    public java.util.Map<String, Object> ragIndex() {
+                        com.lyhn.wraith.rag.EmbeddingClient ec = ragEmbeddingClient();
+                        try { ec.embed("probe"); } // 先探一次:embedding 不可达即快速报错,不空转整库(index 会吞异常)
+                        catch (Exception ex) { return java.util.Map.of("error", "embedding 后端不可达(" + ex.getClass().getSimpleName() + "),请检查「Embedding 后端」配置"); }
+                        try {
+                            com.lyhn.wraith.rag.CodeIndex.IndexResult res =
+                                    new com.lyhn.wraith.rag.CodeIndex(ec, com.lyhn.wraith.rag.CodeIndex.ProgressListener.noop()).index(root);
+                            agent.getToolRegistry().setProjectPath(root); // search_code 工具同库
+                            agent.getMemoryManager().setProjectPath(root);
+                            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                            m.put("chunkCount", res.chunkCount());
+                            m.put("relationCount", res.relationCount());
+                            m.put("message", res.message() != null ? res.message() : "");
+                            return m;
+                        } catch (Exception ex) {
+                            return java.util.Map.of("error", ex.getClass().getSimpleName());
+                        }
+                    }
+                    public java.util.Map<String, Object> ragSearch(String query, int topK) {
+                        try (com.lyhn.wraith.rag.CodeRetriever r = new com.lyhn.wraith.rag.CodeRetriever(root, ragEmbeddingClient())) {
+                            java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+                            for (com.lyhn.wraith.rag.VectorStore.SearchResult sr : r.hybridSearch(query, topK)) {
+                                java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                                m.put("filePath", sr.filePath());
+                                m.put("chunkType", sr.chunkType());
+                                m.put("name", sr.name());
+                                String c = sr.content() == null ? "" : sr.content();
+                                m.put("content", c.length() > 500 ? c.substring(0, 500) + "…" : c);
+                                m.put("similarity", sr.similarity());
+                                out.add(m);
+                            }
+                            return java.util.Map.of("results", out);
+                        } catch (Exception ex) {
+                            return java.util.Map.of("results", java.util.List.of(), "error", ex.getClass().getSimpleName());
+                        }
+                    }
+                    public java.util.Map<String, Object> ragGraph(String name) {
+                        try (com.lyhn.wraith.rag.CodeRetriever r = new com.lyhn.wraith.rag.CodeRetriever(root, ragEmbeddingClient())) {
+                            java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+                            for (com.lyhn.wraith.rag.CodeRelation rel : r.getRelationGraph(name)) {
+                                java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                                m.put("fromName", rel.fromName());
+                                m.put("toName", rel.toName());
+                                m.put("relationType", rel.relationType());
+                                m.put("fromFile", rel.fromFile());
+                                m.put("toFile", rel.toFile());
+                                out.add(m);
+                            }
+                            return java.util.Map.of("relations", out);
+                        } catch (Exception ex) {
+                            return java.util.Map.of("relations", java.util.List.of(), "error", ex.getClass().getSimpleName());
+                        }
+                    }
                     public java.util.Map<String, Object> skillsList() {
                         java.util.List<java.util.Map<String, Object>> list = new java.util.ArrayList<>();
                         java.util.Set<String> disabled = skillRegistry.stateStore().disabled();

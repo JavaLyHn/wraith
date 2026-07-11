@@ -348,6 +348,54 @@ export interface BrowserCmdResult {
   text: string
 }
 
+/** Embedding 后端配置视图(config.getEmbedding 回包;key 不回,只回 hasKey)。 */
+export interface EmbeddingConfigView {
+  provider: string
+  model: string
+  baseUrl: string
+  hasKey: boolean
+}
+
+export interface RagStatus {
+  indexed: boolean
+  chunkCount: number
+  relationCount: number
+  error?: string
+}
+
+export interface RagIndexResult {
+  chunkCount?: number
+  relationCount?: number
+  message?: string
+  error?: string
+}
+
+export interface RagSearchItem {
+  filePath: string
+  chunkType: string
+  name: string
+  content: string
+  similarity: number
+}
+
+export interface RagSearchResult {
+  results: RagSearchItem[]
+  error?: string
+}
+
+export interface RagRelation {
+  fromName: string
+  toName: string
+  relationType: string
+  fromFile: string
+  toFile: string
+}
+
+export interface RagGraphResult {
+  relations: RagRelation[]
+  error?: string
+}
+
 export interface SkillDetail extends SkillView {
   body: string
 }

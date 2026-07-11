@@ -37,6 +37,25 @@ public class EmbeddingClient {
         this.apiKey = apiKey;
     }
 
+    /**
+     * 由(可能不全的)配置构造:空字段按 provider 填默认。
+     * provider 空 → ollama;model/baseUrl 空 → 按 provider 默认。供桌面 embedding 配置使用。
+     */
+    public static EmbeddingClient of(String provider, String model, String baseUrl, String apiKey) {
+        String p = (provider == null || provider.isBlank()) ? "ollama" : provider.trim().toLowerCase();
+        String m = (model == null || model.isBlank()) ? defaultModel(p) : model.trim();
+        String url = (baseUrl == null || baseUrl.isBlank()) ? inferDefaultUrl(p) : baseUrl.trim();
+        return new EmbeddingClient(p, m, url, apiKey == null ? "" : apiKey);
+    }
+
+    private static String defaultModel(String provider) {
+        return switch (provider) {
+            case "zhipu", "glm" -> "embedding-2";
+            case "openai" -> "text-embedding-3-small";
+            default -> "nomic-embed-text:latest";
+        };
+    }
+
     // 安全截断长度（中文密集文本 2000 字符 ≈ 4000~6000 token，适配 8192 上下文模型）
     private static final int MAX_INPUT_CHARS = 2000;
 
@@ -133,6 +152,7 @@ public class EmbeddingClient {
         return switch (provider.toLowerCase()) {
             case "ollama" -> "http://localhost:11434";
             case "zhipu", "glm" -> "https://open.bigmodel.cn/api/paas/v4";
+            case "openai" -> "https://api.openai.com/v1";
             default -> "http://localhost:11434";
         };
     }

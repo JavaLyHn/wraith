@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -87,6 +87,12 @@ export interface WraithApi {
   browserConnect(port?: string): Promise<BrowserCmdResult>
   browserDisconnect(): Promise<BrowserCmdResult>
   browserTabs(): Promise<BrowserCmdResult>
+  configGetEmbedding(): Promise<EmbeddingConfigView>
+  configSetEmbedding(cfg: { provider: string; model: string; baseUrl: string; apiKey: string }): Promise<{ ok: boolean }>
+  ragStatus(): Promise<RagStatus>
+  ragIndex(): Promise<RagIndexResult>
+  ragSearch(query: string, topK?: number): Promise<RagSearchResult>
+  ragGraph(name: string): Promise<RagGraphResult>
   upsertSkill(payload: SkillUpsertPayload): Promise<{ ok: boolean }>
   deleteSkill(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   skillExistsInScope(scope: 'user' | 'project', name: string): Promise<{ exists: boolean }>
@@ -393,6 +399,24 @@ const wraith: WraithApi = {
   },
   browserTabs() {
     return ipcRenderer.invoke('wraith:browserTabs') as Promise<BrowserCmdResult>
+  },
+  configGetEmbedding() {
+    return ipcRenderer.invoke('wraith:configGetEmbedding') as Promise<EmbeddingConfigView>
+  },
+  configSetEmbedding(cfg) {
+    return ipcRenderer.invoke('wraith:configSetEmbedding', cfg) as Promise<{ ok: boolean }>
+  },
+  ragStatus() {
+    return ipcRenderer.invoke('wraith:ragStatus') as Promise<RagStatus>
+  },
+  ragIndex() {
+    return ipcRenderer.invoke('wraith:ragIndex') as Promise<RagIndexResult>
+  },
+  ragSearch(query, topK) {
+    return ipcRenderer.invoke('wraith:ragSearch', query, topK) as Promise<RagSearchResult>
+  },
+  ragGraph(name) {
+    return ipcRenderer.invoke('wraith:ragGraph', name) as Promise<RagGraphResult>
   },
 
   setSkillEnabled(name, enabled) {

@@ -24,6 +24,7 @@ public class WraithConfig {
     private Map<String, ProviderConfig> providers = new LinkedHashMap<>();
     private GatewayConfig gateway;
     private SttConfig stt;
+    private EmbeddingConfig embedding;
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ProviderConfig {
@@ -120,6 +121,23 @@ public class WraithConfig {
         public void setModel(String v) { this.model = v; }
     }
 
+    /** RAG 用的 embedding 后端配置。缺省时 EmbeddingClient 回落到 env/Ollama。 */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class EmbeddingConfig {
+        private String provider;   // ollama | openai | zhipu | glm
+        private String model;
+        private String baseUrl;
+        private String apiKey;     // 仅本地存储,绝不回包/日志
+        public String getProvider() { return provider; }
+        public void setProvider(String v) { this.provider = v; }
+        public String getModel() { return model; }
+        public void setModel(String v) { this.model = v; }
+        public String getBaseUrl() { return baseUrl; }
+        public void setBaseUrl(String v) { this.baseUrl = v; }
+        public String getApiKey() { return apiKey; }
+        public void setApiKey(String v) { this.apiKey = v; }
+    }
+
     public String getDefaultProvider() { return defaultProvider; }
     public void setDefaultProvider(String defaultProvider) { this.defaultProvider = defaultProvider; }
     public Map<String, ProviderConfig> getProviders() { return providers; }
@@ -128,6 +146,8 @@ public class WraithConfig {
     public void setGateway(GatewayConfig gateway) { this.gateway = gateway; }
     public SttConfig getStt() { return stt; }
     public void setStt(SttConfig stt) { this.stt = stt; }
+    public EmbeddingConfig getEmbedding() { return embedding; }
+    public void setEmbedding(EmbeddingConfig embedding) { this.embedding = embedding; }
 
     /** STT 借用的 provider id;缺省 siliconflow。 */
     public String getSttProviderId() {

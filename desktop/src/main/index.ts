@@ -578,6 +578,32 @@ ipcMain.handle('wraith:browserTabs', async () => {
   return client.request('browser.tabs', {})
 })
 
+// Embedding 后端配置 + RAG 检索 / 代码图谱(转发 config.*Embedding / rag.* RPC)
+ipcMain.handle('wraith:configGetEmbedding', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.getEmbedding', {})
+})
+ipcMain.handle('wraith:configSetEmbedding', async (_e, cfg: { provider: string; model: string; baseUrl: string; apiKey: string }) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.setEmbedding', cfg)
+})
+ipcMain.handle('wraith:ragStatus', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('rag.status', {})
+})
+ipcMain.handle('wraith:ragIndex', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('rag.index', {})
+})
+ipcMain.handle('wraith:ragSearch', async (_e, query: string, topK?: number) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('rag.search', { query, topK: topK ?? 8 })
+})
+ipcMain.handle('wraith:ragGraph', async (_e, name: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('rag.graph', { name })
+})
+
 ipcMain.handle('wraith:setSkillEnabled', async (_e, name: string, enabled: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.setEnabled', { name, enabled })
