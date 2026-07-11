@@ -23,6 +23,7 @@ export function buildSplashHtml(logoDataUri: string): string {
     filter:drop-shadow(0 0 22px rgba(150,195,255,.55));
     animation:glowPulse 2.6s ease-in-out 900ms infinite}
   body.dismiss .wrap{animation:ghostOut 450ms ease-in both}
+  body.dismiss .wrap img{animation:none}
   @keyframes ghostIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
   @keyframes ghostOut{from{opacity:1;transform:none}to{opacity:0;transform:scale(1.15)}}
   @keyframes glowPulse{0%,100%{filter:drop-shadow(0 0 18px rgba(150,195,255,.40))}50%{filter:drop-shadow(0 0 30px rgba(150,195,255,.70))}}

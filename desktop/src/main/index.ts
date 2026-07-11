@@ -1100,19 +1100,24 @@ app.whenReady().then(() => {
   } else {
     const splashStartedAt = Date.now()
     splashWindow = createSplash()
-    createWindow()
-    spawnBackend()
+    try {
+      createWindow()
+      spawnBackend()
 
-    if (!splashWindow) {
-      // 无动画:直接显示主窗,不阻塞
-      showMainWindow()
-    } else {
-      const splashTimer = setInterval(() => {
-        if (shouldDismissSplash(Date.now() - splashStartedAt, backendConnected)) {
-          clearInterval(splashTimer)
-          dismissSplash()
-        }
-      }, 150)
+      if (!splashWindow) {
+        // 无动画:直接显示主窗,不阻塞
+        showMainWindow()
+      } else {
+        const splashTimer = setInterval(() => {
+          if (shouldDismissSplash(Date.now() - splashStartedAt, backendConnected)) {
+            clearInterval(splashTimer)
+            dismissSplash()
+          }
+        }, 150)
+      }
+    } catch {
+      // 启动编排异常安全:任何同步异常都必须保证主窗可见(splash 绝不阻塞启动)
+      dismissSplash()
     }
   }
 
