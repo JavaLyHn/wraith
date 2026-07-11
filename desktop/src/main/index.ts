@@ -1140,6 +1140,17 @@ app.whenReady().then(() => {
     callback(permission === 'media')
   })
 
+  // 内嵌浏览器(BrowserPane)的独立 partition:默认拒绝所有权限请求(地理位置/摄像头/通知等)——
+  // 它是可访问任意站点的用户浏览器,不应默认放权。
+  session.fromPartition('persist:wraith-browser').setPermissionRequestHandler((_wc, _permission, cb) => cb(false))
+
+  // webview 客体禁止 window.open / target=_blank 弹新窗(兜底,不依赖单个 allowpopups 属性)
+  app.on('web-contents-created', (_e, contents) => {
+    if (contents.getType() === 'webview') {
+      contents.setWindowOpenHandler(() => ({ action: 'deny' }))
+    }
+  })
+
   if (process.env['WRAITH_E2E'] === '1') {
     // E2E 绕过:不建 splash,立即显示主窗,避免 firstWindow() 拿到 splash 或窗口延迟显示干扰用例
     createWindow()

@@ -81,6 +81,8 @@ export default function BrowserPane({ active }: { active: boolean }): JSX.Elemen
           ref: wv,
           src: 'about:blank',
           partition: 'persist:wraith-browser',
+          // 必须用 undefined(=不写该属性)来关弹窗;传 false 会渲染成 allowpopups="false" 字符串,
+          // Electron 按"属性存在"判定反而开启弹窗。切勿改为 false。
           allowpopups: undefined,
           style: { width: '100%', height: '100%', display: 'flex' },
         })}
