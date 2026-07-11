@@ -65,6 +65,11 @@ describe('deliveryTargetsToLabels', () => {
     expect(deliveryTargetsToLabels(targets)).toEqual(['桌面通知', 'QQ 消息'])
   })
 
+  it('飞书/企微/微信 → 中文标签', () => {
+    const targets: DeliveryTarget[] = [{ platform: 'feishu' }, { platform: 'wecom' }, { platform: 'weixin' }]
+    expect(deliveryTargetsToLabels(targets)).toEqual(['飞书', '企业微信', '微信'])
+  })
+
   it('未知平台返回 platform 字符串本身', () => {
     const targets: DeliveryTarget[] = [{ platform: 'telegram' }]
     expect(deliveryTargetsToLabels(targets)).toEqual(['telegram'])
@@ -72,42 +77,44 @@ describe('deliveryTargetsToLabels', () => {
 })
 
 describe('parseDeliverTo', () => {
-  it('null(新建) → desktop=true, qq=false', () => {
-    expect(parseDeliverTo(null)).toEqual({ desktop: true, qq: false })
+  it('null(新建) → {desktop}', () => {
+    expect(parseDeliverTo(null)).toEqual(new Set(['desktop']))
   })
 
-  it('deliverTo 为空数组 → desktop=true, qq=false', () => {
-    expect(parseDeliverTo(task({ deliverTo: [] }))).toEqual({ desktop: true, qq: false })
+  it('deliverTo 为空数组 → {desktop}', () => {
+    expect(parseDeliverTo(task({ deliverTo: [] }))).toEqual(new Set(['desktop']))
   })
 
-  it('编辑态 desktop-only backfill', () => {
-    expect(parseDeliverTo(task({ deliverTo: [{ platform: 'desktop' }] }))).toEqual({ desktop: true, qq: false })
+  it('编辑态 desktop-only', () => {
+    expect(parseDeliverTo(task({ deliverTo: [{ platform: 'desktop' }] }))).toEqual(new Set(['desktop']))
   })
 
-  it('编辑态 qq-only backfill(QQ target)', () => {
-    expect(parseDeliverTo(task({ deliverTo: [{ platform: 'qq' }] }))).toEqual({ desktop: false, qq: true })
+  it('编辑态多平台(qq + 飞书)', () => {
+    expect(parseDeliverTo(task({ deliverTo: [{ platform: 'qq' }, { platform: 'feishu' }] }))).toEqual(new Set(['qq', 'feishu']))
   })
 
   it('编辑态 desktop+qq', () => {
-    expect(parseDeliverTo(task({ deliverTo: [{ platform: 'desktop' }, { platform: 'qq' }] }))).toEqual({ desktop: true, qq: true })
+    expect(parseDeliverTo(task({ deliverTo: [{ platform: 'desktop' }, { platform: 'qq' }] }))).toEqual(new Set(['desktop', 'qq']))
   })
 })
 
 describe('buildDeliverTo', () => {
   it('desktop-only → [{platform:"desktop"}]', () => {
-    expect(buildDeliverTo(true, false)).toEqual([{ platform: 'desktop' }])
+    expect(buildDeliverTo(['desktop'])).toEqual([{ platform: 'desktop' }])
   })
 
-  it('qq-only → [{platform:"qq"}]', () => {
-    expect(buildDeliverTo(false, true)).toEqual([{ platform: 'qq' }])
+  it('多平台按传入顺序输出', () => {
+    expect(buildDeliverTo(['desktop', 'qq', 'feishu'])).toEqual([
+      { platform: 'desktop' }, { platform: 'qq' }, { platform: 'feishu' },
+    ])
   })
 
-  it('both → desktop first, qq second', () => {
-    expect(buildDeliverTo(true, true)).toEqual([{ platform: 'desktop' }, { platform: 'qq' }])
+  it('IM-only(无桌面)', () => {
+    expect(buildDeliverTo(['weixin', 'wecom'])).toEqual([{ platform: 'weixin' }, { platform: 'wecom' }])
   })
 
   it('none → []', () => {
-    expect(buildDeliverTo(false, false)).toEqual([])
+    expect(buildDeliverTo([])).toEqual([])
   })
 })
 
@@ -144,6 +151,11 @@ describe('parseApproval', () => {
 
   it('askTimeoutMinutes absent → 空字符串', () => {
     const result = parseApproval(task({ approval: { default: 'ask' } }))
+    expect(result.askTimeoutMinutes).toBe('')
+  })
+
+  it('askTimeoutMinutes 为 JSON null → 空字符串(不得变成 "null")', () => {
+    const result = parseApproval(task({ approval: { default: 'ask', askTimeoutMinutes: null } as never }))
     expect(result.askTimeoutMinutes).toBe('')
   })
 })

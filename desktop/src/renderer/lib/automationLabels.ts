@@ -56,36 +56,34 @@ export function approvalModeLabel(mode: ApprovalMode): string {
 // DeliveryTarget label 纯函数
 // ---------------------------------------------------------------------------
 
+/** 投递平台 → 中文标签(展示 + 勾选项共用)。IM 平台取短名。未知平台回落 id 本身。 */
+const DELIVERY_LABELS: Record<string, string> = {
+  desktop: '桌面通知', qq: 'QQ 消息', feishu: '飞书', wecom: '企业微信', weixin: '微信',
+}
+export function deliveryPlatformLabel(platform: string): string {
+  return DELIVERY_LABELS[platform] ?? platform
+}
+
 /** 投递目标数组 → 简短中文描述列表(用于展示)。 */
 export function deliveryTargetsToLabels(targets: DeliveryTarget[]): string[] {
-  return targets.map(t => {
-    if (t.platform === 'desktop') return '桌面通知'
-    if (t.platform === 'qq') return 'QQ 消息'
-    return t.platform
-  })
+  return targets.map(t => deliveryPlatformLabel(t.platform))
 }
 
 // ---------------------------------------------------------------------------
 // AutomationForm parse/build helpers(从 AutomationForm.tsx 提取,纯函数)
 // ---------------------------------------------------------------------------
 
-/** 解析 initial.deliverTo → desktop/qq 布尔值;新建任务默认 desktop=true */
-export function parseDeliverTo(initial: AutomationTask | null): { desktop: boolean; qq: boolean } {
+/** 解析 initial.deliverTo → 已选平台 id 集合;新建任务默认 {desktop}。 */
+export function parseDeliverTo(initial: AutomationTask | null): Set<string> {
   if (!initial || !initial.deliverTo || initial.deliverTo.length === 0) {
-    return { desktop: true, qq: false }
+    return new Set(['desktop'])
   }
-  return {
-    desktop: initial.deliverTo.some(d => d.platform === 'desktop'),
-    qq: initial.deliverTo.some(d => d.platform === 'qq'),
-  }
+  return new Set(initial.deliverTo.map(d => d.platform))
 }
 
-/** 构建 DeliveryTarget[] */
-export function buildDeliverTo(desktop: boolean, qq: boolean): DeliveryTarget[] {
-  const targets: DeliveryTarget[] = []
-  if (desktop) targets.push({ platform: 'desktop' })
-  if (qq) targets.push({ platform: 'qq' })
-  return targets
+/** 平台 id 序列 → DeliveryTarget[](保持传入顺序,便于 UI 稳定输出)。 */
+export function buildDeliverTo(platforms: Iterable<string>): DeliveryTarget[] {
+  return Array.from(platforms).map(p => ({ platform: p }))
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +111,7 @@ export function parseApproval(initial: AutomationTask | null): {
     toolOverrides: ap.tools
       ? Object.entries(ap.tools).map(([tool, mode]) => ({ tool, mode }))
       : [],
-    askTimeoutMinutes: ap.askTimeoutMinutes !== undefined ? String(ap.askTimeoutMinutes) : '',
+    // != null 同时挡 undefined 与 JSON null(否则 String(null)==="null" 会漏进 UI,如「超时 null 分」)
+    askTimeoutMinutes: ap.askTimeoutMinutes != null ? String(ap.askTimeoutMinutes) : '',
   }
 }
