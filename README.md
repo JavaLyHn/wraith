@@ -8,7 +8,9 @@
 
 ## 下载
 
-桌面版（macOS · Apple Silicon）：前往 **[Releases](https://github.com/JavaLyHn/wraith/releases/latest)** 下载 `Wraith-<version>-arm64.dmg`。自包含内置 JRE，无需系统 Java；本版本未签名，首次启动请在「应用程序」里右键 → 打开。
+桌面版（macOS · Apple Silicon）：前往 **[Releases](https://github.com/JavaLyHn/wraith/releases/latest)** 下载 `Wraith-<version>-arm64.dmg`。自包含内置 JRE，无需系统 Java。
+
+> ⚠️ 本版本未签名/未公证，下载后被 Gatekeeper 隔离会误报「已损坏，无法打开」（右键「打开」对此无效）。解决：把 `Wraith.app` 拖到 `/应用程序`，在「终端」执行 `sudo xattr -cr /Applications/Wraith.app`（会提示输入登录密码；必须加 `sudo`，因内置 JRE 含只读文件），再双击打开。
 
 当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP、第 24 期 `IM 网关`（QQ / 飞书 单聊 bot + 桌面配置面板 + 定时任务投递）。
 
