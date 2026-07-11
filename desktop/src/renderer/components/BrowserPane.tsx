@@ -1,91 +1,121 @@
-import { createElement, useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, RotateCw } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowLeft, ArrowRight, ArrowUpRight, Globe, Plus, RotateCw } from 'lucide-react'
+import BrowserWebview, { type WebviewEl } from './BrowserWebview'
+import {
+  addBrowserTab, closeBrowserTab, newBrowserTab, patchBrowserTab, setActiveBrowserTab,
+  type BrowserTab, type BrowserTabsState,
+} from '../lib/browserTabs'
 import { normalizeUrl } from '../lib/rightDock'
 
-/** Electron webview 元素的最小类型(仅用到的方法)。 */
-interface WebviewEl extends HTMLElement {
-  src: string
-  canGoBack(): boolean
-  canGoForward(): boolean
-  goBack(): void
-  goForward(): void
-  reload(): void
-  loadURL(url: string): Promise<void>
-  getURL(): string
-}
-
-/** 内嵌浏览器:地址栏 + 前进/后退/刷新 + <webview>(独立 partition、隔离)。用户浏览用。 */
+/** 内嵌浏览器:多标签(每标签一个常挂 webview)+ 地址栏/导航 + 精致空态。用户浏览用。 */
 export default function BrowserPane({ active }: { active: boolean }): JSX.Element {
-  void active // RightDock 通过 CSS 控制显隐;保留 prop 供将来扩展(如切走暂停媒体)
-  const wv = useRef<WebviewEl | null>(null)
-  const [addr, setAddr] = useState('')       // 地址栏输入
-  const [loading, setLoading] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [state, setState] = useState<BrowserTabsState>({ tabs: [], activeId: null })
+  const [addr, setAddr] = useState('')
+  const refs = useRef<Map<string, WebviewEl>>(new Map())
+  const seq = useRef(0)
+  const addrInput = useRef<HTMLInputElement>(null)
 
-  // 绑定 webview DOM 事件(导航/加载态/失败)
+  const activeTab: BrowserTab | undefined = state.tabs.find(t => t.id === state.activeId)
+
+  // 稳定回调:BrowserWebview 只在挂载时绑一次,靠这两个稳定引用
+  const registerRef = useCallback((id: string, el: WebviewEl | null) => {
+    if (el) refs.current.set(id, el)
+    else refs.current.delete(id)
+  }, [])
+  const onState = useCallback((id: string, patch: Partial<BrowserTab>) => {
+    setState(s => patchBrowserTab(s, id, patch))
+  }, [])
+
+  const addNew = useCallback(() => {
+    const id = 'btab-' + (++seq.current)
+    setState(s => addBrowserTab(s, newBrowserTab(id)))
+  }, [])
+
+  // active 且无标签时自动建首标签(deps [active];关到空由 close 内部补,不靠此重建)
   useEffect(() => {
-    const el = wv.current
-    if (!el) return
-    const onStart = (): void => { setLoading(true); setFailed(false) }
-    const onStop = (): void => { setLoading(false); try { setAddr(el.getURL()) } catch { /* ignore */ } }
-    const onNav = (): void => { try { setAddr(el.getURL()) } catch { /* ignore */ } }
-    const onFail = (e: Event): void => {
-      // 主框架加载失败才标记(忽略子资源/-3 取消)
-      const ev = e as unknown as { errorCode?: number; isMainFrame?: boolean }
-      if (ev.isMainFrame !== false && ev.errorCode !== -3) { setLoading(false); setFailed(true) }
-    }
-    el.addEventListener('did-start-loading', onStart)
-    el.addEventListener('did-stop-loading', onStop)
-    el.addEventListener('did-navigate', onNav)
-    el.addEventListener('did-navigate-in-page', onNav)
-    el.addEventListener('did-fail-load', onFail as EventListener)
-    return () => {
-      el.removeEventListener('did-start-loading', onStart)
-      el.removeEventListener('did-stop-loading', onStop)
-      el.removeEventListener('did-navigate', onNav)
-      el.removeEventListener('did-navigate-in-page', onNav)
-      el.removeEventListener('did-fail-load', onFail as EventListener)
-    }
-  }, [])
+    if (active && state.tabs.length === 0) addNew()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active])
 
-  const navigate = useCallback((raw: string) => {
+  // 地址栏跟随活动标签:仅切标签或该标签真实导航(url 变)时回灌;
+  // 用户打字只改本地 addr,不触发导航、也不被覆盖(activeTab.url 仅真实导航时变)
+  useEffect(() => {
+    setAddr(activeTab?.url ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.activeId, activeTab?.url])
+
+  const close = (id: string): void => {
+    refs.current.delete(id)
+    setState(s => {
+      const ns = closeBrowserTab(s, id)
+      if (ns.tabs.length === 0) {
+        const nid = 'btab-' + (++seq.current)
+        return addBrowserTab(ns, newBrowserTab(nid))   // 关到空自动补新空白标签(永不空)
+      }
+      return ns
+    })
+  }
+
+  const navigate = (raw: string): void => {
+    const id = state.activeId
+    if (!id) return
     const url = normalizeUrl(raw)
-    setFailed(false)
-    void wv.current?.loadURL(url).catch(() => setFailed(true))
-  }, [])
+    setState(s => patchBrowserTab(s, id, { failed: false }))
+    void refs.current.get(id)?.loadURL(url).catch(() => setState(s => patchBrowserTab(s, id, { failed: true })))
+  }
 
   const btn = 'rounded p-1 text-fg-muted hover:bg-surface/60 disabled:opacity-40'
+  const showEmpty = !!activeTab && activeTab.url === '' && !activeTab.loading && !activeTab.failed
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* 地址栏 + 导航 */}
+      {/* 标签条 */}
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
-        <button className={btn} title="后退" onClick={() => wv.current?.goBack()}><ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} /></button>
-        <button className={btn} title="前进" onClick={() => wv.current?.goForward()}><ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} /></button>
-        <button className={btn} title="刷新" onClick={() => wv.current?.reload()}><RotateCw className={'h-3.5 w-3.5 ' + (loading ? 'animate-spin' : '')} strokeWidth={1.5} /></button>
+        {state.tabs.map(t => (
+          <div key={t.id}
+            className={'flex items-center gap-1.5 rounded-md px-2 py-1 text-2xs ' +
+              (t.id === state.activeId ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>
+            <Globe className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+            <button data-testid="browser-tab" onClick={() => setState(s => setActiveBrowserTab(s, t.id))} className="max-w-[120px] truncate">{t.title}</button>
+            <button data-testid="browser-tab-close" onClick={() => close(t.id)} className="text-fg-subtle hover:text-danger">×</button>
+          </div>
+        ))}
+        <button data-testid="browser-add" onClick={addNew} className="rounded p-1 text-fg-muted hover:bg-surface/60" title="新建标签页"><Plus className="h-3.5 w-3.5" strokeWidth={1.5} /></button>
+      </div>
+      {/* 工具条:后退/前进/刷新 + 地址栏 + 前往 */}
+      <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
+        <button className={btn} title="后退" disabled={!activeTab?.canBack} onClick={() => { if (activeTab) refs.current.get(activeTab.id)?.goBack() }}><ArrowLeft className="h-3.5 w-3.5" strokeWidth={1.5} /></button>
+        <button className={btn} title="前进" disabled={!activeTab?.canForward} onClick={() => { if (activeTab) refs.current.get(activeTab.id)?.goForward() }}><ArrowRight className="h-3.5 w-3.5" strokeWidth={1.5} /></button>
+        <button className={btn} title="刷新" disabled={!activeTab} onClick={() => { if (activeTab) refs.current.get(activeTab.id)?.reload() }}><RotateCw className={'h-3.5 w-3.5 ' + (activeTab?.loading ? 'animate-spin' : '')} strokeWidth={1.5} /></button>
         <input
+          ref={addrInput}
           data-testid="browser-addr"
           value={addr}
           onChange={e => setAddr(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') navigate(addr) }}
-          placeholder="输入网址回车访问"
+          placeholder="输入 URL"
           className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1 text-2xs text-fg outline-none focus:border-accent"
         />
+        <button className={btn} title="前往" disabled={!activeTab} onClick={() => navigate(addr)}><ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.5} /></button>
       </div>
-      {/* webview 主体 */}
+      {/* webview 栈(全常挂,CSS 显隐)+ 空态/失败态覆盖 */}
       <div className="relative min-h-0 flex-1">
-        {failed && (
+        {state.tabs.map(t => (
+          <BrowserWebview key={t.id} tab={t} active={t.id === state.activeId} onState={onState} registerRef={registerRef} />
+        ))}
+        {showEmpty && (
+          <button
+            data-testid="browser-empty"
+            onClick={() => addrInput.current?.focus()}
+            className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-bg text-fg-subtle">
+            <Globe className="h-16 w-16" strokeWidth={1} />
+            <div className="text-sm font-semibold text-fg">开始浏览</div>
+            <div className="text-xs text-fg-subtle">输入 URL 以打开页面</div>
+          </button>
+        )}
+        {activeTab?.failed && (
           <div className="absolute inset-0 z-10 flex items-center justify-center bg-bg text-xs text-fg-subtle">页面加载失败</div>
         )}
-        {createElement('webview', {
-          ref: wv,
-          src: 'about:blank',
-          partition: 'persist:wraith-browser',
-          // 必须用 undefined(=不写该属性)来关弹窗;传 false 会渲染成 allowpopups="false" 字符串,
-          // Electron 按"属性存在"判定反而开启弹窗。切勿改为 false。
-          allowpopups: undefined,
-          style: { width: '100%', height: '100%', display: 'flex' },
-        })}
       </div>
     </div>
   )
