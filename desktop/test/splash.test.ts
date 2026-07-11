@@ -21,3 +21,25 @@ describe('shouldDismissSplash', () => {
     expect(shouldDismissSplash(300, true, 400, 2000)).toBe(false)
   })
 })
+
+import { buildSplashHtml } from '../src/main/splash'
+
+describe('buildSplashHtml', () => {
+  const html = buildSplashHtml('data:image/png;base64,AAAA')
+  it('内联传入的 logo data URI', () => {
+    expect(html).toContain('src="data:image/png;base64,AAAA"')
+  })
+  it('含幽灵浮现入场动画关键帧', () => {
+    expect(html).toContain('@keyframes ghostIn')
+  })
+  it('含散去 hook(__dismiss + dismiss class)', () => {
+    expect(html).toContain('window.__dismiss')
+    expect(html).toContain("classList.add('dismiss')")
+  })
+  it('含 reduced-motion 降级', () => {
+    expect(html).toContain('prefers-reduced-motion')
+  })
+  it('背景透明', () => {
+    expect(html).toContain('background:transparent')
+  })
+})
