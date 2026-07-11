@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseTagsInput, validateSkillName, toUpsertPayload, scopeToCleanup } from '../src/renderer/lib/skillEditor'
+import { parseTagsInput, validateSkillName, toUpsertPayload, scopeToCleanup, normalizeReferences } from '../src/renderer/lib/skillEditor'
 
 describe('parseTagsInput', () => {
   it('逗号/换行分隔,trim,去空,去重保序', () => {
@@ -27,12 +27,34 @@ describe('toUpsertPayload', () => {
   it('表单态映射为载荷,tags 解析,name trim', () => {
     const payload = toUpsertPayload({
       scope: 'user', name: '  mine  ', description: 'd', version: '1',
-      author: 'me', tagsInput: 'x, y, x', body: 'B',
+      author: 'me', tagsInput: 'x, y, x', body: 'B', references: [],
     })
     expect(payload).toEqual({
       scope: 'user', name: 'mine', description: 'd', version: '1',
-      author: 'me', tags: ['x', 'y'], body: 'B',
+      author: 'me', tags: ['x', 'y'], body: 'B', references: [],
     })
+  })
+})
+
+describe('normalizeReferences', () => {
+  it('trim path、去空 path、去前导斜杠', () => {
+    expect(normalizeReferences([
+      { path: '  a.md ', content: 'A' },
+      { path: '', content: 'skip' },
+      { path: '/site/b.md', content: 'B' },
+    ])).toEqual([
+      { path: 'a.md', content: 'A' },
+      { path: 'site/b.md', content: 'B' },
+    ])
+  })
+  it('同 path 去重(后者胜)', () => {
+    expect(normalizeReferences([
+      { path: 'x.md', content: '1' },
+      { path: 'x.md', content: '2' },
+    ])).toEqual([{ path: 'x.md', content: '2' }])
+  })
+  it('undefined → 空数组', () => {
+    expect(normalizeReferences(undefined as unknown as never[])).toEqual([])
   })
 })
 

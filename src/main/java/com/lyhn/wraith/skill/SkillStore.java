@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -15,6 +16,7 @@ import java.util.regex.Pattern;
 public final class SkillStore {
 
     private static final Pattern SAFE_NAME = Pattern.compile("^[A-Za-z0-9_-]+$");
+    private static final Pattern SAFE_REF_SEGMENT = Pattern.compile("^[A-Za-z0-9._-]+$");
 
     private final Path userSkillsDir;
     private final Path projectSkillsDir;
@@ -69,6 +71,54 @@ public final class SkillStore {
                 }
             }
         }
+    }
+
+    /**
+     * replace 模式重写技能的 references/:先清空,再按 refs([{path,content}])写入。
+     * path 逐段安全校验(相对、无 .. / 绝对、仅 [A-Za-z0-9._-] + '/' 分隔),越权段整条跳过。
+     * refs 为空 → 清空 references/(等价删除全部参考文件)。
+     */
+    public void writeReferences(String scope, String name, List<Map<String, String>> refs) throws IOException {
+        Path dir = resolveScopeDir(scope);
+        String safe = requireSafeName(name);
+        Path refsDir = dir.resolve(safe).resolve("references");
+        if (Files.isDirectory(refsDir)) {
+            try (var walk = Files.walk(refsDir)) {
+                for (Path p : walk.sorted(Comparator.reverseOrder()).toList()) {
+                    Files.deleteIfExists(p);
+                }
+            }
+        }
+        if (refs == null || refs.isEmpty()) {
+            return;
+        }
+        for (Map<String, String> r : refs) {
+            Path dst = safeResolveUnder(refsDir, r.get("path"));
+            if (dst == null) {
+                continue;
+            }
+            Files.createDirectories(dst.getParent());
+            String content = r.get("content");
+            Files.writeString(dst, content == null ? "" : content);
+        }
+    }
+
+    /** 把相对路径安全解析到 base 之下;非法(绝对/含 .. / 非法字符/逃逸)返回 null。 */
+    private static Path safeResolveUnder(Path base, String rel) {
+        if (rel == null) {
+            return null;
+        }
+        String r = rel.trim().replace('\\', '/').replaceAll("^/+", "");
+        if (r.isEmpty()) {
+            return null;
+        }
+        for (String seg : r.split("/")) {
+            if (seg.isEmpty() || seg.equals(".") || seg.equals("..") || !SAFE_REF_SEGMENT.matcher(seg).matches()) {
+                return null;
+            }
+        }
+        Path resolved = base.resolve(r).normalize();
+        return resolved.startsWith(base.normalize()) ? resolved : null;
     }
 
     /** 删除 &lt;scopeDir&gt;/&lt;name&gt;/ 整个目录,幂等(不存在即 no-op)。 */

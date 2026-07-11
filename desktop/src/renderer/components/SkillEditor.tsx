@@ -20,6 +20,7 @@ function initForm(initial?: SkillDetail): SkillFormState {
     author: initial?.author ?? '',
     tagsInput: (initial?.tags ?? []).join(', '),
     body: initial?.body ?? '',
+    references: initial?.references ? initial.references.map(r => ({ ...r })) : [],
   }
 }
 
@@ -30,6 +31,13 @@ export default function SkillEditor({ initial, lockName, lockScope, onSaved, onC
   const set = <K extends keyof SkillFormState>(k: K, v: SkillFormState[K]): void =>
     setForm(prev => ({ ...prev, [k]: v }))
   const nameError = validateSkillName(form.name)
+
+  // 参考文件(references/)增删改
+  const addRef = (): void => setForm(p => ({ ...p, references: [...p.references, { path: '', content: '' }] }))
+  const updateRef = (i: number, patch: Partial<{ path: string; content: string }>): void =>
+    setForm(p => ({ ...p, references: p.references.map((r, idx) => (idx === i ? { ...r, ...patch } : r)) }))
+  const removeRef = (i: number): void =>
+    setForm(p => ({ ...p, references: p.references.filter((_, idx) => idx !== i) }))
 
   const save = async (): Promise<void> => {
     if (nameError) { setError(nameError); return }
@@ -107,6 +115,31 @@ export default function SkillEditor({ initial, lockName, lockScope, onSaved, onC
             <textarea className={inputCls + ' font-mono'} rows={14} value={form.body}
               onChange={e => set('body', e.target.value)} placeholder="# 技能正文…" />
           </label>
+
+          {/* 参考文件 references/ */}
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <span className="text-2xs text-fg-subtle">参考文件 · references/(可选,load_skill 后按需查阅)</span>
+              <button type="button" data-testid="skill-ref-add" onClick={addRef}
+                className="ml-auto rounded-lg border border-border px-2 py-1 text-3xs text-fg-muted hover:border-accent hover:text-accent">＋ 添加参考文件</button>
+            </div>
+            {form.references.length === 0 && (
+              <div className="text-3xs text-fg-subtle">暂无。例如 cdp-cheatsheet.md、site-patterns/github.com.md(路径可含 /)。</div>
+            )}
+            {form.references.map((r, i) => (
+              <div key={i} data-testid="skill-ref-row" className="rounded-lg border border-border p-2">
+                <div className="flex items-center gap-2">
+                  <input className={inputCls + ' font-mono !py-1'} value={r.path}
+                    onChange={e => updateRef(i, { path: e.target.value })}
+                    placeholder="相对路径,如 site-patterns/x.md" />
+                  <button type="button" data-testid="skill-ref-remove" onClick={() => removeRef(i)}
+                    className="shrink-0 rounded-lg border border-border px-2 py-1 text-3xs text-fg-muted hover:border-danger hover:text-danger">删除</button>
+                </div>
+                <textarea className={inputCls + ' mt-1.5 font-mono'} rows={5} value={r.content}
+                  onChange={e => updateRef(i, { content: e.target.value })} placeholder="文件内容(Markdown / 文本)" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>

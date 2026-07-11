@@ -123,9 +123,10 @@ public final class AppServer {
         default java.util.Map<String, Object> skillsGet(String name) {
             throw new UnsupportedOperationException("skillsGet not implemented");
         }
-        /** 建/改一个用户或项目技能。默认抛出。 */
+        /** 建/改一个用户或项目技能(references = [{path,content}],replace 模式)。默认抛出。 */
         default java.util.Map<String, Object> skillsUpsert(String scope, String name, String description,
-                String version, String author, java.util.List<String> tags, String body) {
+                String version, String author, java.util.List<String> tags, String body,
+                java.util.List<java.util.Map<String, String>> references) {
             throw new UnsupportedOperationException("skillsUpsert not implemented");
         }
         /** 删除一个用户或项目技能。默认抛出。 */
@@ -517,7 +518,18 @@ public final class AppServer {
                 if (p != null && p.has("tags") && p.get("tags").isArray()) {
                     p.get("tags").forEach(n -> { if (n.isTextual()) tags.add(n.asText()); });
                 }
-                try { writer.result(msg.id(), session.skillsUpsert(scope, name, description, version, author, tags, body)); }
+                java.util.List<java.util.Map<String, String>> references = new java.util.ArrayList<>();
+                if (p != null && p.has("references") && p.get("references").isArray()) {
+                    for (JsonNode n : p.get("references")) {
+                        if (n != null && n.isObject()) {
+                            java.util.Map<String, String> ref = new java.util.LinkedHashMap<>();
+                            ref.put("path", n.hasNonNull("path") ? n.get("path").asText() : "");
+                            ref.put("content", n.hasNonNull("content") ? n.get("content").asText() : "");
+                            references.add(ref);
+                        }
+                    }
+                }
+                try { writer.result(msg.id(), session.skillsUpsert(scope, name, description, version, author, tags, body, references)); }
                 catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

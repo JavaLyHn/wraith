@@ -430,6 +430,7 @@ export interface SkillUpsertPayload {
   author: string
   tags: string[]
   body: string
+  references?: SkillReference[]
 }
 
 // ---------------------------------------------------------------------------

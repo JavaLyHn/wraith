@@ -1799,8 +1799,12 @@ public class Main {
                         return v;
                     }
                     public java.util.Map<String,Object> skillsUpsert(String scope, String name, String description,
-                            String version, String author, java.util.List<String> tags, String body) {
-                        try { skillStore.upsert(scope, name, description, version, author, tags, body); }
+                            String version, String author, java.util.List<String> tags, String body,
+                            java.util.List<java.util.Map<String, String>> references) {
+                        try {
+                            skillStore.upsert(scope, name, description, version, author, tags, body);
+                            skillStore.writeReferences(scope, name, references); // replace 模式:UI 是权威集
+                        }
                         catch (java.io.IOException e) { throw new RuntimeException("写入技能失败: " + e.getMessage(), e); }
                         skillRegistry.reload();
                         return java.util.Map.of("ok", true);

@@ -1,4 +1,4 @@
-import type { SkillUpsertPayload } from '../../shared/types'
+import type { SkillUpsertPayload, SkillReference } from '../../shared/types'
 
 const SAFE_NAME = /^[A-Za-z0-9_-]+$/
 
@@ -27,9 +27,21 @@ export interface SkillFormState {
   author: string
   tagsInput: string
   body: string
+  references: SkillReference[]
 }
 
-/** 表单态 → RPC 载荷(tags 经 parseTagsInput,name trim)。 */
+/** 归一参考文件:trim path、去空 path、按 path 去重(后者胜,保序)。 */
+export function normalizeReferences(refs: SkillReference[]): SkillReference[] {
+  const byPath = new Map<string, SkillReference>()
+  for (const r of refs || []) {
+    const path = (r.path || '').trim().replace(/^\/+/, '')
+    if (!path) continue
+    byPath.set(path, { path, content: r.content ?? '' })
+  }
+  return [...byPath.values()]
+}
+
+/** 表单态 → RPC 载荷(tags 经 parseTagsInput,name trim,references 归一)。 */
 export function toUpsertPayload(form: SkillFormState): SkillUpsertPayload {
   return {
     scope: form.scope,
@@ -39,6 +51,7 @@ export function toUpsertPayload(form: SkillFormState): SkillUpsertPayload {
     author: form.author,
     tags: parseTagsInput(form.tagsInput),
     body: form.body,
+    references: normalizeReferences(form.references),
   }
 }
 
