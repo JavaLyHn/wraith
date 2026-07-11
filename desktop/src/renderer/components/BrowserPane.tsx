@@ -46,13 +46,10 @@ export default function BrowserPane({ active }: { active: boolean }): JSX.Elemen
 
   const close = (id: string): void => {
     refs.current.delete(id)
+    const nid = 'btab-' + (++seq.current)   // 在 updater 外算 id(纯度:与 addNew 一致,避免 StrictMode 双调跳号)
     setState(s => {
       const ns = closeBrowserTab(s, id)
-      if (ns.tabs.length === 0) {
-        const nid = 'btab-' + (++seq.current)
-        return addBrowserTab(ns, newBrowserTab(nid))   // 关到空自动补新空白标签(永不空)
-      }
-      return ns
+      return ns.tabs.length === 0 ? addBrowserTab(ns, newBrowserTab(nid)) : ns   // 关到空自动补新空白标签(永不空)
     })
   }
 
