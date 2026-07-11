@@ -431,6 +431,21 @@ export default function App(): JSX.Element {
     setAttachments(prev => prev.filter((_, i) => i !== index))
   }, [])
 
+  const handleAddAttachments = useCallback((items: AttachmentItem[]) => {
+    if (items.length > 0) setAttachments(prev => [...prev, ...items])
+  }, [])
+
+  // 全窗兜底:拖文件到 Composer 之外的空白处时,阻止 Electron 默认导航到 file://。
+  useEffect(() => {
+    const prevent = (e: DragEvent): void => { e.preventDefault() }
+    window.addEventListener('dragover', prevent)
+    window.addEventListener('drop', prevent)
+    return () => {
+      window.removeEventListener('dragover', prevent)
+      window.removeEventListener('drop', prevent)
+    }
+  }, [])
+
   // ── input submit ──────────────────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
     const text = inputValue.trim()
@@ -876,6 +891,7 @@ export default function App(): JSX.Element {
                 attachments={attachments}
                 onPickAttachments={handlePickAttachments}
                 onRemoveAttachment={handleRemoveAttachment}
+                onAddAttachments={handleAddAttachments}
                 mode={pendingMode}
                 onModeChange={setPendingMode}
               />

@@ -14,6 +14,7 @@ import ModeSwitcher from './ModeSwitcher'
 import type { StatusData, McpResourceView, RunMode } from '../../shared/types'
 import { detectMention, filterMentionItems, insertMention } from '../../shared/mentionTrigger'
 import type { MentionState } from '../../shared/mentionTrigger'
+import { isImageMime, imageExtFromMime, pathsToAttachments } from '../lib/composerAttachments'
 import { VadSegmenter, DEFAULT_VAD } from '../lib/vadSegmenter'
 import { OrderedAppender } from '../lib/orderedAppender'
 import { micLevel } from '../lib/waveform'
@@ -42,6 +43,7 @@ interface ComposerProps {
   attachments?: AttachmentItem[]
   onPickAttachments?: () => void
   onRemoveAttachment?: (index: number) => void
+  onAddAttachments?: (items: AttachmentItem[]) => void
   mode?: RunMode
   onModeChange?: (m: RunMode) => void
 }
@@ -63,11 +65,14 @@ export default function Composer({
   attachments = [],
   onPickAttachments,
   onRemoveAttachment,
+  onAddAttachments,
   mode = 'react',
   onModeChange,
 }: ComposerProps): JSX.Element {
   const [mention, setMention] = useState<MentionState>({ active: false, start: 0, query: '' })
   const [mentionIndex, setMentionIndex] = useState(0)
+  const [dragOver, setDragOver] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
@@ -138,6 +143,72 @@ export default function Composer({
     },
     [onSubmit, running, popoverOpen, items, mentionIndex, mention, value, onChange],
   )
+
+  // 粘贴图片:剪贴板含 image blob → 落临时文件成附件;纯文本粘贴不拦(照常插入)
+  const handlePaste = useCallback(async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (running) return
+    const imgItems = Array.from(e.clipboardData?.items ?? []).filter(
+      it => it.kind === 'file' && isImageMime(it.type),
+    )
+    if (imgItems.length === 0) return
+    e.preventDefault()
+    setAttachError(null)
+    const added: AttachmentItem[] = []
+    for (const it of imgItems) {
+      const file = it.getAsFile()
+      const ext = file && imageExtFromMime(file.type)
+      if (!file || !ext) continue
+      try {
+        const b64 = await blobToBase64(file)
+        added.push(await window.wraith.saveTempImage(b64, ext))
+      } catch (err) {
+        setAttachError('图片粘贴失败:' + (err as Error).message)
+      }
+    }
+    if (added.length > 0) onAddAttachments?.(added)
+  }, [running, onAddAttachments])
+
+  // 拖拽:OS 文件有磁盘路径(Electron 32 经 webUtils 取);无路径(如浏览器拖图)回退到 blob→临时文件
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    if (running) return
+    const files = Array.from(e.dataTransfer?.files ?? [])
+    if (files.length === 0) return
+    setAttachError(null)
+    const paths: string[] = []
+    const blobFallback: File[] = []
+    for (const f of files) {
+      const p = window.wraith.pathForFile(f)
+      if (p) paths.push(p)
+      else if (isImageMime(f.type)) blobFallback.push(f)
+    }
+    const added: AttachmentItem[] = pathsToAttachments(paths)
+    for (const f of blobFallback) {
+      const ext = imageExtFromMime(f.type)
+      if (!ext) continue
+      try {
+        const b64 = await blobToBase64(f)
+        added.push(await window.wraith.saveTempImage(b64, ext))
+      } catch (err) {
+        setAttachError('图片拖入失败:' + (err as Error).message)
+      }
+    }
+    if (added.length > 0) onAddAttachments?.(added)
+  }, [running, onAddAttachments])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (running) return
+    if (Array.from(e.dataTransfer?.types ?? []).includes('Files')) {
+      e.preventDefault()
+      setDragOver(true)
+    }
+  }, [running])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    // 只在真正离开容器(而非进入子元素)时收起高亮
+    if (e.currentTarget === e.target) setDragOver(false)
+  }, [])
 
   // 段落转写完成 → 按序 flush → 依次插入到追加点（段间空格分隔）
   const flushSegment = useCallback((seq: number, text: string) => {
@@ -267,11 +338,21 @@ export default function Composer({
   return (
     <TooltipProvider delayDuration={200}>
       <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={
-          'relative w-full rounded-2xl border border-fg-subtle/40 bg-surface shadow-md transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25 ' +
+          'relative w-full rounded-2xl border bg-surface shadow-md transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25 ' +
+          (dragOver ? 'border-accent ring-2 ring-accent/40 ' : 'border-fg-subtle/40 ') +
           (centered ? 'max-w-2xl mx-auto' : '')
         }
       >
+        {dragOver && (
+          <div data-testid="drop-hint"
+            className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center rounded-2xl bg-accent/5 text-xs font-medium text-accent">
+            松手添加为附件
+          </div>
+        )}
         {/* @-mention popover */}
         {popoverOpen && (
           <div data-testid="mention-popover"
@@ -323,6 +404,10 @@ export default function Composer({
           </div>
         )}
 
+        {attachError && (
+          <div data-testid="attach-error" className="px-3 pt-2 text-2xs text-danger">{attachError}</div>
+        )}
+
         {/* text row */}
         <textarea
           ref={textareaRef}
@@ -334,6 +419,7 @@ export default function Composer({
             setMentionIndex(0)
           }}
           onKeyDown={handleKeyDown}
+          onPaste={e => { void handlePaste(e) }}
           placeholder="给 Wraith 一个目标… (Enter 发送, Shift+Enter 换行)"
           rows={centered ? 3 : 2}
           className="w-full resize-none bg-transparent px-4 pt-3 text-sm text-fg outline-none placeholder:text-fg-subtle disabled:opacity-50"

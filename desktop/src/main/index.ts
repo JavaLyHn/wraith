@@ -325,6 +325,24 @@ ipcMain.handle('wraith:pickAttachments', async () => {
   }))
 })
 
+// 粘贴图片:renderer 只有内存 blob、无磁盘路径,先落临时文件再走附件通道。
+let pastedImageSeq = 0
+ipcMain.handle('wraith:saveTempImage', async (_e, base64: string, ext: string) => {
+  const { validImageExt, tempImageName } = await import('./tempImage.js')
+  const safeExt = validImageExt(ext)
+  if (!safeExt) throw new Error('不支持的图片格式(支持 png/jpg/jpeg/gif/webp)')
+  if (!base64 || typeof base64 !== 'string') throw new Error('剪贴板图片为空')
+  const buf = Buffer.from(base64, 'base64')
+  if (buf.length === 0) throw new Error('剪贴板图片解码为空')
+  if (buf.length > 20 * 1024 * 1024) throw new Error('粘贴图片过大(超 20MB)')
+  const dir = path.join(os.tmpdir(), 'wraith-paste')
+  await fs.promises.mkdir(dir, { recursive: true })
+  const name = tempImageName(safeExt, pastedImageSeq++, Date.now())
+  const filePath = path.join(dir, name)
+  await fs.promises.writeFile(filePath, buf)
+  return { path: filePath, name, kind: 'image' }
+})
+
 ipcMain.handle(
   'wraith:respondApproval',
   async (

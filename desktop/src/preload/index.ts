@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
@@ -14,6 +14,10 @@ export interface WraithApi {
   submitTurn(input: string, attachments?: { path: string; kind: string }[], mode?: RunMode): Promise<{ turnId: string; status: string }>
   respondPlanReview(reviewId: string, decision: 'execute' | 'supplement' | 'cancel', feedback?: string): Promise<{ ok: boolean }>
   pickAttachments(): Promise<{ path: string; name: string; kind: string }[]>
+  /** 粘贴图片:base64 落临时文件,返回附件条目。 */
+  saveTempImage(base64: string, ext: string): Promise<{ path: string; name: string; kind: string }>
+  /** 拖拽文件:取其磁盘路径(Electron 32 用 webUtils,File.path 已移除)。 */
+  pathForFile(file: File): string
   respondApproval(
     approvalId: string,
     decision: 'APPROVED' | 'REJECTED' | 'MODIFIED' | 'APPROVED_ALL',
@@ -139,6 +143,14 @@ const wraith: WraithApi = {
 
   pickAttachments() {
     return ipcRenderer.invoke('wraith:pickAttachments') as Promise<{ path: string; name: string; kind: string }[]>
+  },
+
+  saveTempImage(base64, ext) {
+    return ipcRenderer.invoke('wraith:saveTempImage', base64, ext) as Promise<{ path: string; name: string; kind: string }>
+  },
+
+  pathForFile(file) {
+    return webUtils.getPathForFile(file)
   },
 
   respondApproval(approvalId, decision, opts) {
