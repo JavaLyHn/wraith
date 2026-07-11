@@ -966,9 +966,7 @@ export default function App(): JSX.Element {
                   onPlanReview={handlePlanReview}
                   mode={pendingMode}
                 />
-                {terminalOpen && (
-                  <TerminalDrawer cwd={state.workspace ?? null} onClose={() => setTerminalOpen(false)} />
-                )}
+                <TerminalDrawer open={terminalOpen} cwd={state.workspace ?? null} onClose={() => setTerminalOpen(false)} />
                 <div className="shrink-0 px-4 py-3">{composer}</div>
               </>
             ) : (

@@ -1128,8 +1128,8 @@ app.whenReady().then(() => {
   )
 
   ptyManager = new PtyManager(
-    (id, data) => { mainWindow?.webContents.send('wraith:pty-data', { id, data }) },
-    (id, code) => { mainWindow?.webContents.send('wraith:pty-exit', { id, code }) },
+    (id, data) => { try { mainWindow?.webContents.send('wraith:pty-data', { id, data }) } catch { /* window destroyed — 静默降级 */ } },
+    (id, code) => { try { mainWindow?.webContents.send('wraith:pty-exit', { id, code }) } catch { /* window destroyed — 静默降级 */ } },
     process.env,
     os.homedir(),
   )

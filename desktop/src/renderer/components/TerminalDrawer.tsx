@@ -6,8 +6,9 @@ import { addTab, closeTab, setActive, shortTabLabel, type TabsState } from '../l
 
 const MIN_H = 120
 
-/** 底部终端抽屉:多标签,顶边拖拽调高,全标签常挂 CSS 显隐(切标签保留 PTY)。 */
-export default function TerminalDrawer({ cwd, onClose }: { cwd: string | null; onClose: () => void }): JSX.Element {
+/** 底部终端抽屉:多标签,顶边拖拽调高,全标签常挂 CSS 显隐(切标签保留 PTY)。
+ * open=false 时 CSS hidden(display:none),保持挂载让 PTY 不丢失。 */
+export default function TerminalDrawer({ open, cwd, onClose }: { open: boolean; cwd: string | null; onClose: () => void }): JSX.Element {
   const [state, setState] = useState<TabsState>({ tabs: [], activeId: null })
   const [height, setHeight] = useState(() => Math.round(window.innerHeight * 0.38))
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
@@ -20,8 +21,8 @@ export default function TerminalDrawer({ cwd, onClose }: { cwd: string | null; o
     } catch { /* 创建失败:忽略,用户可重试 */ }
   }, [cwd])
 
-  // 打开时若无标签,自动建一个
-  useEffect(() => { if (state.tabs.length === 0) void addNew() /* eslint-disable-next-line */ }, [])
+  // 首次打开且无标签时,自动建一个(PTY 延迟到首次 open,避免冷启动孤立进程)
+  useEffect(() => { if (open && state.tabs.length === 0) void addNew() /* eslint-disable-next-line */ }, [open])
 
   const close = (id: string): void => {
     void window.wraith.ptyKill(id)
@@ -49,7 +50,7 @@ export default function TerminalDrawer({ cwd, onClose }: { cwd: string | null; o
   }
 
   return (
-    <div data-testid="terminal-drawer" className="flex flex-col border-t border-border bg-bg" style={{ height }}>
+    <div data-testid="terminal-drawer" className={'flex flex-col border-t border-border bg-bg' + (open ? '' : ' hidden')} style={{ height }}>
       {/* 拖拽手柄 */}
       <div onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd}
         className="h-1.5 shrink-0 cursor-ns-resize hover:bg-accent/30" />
