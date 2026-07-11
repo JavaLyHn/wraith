@@ -30,7 +30,7 @@ import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { compactionNotice } from './lib/compactView'
-import { Download, SquareTerminal, Wand2 } from 'lucide-react'
+import { Download, PanelRight, SquareTerminal, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -54,6 +54,7 @@ import BrowserPanel from './components/BrowserPanel'
 import RagPanel from './components/RagPanel'
 import SettingsPanel from './components/SettingsPanel'
 import TerminalDrawer from './components/TerminalDrawer'
+import RightDock from './components/RightDock'
 import { useSettings } from './settings/SettingsContext'
 
 // ---------------------------------------------------------------------------
@@ -162,6 +163,7 @@ export default function App(): JSX.Element {
   const [updateNotice, setUpdateNotice] = useState<{ latest: string; url: string } | null>(null)
   const [pendingMode, setPendingMode] = useState<RunMode>('react')
   const [terminalOpen, setTerminalOpen] = useState(false)
+  const [rightDockOpen, setRightDockOpen] = useState(false)
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
@@ -836,6 +838,7 @@ export default function App(): JSX.Element {
         automationBadge={automationBadge}
       />
 
+      <div className="flex min-w-0 flex-1 flex-row">
       <div className="relative flex min-w-0 flex-1 flex-col">
         {state.connection === 'disconnected' && (
           <DisconnectedBanner onRestart={handleRestart} />
@@ -961,6 +964,11 @@ export default function App(): JSX.Element {
                     title="终端">
                     <SquareTerminal className="h-4 w-4" strokeWidth={1.5} />
                   </button>
+                  <button data-testid="rightdock-toggle" onClick={() => setRightDockOpen(v => !v)}
+                    className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (rightDockOpen ? 'text-accent' : 'text-fg-muted')}
+                    title="右侧面板(浏览器/终端)">
+                    <PanelRight className="h-4 w-4" strokeWidth={1.5} />
+                  </button>
                 </div>
                 {!pv.showWelcome ? (
                   <>
@@ -986,6 +994,8 @@ export default function App(): JSX.Element {
             )
           })()
         )}
+      </div>
+      <RightDock open={rightDockOpen} cwd={state.workspace ?? null} onClose={() => setRightDockOpen(false)} />
       </div>
 
       {/* Approval modal（Task 8 换 shadcn Dialog；此处结构不变） */}
