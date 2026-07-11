@@ -20,12 +20,16 @@ export class PtyManager {
     const id = 'pty-' + (++this.seq)
     const shell = resolveShell(this.env, process.platform)
     const cwd = opts.cwd && opts.cwd.trim() ? opts.cwd : this.homeDir
+    // 关掉 macOS Apple Terminal 的会话保存/恢复:dev 时从启动终端继承的
+    // TERM_PROGRAM=Apple_Terminal 会让子 zsh source /etc/zshrc_Apple_Terminal,
+    // 打印 "Restored session: <date>" 噪声。SHELL_SESSIONS_DISABLE=1 是官方 opt-out。
+    const env = { ...this.env, SHELL_SESSIONS_DISABLE: '1' } as { [key: string]: string }
     const p = spawnPty(shell, [], {
       name: 'xterm-color',
       cols: opts.cols ?? 80,
       rows: opts.rows ?? 24,
       cwd,
-      env: this.env as { [key: string]: string },
+      env,
     })
     this.ptys.set(id, p)
     p.onData(d => this.onData(id, d))
