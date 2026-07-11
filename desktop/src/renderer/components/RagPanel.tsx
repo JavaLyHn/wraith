@@ -10,6 +10,7 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   const [draft, setDraft] = useState<Draft>({ provider: 'ollama', model: '', baseUrl: '', apiKey: '' })
   const [status, setStatus] = useState<RagStatus | null>(null)
   const [indexBusy, setIndexBusy] = useState(false)
+  const [indexProgress, setIndexProgress] = useState('')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<RagSearchItem[]>([])
   const [searchBusy, setSearchBusy] = useState(false)
@@ -32,6 +33,16 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
 
   useEffect(() => { void loadCfg(); void loadStatus() }, [loadCfg, loadStatus])
 
+  // 订阅索引实时进度(后端 CodeIndex.ProgressListener → writer.notify rag.index.progress)
+  useEffect(() => {
+    return window.wraith.onEvent((evt) => {
+      if (evt.kind === 'notification' && evt.method === 'rag.index.progress') {
+        const m = (evt.params as { message?: string })?.message
+        if (typeof m === 'string') setIndexProgress(m)
+      }
+    })
+  }, [])
+
   const saveCfg = useCallback(async (): Promise<void> => {
     setNotice(null)
     try { await window.wraith.configSetEmbedding(draft); setNotice('✅ Embedding 配置已保存'); void loadCfg() }
@@ -39,14 +50,14 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   }, [draft, loadCfg])
 
   const doIndex = useCallback(async (): Promise<void> => {
-    setIndexBusy(true); setNotice(null); setError(null)
+    setIndexBusy(true); setNotice(null); setError(null); setIndexProgress('')
     try {
       const r = await window.wraith.ragIndex()
       if (r.error) setError('索引失败:' + r.error)
       else setNotice(`✅ 已索引 ${r.chunkCount ?? 0} 块 · ${r.relationCount ?? 0} 关系`)
       void loadStatus()
     } catch (err) { setError((err as Error).message) }
-    finally { setIndexBusy(false) }
+    finally { setIndexBusy(false); setIndexProgress('') }
   }, [loadStatus])
 
   const doSearch = useCallback(async (): Promise<void> => {
@@ -127,9 +138,12 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
           </span>
           <button onClick={() => void doIndex()} disabled={indexBusy}
             className="ml-auto rounded-lg border border-border px-2.5 py-1.5 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:opacity-40">
-            {indexBusy ? '索引中…(大库可能数分钟)' : status?.indexed ? '重建索引' : '建立索引'}
+            {indexBusy ? '索引中…' : status?.indexed ? '重建索引' : '建立索引'}
           </button>
         </div>
+        {indexBusy && (
+          <div className="mb-5 -mt-3 truncate font-mono text-3xs text-fg-subtle">{indexProgress || '正在建立索引…(大库可能数分钟)'}</div>
+        )}
 
         {/* 3. 检索 */}
         <div className={sectionHead}><Search className="h-3.5 w-3.5" strokeWidth={1.5} />语义检索</div>

@@ -1583,8 +1583,11 @@ public class Main {
                         try { ec.embed("probe"); } // 先探一次:embedding 不可达即快速报错,不空转整库(index 会吞异常)
                         catch (Exception ex) { return java.util.Map.of("error", "embedding 后端不可达(" + ex.getClass().getSimpleName() + "),请检查「Embedding 后端」配置"); }
                         try {
+                            // 索引进度经 writer 推 rag.index.progress 事件(writer 线程安全;桌面面板订阅显示)
+                            com.lyhn.wraith.rag.CodeIndex.ProgressListener pl =
+                                    m -> writer.notify("rag.index.progress", java.util.Map.of("message", m == null ? "" : m));
                             com.lyhn.wraith.rag.CodeIndex.IndexResult res =
-                                    new com.lyhn.wraith.rag.CodeIndex(ec, com.lyhn.wraith.rag.CodeIndex.ProgressListener.noop()).index(root);
+                                    new com.lyhn.wraith.rag.CodeIndex(ec, pl).index(root);
                             agent.getToolRegistry().setProjectPath(root); // search_code 工具同库
                             agent.getMemoryManager().setProjectPath(root);
                             java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
