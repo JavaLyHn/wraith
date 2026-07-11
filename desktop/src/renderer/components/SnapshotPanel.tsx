@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { History, RotateCcw, RefreshCw, Trash2 } from 'lucide-react'
 import type { SnapshotEntryView } from '../../shared/types'
-import { relativeTime } from '../lib/memoryView'
-import { phaseLabel } from '../lib/snapshotView'
+import { phaseLabel, phaseMeaning, modeLabel, absTime } from '../lib/snapshotView'
 
 export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.Element {
   const [snapshots, setSnapshots] = useState<SnapshotEntryView[]>([])
@@ -49,8 +48,6 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
     finally { setBusy(false) }
   }, [load])
 
-  const now = Date.now()
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
@@ -71,6 +68,10 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
         </span>
       </div>
 
+      <div className="shrink-0 border-b border-border px-4 py-2 text-3xs leading-relaxed text-fg-subtle">
+        每轮对话前后自动存下的「工作区存档」。点某个<span className="text-accent">轮前</span>存档的「恢复到此」,可把项目文件回滚到那一刻(与你项目的 git 相互独立、不受影响)。
+      </div>
+
       {error && <div className="shrink-0 px-4 py-2 text-xs text-danger">出错:{error}</div>}
       {notice && <div className="shrink-0 px-4 py-2 text-xs text-fg">{notice}</div>}
 
@@ -80,21 +81,19 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
         ) : snapshots.length === 0 ? (
           <div className="text-xs text-fg-subtle">暂无快照。跑过对话后,每轮开始前会自动存一个可恢复的快照。</div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col">
             {snapshots.map((s) => (
-              <div key={s.commitId} className="group flex items-start gap-2 rounded-lg border border-border px-3 py-2">
+              <div key={s.commitId} className="flex items-center gap-3 border-b border-border/60 py-2.5">
+                <span className={'shrink-0 rounded px-1.5 py-0.5 text-3xs ' +
+                  (s.phase === 'PRE_TURN' ? 'bg-accent/12 text-accent' : s.phase === 'PRE_RESTORE' ? 'bg-danger/10 text-danger' : 'bg-surface text-fg-muted')}>{phaseLabel(s.phase)}</span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-3xs text-fg-subtle">
-                    <span className={'rounded px-1.5 py-0.5 ' + (s.phase === 'PRE_TURN' ? 'bg-accent/12 text-accent' : 'bg-surface text-fg-muted')}>{phaseLabel(s.phase)}</span>
-                    <span>{relativeTime(s.createdAtMs, now)}</span>
-                    <span className="opacity-60">{s.shortId}</span>
-                  </div>
-                  <div className="mt-1 break-words text-xs text-fg">{s.summary || '(无摘要)'}</div>
+                  <div className="truncate text-xs text-fg">{phaseMeaning(s.phase)}</div>
+                  <div className="mt-0.5 truncate text-3xs text-fg-subtle">{absTime(s.createdAtMs)} · {modeLabel(s.turnId)}</div>
                 </div>
                 {s.preTurnOffset > 0 && (
-                  <button onClick={() => void doRestore(s)} disabled={busy} title="恢复到此快照"
-                    className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted opacity-0 hover:border-accent hover:text-accent disabled:opacity-40 group-hover:opacity-100">
-                    <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />恢复
+                  <button onClick={() => void doRestore(s)} disabled={busy} title="把工作区恢复到这个存档"
+                    className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:opacity-40">
+                    <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />恢复到此
                   </button>
                 )}
               </div>
