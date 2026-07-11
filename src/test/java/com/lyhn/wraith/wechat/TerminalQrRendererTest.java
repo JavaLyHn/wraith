@@ -39,4 +39,27 @@ class TerminalQrRendererTest {
         assertEquals((byte) 'N', png[2]);
         assertEquals((byte) 'G', png[3]);
     }
+
+    @Test
+    void pngMarkerCarriesDecodablePngBase64() {
+        String marker = TerminalQrRenderer.pngMarker("https://liteapp.weixin.qq.com/q/test?qrcode=abc");
+
+        assertTrue(marker.startsWith(TerminalQrRenderer.QR_PNG_MARKER + " "));
+        String base64 = marker.substring((TerminalQrRenderer.QR_PNG_MARKER + " ").length());
+        // 单行(无换行),便于桌面按行解析
+        assertFalse(base64.contains("\n"));
+        byte[] png = java.util.Base64.getDecoder().decode(base64);
+        assertEquals((byte) 0x89, png[0]);
+        assertEquals((byte) 'P', png[1]);
+        assertEquals((byte) 'N', png[2]);
+        assertEquals((byte) 'G', png[3]);
+        // 二维码明文不得出现在标记里(仅 base64)
+        assertFalse(marker.contains("https://liteapp.weixin.qq.com"));
+    }
+
+    @Test
+    void pngMarkerReturnsNullForBlankContent() {
+        assertEquals(null, TerminalQrRenderer.pngMarker(""));
+        assertEquals(null, TerminalQrRenderer.pngMarker(null));
+    }
 }

@@ -5,6 +5,7 @@ import {
   resolveBindWeixinCommand,
   parseConnectUrl,
   parseWeixinQrUrl,
+  parseQrPngMarker,
   classifyBindLine,
   classifyGatewayStderr,
   classifyGatewayStatusLine,
@@ -150,5 +151,21 @@ describe('classifyBindLine — weixin 输出', () => {
     expect(classifyBindLine('✅ 微信绑定成功,账号: acc1')).toBe('bound')
     expect(classifyBindLine('[gateway] 二维码已过期,请重试 wraith gateway bind-weixin')).toBe('failed')
     expect(classifyBindLine('[gateway] 绑定超时(未在限定时间内完成扫码),请重试')).toBe('failed')
+  })
+})
+
+describe('parseQrPngMarker', () => {
+  it('把 WRAITH_QR_PNG <base64> 转成 data URL', () => {
+    const b64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='
+    expect(parseQrPngMarker(`WRAITH_QR_PNG ${b64}`)).toBe(`data:image/png;base64,${b64}`)
+  })
+  it('容忍标记前的日志前缀', () => {
+    const b64 = 'A'.repeat(48)
+    expect(parseQrPngMarker(`2026-07-11 INFO WRAITH_QR_PNG ${b64}`)).toBe(`data:image/png;base64,${b64}`)
+  })
+  it('拒绝非 base64 内容 / 过短 / 无关行', () => {
+    expect(parseQrPngMarker('WRAITH_QR_PNG not base64 !!!')).toBeNull()
+    expect(parseQrPngMarker('WRAITH_QR_PNG short')).toBeNull()
+    expect(parseQrPngMarker('普通日志行')).toBeNull()
   })
 })

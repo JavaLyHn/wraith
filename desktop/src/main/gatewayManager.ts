@@ -62,6 +62,20 @@ export function resolveBindWeixinCommand(
   return { cmd: g.cmd, args }
 }
 
+/**
+ * 解析 bind-weixin stdout 上的机读二维码标记 `WRAITH_QR_PNG <base64-png>`。
+ * 命中且 base64 合法(仅 base64 字符、长度 ≥32)→ 返回可直接用于 <img src> 的 data URL;否则 null。
+ * 用 indexOf 容忍标记前的日志前缀。
+ */
+export function parseQrPngMarker(line: string): string | null {
+  const marker = 'WRAITH_QR_PNG'
+  const idx = line.indexOf(marker)
+  if (idx < 0) return null
+  const b64 = line.slice(idx + marker.length).trim()
+  if (b64.length < 32 || !/^[A-Za-z0-9+/=]+$/.test(b64)) return null
+  return `data:image/png;base64,${b64}`
+}
+
 /** 从 bind-weixin 输出行提取扫码兜底链接;仅 http(s) 才返回(防 openExternal 误开非 URL 内容)。 */
 export function parseWeixinQrUrl(line: string): string | null {
   const marker = '扫码失败时可打开链接:'
@@ -304,6 +318,12 @@ export class GatewayManager {
     let cancelled = false
 
     const handleLine = (l: string): void => {
+      const qr = parseQrPngMarker(l)
+      if (qr) {
+        // 机读二维码标记:转成图片事件,且不落日志(base64 太长会刷屏日志区)
+        this.onEvent({ kind: 'bind', phase: 'scanning', qr })
+        return
+      }
       this.pushLog(l)
       if (l.includes('请用目标微信扫描二维码')) {
         this.onEvent({ kind: 'bind', phase: 'scanning' })

@@ -20,6 +20,8 @@ import java.util.Map;
 
 public final class TerminalQrRenderer {
     static final int DEFAULT_IMAGE_SIZE_PX = 260;
+    /** 机读二维码标记前缀:非交互式(桌面 spawn 的管道进程)输出 `WRAITH_QR_PNG <base64-png>`。 */
+    public static final String QR_PNG_MARKER = "WRAITH_QR_PNG";
     private static final String FG_BLACK = "\u001B[30m";
     private static final String FG_WHITE = "\u001B[97m";
     private static final String BG_BLACK = "\u001B[40m";
@@ -33,11 +35,46 @@ public final class TerminalQrRenderer {
         if (out == null || content == null || content.isBlank()) {
             return;
         }
+        // 非交互式(桌面把 `gateway bind-weixin` 作为子进程 spawn,stdio 走管道,System.console()==null):
+        // ANSI 半块 + 转义色码在桌面 <pre> 里会糊成乱码;改输出机读 PNG 标记,由桌面渲染成 <img>。
+        if (!isInteractiveTerminal()) {
+            String marker = pngMarker(content);
+            if (marker != null) {
+                out.println(marker);
+                return;
+            }
+            // PNG 生成失败:退回 ANSI(管道里虽不理想,至少不丢信息)
+        }
         if (supportsInlineImage()) {
             out.print(renderInlinePng(content, DEFAULT_IMAGE_SIZE_PX));
         } else {
             out.println(renderAnsi(content));
         }
+    }
+
+    /**
+     * 机读:把二维码内容渲染成 PNG,输出单行 {@code WRAITH_QR_PNG <base64>},
+     * 供桌面/非 TTY 环境识别后渲染成 {@code <img>}。内容为空或渲染失败返回 null。
+     * base64 不含换行,保证桌面可按行解析。
+     */
+    public static String pngMarker(String content) {
+        if (content == null || content.isBlank()) {
+            return null;
+        }
+        try {
+            byte[] png = renderPng(content, DEFAULT_IMAGE_SIZE_PX);
+            return QR_PNG_MARKER + " " + Base64.getEncoder().encodeToString(png);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static boolean isInteractiveTerminal() {
+        // 系统属性可强制交互(特殊终端/调试);否则以 System.console() 判断是否 TTY。
+        if (Boolean.getBoolean("wraith.terminal.forceInteractive")) {
+            return true;
+        }
+        return System.console() != null;
     }
 
     static String renderAnsi(String content) {

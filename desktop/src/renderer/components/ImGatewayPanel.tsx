@@ -30,7 +30,7 @@ const BTN_SECONDARY = 'rounded-lg border border-border px-4 py-2 text-xs text-fg
 export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Element {
   const [config, setConfig] = useState<GatewayConfigView | null>(null)
   const [status, setStatus] = useState<GatewayStatus>({ state: 'stopped' })
-  const [bind, setBind] = useState<{ phase: GatewayBindPhase; message?: string } | null>(null)
+  const [bind, setBind] = useState<{ phase: GatewayBindPhase; message?: string; qr?: string } | null>(null)
   const [secretInput, setSecretInput] = useState('')
   const [secretBusy, setSecretBusy] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
@@ -112,23 +112,28 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
     const unsub = window.wraith.onGatewayEvent(evt => {
       if (evt.kind === 'status') setStatus(evt.status)
       else if (evt.kind === 'bind') {
-        setBind({ phase: evt.phase, message: evt.message })
+        // 微信扫码:先来一条无 qr 的「请扫码」行(phase=scanning),再来一条带 qr 的图片行(也 scanning)。
+        // 保留已拿到的二维码,避免第二条把图冲掉;非 scanning 阶段清空 qr。
+        setBind(prev => ({
+          phase: evt.phase,
+          message: evt.message,
+          qr: evt.qr ?? (evt.phase === 'scanning' ? prev?.qr : undefined),
+        }))
         if (evt.phase === 'bound' || evt.phase === 'secret-invalid') void refreshConfig()
       }
     })
     return () => { unsub() }
   }, [refreshConfig, refreshStatus])
 
-  // 微信扫码绑定期间每 2s 拉日志(终端二维码在日志区呈现)
+  // 微信扫码绑定期间,若用户展开了日志则每 2s 刷新;二维码本身走图片事件(见下方 QR 卡片),不再依赖日志区。
   useEffect(() => {
-    if (selectedPlatform !== 'weixin' || bind?.phase !== 'scanning') return
-    setShowLogs(true)
+    if (selectedPlatform !== 'weixin' || bind?.phase !== 'scanning' || !showLogs) return
     const t = setInterval(async () => {
       try { const { lines } = await window.wraith.gatewayLogs(); setLogs(lines) }
       catch { /* ignore */ }
     }, 2000)
     return () => clearInterval(t)
-  }, [selectedPlatform, bind?.phase])
+  }, [selectedPlatform, bind?.phase, showLogs])
 
   const handleBind = useCallback(() => {
     setBind({ phase: 'scanning' })
@@ -429,7 +434,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
               </div>
             ) : (
               <div className="mt-2 text-xs text-fg-subtle">
-                未绑定——点「扫码绑定」,二维码会出现在下方日志区(自动展开);若有 http 链接会同时在浏览器打开。
+                未绑定——点「扫码绑定」,二维码会显示在下方;若有 http 链接会同时在浏览器打开。
               </div>
             )}
             <label className="mt-2 block text-xs text-fg-muted">
@@ -453,6 +458,23 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
               <div data-testid="im-wx-bind-status"
                 className={'mt-2 text-xs ' + (bind.phase === 'bound' ? 'text-success' : bind.phase === 'failed' ? 'text-danger' : 'text-fg-muted')}>
                 {bindPhaseLabel(bind.phase, bind.message)}
+              </div>
+            )}
+
+            {/* 扫码期二维码卡片:后端在非交互式环境把二维码渲染成 PNG(WRAITH_QR_PNG 标记),
+                这里直接当图片显示,取代过去日志区里糊成乱码的 ANSI 半块。 */}
+            {selectedPlatform === 'weixin' && bind?.phase === 'scanning' && (
+              <div className="mt-3 flex flex-col items-center gap-2 rounded-lg border border-border bg-surface/40 p-4">
+                <div className="text-xs text-fg-muted">请用目标微信扫描二维码</div>
+                {bind.qr ? (
+                  <img src={bind.qr} alt="微信绑定二维码" data-testid="im-wx-qr"
+                    className="h-52 w-52 rounded-md bg-white p-2" />
+                ) : (
+                  <div className="flex h-52 w-52 items-center justify-center rounded-md border border-dashed border-border text-2xs text-fg-subtle">
+                    二维码生成中…
+                  </div>
+                )}
+                <div className="text-3xs text-fg-subtle">扫码后在手机微信确认;二维码约 5 分钟过期</div>
               </div>
             )}
           </section>

@@ -47,4 +47,5 @@ export type GatewayBindPhase = 'scanning' | 'bound' | 'secret-invalid' | 'failed
 
 export type GatewayEvent =
   | { kind: 'status'; status: GatewayStatus }
-  | { kind: 'bind'; phase: GatewayBindPhase; message?: string }
+  // qr:微信扫码绑定时的二维码 data URL(image/png);仅 scanning 阶段带,由桌面渲染成 <img>。
+  | { kind: 'bind'; phase: GatewayBindPhase; message?: string; qr?: string }
