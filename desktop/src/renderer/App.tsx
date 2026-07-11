@@ -27,6 +27,7 @@ import { messagesToItems } from '../shared/messagesToItems'
 import { spliceCards } from '../shared/spliceCards'
 import { lastUserMessage } from './lib/resend'
 import { pendingModeAfterSubmit } from './lib/nextPendingMode'
+import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { Download } from 'lucide-react'
 import Transcript from './components/Transcript'
@@ -451,6 +452,11 @@ export default function App(): JSX.Element {
   const handleSubmit = useCallback(async () => {
     const text = inputValue.trim()
     if (!text || state.turn === 'running') return
+    // 发送前预检:确定不支持图片的模型 + 带图 → 就地拦下报错,保留输入与附件供切模型后重发
+    if (attachments.some(a => a.kind === 'image') && shouldBlockImageSend(state.model)) {
+      setSubmitError(`当前模型「${state.model}」不支持图片。请切到支持视觉的模型(如 glm-5v-turbo),或移除图片后再发。`)
+      return
+    }
     setInputValue('')
     setSubmitError(null) // 新提交:清除上次遗留的错误横幅
     const pendingAttachments = attachments
@@ -471,7 +477,7 @@ export default function App(): JSX.Element {
       const short = reason.replace(/https?:\/\/\S+/g, '').replace(/sk-\S+/g, '').slice(0, 80).trim()
       setSubmitError(short ? `消息发送失败,请重试(${short})` : '消息发送失败,请重试')
     }
-  }, [inputValue, state.turn, attachments, pendingMode])
+  }, [inputValue, state.turn, state.model, attachments, pendingMode])
 
   // ── approval handlers ──────────────────────────────────────────────────────
   const handleApprovalRespond = useCallback(
@@ -893,6 +899,7 @@ export default function App(): JSX.Element {
                 onPickAttachments={handlePickAttachments}
                 onRemoveAttachment={handleRemoveAttachment}
                 onAddAttachments={handleAddAttachments}
+                onModelSwitched={(m) => dispatch({ type: 'setModel', model: m })}
                 mode={pendingMode}
                 onModeChange={setPendingMode}
               />

@@ -8,9 +8,11 @@ interface ModelSwitcherProps {
   initialModel: string
   /** turn 运行中:触发器 disabled。 */
   running: boolean
+  /** 切换成功后上报新模型串给父层(用于同步 state.model / 图片预检)。 */
+  onSwitched?: (model: string) => void
 }
 
-export default function ModelSwitcher({ initialModel, running }: ModelSwitcherProps): JSX.Element {
+export default function ModelSwitcher({ initialModel, running, onSwitched }: ModelSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [displayModel, setDisplayModel] = useState(initialModel)
 
@@ -46,12 +48,13 @@ export default function ModelSwitcher({ initialModel, running }: ModelSwitcherPr
     try {
       const result = await window.wraith.setModel(providerName)
       setDisplayModel(result.model)
+      onSwitched?.(result.model)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       console.error('[ModelSwitcher] session.setModel failed:', msg)
       setError('切换模型失败')
     }
-  }, [])
+  }, [onSwitched])
 
   const handleSetDefault = useCallback(async (providerName: string, e: React.MouseEvent) => {
     e.stopPropagation()

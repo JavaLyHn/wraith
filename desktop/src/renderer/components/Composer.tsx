@@ -44,6 +44,7 @@ interface ComposerProps {
   onPickAttachments?: () => void
   onRemoveAttachment?: (index: number) => void
   onAddAttachments?: (items: AttachmentItem[]) => void
+  onModelSwitched?: (model: string) => void
   mode?: RunMode
   onModeChange?: (m: RunMode) => void
 }
@@ -66,6 +67,7 @@ export default function Composer({
   onPickAttachments,
   onRemoveAttachment,
   onAddAttachments,
+  onModelSwitched,
   mode = 'react',
   onModeChange,
 }: ComposerProps): JSX.Element {
@@ -496,7 +498,7 @@ export default function Composer({
           )}
 
           {/* model chip — interactive switcher */}
-          <ModelSwitcher initialModel={model} running={running} />
+          <ModelSwitcher initialModel={model} running={running} onSwitched={onModelSwitched} />
 
           {/* token 状态 — status 事件驱动 */}
           <StatusChip status={status} />
