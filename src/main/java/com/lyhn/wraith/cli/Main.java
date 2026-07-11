@@ -1492,6 +1492,20 @@ public class Main {
                         try { return java.util.Map.of("ok", true, "message", svc.clean()); }
                         catch (Exception e) { return java.util.Map.of("ok", false, "message", "清理失败: " + e.getClass().getSimpleName()); }
                     }
+                    public java.util.Map<String, Object> compactHistory() {
+                        try {
+                            com.lyhn.wraith.agent.Agent.CompactionResult r = agent.compactHistoryNow();
+                            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                            m.put("compacted", r.compacted());
+                            m.put("beforeTokens", r.beforeTokens());
+                            m.put("afterTokens", r.afterTokens());
+                            m.put("error", r.error());   // 已是简单消息;null 表示无错
+                            return m;
+                        } catch (Exception e) {
+                            return java.util.Map.of("compacted", false, "beforeTokens", 0, "afterTokens", 0,
+                                    "error", e.getClass().getSimpleName());
+                        }
+                    }
                     public java.util.Map<String, Object> snapshotRestoreCommit(String commitId) {
                         com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
                         if (svc == null) return java.util.Map.of("ok", false, "message", "快照功能不可用");

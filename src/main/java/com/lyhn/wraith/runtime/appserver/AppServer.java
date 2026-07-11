@@ -184,6 +184,10 @@ public final class AppServer {
         default java.util.Map<String, Object> snapshotClean() {
             throw new UnsupportedOperationException("snapshotClean not implemented");
         }
+        /** 手动压缩当前对话历史(把早期消息压成摘要,释放上下文窗口)。默认抛出。 */
+        default java.util.Map<String, Object> compactHistory() {
+            throw new UnsupportedOperationException("compactHistory not implemented");
+        }
         /** 安全策略状态(项目根/审计目录/危险工具集)。默认抛出。 */
         default java.util.Map<String, Object> policyStatus() {
             throw new UnsupportedOperationException("policyStatus not implemented");
@@ -375,6 +379,12 @@ public final class AppServer {
                 } catch (UnsupportedOperationException e) {
                     writer.error(msg.id(), -32000, e.getMessage());
                 }
+            }
+            case "session.compact" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                // 压缩会调一次 LLM 生成摘要,耗时 → 后台线程,避免占用单线程分发循环
+                final SessionRunner s = session;
+                dispatchAsync(msg.id(), s::compactHistory);
             }
             case "config.setDefaultProvider" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }

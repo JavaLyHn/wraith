@@ -128,6 +128,8 @@ export interface WraithApi {
   openPath(path: string): Promise<void>
   saveTextFile(defaultName: string, content: string): Promise<{ ok: boolean; path?: string }>
   transcribe(audioBase64: string, mime: string): Promise<{ text: string }>
+  /** 手动压缩当前对话历史,释放上下文窗口。 */
+  compactHistory(): Promise<{ compacted: boolean; beforeTokens: number; afterTokens: number; error?: string | null }>
 }
 
 const wraith: WraithApi = {
@@ -536,6 +538,9 @@ const wraith: WraithApi = {
   },
   transcribe(audioBase64, mime) {
     return ipcRenderer.invoke('wraith:transcribe', audioBase64, mime) as Promise<{ text: string }>
+  },
+  compactHistory() {
+    return ipcRenderer.invoke('wraith:compactHistory') as Promise<{ compacted: boolean; beforeTokens: number; afterTokens: number; error?: string | null }>
   },
 }
 

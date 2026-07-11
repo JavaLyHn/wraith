@@ -587,6 +587,12 @@ ipcMain.handle('wraith:snapshotClean', async () => {
   return client.request('snapshot.clean', {})
 })
 
+// 手动压缩当前对话历史(转发 AppServer session.compact,后端后台线程跑)
+ipcMain.handle('wraith:compactHistory', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.compact', {})
+})
+
 // 安全策略状态 + 危险工具审计(只读,转发 AppServer policy.status / audit.list)
 ipcMain.handle('wraith:policyStatus', async () => {
   if (!client) throw new Error('Backend not connected')

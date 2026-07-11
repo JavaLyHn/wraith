@@ -29,7 +29,8 @@ import { lastUserMessage } from './lib/resend'
 import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
-import { Download } from 'lucide-react'
+import { compactionNotice } from './lib/compactView'
+import { Download, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -766,6 +767,21 @@ export default function App(): JSX.Element {
     turn: state.turn,
   })
 
+  // 手动整理上下文(压缩当前对话历史,释放上下文窗口;可见 transcript 不变)
+  const [compactBusy, setCompactBusy] = useState(false)
+  const [compactNotice, setCompactNotice] = useState<string | null>(null)
+  const handleCompact = useCallback(async (): Promise<void> => {
+    if (state.turn === 'running') return
+    setCompactBusy(true); setCompactNotice(null)
+    try {
+      setCompactNotice(compactionNotice(await window.wraith.compactHistory()))
+    } catch (err) {
+      setCompactNotice('❌ 整理失败:' + ((err as Error).message || '未知错误'))
+    } finally {
+      setCompactBusy(false)
+    }
+  }, [state.turn])
+
   // 导出当前对话为 Markdown(纯前端序列化 + Electron 保存对话框,不经 Java 后端)
   const handleExport = useCallback(async (): Promise<void> => {
     const items = pv.items
@@ -907,7 +923,19 @@ export default function App(): JSX.Element {
             )
             return !pv.showWelcome ? (
               <>
-                <div className="flex shrink-0 items-center justify-end border-b border-border px-4 py-1.5">
+                <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border px-4 py-1.5">
+                  {compactNotice && (
+                    <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
+                  )}
+                  <button
+                    data-testid="chat-compact"
+                    onClick={() => void handleCompact()}
+                    disabled={compactBusy || state.turn === 'running' || !pv.items.length}
+                    title="整理上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
+                    className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface hover:text-fg disabled:cursor-not-allowed disabled:opacity-40'}
+                  >
+                    <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '整理中…' : '整理'}
+                  </button>
                   <button
                     data-testid="chat-export"
                     onClick={() => void handleExport()}
