@@ -1,6 +1,6 @@
 export const SPLASH_FLOOR_MS = 1200
 export const SPLASH_CAP_MS = 4000
-export const SPLASH_EXIT_MS = 450
+export const SPLASH_EXIT_MS = 550
 export const SPLASH_SIZE = 320
 
 /** 是否可散去 splash:到天花板强制散;或已就绪且过地板。 */
@@ -30,10 +30,10 @@ export function buildSplashHtml(logoDataUri: string): string {
     background:linear-gradient(115deg,transparent 34%,rgba(255,255,255,.85) 47%,rgba(175,215,255,.95) 53%,transparent 66%);
     background-size:260% 100%;background-position:165% 0;
     animation:shine 780ms cubic-bezier(.4,0,.2,1) 420ms both}
-  body.dismiss .wrap{animation:ghostOut 450ms ease-in both}
+  body.dismiss .wrap{animation:ghostOut 550ms ease-in both}
   body.dismiss .logo img{animation:none}
   @keyframes ghostIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
-  @keyframes ghostOut{from{opacity:1;transform:none}to{opacity:0;transform:scale(1.15)}}
+  @keyframes ghostOut{from{opacity:1;transform:none}to{opacity:0;transform:scale(1.06)}}
   @keyframes glowPulse{0%,100%{filter:drop-shadow(0 0 18px rgba(150,195,255,.40))}50%{filter:drop-shadow(0 0 30px rgba(150,195,255,.70))}}
   @keyframes shine{from{background-position:165% 0}to{background-position:-65% 0}}
   @media (prefers-reduced-motion: reduce){

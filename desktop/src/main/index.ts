@@ -300,14 +300,17 @@ function createSplash(): BrowserWindow | null {
   }
 }
 
-/** 在 ms 内把整窗透明度 1→0,然后关闭并回调(用于毛玻璃整窗淡出)。 */
+/** 在 ms 内把整窗透明度 1→0(逐帧 ~16ms,顺滑),然后关闭并回调(毛玻璃整窗淡出)。 */
 function fadeOutAndClose(win: BrowserWindow, ms: number, onDone: () => void): void {
-  const steps = 15
-  const stepMs = Math.max(1, Math.floor(ms / steps))
+  const stepMs = 16
+  const steps = Math.max(1, Math.round(ms / stepMs))
   let i = 0
   const timer = setInterval(() => {
     i++
-    if (!win.isDestroyed()) win.setOpacity(Math.max(0, 1 - i / steps))
+    // ease-in-out 感:用平滑曲线而非线性,淡出更自然
+    const p = i / steps
+    const eased = p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2
+    if (!win.isDestroyed()) win.setOpacity(Math.max(0, 1 - eased))
     if (i >= steps) {
       clearInterval(timer)
       if (!win.isDestroyed()) win.close()
