@@ -56,6 +56,12 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
     catch (err) { setError((err as Error).message) }
   }, [draft, draftScope, load])
 
+  const doClearAll = useCallback(async (): Promise<void> => {
+    if (!window.confirm('清空全部长期记忆?此操作不可撤销(项目 + 全局都会清)。')) return
+    try { await window.wraith.memoryClear(); void load() }
+    catch (err) { setError((err as Error).message) }
+  }, [load])
+
   const now = Date.now()
 
   return (
@@ -92,6 +98,10 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
             className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-fg-subtle" />
           {query && <button onClick={clearSearch} className="shrink-0 text-fg-subtle hover:text-fg"><X className="h-3.5 w-3.5" strokeWidth={1.5} /></button>}
         </div>
+        {entries.length > 0 && (
+          <button data-testid="memory-clear-all" onClick={() => void doClearAll()} title="清空全部长期记忆"
+            className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-danger hover:text-danger">清空</button>
+        )}
       </div>
 
       {error && <div className="shrink-0 px-4 py-2 text-xs text-danger">出错:{error}</div>}

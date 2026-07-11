@@ -531,6 +531,10 @@ ipcMain.handle('wraith:memoryInitProject', async (_e, force: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.initProject', { force: !!force })
 })
+ipcMain.handle('wraith:memoryClear', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.clear', {})
+})
 
 // side-git 快照时间线 + 恢复(转发 AppServer snapshot.* RPC)
 ipcMain.handle('wraith:snapshotList', async (_e, limit?: number) => {
@@ -540,6 +544,10 @@ ipcMain.handle('wraith:snapshotList', async (_e, limit?: number) => {
 ipcMain.handle('wraith:snapshotRestore', async (_e, offset: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('snapshot.restore', { offset })
+})
+ipcMain.handle('wraith:snapshotClean', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('snapshot.clean', {})
 })
 
 // 安全策略状态 + 危险工具审计(只读,转发 AppServer policy.status / audit.list)

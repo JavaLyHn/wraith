@@ -76,9 +76,11 @@ export interface WraithApi {
   memorySearch(query: string): Promise<MemoryListResult>
   memoryDelete(id: string): Promise<{ ok: boolean }>
   memorySave(fact: string, scope: string): Promise<{ ok: boolean }>
+  memoryClear(): Promise<{ ok: boolean }>
   memoryInitProject(force: boolean): Promise<ProjectMemoryInitResult>
   snapshotList(limit?: number): Promise<SnapshotListResult>
   snapshotRestore(offset: number): Promise<SnapshotRestoreResult>
+  snapshotClean(): Promise<{ ok: boolean; message?: string }>
   policyStatus(): Promise<PolicyStatusView>
   auditList(limit?: number): Promise<AuditListResult>
   sandboxGet(): Promise<SandboxState>
@@ -367,6 +369,9 @@ const wraith: WraithApi = {
   memorySave(fact, scope) {
     return ipcRenderer.invoke('wraith:memorySave', fact, scope) as Promise<{ ok: boolean }>
   },
+  memoryClear() {
+    return ipcRenderer.invoke('wraith:memoryClear') as Promise<{ ok: boolean }>
+  },
   memoryInitProject(force) {
     return ipcRenderer.invoke('wraith:memoryInitProject', force) as Promise<ProjectMemoryInitResult>
   },
@@ -375,6 +380,9 @@ const wraith: WraithApi = {
   },
   snapshotRestore(offset) {
     return ipcRenderer.invoke('wraith:snapshotRestore', offset) as Promise<SnapshotRestoreResult>
+  },
+  snapshotClean() {
+    return ipcRenderer.invoke('wraith:snapshotClean') as Promise<{ ok: boolean; message?: string }>
   },
   policyStatus() {
     return ipcRenderer.invoke('wraith:policyStatus') as Promise<PolicyStatusView>

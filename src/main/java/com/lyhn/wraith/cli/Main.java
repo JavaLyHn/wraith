@@ -1442,6 +1442,10 @@ public class Main {
                         agent.getMemoryManager().storeFact(fact, scope);
                         return java.util.Map.of("ok", true);
                     }
+                    public java.util.Map<String, Object> memoryClear() {
+                        agent.getMemoryManager().clearLongTerm();
+                        return java.util.Map.of("ok", true);
+                    }
                     public java.util.Map<String, Object> snapshotList(int limit) {
                         com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
                         if (svc == null) return java.util.Map.of("enabled", false, "snapshots", java.util.List.of());
@@ -1481,6 +1485,12 @@ public class Main {
                         } catch (Exception e) {
                             return java.util.Map.of("ok", false, "message", "恢复失败: " + e.getClass().getSimpleName());
                         }
+                    }
+                    public java.util.Map<String, Object> snapshotClean() {
+                        com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
+                        if (svc == null) return java.util.Map.of("ok", false, "message", "快照功能不可用");
+                        try { return java.util.Map.of("ok", true, "message", svc.clean()); }
+                        catch (Exception e) { return java.util.Map.of("ok", false, "message", "清理失败: " + e.getClass().getSimpleName()); }
                     }
                     public java.util.Map<String, Object> policyStatus() {
                         java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { History, RotateCcw, RefreshCw } from 'lucide-react'
+import { History, RotateCcw, RefreshCw, Trash2 } from 'lucide-react'
 import type { SnapshotEntryView } from '../../shared/types'
 import { relativeTime } from '../lib/memoryView'
 import { phaseLabel } from '../lib/snapshotView'
@@ -38,6 +38,17 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
     finally { setBusy(false) }
   }, [load])
 
+  const doClean = useCallback(async (): Promise<void> => {
+    if (!window.confirm('清理旧快照?会删除超出上限的历史快照(不影响当前工作区文件)。')) return
+    setBusy(true); setNotice(null)
+    try {
+      const r = await window.wraith.snapshotClean()
+      setNotice(r.ok ? ('✅ ' + (r.message || '已清理')) : ('❌ ' + (r.message || '清理失败')))
+      await load()
+    } catch (err) { setError((err as Error).message) }
+    finally { setBusy(false) }
+  }, [load])
+
   const now = Date.now()
 
   return (
@@ -52,6 +63,10 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
           {enabled ? `共 ${snapshots.length} 个` : '快照未启用'}
           <button onClick={() => void load()} title="刷新" className="rounded p-1 hover:bg-surface hover:text-fg">
             <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.5} />
+          </button>
+          <button data-testid="snapshot-clean" onClick={() => void doClean()} disabled={busy} title="清理旧快照"
+            className="rounded p-1 hover:bg-surface hover:text-danger disabled:opacity-40">
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
           </button>
         </span>
       </div>
