@@ -123,6 +123,32 @@ public class SideGitManager {
         }
     }
 
+    /** 恢复到任意一张快照(按 commitId;含 pre-restore,故可用于撤销上一次恢复)。恢复前同样先存 pre-restore 快照。 */
+    public synchronized RestoreResult restoreToCommit(String commitId) throws IOException, GitAPIException {
+        if (!config.enabled()) {
+            return RestoreResult.failure("快照功能已关闭");
+        }
+        if (commitId == null || commitId.isBlank()) {
+            return RestoreResult.failure("缺少快照 id");
+        }
+        boolean known = listSnapshots(Math.max(config.maxSnapshots() * 8, 200)).stream()
+                .anyMatch(s -> commitId.equals(s.commitId()));
+        if (!known) {
+            return RestoreResult.failure("找不到该快照");
+        }
+        String shortId = commitId.length() > 10 ? commitId.substring(0, 10) : commitId;
+        TurnSnapshot current = preRestoreSnapshot("restore-" + Instant.now().toEpochMilli(), "Before restoring " + shortId);
+        try (Git git = openGit(); Repository repository = git.getRepository()) {
+            Map<String, ObjectId> targetTree = treeEntries(repository, ObjectId.fromString(commitId));
+            Map<String, ObjectId> currentTree = current == null
+                    ? Map.of()
+                    : treeEntries(repository, ObjectId.fromString(current.commitId()));
+            List<String> removed = deleteTrackedFilesMissingFromTarget(currentTree, targetTree);
+            List<String> restored = writeTargetTree(repository, targetTree);
+            return RestoreResult.success(commitId, restored, removed);
+        }
+    }
+
     public synchronized String formatStatus() {
         StringBuilder sb = new StringBuilder();
         sb.append("📸 Side-Git 快照状态\n");

@@ -1492,6 +1492,22 @@ public class Main {
                         try { return java.util.Map.of("ok", true, "message", svc.clean()); }
                         catch (Exception e) { return java.util.Map.of("ok", false, "message", "清理失败: " + e.getClass().getSimpleName()); }
                     }
+                    public java.util.Map<String, Object> snapshotRestoreCommit(String commitId) {
+                        com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
+                        if (svc == null) return java.util.Map.of("ok", false, "message", "快照功能不可用");
+                        try {
+                            com.lyhn.wraith.snapshot.RestoreResult r = svc.restoreToCommit(commitId);
+                            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                            m.put("ok", r.success());
+                            m.put("message", r.message() != null ? r.message() : "");
+                            m.put("commitId", r.commitId() != null ? r.commitId() : "");
+                            m.put("restoredCount", r.restoredFiles() != null ? r.restoredFiles().size() : 0);
+                            m.put("removedCount", r.removedFiles() != null ? r.removedFiles().size() : 0);
+                            return m;
+                        } catch (Exception e) {
+                            return java.util.Map.of("ok", false, "message", "恢复失败: " + e.getClass().getSimpleName());
+                        }
+                    }
                     public java.util.Map<String, Object> policyStatus() {
                         java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
                         m.put("projectRoot", agent.getToolRegistry().getProjectPath());

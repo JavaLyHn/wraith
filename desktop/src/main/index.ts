@@ -545,6 +545,10 @@ ipcMain.handle('wraith:snapshotRestore', async (_e, offset: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('snapshot.restore', { offset })
 })
+ipcMain.handle('wraith:snapshotRestoreCommit', async (_e, commitId: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('snapshot.restoreCommit', { commitId })
+})
 ipcMain.handle('wraith:snapshotClean', async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('snapshot.clean', {})

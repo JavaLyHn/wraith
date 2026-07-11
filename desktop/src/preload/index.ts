@@ -80,6 +80,7 @@ export interface WraithApi {
   memoryInitProject(force: boolean): Promise<ProjectMemoryInitResult>
   snapshotList(limit?: number): Promise<SnapshotListResult>
   snapshotRestore(offset: number): Promise<SnapshotRestoreResult>
+  snapshotRestoreCommit(commitId: string): Promise<SnapshotRestoreResult>
   snapshotClean(): Promise<{ ok: boolean; message?: string }>
   policyStatus(): Promise<PolicyStatusView>
   auditList(limit?: number): Promise<AuditListResult>
@@ -380,6 +381,9 @@ const wraith: WraithApi = {
   },
   snapshotRestore(offset) {
     return ipcRenderer.invoke('wraith:snapshotRestore', offset) as Promise<SnapshotRestoreResult>
+  },
+  snapshotRestoreCommit(commitId) {
+    return ipcRenderer.invoke('wraith:snapshotRestoreCommit', commitId) as Promise<SnapshotRestoreResult>
   },
   snapshotClean() {
     return ipcRenderer.invoke('wraith:snapshotClean') as Promise<{ ok: boolean; message?: string }>

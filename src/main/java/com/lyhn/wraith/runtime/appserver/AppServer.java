@@ -176,6 +176,10 @@ public final class AppServer {
         default java.util.Map<String, Object> snapshotRestore(int offset) {
             throw new UnsupportedOperationException("snapshotRestore not implemented");
         }
+        /** 按 commitId 恢复到任意一张快照(含 pre-restore,可撤销上次恢复),返回 {ok,message,…}。默认抛出。 */
+        default java.util.Map<String, Object> snapshotRestoreCommit(String commitId) {
+            throw new UnsupportedOperationException("snapshotRestoreCommit not implemented");
+        }
         /** 清理旧快照,返回 {ok,message}。默认抛出。 */
         default java.util.Map<String, Object> snapshotClean() {
             throw new UnsupportedOperationException("snapshotClean not implemented");
@@ -559,6 +563,15 @@ public final class AppServer {
                 JsonNode p = msg.params();
                 int offset = (p != null && p.hasNonNull("offset")) ? p.get("offset").asInt() : 1;
                 try { writer.result(msg.id(), session.snapshotRestore(offset)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "snapshot.restoreCommit" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String commitId = textParam(p, "commitId");
+                if (commitId == null || commitId.isBlank()) { writer.error(msg.id(), -32602, "缺 commitId"); return true; }
+                try { writer.result(msg.id(), session.snapshotRestoreCommit(commitId)); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

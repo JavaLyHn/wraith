@@ -22,15 +22,15 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
   useEffect(() => { void load() }, [load])
 
   const doRestore = useCallback(async (e: SnapshotEntryView): Promise<void> => {
-    if (e.preTurnOffset <= 0) return
     const ok = window.confirm(
-      `恢复工作区到这个快照?\n\n${e.summary || e.shortId}\n\n` +
-      `⚠️ 会用该快照的文件覆盖当前工作区(可能删改文件)。\n恢复前系统会自动存一个「恢复前」快照,可再恢复回来。`,
+      `把工作区恢复到这张「${phaseLabel(e.phase)}」存档(${absTime(e.createdAtMs)})?\n\n` +
+      `⚠️ 会用该存档的文件覆盖当前工作区(此后改动 / 新建的文件会丢失)。\n` +
+      `恢复前会自动再存一张「恢复前」存档 —— 想撤销这次恢复,就回到那张即可。`,
     )
     if (!ok) return
     setBusy(true); setNotice(null)
     try {
-      const r = await window.wraith.snapshotRestore(e.preTurnOffset)
+      const r = await window.wraith.snapshotRestoreCommit(e.commitId)
       setNotice(r.ok ? `✅ ${r.message}(写回 ${r.restoredCount} · 删除 ${r.removedCount})` : `❌ ${r.message}`)
       await load()
     } catch (err) { setError((err as Error).message) }
@@ -69,7 +69,7 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
       </div>
 
       <div className="shrink-0 border-b border-border px-4 py-2 text-3xs leading-relaxed text-fg-subtle">
-        每轮对话前后自动存下的「工作区存档」。点某个<span className="text-accent">轮前</span>存档的「恢复到此」,可把项目文件回滚到那一刻(与你项目的 git 相互独立、不受影响)。
+        每轮对话(计划/团队模式)前后自动存下的「工作区存档」。任一条点「恢复到此」即把项目文件回滚到那一刻;恢复前会自动再存一张<span className="text-accent">恢复前</span>存档 —— 想撤销这次恢复,就回到那张。(与你项目的 git 相互独立、互不影响)
       </div>
 
       {error && <div className="shrink-0 px-4 py-2 text-xs text-danger">出错:{error}</div>}
@@ -91,12 +91,10 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
                   {absTime(s.createdAtMs)}
                   <span className="ml-2 text-3xs text-fg-subtle">{modeLabel(s.turnId)}</span>
                 </span>
-                {s.preTurnOffset > 0 && (
-                  <button onClick={() => void doRestore(s)} disabled={busy} title="把工作区恢复到这个存档"
-                    className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:opacity-40">
-                    <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />恢复到此
-                  </button>
-                )}
+                <button onClick={() => void doRestore(s)} disabled={busy} title="把工作区恢复到这个存档"
+                  className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:opacity-40">
+                  <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />恢复到此
+                </button>
               </div>
             ))}
           </div>

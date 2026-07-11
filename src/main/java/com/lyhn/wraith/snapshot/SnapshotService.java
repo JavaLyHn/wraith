@@ -71,6 +71,11 @@ public class SnapshotService implements AutoCloseable {
         return manager.restorePreTurn(offset);
     }
 
+    public RestoreResult restoreToCommit(String commitId) throws Exception {
+        awaitIdle();
+        return manager.restoreToCommit(commitId);
+    }
+
     public String status() {
         return manager.formatStatus();
     }
