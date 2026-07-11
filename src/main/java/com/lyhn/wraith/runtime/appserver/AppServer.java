@@ -553,31 +553,29 @@ public final class AppServer {
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
+            // 浏览器 RPC 走后台线程:tabs/connect 可能触发 HITL 审批或阻塞在 MCP 上,
+            // 若占用单线程分发循环会与 approval.respond 死锁(见 dispatchAsync 注释)。
             case "browser.status" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
-                try { writer.result(msg.id(), session.browserStatus()); }
-                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
-                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                final SessionRunner s = session;
+                dispatchAsync(msg.id(), s::browserStatus);
             }
             case "browser.connect" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                final SessionRunner s = session;
                 JsonNode p = msg.params();
-                String port = (p != null && p.hasNonNull("port")) ? p.get("port").asText() : null;
-                try { writer.result(msg.id(), session.browserConnect(port)); }
-                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
-                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                final String port = (p != null && p.hasNonNull("port")) ? p.get("port").asText() : null;
+                dispatchAsync(msg.id(), () -> s.browserConnect(port));
             }
             case "browser.disconnect" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
-                try { writer.result(msg.id(), session.browserDisconnect()); }
-                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
-                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                final SessionRunner s = session;
+                dispatchAsync(msg.id(), s::browserDisconnect);
             }
             case "browser.tabs" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
-                try { writer.result(msg.id(), session.browserTabs()); }
-                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
-                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                final SessionRunner s = session;
+                dispatchAsync(msg.id(), s::browserTabs);
             }
             case "gateway.config.get" -> {
                 JsonNode p = msg.params();
@@ -843,6 +841,21 @@ public final class AppServer {
         }, "wraith-appserver-turn");
         t.setDaemon(true);
         turnThread = t;
+        t.start();
+    }
+
+    /**
+     * 在后台守护线程上跑一个会阻塞的 RPC(如浏览器工具触发 HITL 审批),避免占用单线程分发循环
+     * —— 否则分发线程卡在工具里等审批,而审批的 approval.respond 又要靠分发线程读取,形成死锁。
+     * 结果/错误在完成时通过线程安全的 writer 回给对应请求 id。
+     */
+    private void dispatchAsync(Object id, java.util.concurrent.Callable<Map<String, Object>> work) {
+        Thread t = new Thread(() -> {
+            try { writer.result(id, work.call()); }
+            catch (UnsupportedOperationException e) { writer.error(id, -32000, e.getMessage()); }
+            catch (Exception e) { writer.error(id, -32000, e.getMessage()); }
+        }, "wraith-appserver-async");
+        t.setDaemon(true);
         t.start();
     }
 
