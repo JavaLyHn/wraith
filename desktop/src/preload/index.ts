@@ -18,6 +18,8 @@ export interface WraithApi {
   saveTempImage(base64: string, ext: string): Promise<{ path: string; name: string; kind: string }>
   /** 拖拽文件:取其磁盘路径(Electron 32 用 webUtils,File.path 已移除)。 */
   pathForFile(file: File): string
+  /** 附件缩略图:磁盘图片 → data: URL(非图/读失败返回 null)。 */
+  readImageDataUrl(path: string): Promise<string | null>
   respondApproval(
     approvalId: string,
     decision: 'APPROVED' | 'REJECTED' | 'MODIFIED' | 'APPROVED_ALL',
@@ -151,6 +153,10 @@ const wraith: WraithApi = {
 
   pathForFile(file) {
     return webUtils.getPathForFile(file)
+  },
+
+  readImageDataUrl(path) {
+    return ipcRenderer.invoke('wraith:readImageDataUrl', path) as Promise<string | null>
   },
 
   respondApproval(approvalId, decision, opts) {

@@ -73,6 +73,8 @@ export default function Composer({
   const [mentionIndex, setMentionIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
+  const [previews, setPreviews] = useState<Record<string, string>>({})
+  const previewReqRef = useRef<Set<string>>(new Set())
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [recording, setRecording] = useState(false)
   const [transcribing, setTranscribing] = useState(false)
@@ -108,6 +110,19 @@ export default function Composer({
 
   const items = mention.active ? filterMentionItems(resources, mention.query) : []
   const popoverOpen = mention.active && items.length > 0
+
+  // 为图片附件按需拉取缩略图 data:URL(每条只拉一次)
+  useEffect(() => {
+    let cancelled = false
+    for (const a of attachments) {
+      if (a.kind !== 'image' || previewReqRef.current.has(a.path)) continue
+      previewReqRef.current.add(a.path)
+      void window.wraith.readImageDataUrl(a.path).then(url => {
+        if (!cancelled && url) setPreviews(prev => ({ ...prev, [a.path]: url }))
+      }).catch(() => { /* 读失败:退回只显示文件名 */ })
+    }
+    return () => { cancelled = true }
+  }, [attachments])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -179,9 +194,10 @@ export default function Composer({
     const paths: string[] = []
     const blobFallback: File[] = []
     for (const f of files) {
-      const p = window.wraith.pathForFile(f)
+      let p = ''
+      try { p = window.wraith.pathForFile(f) || '' } catch { p = '' }
       if (p) paths.push(p)
-      else if (isImageMime(f.type)) blobFallback.push(f)
+      else if (isImageMime(f.type)) blobFallback.push(f)  // 取不到路径的图:走 blob→临时文件
     }
     const added: AttachmentItem[] = pathsToAttachments(paths)
     for (const f of blobFallback) {
@@ -377,23 +393,35 @@ export default function Composer({
         {/* attachment chips row — 仅在有附件时显示(输入框上方) */}
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-3 pt-2.5">
-            {attachments.map((a, i) => (
-              <span
-                key={a.path + i}
-                data-testid="attachment-chip"
-                className="flex max-w-[200px] items-center gap-1 rounded-md border border-border bg-bg px-2 py-0.5 text-xs text-fg"
-              >
-                <span className="truncate">{a.name}</span>
-                <button
-                  data-testid="attachment-remove"
-                  aria-label={`移除 ${a.name}`}
-                  onClick={() => onRemoveAttachment?.(i)}
-                  className="ml-0.5 shrink-0 text-fg-subtle hover:text-fg"
+            {attachments.map((a, i) => {
+              const preview = a.kind === 'image' ? previews[a.path] : undefined
+              return (
+                <span
+                  key={a.path + i}
+                  data-testid="attachment-chip"
+                  title={a.name}
+                  className="flex items-center gap-1.5 rounded-md border border-border bg-bg px-2 py-1 text-xs text-fg"
                 >
-                  ×
-                </button>
-              </span>
-            ))}
+                  {preview && (
+                    <img
+                      data-testid="attachment-thumb"
+                      src={preview}
+                      alt={a.name}
+                      className="h-10 w-10 shrink-0 rounded object-cover"
+                    />
+                  )}
+                  <span className="max-w-[140px] truncate">{a.name}</span>
+                  <button
+                    data-testid="attachment-remove"
+                    aria-label={`移除 ${a.name}`}
+                    onClick={() => onRemoveAttachment?.(i)}
+                    className="ml-0.5 shrink-0 text-fg-subtle hover:text-fg"
+                  >
+                    ×
+                  </button>
+                </span>
+              )
+            })}
           </div>
         )}
 

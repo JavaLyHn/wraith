@@ -343,6 +343,21 @@ ipcMain.handle('wraith:saveTempImage', async (_e, base64: string, ext: string) =
   return { path: filePath, name, kind: 'image' }
 })
 
+// 附件缩略图:把磁盘图片读成 data: URL 供 renderer <img> 直接显示(无 CSP,data: 可用)。
+ipcMain.handle('wraith:readImageDataUrl', async (_e, filePath: string) => {
+  const { validImageExt } = await import('./tempImage.js')
+  const ext = validImageExt(path.extname(filePath))
+  if (!ext) return null
+  try {
+    const buf = await fs.promises.readFile(filePath)
+    if (buf.length === 0 || buf.length > 20 * 1024 * 1024) return null
+    const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : `image/${ext}`
+    return `data:${mime};base64,${buf.toString('base64')}`
+  } catch {
+    return null
+  }
+})
+
 ipcMain.handle(
   'wraith:respondApproval',
   async (
