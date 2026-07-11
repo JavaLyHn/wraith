@@ -927,52 +927,62 @@ export default function App(): JSX.Element {
                 onModeChange={setPendingMode}
               />
             )
-            return !pv.showWelcome ? (
+            return (
               <>
+                {/* 顶部工具条:终端开关常驻(新对话页也在);压缩/导出仅活跃对话显示 */}
                 <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border px-4 py-1.5">
-                  {compactNotice && (
+                  {!pv.showWelcome && compactNotice && (
                     <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
                   )}
-                  <button
-                    data-testid="chat-compact"
-                    onClick={() => void handleCompact()}
-                    disabled={compactBusy || state.turn === 'running' || !pv.items.length}
-                    title="压缩上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
-                    className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface hover:text-fg disabled:cursor-not-allowed disabled:opacity-40'}
-                  >
-                    <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '压缩中…' : '压缩'}
-                  </button>
-                  <button
-                    data-testid="chat-export"
-                    onClick={() => void handleExport()}
-                    disabled={!pv.items.length}
-                    title="导出当前对话为 Markdown"
-                    className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />导出
-                  </button>
+                  {!pv.showWelcome && (
+                    <button
+                      data-testid="chat-compact"
+                      onClick={() => void handleCompact()}
+                      disabled={compactBusy || state.turn === 'running' || !pv.items.length}
+                      title="压缩上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
+                      className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface hover:text-fg disabled:cursor-not-allowed disabled:opacity-40'}
+                    >
+                      <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '压缩中…' : '压缩'}
+                    </button>
+                  )}
+                  {!pv.showWelcome && (
+                    <button
+                      data-testid="chat-export"
+                      onClick={() => void handleExport()}
+                      disabled={!pv.items.length}
+                      title="导出当前对话为 Markdown"
+                      className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />导出
+                    </button>
+                  )}
                   <button data-testid="terminal-toggle" onClick={() => setTerminalOpen(v => !v)}
                     className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (terminalOpen ? 'text-accent' : 'text-fg-muted')}
                     title="终端">
                     <SquareTerminal className="h-4 w-4" strokeWidth={1.5} />
                   </button>
                 </div>
-                <Transcript
-                  items={pv.items}
-                  busy={pv.transcriptBusy}
-                  onEditMessage={handleEditMessage}
-                  onDeleteMessage={handleDeleteMessage}
-                  onResendMessage={handleResendMessage}
-                  onPlanReview={handlePlanReview}
-                  mode={pendingMode}
-                />
+                {!pv.showWelcome ? (
+                  <>
+                    <Transcript
+                      items={pv.items}
+                      busy={pv.transcriptBusy}
+                      onEditMessage={handleEditMessage}
+                      onDeleteMessage={handleDeleteMessage}
+                      onResendMessage={handleResendMessage}
+                      onPlanReview={handlePlanReview}
+                      mode={pendingMode}
+                    />
+                    <div className="shrink-0 px-4 py-3">{composer}</div>
+                  </>
+                ) : (
+                  <div className="min-h-0 flex-1">
+                    <WelcomeEmptyState>{composer}</WelcomeEmptyState>
+                  </div>
+                )}
+                {/* 终端抽屉:最底部(Composer 下方),常驻挂载,由 open 控制丝滑展开/收起 */}
                 <TerminalDrawer open={terminalOpen} cwd={state.workspace ?? null} onClose={() => setTerminalOpen(false)} />
-                <div className="shrink-0 px-4 py-3">{composer}</div>
               </>
-            ) : (
-              <div className="min-h-0 flex-1">
-                <WelcomeEmptyState>{composer}</WelcomeEmptyState>
-              </div>
             )
           })()
         )}

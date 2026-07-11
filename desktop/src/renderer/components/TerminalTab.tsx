@@ -13,9 +13,19 @@ export default function TerminalTab({ id, active }: { id: string; active: boolea
   useEffect(() => {
     const host = hostRef.current
     if (!host) return
+    // 主题感知:从 CSS 变量取色(hex),浅/深色随 app [data-theme] 自动匹配
+    const cs = getComputedStyle(document.documentElement)
+    const cssv = (name: string, fb: string): string => cs.getPropertyValue(name).trim() || fb
+    const fg = cssv('--fg', '#1c2430')
     const term = new Terminal({
       fontSize: 13, fontFamily: 'Menlo, Monaco, monospace', cursorBlink: true,
-      allowTransparency: true, theme: { background: '#00000000' },
+      theme: {
+        background: cssv('--bg-elevated', '#ffffff'),
+        foreground: fg,
+        cursor: cssv('--accent', '#0ea5b7'),
+        cursorAccent: cssv('--bg-elevated', '#ffffff'),
+        selectionBackground: 'rgba(14,165,183,0.22)',
+      },
     })
     const fit = new FitAddon()
     term.loadAddon(fit)

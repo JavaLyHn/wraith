@@ -1,16 +1,18 @@
 // desktop/src/renderer/components/TerminalDrawer.tsx
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, SquareTerminal } from 'lucide-react'
 import TerminalTab from './TerminalTab'
 import { addTab, closeTab, setActive, shortTabLabel, type TabsState } from '../lib/terminalTabs'
 
 const MIN_H = 120
 
 /** 底部终端抽屉:多标签,顶边拖拽调高,全标签常挂 CSS 显隐(切标签保留 PTY)。
- * open=false 时 CSS hidden(display:none),保持挂载让 PTY 不丢失。 */
+ * 常驻挂载(PTY 不丢);open=false → 高度过渡到 0(丝滑收起),open=true → 展开到 height。
+ * 拖拽期间关掉过渡,避免橡皮筋感。 */
 export default function TerminalDrawer({ open, cwd, onClose }: { open: boolean; cwd: string | null; onClose: () => void }): JSX.Element {
   const [state, setState] = useState<TabsState>({ tabs: [], activeId: null })
   const [height, setHeight] = useState(() => Math.round(window.innerHeight * 0.38))
+  const [dragging, setDragging] = useState(false)
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
 
   const addNew = useCallback(async () => {
@@ -22,7 +24,10 @@ export default function TerminalDrawer({ open, cwd, onClose }: { open: boolean; 
   }, [cwd])
 
   // 首次打开且无标签时,自动建一个(PTY 延迟到首次 open,避免冷启动孤立进程)
-  useEffect(() => { if (open && state.tabs.length === 0) void addNew() /* eslint-disable-next-line */ }, [open])
+  useEffect(() => {
+    if (open && state.tabs.length === 0) void addNew()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const close = (id: string): void => {
     void window.wraith.ptyKill(id)
@@ -33,9 +38,10 @@ export default function TerminalDrawer({ open, cwd, onClose }: { open: boolean; 
     })
   }
 
-  // 顶边拖拽调高
+  // 顶边拖拽调高(拖拽期间关过渡)
   const onDragStart = (e: React.PointerEvent): void => {
     dragRef.current = { startY: e.clientY, startH: height }
+    setDragging(true)
     ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
   }
   const onDragMove = (e: React.PointerEvent): void => {
@@ -46,11 +52,16 @@ export default function TerminalDrawer({ open, cwd, onClose }: { open: boolean; 
   }
   const onDragEnd = (e: React.PointerEvent): void => {
     dragRef.current = null
+    setDragging(false)
     ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
   }
 
   return (
-    <div data-testid="terminal-drawer" className={'flex flex-col border-t border-border bg-bg' + (open ? '' : ' hidden')} style={{ height }}>
+    <div data-testid="terminal-drawer"
+      className={'flex flex-col overflow-hidden bg-surface '
+        + (open ? 'border-t border-border ' : '')
+        + (dragging ? '' : 'transition-[height] duration-300 ease-out')}
+      style={{ height: open ? height : 0 }}>
       {/* 拖拽手柄 */}
       <div onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd}
         className="h-1.5 shrink-0 cursor-ns-resize hover:bg-accent/30" />
@@ -58,9 +69,10 @@ export default function TerminalDrawer({ open, cwd, onClose }: { open: boolean; 
       <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
         {state.tabs.map(t => (
           <div key={t.id}
-            className={'flex items-center gap-1 rounded px-2 py-1 text-2xs ' +
+            className={'flex items-center gap-1.5 rounded-md px-2 py-1 text-2xs ' +
               (t.id === state.activeId ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>
-            <button data-testid="terminal-tab" onClick={() => setState(s => setActive(s, t.id))} className="max-w-[120px] truncate">{t.label}</button>
+            <SquareTerminal className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+            <button data-testid="terminal-tab" onClick={() => setState(s => setActive(s, t.id))} className="max-w-[140px] truncate">{t.label}</button>
             <button data-testid="terminal-tab-close" onClick={() => close(t.id)} className="text-fg-subtle hover:text-danger">×</button>
           </div>
         ))}
@@ -68,7 +80,7 @@ export default function TerminalDrawer({ open, cwd, onClose }: { open: boolean; 
         <button data-testid="terminal-drawer-close" onClick={onClose} className="ml-auto rounded p-1 text-fg-muted hover:bg-surface/60" title="收起"><X className="h-3.5 w-3.5" strokeWidth={1.5} /></button>
       </div>
       {/* 全标签常挂,CSS 显隐 */}
-      <div className="relative min-h-0 flex-1 px-2 py-1">
+      <div className="relative min-h-0 flex-1">
         {state.tabs.map(t => (
           <div key={t.id} className={'absolute inset-0 px-2 py-1 ' + (t.id === state.activeId ? '' : 'hidden')}>
             <TerminalTab id={t.id} active={t.id === state.activeId} />
