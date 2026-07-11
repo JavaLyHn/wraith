@@ -19,23 +19,33 @@ export function buildSplashHtml(logoDataUri: string): string {
   html,body{margin:0;height:100vh;background:transparent;overflow:hidden}
   body{display:flex;align-items:center;justify-content:center;-webkit-user-select:none;cursor:default}
   .wrap{animation:ghostIn 900ms cubic-bezier(.22,.61,.36,1) both}
-  .wrap img{width:148px;height:148px;display:block;
+  .logo{position:relative;width:148px;height:148px}
+  .logo img{width:148px;height:148px;display:block;
     filter:drop-shadow(0 0 26px rgba(150,195,255,.50));
     animation:glowPulse 2.6s ease-in-out 900ms infinite}
+  /* 渐变光泽:以 logo 为 mask,一条明亮渐变光带斜扫过 logo 一次(闪一下) */
+  .shine{position:absolute;inset:0;pointer-events:none;
+    -webkit-mask:url(${logoDataUri}) center/contain no-repeat;
+    mask:url(${logoDataUri}) center/contain no-repeat;
+    background:linear-gradient(115deg,transparent 34%,rgba(255,255,255,.85) 47%,rgba(175,215,255,.95) 53%,transparent 66%);
+    background-size:260% 100%;background-position:165% 0;
+    animation:shine 780ms cubic-bezier(.4,0,.2,1) 420ms both}
   body.dismiss .wrap{animation:ghostOut 450ms ease-in both}
-  body.dismiss .wrap img{animation:none}
+  body.dismiss .logo img{animation:none}
   @keyframes ghostIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
   @keyframes ghostOut{from{opacity:1;transform:none}to{opacity:0;transform:scale(1.15)}}
   @keyframes glowPulse{0%,100%{filter:drop-shadow(0 0 18px rgba(150,195,255,.40))}50%{filter:drop-shadow(0 0 30px rgba(150,195,255,.70))}}
+  @keyframes shine{from{background-position:165% 0}to{background-position:-65% 0}}
   @media (prefers-reduced-motion: reduce){
     .wrap{animation:fadeIn 500ms ease both}
-    .wrap img{animation:none}
+    .logo img{animation:none}
+    .shine{display:none}
     body.dismiss .wrap{animation:fadeOut 300ms ease both}
     @keyframes fadeIn{from{opacity:0}to{opacity:1}}
     @keyframes fadeOut{from{opacity:1}to{opacity:0}}
   }
   </style></head><body>
-  <div class="wrap"><img src="${logoDataUri}" alt=""></div>
+  <div class="wrap"><div class="logo"><img src="${logoDataUri}" alt=""><span class="shine"></span></div></div>
   <script>window.__dismiss=function(){document.body.classList.add('dismiss')}</script>
   </body></html>`
 }

@@ -42,4 +42,8 @@ describe('buildSplashHtml', () => {
   it('背景透明', () => {
     expect(html).toContain('background:transparent')
   })
+  it('含渐变光泽扫过(shine)动画 + logo mask', () => {
+    expect(html).toContain('@keyframes shine')
+    expect(html).toContain('mask:url(data:image/png;base64,AAAA)')
+  })
 })
