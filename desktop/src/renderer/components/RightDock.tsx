@@ -40,7 +40,7 @@ export default function RightDock({ open, cwd, onClose }: { open: boolean; cwd: 
         + (dragging ? '' : 'transition-[width] duration-300 ease-out')}
       style={{ width: open ? width : 0 }}>
       {/* 左边缘拖拽手柄 */}
-      <div onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd}
+      <div onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerCancel={onDragEnd}
         className="w-1.5 shrink-0 cursor-ew-resize hover:bg-accent/30" />
       <div className="flex min-w-0 flex-1 flex-col">
         {/* 分段切换 + 收起 */}

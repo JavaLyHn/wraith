@@ -35,7 +35,7 @@ export default function TerminalDrawer({ open, cwd, onClose }: { open: boolean; 
         + (open ? 'border-t border-border ' : '')
         + (dragging ? '' : 'transition-[height] duration-300 ease-out')}
       style={{ height: open ? height : 0 }}>
-      <div onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd}
+      <div onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerCancel={onDragEnd}
         className="h-1.5 shrink-0 cursor-ns-resize hover:bg-accent/30" />
       <TerminalPane
         active={open}
