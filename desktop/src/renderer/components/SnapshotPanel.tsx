@@ -84,12 +84,13 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
           <div className="flex flex-col">
             {snapshots.map((s) => (
               <div key={s.commitId} className="flex items-center gap-3 border-b border-border/60 py-2.5">
-                <span className={'shrink-0 rounded px-1.5 py-0.5 text-3xs ' +
+                <span title={phaseMeaning(s.phase)}
+                  className={'shrink-0 cursor-default rounded px-1.5 py-0.5 text-3xs ' +
                   (s.phase === 'PRE_TURN' ? 'bg-accent/12 text-accent' : s.phase === 'PRE_RESTORE' ? 'bg-danger/10 text-danger' : 'bg-surface text-fg-muted')}>{phaseLabel(s.phase)}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs text-fg">{phaseMeaning(s.phase)}</div>
-                  <div className="mt-0.5 truncate text-3xs text-fg-subtle">{absTime(s.createdAtMs)} · {modeLabel(s.turnId)}</div>
-                </div>
+                <span className="min-w-0 flex-1 truncate text-xs text-fg">
+                  {absTime(s.createdAtMs)}
+                  <span className="ml-2 text-3xs text-fg-subtle">{modeLabel(s.turnId)}</span>
+                </span>
                 {s.preTurnOffset > 0 && (
                   <button onClick={() => void doRestore(s)} disabled={busy} title="把工作区恢复到这个存档"
                     className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:opacity-40">
