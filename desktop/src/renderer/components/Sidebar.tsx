@@ -429,8 +429,8 @@ export default function Sidebar({
           {searchActive ? (
             /* 激活态:仅会话(项目切换在顶部,不再重复列) */
             <>
-              {/* 会话分区 */}
-              <div className="mt-4 px-3 text-3xs uppercase tracking-wider text-fg-subtle">会话</div>
+              {/* 对话分区(与非搜索态一致,避免点搜索后标题从「对话」跳成「会话」) */}
+              <div className="mt-4 px-3 text-3xs uppercase tracking-wider text-fg-subtle">对话</div>
               <div className="px-3">
                 {filtered.sessions.length === 0 ? (
                   <div className="px-3 py-2 text-xs text-fg-subtle">无匹配</div>
