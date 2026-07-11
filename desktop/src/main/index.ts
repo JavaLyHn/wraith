@@ -250,7 +250,8 @@ function createWindow(): void {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
-      preload: preloadPath
+      preload: preloadPath,
+      webviewTag: true
     }
   })
 
