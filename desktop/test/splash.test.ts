@@ -7,7 +7,7 @@ describe('shouldDismissSplash', () => {
   })
   it('已就绪且过地板 → 散', () => {
     expect(shouldDismissSplash(SPLASH_FLOOR_MS, true)).toBe(true)
-    expect(shouldDismissSplash(1500, true)).toBe(true)
+    expect(shouldDismissSplash(SPLASH_FLOOR_MS + 300, true)).toBe(true)
   })
   it('未就绪、未到天花板 → 不散', () => {
     expect(shouldDismissSplash(3000, false)).toBe(false)
