@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import {
   PROVIDER_CATALOG, findCatalogEntry,
   baseProviderId, nextInstanceId, instanceDisplayName, prefillForm,
@@ -125,7 +126,7 @@ export default function ProvidersPanel({ onBack }: { onBack: () => void }): JSX.
   return (
     <div data-testid="providers-panel" className="flex h-full flex-col p-4">
       <div className="mb-2 flex items-center gap-2">
-        <button data-testid="providers-back" onClick={onBack} className="text-xs text-fg-muted">← 返回</button>
+        <button data-testid="providers-back" onClick={onBack} title="返回对话" className="rounded-lg p-1.5 text-fg-muted hover:bg-surface hover:text-fg transition-colors"><ArrowLeft className="h-4 w-4" strokeWidth={1.5} /></button>
         <input data-testid="providers-search" value={q} onChange={e => setQ(e.target.value)} placeholder="搜索 provider…"
           className="flex-1 rounded-lg border border-border bg-bg px-3 py-1.5 text-xs outline-none focus:border-accent" />
       </div>

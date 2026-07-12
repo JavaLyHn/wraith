@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import type { AutomationTask, ProjectView } from '../../shared/types'
 import AutomationForm from './AutomationForm'
 import AutomationRuns from './AutomationRuns'
@@ -90,8 +91,8 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <button data-testid="automations-back" onClick={onBack}
-          className="rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface/60">← 返回对话</button>
+        <button data-testid="automations-back" onClick={onBack} title="返回对话"
+          className="rounded-lg p-1.5 text-fg-muted hover:bg-surface hover:text-fg transition-colors"><ArrowLeft className="h-4 w-4" strokeWidth={1.5} /></button>
         <span className="text-sm font-bold text-fg">自动化</span>
         <span className="text-xs text-fg-subtle">定时任务</span>
       </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import type { GatewayBindPhase, GatewayConfigView, GatewayState, GatewayStatus } from '../../shared/gateway'
 import { maskId, bindPhaseLabel } from '../lib/gatewayLabels'
 import { IM_PLATFORMS } from '../lib/imPlatforms'
@@ -238,8 +239,8 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <button data-testid="im-back" onClick={onBack}
-          className="rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface/60">← 返回对话</button>
+        <button data-testid="im-back" onClick={onBack} title="返回对话"
+          className="rounded-lg p-1.5 text-fg-muted hover:bg-surface hover:text-fg transition-colors"><ArrowLeft className="h-4 w-4" strokeWidth={1.5} /></button>
         <span className="text-sm font-bold text-fg">IM 网关</span>
         <span className="text-xs text-fg-subtle">对话式 IM 接入</span>
       </div>

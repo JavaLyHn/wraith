@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ScanSearch, Database, Search, Network, Save } from 'lucide-react'
+import { ArrowLeft, ScanSearch, Database, Search, Network, Save } from 'lucide-react'
 import type { EmbeddingConfigView, RagStatus, RagSearchItem, RagRelation } from '../../shared/types'
 import { embeddingDefaults } from '../lib/ragView'
 
@@ -88,8 +88,8 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <button data-testid="rag-back" onClick={onBack}
-          className="rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface/60">← 返回对话</button>
+        <button data-testid="rag-back" onClick={onBack} title="返回对话"
+          className="rounded-lg p-1.5 text-fg-muted hover:bg-surface hover:text-fg transition-colors"><ArrowLeft className="h-4 w-4" strokeWidth={1.5} /></button>
         <span className="flex items-center gap-2 text-sm font-bold text-fg">
           <ScanSearch className="h-4 w-4 shrink-0" strokeWidth={1.5} />代码检索
         </span>

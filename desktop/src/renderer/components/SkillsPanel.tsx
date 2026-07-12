@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ArrowLeft } from 'lucide-react'
 import type { SkillView, SkillDetail } from '../../shared/types'
 import { groupSkillsBySource } from '../lib/skillsView'
 import SkillEditor from './SkillEditor'
@@ -77,8 +78,8 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <button data-testid="skills-back" onClick={onBack}
-          className="rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface/60">← 返回对话</button>
+        <button data-testid="skills-back" onClick={onBack} title="返回对话"
+          className="rounded-lg p-1.5 text-fg-muted hover:bg-surface hover:text-fg transition-colors"><ArrowLeft className="h-4 w-4" strokeWidth={1.5} /></button>
         <span className="text-sm font-bold text-fg">技能</span>
         <span className="text-xs text-fg-subtle">SKILL.md 决策手册 · load_skill 注入</span>
         <div className="ml-auto flex items-center gap-2">
