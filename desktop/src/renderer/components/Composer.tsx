@@ -47,6 +47,7 @@ interface ComposerProps {
   onModelSwitched?: (model: string) => void
   mode?: RunMode
   onModeChange?: (m: RunMode) => void
+  focusSignal?: number
 }
 
 export default function Composer({
@@ -70,6 +71,7 @@ export default function Composer({
   onModelSwitched,
   mode = 'react',
   onModeChange,
+  focusSignal,
 }: ComposerProps): JSX.Element {
   const [mention, setMention] = useState<MentionState>({ active: false, start: 0, query: '' })
   const [mentionIndex, setMentionIndex] = useState(0)
@@ -109,6 +111,9 @@ export default function Composer({
       streamRef.current = null
     }
   }, [])
+
+  // 首页示例卡「填入并聚焦」:信号变化即聚焦输入框(首帧 0 不触发)
+  useEffect(() => { if (focusSignal) textareaRef.current?.focus() }, [focusSignal])
 
   const items = mention.active ? filterMentionItems(resources, mention.query) : []
   const popoverOpen = mention.active && items.length > 0

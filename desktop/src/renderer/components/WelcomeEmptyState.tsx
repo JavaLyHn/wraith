@@ -9,8 +9,7 @@ export default function WelcomeEmptyState(
   return (
     <div className="flex h-full flex-col items-center justify-center px-6">
       <div className="welcome-logo mb-4"><Logo className="h-16 w-16 object-contain" /></div>
-      <h1 className="mb-2 text-2xl font-semibold text-fg">今天做点什么?</h1>
-      <p className="mb-6 text-sm text-fg-muted">Wraith 会读代码、跑命令、改文件——先说个目标</p>
+      <h1 className="mb-6 text-2xl font-semibold text-fg">今天做点什么?</h1>
       {examples.length > 0 && (
         <div className="mb-8 flex w-full max-w-2xl flex-wrap justify-center gap-2">
           {examples.map((ex) => (
