@@ -30,7 +30,7 @@ import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { compactionNotice } from './lib/compactView'
-import { Download, PanelRight, SquareTerminal, Wand2 } from 'lucide-react'
+import { Download, PanelLeft, PanelRight, SquareTerminal, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -39,6 +39,7 @@ import ModelFallbackBanner from './components/ModelFallbackBanner'
 import SubmitErrorBanner from './components/SubmitErrorBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import Sidebar from './components/Sidebar'
+import SidebarDock from './components/SidebarDock'
 import PreviewBanner from './components/PreviewBanner'
 import { selectAction, resolveOnIdle, deriveView, type Preview } from '../shared/sessionPreview'
 import PluginsPanel from './components/PluginsPanel'
@@ -164,6 +165,8 @@ export default function App(): JSX.Element {
   const [pendingMode, setPendingMode] = useState<RunMode>('react')
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [rightDockOpen, setRightDockOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('wraith.sidebar.collapsed') === '1')
+  const [sidebarPeek, setSidebarPeek] = useState(false)
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
@@ -173,6 +176,11 @@ export default function App(): JSX.Element {
   useEffect(() => {
     turnRef.current = state.turn
   }, [state.turn])
+
+  // 折叠状态持久化
+  useEffect(() => {
+    localStorage.setItem('wraith.sidebar.collapsed', sidebarCollapsed ? '1' : '0')
+  }, [sidebarCollapsed])
 
   // 预览覆盖态:running 时只读显示另一会话或空白新会话页
   const [preview, setPreview] = useState<Preview>(null)
@@ -772,6 +780,11 @@ export default function App(): JSX.Element {
     turn: state.turn,
   })
 
+  // 折叠态下导航目标变化(切会话/切视图)→ 自动收浮层
+  useEffect(() => {
+    if (sidebarCollapsed) setSidebarPeek(false)
+  }, [pv.activeSessionId, view, sidebarCollapsed])
+
   // 手动压缩上下文(压缩当前对话历史,释放上下文窗口;可见 transcript 不变)
   const [compactBusy, setCompactBusy] = useState(false)
   const [compactNotice, setCompactNotice] = useState<string | null>(null)
@@ -804,39 +817,53 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-fg">
-      <Sidebar
-        workspace={state.workspace}
-        projects={projects}
-        busy={state.turn === 'running'}
-        sessions={sessions}
-        activeSessionId={pv.activeSessionId}
-        runningSessionId={pv.runningSessionId}
-        newDraftActive={!pv.activeSessionId}
-        onNewConversation={handleNewConversation}
-        onSelectSession={handleSelectSession}
-        onToggleStar={handleToggleStar}
-        onRenameSession={handleRenameSession}
-        onDeleteSession={handleDeleteSession}
-        onActivateProject={switchToProject}
-        onAddProject={handleAddProject}
-        onRemoveProject={handleRemoveProject}
-        onRenameProject={handleRenameProject}
-        sandbox={state.sandbox}
-        activeNav={view === 'chat' ? null : view}
-        onOpenPlugins={() => setView('plugins')}
-        onOpenAutomations={() => setView('automations')}
-        onOpenImGateway={() => setView('im-gateway')}
-        onOpenProviders={() => setView('providers')}
-        onOpenSkills={() => setView('skills')}
-        onOpenMemory={() => setView('memory')}
-        onOpenSnapshots={() => setView('snapshots')}
-        onOpenTasks={() => setView('tasks')}
-        onOpenPolicy={() => setView('policy')}
-        onOpenBrowser={() => setView('browser')}
-        onOpenRag={() => setView('rag')}
-        onOpenSettings={() => setView('settings')}
-        automationBadge={automationBadge}
-      />
+      {sidebarCollapsed && (
+        <button
+          type="button"
+          data-testid="sidebar-expand"
+          onClick={() => setSidebarCollapsed(false)}
+          title="展开侧栏"
+          className="fixed left-2 top-2 z-40 rounded-lg bg-surface/80 p-1.5 text-fg-muted shadow backdrop-blur hover:bg-surface hover:text-fg"
+        >
+          <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
+        </button>
+      )}
+      <SidebarDock collapsed={sidebarCollapsed} peek={sidebarPeek} onPeekChange={setSidebarPeek}>
+        <Sidebar
+          workspace={state.workspace}
+          projects={projects}
+          busy={state.turn === 'running'}
+          sessions={sessions}
+          activeSessionId={pv.activeSessionId}
+          runningSessionId={pv.runningSessionId}
+          newDraftActive={!pv.activeSessionId}
+          onNewConversation={handleNewConversation}
+          onSelectSession={handleSelectSession}
+          onToggleStar={handleToggleStar}
+          onRenameSession={handleRenameSession}
+          onDeleteSession={handleDeleteSession}
+          onActivateProject={switchToProject}
+          onAddProject={handleAddProject}
+          onRemoveProject={handleRemoveProject}
+          onRenameProject={handleRenameProject}
+          sandbox={state.sandbox}
+          activeNav={view === 'chat' ? null : view}
+          onOpenPlugins={() => setView('plugins')}
+          onOpenAutomations={() => setView('automations')}
+          onOpenImGateway={() => setView('im-gateway')}
+          onOpenProviders={() => setView('providers')}
+          onOpenSkills={() => setView('skills')}
+          onOpenMemory={() => setView('memory')}
+          onOpenSnapshots={() => setView('snapshots')}
+          onOpenTasks={() => setView('tasks')}
+          onOpenPolicy={() => setView('policy')}
+          onOpenBrowser={() => setView('browser')}
+          onOpenRag={() => setView('rag')}
+          onOpenSettings={() => setView('settings')}
+          automationBadge={automationBadge}
+          onToggleCollapsed={() => setSidebarCollapsed(v => !v)}
+        />
+      </SidebarDock>
 
       <div className="flex min-w-0 flex-1 flex-row">
       <div className="relative flex min-w-0 flex-1 flex-col">

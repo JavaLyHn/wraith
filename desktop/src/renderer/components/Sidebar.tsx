@@ -8,7 +8,7 @@ import {
 import {
   Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
   Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown,
-  Shield, ShieldAlert, ShieldCheck, ListTodo,
+  Shield, ShieldAlert, ShieldCheck, ListTodo, PanelLeft,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
 import Logo from './Logo'
@@ -128,6 +128,8 @@ interface SidebarProps {
   onOpenRag: () => void
   onOpenSettings: () => void
   automationBadge: boolean
+  /** 展开态点击折叠、浮层态点击展开(翻转折叠)。传入才渲染折叠按钮。 */
+  onToggleCollapsed?: () => void
 }
 
 export default function Sidebar({
@@ -162,6 +164,7 @@ export default function Sidebar({
   onOpenRag,
   onOpenSettings,
   automationBadge,
+  onToggleCollapsed,
 }: SidebarProps): JSX.Element {
   const [searchActive, setSearchActive] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -227,16 +230,29 @@ export default function Sidebar({
         data-testid="sidebar"
         className="sidebar-gradient flex h-full w-60 flex-col border-r border-border"
       >
-        <button
-          type="button"
-          data-testid="brand-home"
-          onClick={onNewConversation}
-          title="回到新对话首页"
-          className="flex w-full select-none items-center gap-2 px-4 py-4 text-left transition-opacity hover:opacity-80"
-        >
-          <Logo className="h-7 w-7 object-contain" />
-          <span className="text-sm font-bold tracking-wide text-fg">WRAITH</span>
-        </button>
+        <div className="flex items-center">
+          <button
+            type="button"
+            data-testid="brand-home"
+            onClick={onNewConversation}
+            title="回到新对话首页"
+            className="flex flex-1 select-none items-center gap-2 px-4 py-4 text-left transition-opacity hover:opacity-80"
+          >
+            <Logo className="h-7 w-7 object-contain" />
+            <span className="text-sm font-bold tracking-wide text-fg">WRAITH</span>
+          </button>
+          {onToggleCollapsed && (
+            <button
+              type="button"
+              data-testid="sidebar-collapse"
+              onClick={onToggleCollapsed}
+              title="折叠侧栏"
+              className="mr-2 shrink-0 rounded-lg p-1.5 text-fg-muted hover:bg-surface/60 hover:text-fg"
+            >
+              <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
+            </button>
+          )}
+        </div>
 
         <ProjectSwitcher
           projects={projects}
