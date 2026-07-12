@@ -17,3 +17,28 @@ describe('normalizeUrl', () => {
   })
   it('about: 原样', () => { expect(normalizeUrl('about:blank')).toBe('about:blank') })
 })
+
+import { fitZoom, FIT_TARGET_WIDTH, FIT_MIN_ZOOM } from '../src/renderer/lib/rightDock'
+
+describe('fitZoom', () => {
+  it('面板 ≥ 目标宽 → 1(不缩)', () => {
+    expect(fitZoom(1000, 1000)).toBe(1)
+    expect(fitZoom(1400, 1000)).toBe(1)
+  })
+  it('窄面板 → 面板宽/目标宽', () => {
+    expect(fitZoom(600, 1000)).toBeCloseTo(0.6, 5)
+    expect(fitZoom(800, 1000)).toBeCloseTo(0.8, 5)
+  })
+  it('极窄面板夹到下限 FIT_MIN_ZOOM', () => {
+    expect(fitZoom(300, 1000)).toBe(FIT_MIN_ZOOM)
+  })
+  it('非法宽度 → 1(安全)', () => {
+    expect(fitZoom(0, 1000)).toBe(1)
+    expect(fitZoom(-5, 1000)).toBe(1)
+    expect(fitZoom(600, 0)).toBe(1)
+  })
+  it('默认目标宽 = FIT_TARGET_WIDTH', () => {
+    expect(fitZoom(FIT_TARGET_WIDTH)).toBe(1)
+    expect(fitZoom(FIT_TARGET_WIDTH / 2)).toBeCloseTo(0.5, 5)
+  })
+})

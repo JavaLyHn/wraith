@@ -1,5 +1,6 @@
 import { createElement, useEffect, useRef } from 'react'
 import type { BrowserTab } from '../lib/browserTabs'
+import { fitZoom } from '../lib/rightDock'
 
 /** Electron webview 元素的最小类型(仅用到的方法)。 */
 export interface WebviewEl extends HTMLElement {
@@ -12,6 +13,7 @@ export interface WebviewEl extends HTMLElement {
   loadURL(url: string): Promise<void>
   getURL(): string
   getTitle(): string
+  setZoomFactor(factor: number): void
 }
 
 const displayUrl = (u: string): string => (u === 'about:blank' ? '' : u)
@@ -29,6 +31,14 @@ export default function BrowserWebview(
     const el = wv.current
     if (!el) return
     registerRef(id, el)
+    // 自动缩放适宽:按面板实宽算缩放因子,让宽桌面站(如百度 PC 版)以 ~1000px 桌面宽布局再缩放填满面板,
+    // 不裁切;面板≥目标宽则 z=1 不缩。dom-ready(每次导航就绪)+ 面板尺寸变化时重applied。
+    const applyFit = (): void => {
+      try { el.setZoomFactor(fitZoom(el.getBoundingClientRect().width)) } catch { /* 未就绪:忽略,dom-ready/resize 会再试 */ }
+    }
+    el.addEventListener('dom-ready', applyFit)
+    const ro = new ResizeObserver(applyFit)
+    ro.observe(el)
     const onStart = (): void => onState(id, { loading: true, failed: false })
     const onStop = (): void => {
       try { onState(id, { loading: false, url: displayUrl(el.getURL()), title: el.getTitle() || '新标签页', canBack: el.canGoBack(), canForward: el.canGoForward() }) }
@@ -59,6 +69,8 @@ export default function BrowserWebview(
       el.removeEventListener('did-navigate-in-page', onNav)
       el.removeEventListener('page-title-updated', onTitle as EventListener)
       el.removeEventListener('did-fail-load', onFail as EventListener)
+      el.removeEventListener('dom-ready', applyFit)
+      ro.disconnect()
       registerRef(id, null)
     }
     // 仅按标签 id 绑一次;onState/registerRef 由父层 useCallback 稳定,故不入 deps
