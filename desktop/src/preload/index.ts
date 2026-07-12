@@ -135,7 +135,7 @@ export interface WraithApi {
   taskAdd(prompt: string): Promise<{ ok: boolean; id?: string; message?: string }>
   taskGet(id: string): Promise<DurableTaskView>
   taskCancel(id: string): Promise<{ ok: boolean }>
-  ptyCreate(opts?: { cwd?: string; cols?: number; rows?: number }): Promise<{ id: string }>
+  ptyCreate(opts?: { cwd?: string; cols?: number; rows?: number; theme?: 'light' | 'dark' }): Promise<{ id: string }>
   ptyInput(id: string, data: string): Promise<void>
   ptyResize(id: string, cols: number, rows: number): Promise<void>
   ptyKill(id: string): Promise<void>

@@ -2,7 +2,7 @@
 import { spawn as spawnPty, type IPty } from 'node-pty'
 import { resolveShell } from './ptyHelpers'
 
-export interface PtyCreateOpts { cwd?: string; cols?: number; rows?: number }
+export interface PtyCreateOpts { cwd?: string; cols?: number; rows?: number; theme?: 'light' | 'dark' }
 
 /** 主进程 PTY 管理:开/写/resize/杀,数据与退出经构造回调转发给渲染。 */
 export class PtyManager {
@@ -23,7 +23,7 @@ export class PtyManager {
     // 关掉 macOS Apple Terminal 的会话保存/恢复:dev 时从启动终端继承的
     // TERM_PROGRAM=Apple_Terminal 会让子 zsh source /etc/zshrc_Apple_Terminal,
     // 打印 "Restored session: <date>" 噪声。SHELL_SESSIONS_DISABLE=1 是官方 opt-out。
-    const env = { ...this.env, SHELL_SESSIONS_DISABLE: '1' } as { [key: string]: string }
+    const env = { ...this.env, SHELL_SESSIONS_DISABLE: '1', WRAITH_TERM_THEME: opts.theme ?? 'dark' } as { [key: string]: string }
     const p = spawnPty(shell, [], {
       // xterm-256color:与真终端一致、也是 xterm.js 模拟的类型。旧的 xterm-color 会让
       // JLine 等按受限 terminfo 发横线序列,xterm.js 认不出而显示成一排 q。

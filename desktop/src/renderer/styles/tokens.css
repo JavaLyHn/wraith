@@ -147,11 +147,11 @@ body {
   font-weight: 600;
 }
 
-/* xterm IME 组字层:默认是突兀的黑底白字。终端固定深色,故这里用与终端一致的深色底 + 浅字,
-   仅用 accent 下划线示意正在输入,与终端背景融合。xterm.css 按组件导入、同优先级会覆盖,故 !important。 */
+/* xterm IME 组字层:默认是突兀的黑底白字。随主题的淡色输入,
+   仅用 accent 下划线示意正在输入。xterm.css 按组件导入、同优先级会覆盖,故 !important。 */
 .xterm .composition-view {
-  background: #12161c !important;
-  color: #e6edf3 !important;
+  background: var(--bg-elevated) !important;
+  color: var(--fg) !important;
   border-bottom: 1px solid var(--accent);
   padding: 0 1px;
 }

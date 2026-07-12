@@ -993,7 +993,7 @@ ipcMain.handle('wraith:checkUpdate', async (_e, beta: boolean) => {
 ipcMain.handle('wraith:openExternal', (_e, url: string) => { void shell.openExternal(url) })
 ipcMain.handle('wraith:openPath', (_e, p: string) => shell.openPath(p))
 
-ipcMain.handle('wraith:ptyCreate', (_e, opts?: { cwd?: string; cols?: number; rows?: number }) => ptyManager?.create(opts ?? {}) ?? { id: '' })
+ipcMain.handle('wraith:ptyCreate', (_e, opts?: { cwd?: string; cols?: number; rows?: number; theme?: 'light' | 'dark' }) => ptyManager?.create(opts ?? {}) ?? { id: '' })
 ipcMain.handle('wraith:ptyInput', (_e, id: string, data: string) => { ptyManager?.write(id, data) })
 ipcMain.handle('wraith:ptyResize', (_e, id: string, cols: number, rows: number) => { ptyManager?.resize(id, cols, rows) })
 ipcMain.handle('wraith:ptyKill', (_e, id: string) => { ptyManager?.kill(id) })
