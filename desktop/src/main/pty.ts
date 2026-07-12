@@ -25,7 +25,9 @@ export class PtyManager {
     // 打印 "Restored session: <date>" 噪声。SHELL_SESSIONS_DISABLE=1 是官方 opt-out。
     const env = { ...this.env, SHELL_SESSIONS_DISABLE: '1' } as { [key: string]: string }
     const p = spawnPty(shell, [], {
-      name: 'xterm-color',
+      // xterm-256color:与真终端一致、也是 xterm.js 模拟的类型。旧的 xterm-color 会让
+      // JLine 等按受限 terminfo 发横线序列,xterm.js 认不出而显示成一排 q。
+      name: 'xterm-256color',
       cols: opts.cols ?? 80,
       rows: opts.rows ?? 24,
       cwd,
