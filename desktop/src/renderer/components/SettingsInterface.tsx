@@ -1,6 +1,6 @@
 import { useSettings } from '../settings/SettingsContext'
 import { ACCENTS } from '../settings/theme'
-import type { AccentKey, FontSize, FontFamily, ThemeMode } from '../settings/prefs'
+import type { AccentKey, FontSize, ThemeMode } from '../settings/prefs'
 
 const THEME_OPTS: { key: ThemeMode; label: string; prev: string }[] = [
   { key: 'system', label: '系统', prev: 'linear-gradient(90deg,#f7f8fa 50%,#0f1419 50%)' },
@@ -8,7 +8,6 @@ const THEME_OPTS: { key: ThemeMode; label: string; prev: string }[] = [
   { key: 'dark', label: '深色', prev: '#0f1419' },
 ]
 const SIZE_OPTS: { key: FontSize; label: string }[] = [{ key: 'sm', label: '小' }, { key: 'md', label: '中' }, { key: 'lg', label: '大' }]
-const FAMILY_OPTS: { key: FontFamily; label: string }[] = [{ key: 'system', label: '系统' }, { key: 'sans', label: '无衬线' }, { key: 'mono', label: '等宽' }]
 
 export default function SettingsInterface(): JSX.Element {
   const { prefs, setUi } = useSettings()
@@ -51,16 +50,6 @@ export default function SettingsInterface(): JSX.Element {
           {SIZE_OPTS.map((s) => (
             <button key={s.key} data-testid={`size-${s.key}`} onClick={() => setUi({ fontSize: s.key })}
               className={segItem(ui.fontSize === s.key) + ' border-r border-border last:border-r-0'}>{s.label}</button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <div className={lbl}>字体</div>
-        <div className={seg}>
-          {FAMILY_OPTS.map((f) => (
-            <button key={f.key} data-testid={`family-${f.key}`} onClick={() => setUi({ fontFamily: f.key })}
-              className={segItem(ui.fontFamily === f.key) + ' border-r border-border last:border-r-0'}>{f.label}</button>
           ))}
         </div>
       </div>
