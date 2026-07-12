@@ -23,7 +23,7 @@ public final class IntroAnimation {
     }
 
     private static final String ESC = String.valueOf((char) 27);
-    private static final String WHITE = ESC + "[1;97m";
+    private static final String WHITE = ESC + "[1m";
     private static final String RESET = ESC + "[0m";
     private static final String HIDE_CURSOR = ESC + "[?25l";
     private static final String SHOW_CURSOR = ESC + "[?25h";

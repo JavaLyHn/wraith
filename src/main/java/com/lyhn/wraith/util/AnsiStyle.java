@@ -14,7 +14,8 @@ public final class AnsiStyle {
     private static final String RED = "\u001B[31m";
     private static final String GRAY = "\u001B[90m";
     private static final String PURPLE = "\u001B[38;5;141m";
-    private static final String BG_PANEL = "\u001B[48;5;236m";
+    private static final boolean LIGHT_TERM = "light".equalsIgnoreCase(System.getenv("WRAITH_TERM_THEME"));
+    private static final String BG_PANEL = LIGHT_TERM ? "\u001B[48;5;253m" : "\u001B[48;5;236m";
     private static final boolean ENABLED = determineEnabled();
 
     private AnsiStyle() {
@@ -29,7 +30,7 @@ public final class AnsiStyle {
     }
 
     public static String wordmark(String text) {
-        return wrap(BOLD + (char) 27 + "[97m", text);
+        return wrap(BOLD, text);
     }
 
     public static String answerMarker() {
