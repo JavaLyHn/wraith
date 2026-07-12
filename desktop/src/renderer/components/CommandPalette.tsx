@@ -42,7 +42,7 @@ export default function CommandPalette(
   if (!open) return null
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
-    if (e.key === 'Escape') { onClose() }
+    if (e.key === 'Escape') { e.stopPropagation(); onClose() }   // 阻止冒泡到 app 级 Esc(避免连带中断运行中的对话)
     else if (e.key === 'ArrowDown') { e.preventDefault(); setActive(i => Math.min(flat.length - 1, i + 1)) }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(i => Math.max(0, i - 1)) }
     else if (e.key === 'Enter') { e.preventDefault(); const it = flat[active]; if (it) run(it) }
