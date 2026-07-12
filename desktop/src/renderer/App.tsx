@@ -964,7 +964,7 @@ export default function App(): JSX.Element {
             return (
               <>
                 {/* 顶部工具条:终端开关常驻(新对话页也在);压缩/导出仅活跃对话显示 */}
-                <div className="flex shrink-0 items-center justify-end gap-2 border-b border-border px-4 py-1.5">
+                <div className="flex shrink-0 items-center justify-end gap-2 px-4 py-1.5">
                   {!pv.showWelcome && compactNotice && (
                     <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
                   )}
