@@ -23,19 +23,25 @@ export function buildSplashHtml(logoDataUri: string): string {
   .logo img{width:148px;height:148px;display:block;
     filter:drop-shadow(0 0 26px rgba(150,195,255,.50));
     animation:glowPulse 2.6s ease-in-out 900ms infinite}
-  /* 渐变光泽:以 logo 为 mask,一条明亮渐变光带斜扫过 logo 一次(闪一下) */
-  .shine{position:absolute;inset:0;pointer-events:none;
+  /* 渐变光泽:以 logo 为 mask,一条明亮渐变光带斜扫过 logo 一次(闪一下)。
+     一次性 glint:淡入→斜扫→淡出到全透明,收尾 opacity=0,不留残带。 */
+  .shine{position:absolute;inset:0;pointer-events:none;opacity:0;
     -webkit-mask:url(${logoDataUri}) center/contain no-repeat;
     mask:url(${logoDataUri}) center/contain no-repeat;
-    background:linear-gradient(115deg,transparent 34%,rgba(255,255,255,.85) 47%,rgba(175,215,255,.95) 53%,transparent 66%);
-    background-size:260% 100%;background-position:165% 0;
-    animation:shine 900ms cubic-bezier(.4,0,.2,1) 500ms both}
+    background:linear-gradient(115deg,transparent 42%,rgba(255,255,255,.9) 49%,rgba(180,220,255,.95) 51%,transparent 58%);
+    background-size:250% 100%;
+    animation:shine 1050ms cubic-bezier(.4,0,.2,1) 550ms both}
   body.dismiss .wrap{animation:ghostOut 550ms ease-in both}
   body.dismiss .logo img{animation:none}
+  body.dismiss .shine{animation:none;opacity:0}
   @keyframes ghostIn{from{opacity:0;transform:translateY(12px) scale(.98)}to{opacity:1;transform:none}}
   @keyframes ghostOut{from{opacity:1;transform:none}to{opacity:0;transform:scale(1.06)}}
   @keyframes glowPulse{0%,100%{filter:drop-shadow(0 0 18px rgba(150,195,255,.40))}50%{filter:drop-shadow(0 0 30px rgba(150,195,255,.70))}}
-  @keyframes shine{from{background-position:165% 0}to{background-position:-70% 0}}
+  @keyframes shine{
+    0%{background-position:150% 0;opacity:0}
+    12%{opacity:1}
+    88%{opacity:1}
+    100%{background-position:-60% 0;opacity:0}}
   @media (prefers-reduced-motion: reduce){
     .wrap{animation:fadeIn 500ms ease both}
     .logo img{animation:none}
