@@ -247,7 +247,7 @@ export default function Sidebar({
               data-testid="sidebar-collapse"
               onClick={onToggleCollapsed}
               title="折叠侧栏"
-              className="mr-2 shrink-0 rounded-lg p-1.5 text-fg-muted hover:bg-surface/60 hover:text-fg"
+              className="mr-2 shrink-0 rounded-lg p-1.5 text-fg-muted hover:bg-surface/60 hover:text-fg transition-colors"
             >
               <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
             </button>

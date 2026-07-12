@@ -165,7 +165,9 @@ export default function App(): JSX.Element {
   const [pendingMode, setPendingMode] = useState<RunMode>('react')
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [rightDockOpen, setRightDockOpen] = useState(false)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => localStorage.getItem('wraith.sidebar.collapsed') === '1')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem('wraith.sidebar.collapsed') === '1' } catch { return false }
+  })
   const [sidebarPeek, setSidebarPeek] = useState(false)
   const startedRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
@@ -179,7 +181,7 @@ export default function App(): JSX.Element {
 
   // 折叠状态持久化
   useEffect(() => {
-    localStorage.setItem('wraith.sidebar.collapsed', sidebarCollapsed ? '1' : '0')
+    try { localStorage.setItem('wraith.sidebar.collapsed', sidebarCollapsed ? '1' : '0') } catch { /* localStorage 不可用:忽略 */ }
   }, [sidebarCollapsed])
 
   // 预览覆盖态:running 时只读显示另一会话或空白新会话页
@@ -823,7 +825,7 @@ export default function App(): JSX.Element {
           data-testid="sidebar-expand"
           onClick={() => setSidebarCollapsed(false)}
           title="展开侧栏"
-          className="fixed left-2 top-2 z-40 rounded-lg bg-surface/80 p-1.5 text-fg-muted shadow backdrop-blur hover:bg-surface hover:text-fg"
+          className="fixed left-2 top-2 z-40 rounded-lg bg-surface/80 p-1.5 text-fg-muted shadow backdrop-blur hover:bg-surface hover:text-fg transition-colors"
         >
           <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
         </button>
