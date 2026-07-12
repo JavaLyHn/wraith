@@ -26,6 +26,7 @@ import {
 } from '../shared/transcriptReducer'
 import { messagesToItems } from '../shared/messagesToItems'
 import { spliceCards } from '../shared/spliceCards'
+import { EXAMPLE_PROMPTS, pickExamplePrompts } from './lib/welcomePrompts'
 import { lastUserMessage } from './lib/resend'
 import { sessionDisplayName } from './lib/sessionView'
 import { pendingModeAfterSubmit } from './lib/nextPendingMode'
@@ -165,6 +166,7 @@ export default function App(): JSX.Element {
   const { prefs: appPrefs } = useSettings()
   const [updateNotice, setUpdateNotice] = useState<{ latest: string; url: string } | null>(null)
   const [pendingMode, setPendingMode] = useState<RunMode>('react')
+  const [examplePrompts] = useState(() => pickExamplePrompts(EXAMPLE_PROMPTS, 4))
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [rightDockOpen, setRightDockOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -468,8 +470,8 @@ export default function App(): JSX.Element {
   }, [])
 
   // ── input submit ──────────────────────────────────────────────────────────
-  const handleSubmit = useCallback(async () => {
-    const text = inputValue.trim()
+  const handleSubmit = useCallback(async (override?: string) => {
+    const text = (override ?? inputValue).trim()
     if (!text || state.turn === 'running') return
     // 发送前预检:确定不支持图片的模型 + 带图 → 就地拦下报错,保留输入与附件供切模型后重发
     if (attachments.some(a => a.kind === 'image') && shouldBlockImageSend(state.model)) {
@@ -1032,7 +1034,7 @@ export default function App(): JSX.Element {
                   </>
                 ) : (
                   <div className="min-h-0 flex-1">
-                    <WelcomeEmptyState>{composer}</WelcomeEmptyState>
+                    <WelcomeEmptyState examples={examplePrompts} onPickExample={(t) => void handleSubmit(t)}>{composer}</WelcomeEmptyState>
                   </div>
                 )}
                 {/* 终端抽屉:最底部(Composer 下方),常驻挂载,由 open 控制丝滑展开/收起 */}
