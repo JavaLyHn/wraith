@@ -819,13 +819,15 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg text-fg">
-      {sidebarCollapsed && (
+      {/* 折叠态展开按钮:仅聊天视图(顶栏右对齐、左上角空);工具视图有各自的「← 返回对话」头部,
+          浮动按钮会与之碰撞,故不显示——那里靠左缘悬停划出(peek)或「返回对话」即可展开/离开。 */}
+      {sidebarCollapsed && view === 'chat' && (
         <button
           type="button"
           data-testid="sidebar-expand"
           onClick={() => setSidebarCollapsed(false)}
           title="展开侧栏"
-          className="fixed left-2 top-2 z-40 rounded-lg bg-surface/80 p-1.5 text-fg-muted shadow backdrop-blur hover:bg-surface hover:text-fg transition-colors"
+          className="fixed left-3 top-2 z-40 rounded-lg p-1.5 text-fg-muted hover:bg-surface hover:text-fg transition-colors"
         >
           <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
         </button>
