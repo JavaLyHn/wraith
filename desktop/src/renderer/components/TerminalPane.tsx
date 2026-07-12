@@ -14,7 +14,7 @@ export default function TerminalPane(
 
   const addNew = useCallback(async () => {
     try {
-      const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light'
+      const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark'   // 异常值 fail-dark,与 CLI 缺省一致
       const { id } = await window.wraith.ptyCreate({ cwd: cwd ?? undefined, theme })
       if (!id) return
       setState(s => addTab(s, { id, label: shortTabLabel(cwd ?? '', s.tabs.length) }))
