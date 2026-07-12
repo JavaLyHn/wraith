@@ -27,7 +27,7 @@ export default function BrowserPanel({ onBack }: { onBack: () => void }): JSX.El
         </span>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 panel-content">
         <div className="mb-3 rounded-lg border border-border bg-surface/40 px-3 py-2 text-3xs leading-relaxed text-fg-subtle">
           管理 agent 用哪个浏览器:<b className="text-fg-muted">隔离</b>(无痕、无登录态)↔ <b className="text-fg-muted">共享</b>(接管本机已登录 Chrome,可访问需登录页面)。
           <div className="mt-1">前置:① 本机 Chrome 以 <code className="text-fg">--remote-debugging-port=9222</code> 启动;② 「MCP」面板里配置了 <code className="text-fg">chrome-devtools</code>(npx 自动装)。未满足时连接会提示未配置。</div>

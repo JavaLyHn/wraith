@@ -98,7 +98,7 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
       {error && <div className="shrink-0 px-4 py-2 text-xs text-danger">{error}</div>}
       {notice && <div className="shrink-0 px-4 py-2 text-xs text-fg">{notice}</div>}
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4 panel-content">
         {/* 1. Embedding 后端 */}
         <div className={sectionHead}><Database className="h-3.5 w-3.5" strokeWidth={1.5} />Embedding 后端</div>
         <div className="mb-5 grid grid-cols-2 gap-2">

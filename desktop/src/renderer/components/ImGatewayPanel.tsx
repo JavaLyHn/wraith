@@ -244,7 +244,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         <span className="text-xs text-fg-subtle">对话式 IM 接入</span>
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 panel-content">
         {/* 接入平台:QQ 可用,其余参照 hermes 平台清单标「即将支持」占位 */}
         <section>
           <div className="mb-2 text-xs font-bold text-fg">接入平台</div>

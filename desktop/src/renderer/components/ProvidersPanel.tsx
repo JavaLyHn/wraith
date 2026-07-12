@@ -129,7 +129,7 @@ export default function ProvidersPanel({ onBack }: { onBack: () => void }): JSX.
         <input data-testid="providers-search" value={q} onChange={e => setQ(e.target.value)} placeholder="搜索 provider…"
           className="flex-1 rounded-lg border border-border bg-bg px-3 py-1.5 text-xs outline-none focus:border-accent" />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto panel-content">
         {doneRows.length > 0 && <><div className="mt-2 px-2 text-3xs uppercase tracking-wider text-fg-subtle">已配置</div>{doneRows.map(renderDoneRow)}</>}
         {normalCatalog.length > 0 && <><div className="mt-3 px-2 text-3xs uppercase tracking-wider text-fg-subtle">普通 API</div>{normalCatalog.map(renderCatalogRow)}</>}
         {codingCatalog.length > 0 && <><div className="mt-3 px-2 text-3xs uppercase tracking-wider text-fg-subtle">Coding Plan</div>{codingCatalog.map(renderCatalogRow)}</>}

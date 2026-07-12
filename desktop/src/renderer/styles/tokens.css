@@ -156,3 +156,6 @@ body {
   border-bottom: 1px solid var(--accent);
   padding: 0 1px;
 }
+
+/* 工具面板内容区:宽视口下舒适定宽居中(头部仍全宽)。改宽度只改此处。 */
+.panel-content { width: 100%; max-width: 1040px; margin-inline: auto; }

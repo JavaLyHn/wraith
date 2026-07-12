@@ -57,7 +57,7 @@ export default function PolicyPanel({ onBack }: { onBack: () => void }): JSX.Ele
 
       {error && <div className="shrink-0 px-4 py-2 text-xs text-danger">出错:{error}</div>}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 panel-content">
         {/* 策略状态 */}
         <div className="mb-2 text-3xs uppercase tracking-wider text-fg-subtle">策略</div>
         <div className="mb-2 flex flex-col gap-2">

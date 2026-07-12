@@ -106,7 +106,7 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
 
       {error && <div className="shrink-0 px-4 py-2 text-xs text-danger">出错:{error}</div>}
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 panel-content">
         {busy && entries.length === 0 ? (
           <div className="text-xs text-fg-subtle">加载中…</div>
         ) : entries.length === 0 ? (
