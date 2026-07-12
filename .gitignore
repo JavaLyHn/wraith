@@ -34,5 +34,8 @@ desktop/playwright-report/
 desktop/test-results/
 desktop/release/
 
+# 测试运行器产物(根目录,与 desktop/test-results/ 同类)
+test-results/
+
 # Workflow scratch (SDD reports, planning artifacts — stay on disk, not in git)
 .superpowers/
