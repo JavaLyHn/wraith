@@ -6,13 +6,12 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import {
-  Plus, Search, X, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
+  Plus, Search, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
   Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown,
   Shield, ShieldAlert, ShieldCheck, ListTodo, PanelLeft,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
 import Logo from './Logo'
-import { filterSidebar } from '../lib/sidebarSearch'
 import { sessionDisplayName, partitionStarred, groupSessionsByTime } from '../lib/sessionView'
 import type { SessionMeta, ProjectView } from '../../shared/types'
 
@@ -130,6 +129,8 @@ interface SidebarProps {
   automationBadge: boolean
   /** 展开态点击折叠、浮层态点击展开(翻转折叠)。传入才渲染折叠按钮。 */
   onToggleCollapsed?: () => void
+  /** 打开命令面板(搜索)。 */
+  onOpenSearch: () => void
 }
 
 export default function Sidebar({
@@ -165,9 +166,8 @@ export default function Sidebar({
   onOpenSettings,
   automationBadge,
   onToggleCollapsed,
+  onOpenSearch,
 }: SidebarProps): JSX.Element {
-  const [searchActive, setSearchActive] = useState(false)
-  const [searchQuery, setSearchQuery] = useState('')
   const [toolsExpanded, setToolsExpanded] = useState(false)
   // 进入某工具页时强制展开(高亮可见);否则由用户折叠状态决定
   const showTools = toolsExpanded || activeNav !== null
@@ -180,53 +180,10 @@ export default function Sidebar({
     try { localStorage.setItem('wraith.sidebar.sessionGroupMode', next) } catch { /* ignore */ }
     return next
   })
-  const inputRef = useRef<HTMLInputElement>(null)
-  const asideRef = useRef<HTMLElement>(null)
-
-  useEffect(() => {
-    if (searchActive) {
-      inputRef.current?.focus()
-    }
-  }, [searchActive])
-
-  // 搜索激活时:点击侧栏之外(正文/编辑区等)即收起搜索、恢复原状。
-  // 用 mousedown + 「在 aside 之内不关」避免与「点搜索结果」竞态(结果在 aside 内)。
-  useEffect(() => {
-    if (!searchActive) return
-    const onDown = (e: MouseEvent): void => {
-      if (asideRef.current && !asideRef.current.contains(e.target as Node)) {
-        setSearchQuery('')
-        setSearchActive(false)
-      }
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [searchActive])
-
-  const handleSearchActivate = () => {
-    setSearchActive(true)
-  }
-
-  const handleSearchClear = () => {
-    setSearchQuery('')
-    setSearchActive(false)
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Escape') {
-      handleSearchClear()
-    }
-  }
-
-  const sessionItems = sessions.map(s => ({ id: s.id, title: s.title }))
-  const filtered = searchActive
-    ? filterSidebar(sessionItems, projects, searchQuery)
-    : { sessions: sessionItems, projects }
 
   return (
     <TooltipProvider delayDuration={200}>
       <aside
-        ref={asideRef}
         data-testid="sidebar"
         className="sidebar-gradient flex h-full w-60 flex-col border-r border-border"
       >
@@ -277,36 +234,14 @@ export default function Sidebar({
 
         {/* nav */}
         <nav className="mt-3 flex flex-col gap-0.5 px-3">
-          {/* search — 非激活态显示放大镜按钮;激活态显示输入框 */}
-          {!searchActive ? (
-            <button
-              data-testid="nav-search"
-              onClick={handleSearchActivate}
-              className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60"
-            >
-              <span className="flex items-center gap-2"><Search className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />搜索</span>
-            </button>
-          ) : (
-            <div className="flex items-center gap-1 rounded-lg border border-border bg-surface/60 px-2 py-1">
-              <input
-                ref={inputRef}
-                data-testid="sidebar-search"
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="搜索会话"
-                className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-subtle"
-              />
-              <button
-                data-testid="sidebar-search-clear"
-                onClick={handleSearchClear}
-                className="shrink-0 text-fg-muted hover:text-fg"
-              >
-                <X className="h-3.5 w-3.5" strokeWidth={1.5} />
-              </button>
-            </div>
-          )}
+          {/* search — 点击打开命令面板 */}
+          <button
+            data-testid="nav-search"
+            onClick={onOpenSearch}
+            className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60"
+          >
+            <span className="flex items-center gap-2"><Search className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />搜索</span>
+          </button>
 
           {/* 工具组(可折叠;进入工具页自动展开)*/}
           <button
@@ -442,100 +377,66 @@ export default function Sidebar({
 
         {/* conversations list */}
         <div className="flex-1 overflow-y-auto">
-          {searchActive ? (
-            /* 激活态:仅会话(项目切换在顶部,不再重复列) */
-            <>
-              {/* 对话分区(与非搜索态一致,避免点搜索后标题从「对话」跳成「会话」) */}
-              <div className="mt-4 px-3 text-3xs uppercase tracking-wider text-fg-subtle">对话</div>
-              <div className="px-3">
-                {filtered.sessions.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-fg-subtle">无匹配</div>
-                ) : (
-                  filtered.sessions.map(s => (
-                    <button
-                      key={s.id}
-                      data-testid="conversation-item"
-                      onClick={() => { onSelectSession(s.id); handleSearchClear() }}
-                      className={
-                        'mb-0.5 flex w-full items-center gap-1 truncate rounded-lg px-3 py-2 text-left text-xs ' +
-                        (s.id === activeSessionId ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')
-                      }
-                      title={s.title}
-                    >
-                      {s.id === runningSessionId && (
-                        <span data-testid="session-running-dot" className="relative flex h-2 w-2 shrink-0" title="运行中">
-                          <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-accent opacity-75 motion-reduce:hidden" />
-                          <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
-                        </span>
-                      )}
-                      <span className="truncate">{s.title || '(未命名)'}</span>
-                    </button>
-                  ))
-                )}
-              </div>
-            </>
-          ) : (
-            /* 非激活态:⭐重点分区 + 对话分区 */
-            <>
-              {newDraftActive && (
-                <button
-                  type="button"
-                  data-testid="session-draft"
-                  onClick={onNewConversation}
-                  title="当前新对话(发送消息后自动保存到列表)"
-                  className="mt-2 flex w-full items-center gap-2 rounded-lg bg-surface px-3 py-1.5 text-left text-xs text-fg"
-                >
-                  <span className="truncate">新对话</span>
-                  <span className="ml-auto shrink-0 text-3xs text-fg-subtle">草稿</span>
-                </button>
-              )}
-              {(() => {
-                const { starred, rest } = partitionStarred(sessions)
-                const renderRows = (list: SessionMeta[]): JSX.Element[] => list.map(s => (
-                  <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
-                    running={s.id === runningSessionId}
-                    onSelect={onSelectSession} onToggleStar={onToggleStar}
-                    onRename={onRenameSession} onDelete={onDeleteSession} />
-                ))
-                // sticky 表头:滚动时标题不动,内容从下方滑过(半透明 + 模糊)
-                const headerCls = 'sticky top-0 z-20 mt-4 bg-bg/90 px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
-                const groupLabelCls = 'sticky top-7 z-10 bg-bg/90 px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
-                return (
-                  <>
-                    {sessions.length === 0 && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
-                    {starred.length > 0 && <>
-                      <div className={headerCls + ' flex items-center gap-1'}><Star className="h-3 w-3 shrink-0" strokeWidth={1.5} />重点</div>
-                      <div className="px-2">{renderRows(starred)}</div>
-                    </>}
-                    {rest.length > 0 && <>
-                      <div className={headerCls + ' flex items-center'}>
-                        <span>对话</span>
-                        <button
-                          data-testid="session-group-toggle"
-                          onClick={toggleGroupMode}
-                          title={groupMode === 'time' ? '切换为最新平铺' : '切换为按时间分组'}
-                          aria-label={groupMode === 'time' ? '切换为最新平铺' : '切换为按时间分组'}
-                          className="ml-auto rounded px-1 text-xs leading-none text-fg-muted transition-colors hover:text-accent"
-                        >
-                          {groupMode === 'time'
-                            ? <ListTree className="h-3 w-3" strokeWidth={1.5} />
-                            : <List className="h-3 w-3" strokeWidth={1.5} />}
-                        </button>
-                      </div>
-                      {groupMode === 'time'
-                        ? groupSessionsByTime(rest, Date.now()).map(g => (
-                          <div key={g.label}>
-                            <div className={groupLabelCls}>{g.label}</div>
-                            <div className="px-2">{renderRows(g.sessions)}</div>
-                          </div>
-                        ))
-                        : <div className="px-2">{renderRows(rest)}</div>}
-                    </>}
-                  </>
-                )
-              })()}
-            </>
-          )}
+          {/* ⭐重点分区 + 对话分区 */}
+          <>
+            {newDraftActive && (
+              <button
+                type="button"
+                data-testid="session-draft"
+                onClick={onNewConversation}
+                title="当前新对话(发送消息后自动保存到列表)"
+                className="mt-2 flex w-full items-center gap-2 rounded-lg bg-surface px-3 py-1.5 text-left text-xs text-fg"
+              >
+                <span className="truncate">新对话</span>
+                <span className="ml-auto shrink-0 text-3xs text-fg-subtle">草稿</span>
+              </button>
+            )}
+            {(() => {
+              const { starred, rest } = partitionStarred(sessions)
+              const renderRows = (list: SessionMeta[]): JSX.Element[] => list.map(s => (
+                <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
+                  running={s.id === runningSessionId}
+                  onSelect={onSelectSession} onToggleStar={onToggleStar}
+                  onRename={onRenameSession} onDelete={onDeleteSession} />
+              ))
+              // sticky 表头:滚动时标题不动,内容从下方滑过(半透明 + 模糊)
+              const headerCls = 'sticky top-0 z-20 mt-4 bg-bg/90 px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
+              const groupLabelCls = 'sticky top-7 z-10 bg-bg/90 px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
+              return (
+                <>
+                  {sessions.length === 0 && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
+                  {starred.length > 0 && <>
+                    <div className={headerCls + ' flex items-center gap-1'}><Star className="h-3 w-3 shrink-0" strokeWidth={1.5} />重点</div>
+                    <div className="px-2">{renderRows(starred)}</div>
+                  </>}
+                  {rest.length > 0 && <>
+                    <div className={headerCls + ' flex items-center'}>
+                      <span>对话</span>
+                      <button
+                        data-testid="session-group-toggle"
+                        onClick={toggleGroupMode}
+                        title={groupMode === 'time' ? '切换为最新平铺' : '切换为按时间分组'}
+                        aria-label={groupMode === 'time' ? '切换为最新平铺' : '切换为按时间分组'}
+                        className="ml-auto rounded px-1 text-xs leading-none text-fg-muted transition-colors hover:text-accent"
+                      >
+                        {groupMode === 'time'
+                          ? <ListTree className="h-3 w-3" strokeWidth={1.5} />
+                          : <List className="h-3 w-3" strokeWidth={1.5} />}
+                      </button>
+                    </div>
+                    {groupMode === 'time'
+                      ? groupSessionsByTime(rest, Date.now()).map(g => (
+                        <div key={g.label}>
+                          <div className={groupLabelCls}>{g.label}</div>
+                          <div className="px-2">{renderRows(g.sessions)}</div>
+                        </div>
+                      ))
+                      : <div className="px-2">{renderRows(rest)}</div>}
+                  </>}
+                </>
+              )
+            })()}
+          </>
         </div>
 
         {/* footer: sandbox badge */}

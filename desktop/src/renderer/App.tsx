@@ -1,4 +1,5 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
+import CommandPalette from './components/CommandPalette'
 import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode } from '../shared/types'
 import type { McpFormValue } from './components/McpServerForm'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
@@ -26,6 +27,7 @@ import {
 import { messagesToItems } from '../shared/messagesToItems'
 import { spliceCards } from '../shared/spliceCards'
 import { lastUserMessage } from './lib/resend'
+import { sessionDisplayName } from './lib/sessionView'
 import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
@@ -165,6 +167,7 @@ export default function App(): JSX.Element {
   const [pendingMode, setPendingMode] = useState<RunMode>('react')
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [rightDockOpen, setRightDockOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('wraith.sidebar.collapsed') === '1' } catch { return false }
   })
@@ -574,6 +577,18 @@ export default function App(): JSX.Element {
     return () => window.removeEventListener('keydown', onKey)
   }, [state.turn, state.pendingApproval, automationApproval])
 
+  // ── 全局真快捷键:⌘K 开/关命令面板、⌘N 新对话、⌘, 设置 ────────────────────
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (!e.metaKey) return
+      if (e.key === 'k') { e.preventDefault(); setPaletteOpen(v => !v) }
+      else if (e.key === 'n') { e.preventDefault(); void handleNewConversation() }
+      else if (e.key === ',') { e.preventDefault(); setView('settings') }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [handleNewConversation])
+
   // ── 消息编辑/重发/删除(真回溯:后端裁剪 → 本地裁剪 → 重发) ─────────────────
   const rewindAndResubmit = useCallback(
     async (ordinal: number, text: string) => {
@@ -866,6 +881,7 @@ export default function App(): JSX.Element {
           onOpenSettings={() => setView('settings')}
           automationBadge={automationBadge}
           onToggleCollapsed={() => setSidebarCollapsed(v => !v)}
+          onOpenSearch={() => setPaletteOpen(true)}
         />
       </SidebarDock>
 
@@ -1061,6 +1077,21 @@ export default function App(): JSX.Element {
           onReject={handleAutomationApprovalReject}
         />
       )}
+
+      {/* 命令面板:⌘K 开/关,覆盖最顶层 */}
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        sessions={sessions.map(s => ({ id: s.id, title: sessionDisplayName(s) }))}
+        projects={projects}
+        actions={{
+          selectSession: handleSelectSession,
+          activateProject: switchToProject,
+          newConversation: handleNewConversation,
+          openSettings: () => setView('settings'),
+          openView: (v) => setView(v as typeof view),
+        }}
+      />
     </div>
   )
 }
