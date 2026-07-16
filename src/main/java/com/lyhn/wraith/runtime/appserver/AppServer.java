@@ -931,6 +931,39 @@ public final class AppServer {
                     writer.error(msg.id(), -32000, "写入 approval 请求失败: " + e.getMessage());
                 }
             }
+            case "automations.qqPending" -> {
+                // 直读快照:store 原子写(tmp→ATOMIC_MOVE)保证跨进程读到完整旧/新文件;
+                // 写操作(删/清)必须经 RequestInbox 由 daemon 在其实例锁内执行。
+                java.nio.file.Path wraithDir = automationRequestsDir().getParent();
+                com.lyhn.wraith.automation.delivery.QqPendingStore qp =
+                        new com.lyhn.wraith.automation.delivery.QqPendingStore(wraithDir);
+                List<Map<String, Object>> items = new ArrayList<>();
+                for (com.lyhn.wraith.automation.delivery.QqPendingStore.Pending pd : qp.snapshot()) {
+                    Map<String, Object> m = new java.util.LinkedHashMap<>();
+                    if (pd.id != null) m.put("id", pd.id);
+                    m.put("taskName", pd.taskName == null ? "" : pd.taskName);
+                    String ans = pd.answer == null ? "" : pd.answer;
+                    m.put("answerPreview", ans.length() > 120 ? ans.substring(0, 120) + "…" : ans);
+                    m.put("ts", pd.ts);
+                    m.put("kind", pd.approvalId != null ? "approval" : "result");
+                    if (pd.approvalId != null) m.put("approvalId", pd.approvalId);
+                    items.add(m);
+                }
+                writer.result(msg.id(), Map.of("items", items, "count", items.size()));
+            }
+            case "automations.qqPendingClear" -> {
+                JsonNode p = msg.params();
+                String pendingId = textParam(p, "id"); // null → daemon 侧 clearResults
+                try {
+                    com.lyhn.wraith.automation.RequestInbox inbox =
+                            new com.lyhn.wraith.automation.RequestInbox(automationRequestsDir());
+                    inbox.write(new com.lyhn.wraith.automation.RequestInbox.Request(
+                            "qq-pending-clear", pendingId, null));
+                    ok(msg);
+                } catch (java.io.IOException e) {
+                    writer.error(msg.id(), -32000, "写入 qq-pending-clear 请求失败: " + e.getMessage());
+                }
+            }
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));
                 return false;
