@@ -33,7 +33,7 @@ import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { compactionNotice } from './lib/compactView'
-import { Download, PanelLeft, PanelRight, SquareTerminal, Wand2 } from 'lucide-react'
+import { Download, PanelRight, SquareTerminal, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -48,6 +48,7 @@ import { selectAction, resolveOnIdle, deriveView, type Preview } from '../shared
 import PluginsPanel from './components/PluginsPanel'
 import AutomationsPanel from './components/AutomationsPanel'
 import ImGatewayPanel from './components/ImGatewayPanel'
+import TopBar from './components/TopBar'
 import ProvidersPanel from './components/ProvidersPanel'
 import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
@@ -836,20 +837,9 @@ export default function App(): JSX.Element {
   }, [pv.items, state.model, state.workspace])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-bg text-fg">
-      {/* 折叠态展开按钮:仅聊天视图(顶栏右对齐、左上角空);工具视图有各自的「← 返回对话」头部,
-          浮动按钮会与之碰撞,故不显示——那里靠左缘悬停划出(peek)或「返回对话」即可展开/离开。 */}
-      {sidebarCollapsed && view === 'chat' && (
-        <button
-          type="button"
-          data-testid="sidebar-expand"
-          onClick={() => setSidebarCollapsed(false)}
-          title="展开侧栏"
-          className="fixed left-3 top-2 z-40 rounded-lg p-1.5 text-fg-muted hover:bg-surface hover:text-fg transition-colors"
-        >
-          <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
-        </button>
-      )}
+    <div className="flex h-screen flex-col overflow-hidden bg-bg text-fg">
+      <TopBar collapsed={sidebarCollapsed} onToggleCollapsed={() => setSidebarCollapsed(v => !v)} />
+      <div className="flex min-h-0 flex-1 overflow-hidden">
       <SidebarDock collapsed={sidebarCollapsed} peek={sidebarPeek} onPeekChange={setSidebarPeek}>
         <Sidebar
           workspace={state.workspace}
@@ -883,7 +873,6 @@ export default function App(): JSX.Element {
           onOpenRag={() => setView('rag')}
           onOpenSettings={() => setView('settings')}
           automationBadge={automationBadge}
-          onToggleCollapsed={() => setSidebarCollapsed(v => !v)}
           onOpenSearch={() => setPaletteOpen(true)}
         />
       </SidebarDock>
@@ -1047,6 +1036,7 @@ export default function App(): JSX.Element {
         )}
       </div>
       <RightDock open={rightDockOpen} cwd={state.workspace ?? null} onClose={() => setRightDockOpen(false)} />
+      </div>
       </div>
 
       {/* Approval modal（Task 8 换 shadcn Dialog；此处结构不变） */}

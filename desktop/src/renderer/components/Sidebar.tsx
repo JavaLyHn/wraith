@@ -8,7 +8,7 @@ import {
 import {
   Plus, Search, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
   Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown,
-  Shield, ShieldAlert, ShieldCheck, ListTodo, PanelLeft,
+  Shield, ShieldAlert, ShieldCheck, ListTodo,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
 import Logo from './Logo'
@@ -127,8 +127,6 @@ interface SidebarProps {
   onOpenRag: () => void
   onOpenSettings: () => void
   automationBadge: boolean
-  /** 展开态点击折叠、浮层态点击展开(翻转折叠)。传入才渲染折叠按钮。 */
-  onToggleCollapsed?: () => void
   /** 打开命令面板(搜索)。 */
   onOpenSearch: () => void
 }
@@ -165,7 +163,6 @@ export default function Sidebar({
   onOpenRag,
   onOpenSettings,
   automationBadge,
-  onToggleCollapsed,
   onOpenSearch,
 }: SidebarProps): JSX.Element {
   const [toolsExpanded, setToolsExpanded] = useState(false)
@@ -198,17 +195,6 @@ export default function Sidebar({
             <Logo className="h-7 w-7 object-contain" />
             <span className="text-sm font-bold tracking-wide text-fg">WRAITH</span>
           </button>
-          {onToggleCollapsed && (
-            <button
-              type="button"
-              data-testid="sidebar-collapse"
-              onClick={onToggleCollapsed}
-              title="折叠侧栏"
-              className="mr-2 shrink-0 rounded-lg p-1.5 text-fg-muted hover:bg-surface/60 hover:text-fg transition-colors"
-            >
-              <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
-            </button>
-          )}
         </div>
 
         <ProjectSwitcher
