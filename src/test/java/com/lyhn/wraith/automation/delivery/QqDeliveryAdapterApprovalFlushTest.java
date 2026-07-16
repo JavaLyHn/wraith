@@ -92,7 +92,7 @@ class QqDeliveryAdapterApprovalFlushTest {
 
         assertEquals(1, pendingStore.size(), "should have 1 item before flush");
 
-        adapter.flush("FRESH_MSG_ID");
+        assertEquals(1, adapter.flush("FRESH_MSG_ID"), "one approval delivered");
 
         // Should see a keyboard (msg_type=2) request
         RecordedRequest req = drainUntilMessages();
@@ -136,11 +136,9 @@ class QqDeliveryAdapterApprovalFlushTest {
 
         assertEquals(2, pendingStore.size());
 
-        String digest = adapter.flush("FRESH_MIXED");
+        int delivered = adapter.flush("FRESH_MIXED");
 
-        // digest should contain the plain item
-        assertNotNull(digest, "flush must return digest for plain items");
-        assertTrue(digest.contains("task-plain"), "digest must contain plain task: " + digest);
+        assertEquals(2, delivered, "1 approval + 1 plain delivered");
 
         // Collect all message requests
         RecordedRequest first = drainUntilMessages();
@@ -158,6 +156,10 @@ class QqDeliveryAdapterApprovalFlushTest {
 
         assertTrue(hasKeyboard, "one request must be a keyboard message");
         assertTrue(hasPlain, "one request must be a plain coalesced message");
+
+        // Verify task-plain content appears in the plain coalesced body
+        boolean plainBodyContainsTaskPlain = body1.contains("task-plain") || body2.contains("task-plain");
+        assertTrue(plainBodyContainsTaskPlain, "plain body must contain task-plain: body1=" + body1 + " body2=" + body2);
 
         assertEquals(0, pendingStore.size(), "pending should be fully drained");
     }
@@ -191,10 +193,10 @@ class QqDeliveryAdapterApprovalFlushTest {
         ap.approvalId = "run-fail#3";
         pendingStore.enqueue(ap);
 
-        String result = adapter.flush("FAIL_MSG_ID");
+        int delivered = adapter.flush("FAIL_MSG_ID");
 
-        // Plain items are empty so result is null; approval was re-enqueued
-        assertNull(result, "flush should return null when no plain items");
+        // Approval send failed so nothing delivered; approval was re-enqueued
+        assertEquals(0, delivered, "approval send failed, nothing delivered");
         assertEquals(1, pendingStore.size(), "failed approval item should be re-enqueued");
 
         QqPendingStore.Pending requeued = pendingStore.drainAll().get(0);
@@ -218,14 +220,14 @@ class QqDeliveryAdapterApprovalFlushTest {
         p2.taskName = "beta"; p2.answer = "Beta result"; p2.ts = System.currentTimeMillis();
         pendingStore.enqueue(p2);
 
-        String digest = adapter.flush("PLAIN_FLUSH_ID");
-        assertNotNull(digest, "plain flush must return digest");
-        assertTrue(digest.contains("alpha"), "digest must contain alpha");
-        assertTrue(digest.contains("beta"), "digest must contain beta");
+        int delivered = adapter.flush("PLAIN_FLUSH_ID");
+        assertEquals(2, delivered, "2 plain items delivered (coalesced)");
 
         RecordedRequest req = drainUntilMessages();
         assertNotNull(req, "exactly one coalesced message expected");
         String body = req.getBody().readUtf8();
+        // Verify alpha/beta content in the request body
+        assertTrue(body.contains("alpha") && body.contains("beta"), "body must contain both alpha and beta: " + body);
         // Plain coalesced message uses msg_type=0 (sendC2C)
         assertTrue(body.contains("\"msg_type\":0"), "plain message must use msg_type=0: " + body);
 

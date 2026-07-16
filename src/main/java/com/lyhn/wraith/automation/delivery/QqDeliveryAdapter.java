@@ -101,13 +101,12 @@ public final class QqDeliveryAdapter implements DeliveryAdapter {
      * and the method returns null. Never throws.
      *
      * @param freshMsgId the msg_id of the triggering inbound DM (passive reply token)
-     * @return the coalesced digest string (plain items), or {@code null} if nothing
-     *         was pending or all sends failed
+     * @return the number of pending items successfully delivered this flush (0 if nothing pending or all sends failed)
      */
-    public String flush(String freshMsgId) {
+    public int flush(String freshMsgId) {
         List<QqPendingStore.Pending> ps = pending.drainAll();
         if (ps.isEmpty()) {
-            return null;
+            return 0;
         }
 
         // Partition into plain deliveries and approval-pending items
@@ -121,6 +120,8 @@ public final class QqDeliveryAdapter implements DeliveryAdapter {
             }
         }
 
+        int delivered = 0;
+
         // Send each approval item as its own keyboard message
         for (QqPendingStore.Pending ap : approvals) {
             try {
@@ -128,6 +129,7 @@ public final class QqDeliveryAdapter implements DeliveryAdapter {
                         "⚠️ 定时任务需审批(点按钮同意/拒绝):",
                         freshMsgId,
                         QqApproval.keyboardJson(ap.approvalId));
+                delivered++;
             } catch (IOException e) {
                 // Re-enqueue on failure so it is retried on the next inbound DM
                 pending.enqueue(ap);
@@ -136,18 +138,18 @@ public final class QqDeliveryAdapter implements DeliveryAdapter {
         }
 
         // Coalesce and send plain delivery items
-        if (plain.isEmpty()) {
-            return null;
+        if (!plain.isEmpty()) {
+            String digest = coalesce(plain);
+            try {
+                api.sendC2C(ownerOpenid, digest, freshMsgId);
+                delivered += plain.size();
+            } catch (IOException e) {
+                for (QqPendingStore.Pending p : plain) pending.enqueue(p);
+                log.warn("QqDeliveryAdapter: flush 发送失败,已重新入队 {} 条待发", plain.size(), e);
+            }
         }
-        String digest = coalesce(plain);
-        try {
-            api.sendC2C(ownerOpenid, digest, freshMsgId);
-            return digest;
-        } catch (IOException e) {
-            for (QqPendingStore.Pending p : plain) pending.enqueue(p);
-            log.warn("QqDeliveryAdapter: flush 发送失败,已重新入队 {} 条待发", plain.size(), e);
-            return null;
-        }
+
+        return delivered;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

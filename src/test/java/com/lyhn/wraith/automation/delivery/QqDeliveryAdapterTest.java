@@ -169,12 +169,9 @@ class QqDeliveryAdapterTest {
         // No requests yet
         assertNull(server.takeRequest(100, TimeUnit.MILLISECONDS), "no requests before flush");
 
-        String digest = adapter.flush("FLUSH_MSG_ID");
+        int delivered = adapter.flush("FLUSH_MSG_ID");
 
-        assertNotNull(digest, "flush should return the digest string");
-        assertTrue(digest.contains("task-alpha"), "digest should contain task-alpha: " + digest);
-        assertTrue(digest.contains("task-beta"), "digest should contain task-beta: " + digest);
-        assertTrue(digest.contains("2"), "digest should mention 2 items: " + digest);
+        assertEquals(2, delivered, "flush should report 2 delivered (coalesced plain)");
 
         // Exactly ONE messages request (after the token request)
         RecordedRequest messagesReq = drainUntilMessages();
@@ -204,7 +201,7 @@ class QqDeliveryAdapterTest {
     // ─────────────────────────────────────────────────────────────────────────
 
     @Test
-    void flush_sendFailure_reEnqueuesItems_returnsNull() throws Exception {
+    void flush_sendFailure_reEnqueuesItems_returnsZero() throws Exception {
         // Token endpoint still 200s; messages endpoint returns 500 to simulate network error
         server.setDispatcher(new Dispatcher() {
             @Override
@@ -227,10 +224,10 @@ class QqDeliveryAdapterTest {
         adapter.deliver(target, makeTask("task-y"), makeResult("Result Y"));
         assertEquals(2, pendingStore.size(), "should have 2 pending before flush");
 
-        // flush should not throw, and should return null because send failed
-        String result = adapter.flush("FAIL_MSG_ID");
+        // flush should not throw, and should return 0 because send failed
+        int delivered = adapter.flush("FAIL_MSG_ID");
 
-        assertNull(result, "flush should return null when send fails");
+        assertEquals(0, delivered, "flush should report 0 delivered when send fails");
         assertEquals(2, pendingStore.size(), "pending items should be re-enqueued after send failure");
     }
 

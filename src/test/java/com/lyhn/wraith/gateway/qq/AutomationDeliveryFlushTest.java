@@ -230,9 +230,9 @@ class AutomationDeliveryFlushTest {
             if (authz.isAllowed(inbound.openid()) && !dedup.seen(inbound.msgId())) {
                 lastMsgId.put(inbound.openid(), inbound.msgId());
                 lastInboundAt.put(inbound.openid(), System.currentTimeMillis());
-                String result = qqDeliver.flush(inbound.msgId());
-                // flush 无待发返回 null
-                assertNull(result, "无待发时 flush 应返回 null");
+                int result = qqDeliver.flush(inbound.msgId());
+                // flush 无待发返回 0
+                assertEquals(0, result, "无待发时 flush 应返回 0");
                 reached.countDown();
             }
         };
