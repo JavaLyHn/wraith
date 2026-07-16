@@ -207,11 +207,11 @@ class AutomationDeliveryFlushTest {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Assertion C: 无待发时 flush 返回 null，不发任何请求
+    // Assertion C: 无待发时 flush 返回 0，不发任何请求
     // ─────────────────────────────────────────────────────────────────────────
 
     @Test
-    void c2cInbound_noPending_noPost_flushReturnsNull() throws Exception {
+    void c2cInbound_noPending_noPost_flushReturnsZero() throws Exception {
         QqApiClient api = api();
         QqPendingStore pending = new QqPendingStore(tempDir);
         assertEquals(0, pending.size(), "pre-condition: no pending");

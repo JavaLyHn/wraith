@@ -197,7 +197,7 @@ class QqDeliveryAdapterTest {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Case 4: flush fails (HTTP 500) → items re-enqueued, flush returns null
+    // Case 4: flush fails (HTTP 500) → items re-enqueued, flush returns 0
     // ─────────────────────────────────────────────────────────────────────────
 
     @Test

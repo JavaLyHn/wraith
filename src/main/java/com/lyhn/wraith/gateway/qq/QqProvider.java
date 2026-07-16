@@ -100,7 +100,7 @@ public final class QqProvider implements ImProvider {
                         lastInboundAt.put(inbound.openid(), System.currentTimeMillis());
                         int flushed = qqDeliverRef.flush(inbound.msgId());
                         if (flushed > 0) {
-                            // 同 WRAITH_GATEWAY_STATUS(:130)机读标记范式:桌面 GatewayManager 解析 → 待发即时刷新 + 提示。
+                            // 同 WRAITH_GATEWAY_STATUS 机读标记范式:桌面 GatewayManager 解析 → 待发即时刷新 + 提示。
                             System.out.println("WRAITH_QQ_FLUSHED " + flushed);
                         }
                         driver.onMessage(inbound);

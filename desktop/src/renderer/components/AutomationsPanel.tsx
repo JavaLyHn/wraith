@@ -68,7 +68,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
         void fetchQqPending()
         setFlushToast(evt.count)
         if (flushTimerRef.current !== null) clearTimeout(flushTimerRef.current)
-        flushTimerRef.current = setTimeout(() => setFlushToast(null), 3000)
+        flushTimerRef.current = setTimeout(() => { setFlushToast(null); flushTimerRef.current = null }, 3000)
       }
     })
     // 兜底:面板打开期每 6s 拉一次(覆盖终端起的网关/漏标记;只刷新不弹提示)

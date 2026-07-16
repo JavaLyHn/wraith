@@ -98,7 +98,7 @@ public final class QqDeliveryAdapter implements DeliveryAdapter {
      * </ul>
      *
      * <p>On send failure all affected items are re-enqueued so they are NOT lost,
-     * and the method returns null. Never throws.
+     * and the delivered count reflects only items actually sent (0 if all sends failed). Never throws.
      *
      * @param freshMsgId the msg_id of the triggering inbound DM (passive reply token)
      * @return the number of pending items successfully delivered this flush (0 if nothing pending or all sends failed)
