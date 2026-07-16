@@ -46,6 +46,7 @@ export const BTN_DANGER_GHOST = 'rounded-lg px-4 py-2 text-xs text-danger hover:
 - **R4 去盒交互件**:折叠条(如「高级·工具调用审批」)、行内小盒去边框,交互靠 hover 底色;列表 hover 行保持现有 `hover:bg-surface` 语义。
 - **R5 已达标件不动**:芯片(投递)、徽标(QQ 待发)、胶囊(网关状态)、`rounded-full` 家族已是新语言。
 - **R6 分隔线**:发丝线(`border-t border-border`)仅用于卡内小节或列表行分隔,**不再作为盒的四边**。合法分隔线保留——rollout 是按规则改,不是盲删所有 `border-border`。
+- **R7 防裁剪**:可能超 ~300px 的横排(按钮行/调度行/工具条)一律 `flex-wrap`;任何容器宽度下内容不得被窗口裁剪(宁可换行/换布局,不横向溢出)。
 
 ## 3. 范围
 
@@ -60,9 +61,19 @@ export const BTN_DANGER_GHOST = 'rounded-lg px-4 py-2 text-xs text-danger hover:
 - **浮层**(需要边界感):CommandPalette、ApprovalModal、`ui/`(dialog/popover/select/switch/tooltip)。
 - **结构 chrome**(布局分界,非盒):Sidebar、RightDock、TerminalPane/TerminalDrawer、BrowserPane、ProjectSwitcher/ModeSwitcher/ModelSwitcher、StatusChip。
 
+## 3b. Part L — AutomationsPanel 窄宽自适应(用户追加,已确认「顶部任务芯片条」)
+
+**根因(已诊断)**:面板是固定 240px 任务列表 + 表单的双栏;表单内在最小宽度 ~450-500px(按钮行/调度行/路径输入)。侧栏展开且窗口较窄时内容区仅 ~480px → 表单列装不下 → 横向溢出;macOS 悬浮滚动条不可见,视觉上=右侧被窗口硬裁(用户截图)。与折叠无关,是无窄宽策略。
+
+**设计**:
+- **宽态**(面板内容区宽 ≥ 640px):保持现有双栏(列表 `w-60` + 表单),仅按 R1-R7 换视觉皮肤。
+- **窄态**(< 640px):侧列表隐藏;表单顶部出现**任务芯片条**——一排可横滑(`overflow-x-auto`)芯片,每片 = 状态点 + 任务名 truncate(状态点取色沿 `taskStatusLabel` 三态:运行中绿 / 网关未运行灰 / 暂停 subtle),选中 = 淡青(`border-accent bg-accent/10`,同投递芯片);末尾追加「+ 新建」芯片(= 现有 新建任务 动作)。表单全宽软卡。启停/删除等动作不进芯片(表单底部已有)。
+- **机制**:面板内 `ResizeObserver` 量容器宽 → `narrow` 布尔切换两种 JSX(阈值常量 `NARROW_LAYOUT_PX = 640`,判断抽纯函数可单测);不引 Tailwind container-query 插件。
+- QqPendingBlock/flush toast/网关胶囊不受影响(始终在表单列)。
+
 ## 4. 执行方式(计划要求)
 
-1. **任务 1 = 样板**:建 `formStyles.ts` + 改 AutomationForm 全量套新语言。**此任务完成后暂停,用户 dev 眼验定案**(样板检查点);用户若调整,改样板后再铺开。
+1. **任务 1 = 样板**:建 `formStyles.ts` + 改 AutomationForm 全量套新语言 + AutomationsPanel 落 Part L 窄宽自适应(自动化域一体成为样板)。**此任务(组)完成后暂停,用户 dev 眼验定案**(样板检查点);用户若调整,改样板后再铺开。
 2. **rollout**:其余组件按域分任务,文件不重叠可**并行子代理**,每任务 = 按 R1-R6 机械套用 + import formStyles 去局部重复常量。
 3. 全量门禁 + opus 终审。
 
