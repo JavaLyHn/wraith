@@ -98,7 +98,11 @@ public final class QqProvider implements ImProvider {
                     if (authz.isAllowed(inbound.openid()) && !dedup.seen(inbound.msgId())) {
                         lastMsgId.put(inbound.openid(), inbound.msgId());
                         lastInboundAt.put(inbound.openid(), System.currentTimeMillis());
-                        qqDeliverRef.flush(inbound.msgId());
+                        int flushed = qqDeliverRef.flush(inbound.msgId());
+                        if (flushed > 0) {
+                            // 同 WRAITH_GATEWAY_STATUS(:130)机读标记范式:桌面 GatewayManager 解析 → 待发即时刷新 + 提示。
+                            System.out.println("WRAITH_QQ_FLUSHED " + flushed);
+                        }
                         driver.onMessage(inbound);
                     }
                 },
