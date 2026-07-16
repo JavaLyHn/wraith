@@ -2,6 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* 桌面原生感:按钮默认用箭头而非手型(覆盖 Tailwind Preflight 的 button{cursor:pointer});
+   显式 cursor-* 工具类(如 disabled:cursor-not-allowed、resize 手柄)优先级更高,不受影响。 */
+button,
+[role="button"] {
+  cursor: default;
+}
+
 :root {
   --bg: #f7f8fa;
   --bg-elevated: #ffffff;

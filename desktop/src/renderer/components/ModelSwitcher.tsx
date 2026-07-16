@@ -77,7 +77,7 @@ export default function ModelSwitcher({ initialModel, running, onSwitched }: Mod
         <button
           data-testid="model-chip"
           disabled={running}
-          className="min-w-0 max-w-[160px] cursor-pointer truncate whitespace-nowrap rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="min-w-0 max-w-[160px] truncate whitespace-nowrap rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           {displayModel || '—'}
         </button>

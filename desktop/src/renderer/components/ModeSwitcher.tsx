@@ -47,7 +47,7 @@ export default function ModeSwitcher({ mode, onModeChange, running = false }: Mo
           data-testid="mode-chip"
           disabled={running}
           title="执行模式"
-          className="flex shrink-0 cursor-pointer items-center gap-1 whitespace-nowrap rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50"
         >
           <current.Icon className="h-3 w-3 shrink-0" strokeWidth={1.5} />
           <span>{current.label}</span>

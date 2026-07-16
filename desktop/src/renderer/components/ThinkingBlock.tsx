@@ -18,7 +18,7 @@ export default function ThinkingBlock({ label, text, done }: ThinkingBlockProps)
       className="my-1.5 overflow-hidden rounded-xl border border-border bg-surface font-mono text-xs"
     >
       <div
-        className="flex cursor-pointer select-none items-center gap-2 px-3 py-1.5 text-fg-muted"
+        className="flex select-none items-center gap-2 px-3 py-1.5 text-fg-muted"
         onClick={toggle}
         title={label || undefined}
       >

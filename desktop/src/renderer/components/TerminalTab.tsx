@@ -17,7 +17,7 @@ export default function TerminalTab({ id, active }: { id: string; active: boolea
     const cs = getComputedStyle(document.documentElement)
     const cssv = (name: string, fb: string): string => cs.getPropertyValue(name).trim() || fb
     const term = new Terminal({
-      fontSize: 13, fontFamily: 'Menlo, Monaco, monospace', cursorBlink: true,
+      fontSize: 13, fontFamily: 'Menlo, Monaco, monospace', cursorBlink: true, cursorStyle: 'bar',
       theme: {
         background: cssv('--bg-elevated', '#ffffff'),
         foreground: cssv('--fg', '#1c2430'),
