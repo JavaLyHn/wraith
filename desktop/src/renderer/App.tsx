@@ -838,7 +838,24 @@ export default function App(): JSX.Element {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-bg text-fg">
-      <TopBar collapsed={sidebarCollapsed} onToggleCollapsed={() => setSidebarCollapsed(v => !v)} />
+      <TopBar
+        collapsed={sidebarCollapsed}
+        onToggleCollapsed={() => setSidebarCollapsed(v => !v)}
+        right={view === 'chat' ? (
+          <>
+            <button data-testid="terminal-toggle" onClick={() => setTerminalOpen(v => !v)}
+              className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (terminalOpen ? 'text-accent' : 'text-fg-muted')}
+              title="终端">
+              <SquareTerminal className="h-4 w-4" strokeWidth={1.5} />
+            </button>
+            <button data-testid="rightdock-toggle" onClick={() => setRightDockOpen(v => !v)}
+              className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (rightDockOpen ? 'text-accent' : 'text-fg-muted')}
+              title="右侧面板(浏览器/终端)">
+              <PanelRight className="h-4 w-4" strokeWidth={1.5} />
+            </button>
+          </>
+        ) : undefined}
+      />
       <div className="flex min-h-0 flex-1 overflow-hidden">
       <SidebarDock collapsed={sidebarCollapsed} peek={sidebarPeek} onPeekChange={setSidebarPeek}>
         <Sidebar
@@ -972,12 +989,12 @@ export default function App(): JSX.Element {
             )
             return (
               <>
-                {/* 顶部工具条:终端开关常驻(新对话页也在);压缩/导出仅活跃对话显示 */}
-                <div className="flex shrink-0 items-center justify-end gap-2 px-4 py-1.5">
-                  {!pv.showWelcome && compactNotice && (
-                    <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
-                  )}
-                  {!pv.showWelcome && (
+                {/* 顶部工具条:压缩/导出仅活跃对话显示;终端/右侧面板键已移至 TopBar 右簇 */}
+                {!pv.showWelcome && (
+                  <div className="flex shrink-0 items-center justify-end gap-2 px-4 py-1.5">
+                    {compactNotice && (
+                      <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
+                    )}
                     <button
                       data-testid="chat-compact"
                       onClick={() => void handleCompact()}
@@ -987,8 +1004,6 @@ export default function App(): JSX.Element {
                     >
                       <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '压缩中…' : '压缩'}
                     </button>
-                  )}
-                  {!pv.showWelcome && (
                     <button
                       data-testid="chat-export"
                       onClick={() => void handleExport()}
@@ -998,18 +1013,8 @@ export default function App(): JSX.Element {
                     >
                       <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />导出
                     </button>
-                  )}
-                  <button data-testid="terminal-toggle" onClick={() => setTerminalOpen(v => !v)}
-                    className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (terminalOpen ? 'text-accent' : 'text-fg-muted')}
-                    title="终端">
-                    <SquareTerminal className="h-4 w-4" strokeWidth={1.5} />
-                  </button>
-                  <button data-testid="rightdock-toggle" onClick={() => setRightDockOpen(v => !v)}
-                    className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (rightDockOpen ? 'text-accent' : 'text-fg-muted')}
-                    title="右侧面板(浏览器/终端)">
-                    <PanelRight className="h-4 w-4" strokeWidth={1.5} />
-                  </button>
-                </div>
+                  </div>
+                )}
                 {!pv.showWelcome ? (
                   <>
                     <Transcript

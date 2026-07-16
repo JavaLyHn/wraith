@@ -1,13 +1,16 @@
+import { type ReactNode } from 'react'
 import { PanelLeft } from 'lucide-react'
 import { topBarLeftPad } from '../lib/topBar'
 
 interface TopBarProps {
   collapsed: boolean
   onToggleCollapsed: () => void
+  /** 右上角动作簇(如终端/右侧面板键);缺省则右侧留空。整簇自动 no-drag。 */
+  right?: ReactNode
 }
 
-/** 全宽顶条:窗口拖拽区(macOS 隐藏原生标题栏后)+ 常驻折叠键(紧挨交通灯右侧)。 */
-export default function TopBar({ collapsed, onToggleCollapsed }: TopBarProps): JSX.Element {
+/** 全宽顶条:窗口拖拽区(macOS 隐藏原生标题栏后)+ 折叠键(左,紧挨交通灯)+ 可选右动作簇。 */
+export default function TopBar({ collapsed, onToggleCollapsed, right }: TopBarProps): JSX.Element {
   const pad = topBarLeftPad(window.wraith.platform)
   return (
     <div className={'flex h-[38px] shrink-0 items-center border-b border-border bg-bg [-webkit-app-region:drag] ' + pad}>
@@ -20,6 +23,11 @@ export default function TopBar({ collapsed, onToggleCollapsed }: TopBarProps): J
       >
         <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
       </button>
+      {right && (
+        <div className="ml-auto flex items-center gap-1 pr-2 [-webkit-app-region:no-drag]">
+          {right}
+        </div>
+      )}
     </div>
   )
 }
