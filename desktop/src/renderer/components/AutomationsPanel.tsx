@@ -154,9 +154,9 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
         <span className="ml-auto flex items-center gap-1.5 text-2xs">
           <span data-testid="gateway-pill" className={pillToneCls} title={pill.hint}>{pillGlyph}{pill.text}</span>
           {pill.action && (
-            <button data-testid="gateway-pill-action" onClick={() => void window.wraith.gatewayStart()}
+            <button data-testid="gateway-pill-action" onClick={() => pill.action === 'stop' ? void window.wraith.gatewayStop() : void window.wraith.gatewayStart()}
               className="rounded bg-accent px-2 py-0.5 text-white">
-              {pill.action === 'start' ? '启动网关' : '重试'}
+              {{ start: '启动网关', retry: '重试', stop: '停止网关' }[pill.action]}
             </button>
           )}
         </span>

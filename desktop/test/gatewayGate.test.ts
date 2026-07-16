@@ -20,10 +20,10 @@ describe('taskStatusLabel', () => {
 
 describe('gatewayPillView', () => {
   it('running → ok 无按钮', () => {
-    expect(gatewayPillView({ state: 'running' })).toEqual({ text: '网关运行中', tone: 'ok', action: null })
+    expect(gatewayPillView({ state: 'running' })).toEqual({ text: '网关运行中', tone: 'ok', action: 'stop' })
   })
   it('starting → muted 无按钮', () => {
-    expect(gatewayPillView({ state: 'starting' })).toEqual({ text: '网关启动中…', tone: 'muted', action: null })
+    expect(gatewayPillView({ state: 'starting' })).toEqual({ text: '网关启动中…', tone: 'muted', action: 'stop' })
   })
   it('stopped → warn + start + hint', () => {
     const v = gatewayPillView({ state: 'stopped' })

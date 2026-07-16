@@ -9,7 +9,7 @@ export function taskStatusLabel(enabled: boolean, gatewayState: GatewayState): s
 export interface GatewayPillView {
   text: string
   tone: 'ok' | 'warn' | 'err' | 'muted'
-  action: 'start' | 'retry' | null
+  action: 'start' | 'retry' | 'stop' | null
   hint?: string
 }
 
@@ -19,9 +19,9 @@ const CONNECT_HINT = '启动后会连上已绑定的 QQ/飞书/微信'
 export function gatewayPillView(status: GatewayStatus): GatewayPillView {
   switch (status.state) {
     case 'running':
-      return { text: '网关运行中', tone: 'ok', action: null }
+      return { text: '网关运行中', tone: 'ok', action: 'stop' }
     case 'starting':
-      return { text: '网关启动中…', tone: 'muted', action: null }
+      return { text: '网关启动中…', tone: 'muted', action: 'stop' }
     case 'error':
       return {
         text: '网关异常' + (status.message ? ' · ' + status.message : ''),
