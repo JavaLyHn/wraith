@@ -9,6 +9,7 @@ import {
   classifyBindLine,
   classifyGatewayStderr,
   classifyGatewayStatusLine,
+  parseQqFlushedLine,
 } from '../src/main/gatewayManager'
 
 describe('resolveGatewayCommand', () => {
@@ -167,5 +168,23 @@ describe('parseQrPngMarker', () => {
     expect(parseQrPngMarker('WRAITH_QR_PNG not base64 !!!')).toBeNull()
     expect(parseQrPngMarker('WRAITH_QR_PNG short')).toBeNull()
     expect(parseQrPngMarker('普通日志行')).toBeNull()
+  })
+})
+
+describe('parseQqFlushedLine', () => {
+  it('合法标记 → 计数', () => {
+    expect(parseQqFlushedLine('WRAITH_QQ_FLUSHED 3')).toBe(3)
+    expect(parseQqFlushedLine('WRAITH_QQ_FLUSHED 1')).toBe(1)
+  })
+  it('容忍前缀(与 classifyGatewayStatusLine 一致)', () => {
+    expect(parseQqFlushedLine('12:00:00 INFO WRAITH_QQ_FLUSHED 2')).toBe(2)
+  })
+  it('非标记行 → null', () => {
+    expect(parseQqFlushedLine('some log line')).toBeNull()
+    expect(parseQqFlushedLine('WRAITH_GATEWAY_STATUS connected')).toBeNull()
+  })
+  it('计数缺失/非数字 → null', () => {
+    expect(parseQqFlushedLine('WRAITH_QQ_FLUSHED')).toBeNull()
+    expect(parseQqFlushedLine('WRAITH_QQ_FLUSHED x')).toBeNull()
   })
 })

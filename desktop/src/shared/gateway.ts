@@ -50,3 +50,4 @@ export type GatewayEvent =
   // qr:微信扫码绑定时的二维码 data URL(image/png);仅 scanning 阶段带,由桌面渲染成 <img>。
   // url:扫码失败时的兜底链接;仅 scanning 阶段带,由桌面渲染成可点链接(不再自动开浏览器)。
   | { kind: 'bind'; phase: GatewayBindPhase; message?: string; qr?: string; url?: string }
+  | { kind: 'qq-flushed'; count: number }

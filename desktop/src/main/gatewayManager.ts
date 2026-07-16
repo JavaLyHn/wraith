@@ -129,6 +129,17 @@ export function classifyGatewayStatusLine(line: string): GatewayStatus | null {
   }
 }
 
+/**
+ * 解析 daemon stdout 上的 QQ 冲刷标记:`WRAITH_QQ_FLUSHED <n>`。
+ * 命中且 n 为非负整数 → 返回 n;否则 null。容忍标记前有 logback 前缀(同 classifyGatewayStatusLine)。
+ */
+export function parseQqFlushedLine(line: string): number | null {
+  const m = line.match(/WRAITH_QQ_FLUSHED\s+(\d+)/)
+  if (!m) return null
+  const n = Number.parseInt(m[1]!, 10)
+  return Number.isNaN(n) ? null : n
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // GatewayManager —— 常驻守护进程 + 一次性 bind 的进程管理
 // ─────────────────────────────────────────────────────────────────────────
@@ -207,6 +218,10 @@ export class GatewayManager {
       if (st && this.daemon === proc && !this.stopping) {
         if (st.state === 'error' && st.message) lastErr = st.message // 让退出处理器沿用该文案
         this.setStatus(st)
+      }
+      const flushed = parseQqFlushedLine(l)
+      if (flushed !== null && this.daemon === proc && !this.stopping) {
+        this.onEvent({ kind: 'qq-flushed', count: flushed })
       }
     })
     readline.createInterface({ input: proc.stderr }).on('line', (l) => {
