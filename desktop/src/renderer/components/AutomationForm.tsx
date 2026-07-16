@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Check } from 'lucide-react'
 import type { AutomationTask, AutomationSchedule, ProjectView, ApprovalMode, ApprovalPolicy } from '../../shared/types'
 import { isValidCronShape, approvalModeLabel, parseDeliverTo, buildDeliverTo, deliveryPlatformLabel, parseApproval, saveErrorText } from '../lib/automationLabels'
 import { buildCron, parseCron, describeCron, CRON_MODE_OPTIONS, CRON_DEFAULT_STATE, type CronMode, type CronBuilderState } from '../lib/cronBuilder'
@@ -306,15 +306,22 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
 
         <div className="mt-1 border-t border-border pt-3">
           <div className="mb-1.5 text-xs text-fg-muted">结果投递</div>
-          <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-fg-muted">
-            {DELIVER_PLATFORMS.map(p => (
-              <label key={p} className="flex cursor-pointer items-center gap-1.5">
-                <input data-testid={`automation-form-deliver-${p}`} type="checkbox"
-                  checked={deliver.has(p)} onChange={() => toggleDeliver(p)}
-                  className="rounded border-border" />
-                {deliveryPlatformLabel(p)}
-              </label>
-            ))}
+          <div className="flex flex-wrap gap-2">
+            {DELIVER_PLATFORMS.map(p => {
+              const on = deliver.has(p)
+              return (
+                <button key={p} type="button" role="checkbox" aria-checked={on}
+                  data-testid={`automation-form-deliver-${p}`}
+                  onClick={() => toggleDeliver(p)}
+                  className={'inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ' +
+                    (on
+                      ? 'border-accent bg-accent/10 text-accent'
+                      : 'border-border text-fg-muted hover:border-fg-subtle hover:text-fg')}>
+                  {on && <Check className="h-3 w-3 shrink-0" strokeWidth={2.5} />}
+                  {deliveryPlatformLabel(p)}
+                </button>
+              )
+            })}
           </div>
           {deliver.size === 0
             ? <div className="mt-1.5 text-3xs text-fg-subtle">未选则仅执行,不推送结果</div>
