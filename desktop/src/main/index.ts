@@ -915,6 +915,15 @@ ipcMain.handle('wraith:automationsRuns', async (_e, taskId?: string) => {
   return client.request('automations.runs', taskId ? { taskId } : {})
 })
 
+ipcMain.handle('wraith:qqPending', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.qqPending', {})
+})
+ipcMain.handle('wraith:qqPendingClear', async (_e, id?: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('automations.qqPendingClear', id ? { id } : {})
+})
+
 // ---------------------------------------------------------------------------
 // IM 网关(QQ)—— Phase F
 // ---------------------------------------------------------------------------

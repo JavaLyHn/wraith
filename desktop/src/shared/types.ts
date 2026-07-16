@@ -482,6 +482,16 @@ export interface AutomationTask {
   approval?: ApprovalPolicy
 }
 
+/** QQ 待发队列条目(automations.qqPending 线上形状;遗留旧文件项可能无 id)。 */
+export interface QqPendingItem {
+  id?: string
+  taskName: string
+  answerPreview: string
+  ts: number
+  kind: 'result' | 'approval'
+  approvalId?: string
+}
+
 export type AutomationRunStatus = 'running' | 'waiting_approval' | 'success' | 'failed' | 'interrupted'
 
 export interface AutomationRun {

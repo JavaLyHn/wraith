@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 
 /**
@@ -69,6 +69,9 @@ export interface WraithApi {
   automationsUpsert(task: AutomationTask): Promise<{ ok: boolean }>
   automationsRemove(id: string): Promise<{ ok: boolean }>
   automationsRuns(taskId?: string): Promise<{ runs: AutomationRun[] }>
+  /** QQ 待发队列:快照读 + 删单条结果/清空结果(经 daemon,最终一致) */
+  qqPending(): Promise<{ items: QqPendingItem[]; count: number }>
+  qqPendingClear(id?: string): Promise<{ ok: boolean }>
   modelList(): Promise<ModelListResult>
   setModel(provider: string): Promise<{ provider: string; model: string }>
   setDefaultProvider(provider: string): Promise<{ ok: boolean }>
@@ -361,6 +364,13 @@ const wraith: WraithApi = {
 
   automationsRuns(taskId?) {
     return ipcRenderer.invoke('wraith:automationsRuns', taskId) as Promise<{ runs: AutomationRun[] }>
+  },
+
+  qqPending() {
+    return ipcRenderer.invoke('wraith:qqPending') as Promise<{ items: QqPendingItem[]; count: number }>
+  },
+  qqPendingClear(id) {
+    return ipcRenderer.invoke('wraith:qqPendingClear', id) as Promise<{ ok: boolean }>
   },
 
   modelList() {
