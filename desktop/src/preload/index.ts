@@ -9,6 +9,8 @@ import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, Gateway
  * contextIsolation remains true; renderer has no Node access.
  */
 export interface WraithApi {
+  /** 运行平台('darwin' | 'win32' | 'linux' | ...);renderer 据此决定顶条交通灯留白 */
+  platform: string
   initialize(workspaceDir: string | null): Promise<unknown>
   startSession(workspaceDir: string | null): Promise<{ sessionId: string }>
   submitTurn(input: string, attachments?: { path: string; kind: string }[], mode?: RunMode): Promise<{ turnId: string; status: string }>
@@ -147,6 +149,7 @@ export interface WraithApi {
 }
 
 const wraith: WraithApi = {
+  platform: process.platform,
   initialize(workspaceDir) {
     return ipcRenderer.invoke('wraith:initialize', workspaceDir)
   },
