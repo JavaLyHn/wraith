@@ -248,7 +248,13 @@ function createWindow(): void {
     // dev: show WR icon instead of Electron atom; packaged macOS: dock icon comes from .icns
     icon: app.isPackaged ? undefined : path.join(__dirname, '../../build/icon-512.png'),
     ...(process.platform === 'darwin'
-      ? { titleBarStyle: 'hidden' as const, trafficLightPosition: { x: 12, y: 11 } }
+      ? {
+          titleBarStyle: 'hidden' as const,
+          trafficLightPosition: { x: 12, y: 11 },
+          vibrancy: 'sidebar' as const,
+          visualEffectState: 'active' as const,
+          backgroundColor: '#00000000',
+        }
       : {}),
     webPreferences: {
       contextIsolation: true,

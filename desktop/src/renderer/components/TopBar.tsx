@@ -12,8 +12,9 @@ interface TopBarProps {
 /** 全宽顶条:窗口拖拽区(macOS 隐藏原生标题栏后)+ 折叠键(左,紧挨交通灯)+ 可选右动作簇。 */
 export default function TopBar({ collapsed, onToggleCollapsed, right }: TopBarProps): JSX.Element {
   const pad = topBarLeftPad(window.wraith.platform)
+  const isMac = window.wraith.platform === 'darwin'
   return (
-    <div className={'flex h-[38px] shrink-0 items-center border-b border-border bg-bg [-webkit-app-region:drag] ' + pad}>
+    <div className={'flex h-[38px] shrink-0 items-center border-b border-border [-webkit-app-region:drag] ' + (isMac ? '' : 'bg-bg ') + pad}>
       <button
         type="button"
         data-testid="sidebar-collapse"

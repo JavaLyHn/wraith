@@ -837,7 +837,7 @@ export default function App(): JSX.Element {
   }, [pv.items, state.model, state.workspace])
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-bg text-fg">
+    <div className="flex h-screen flex-col overflow-hidden text-fg">
       <TopBar
         collapsed={sidebarCollapsed}
         onToggleCollapsed={() => setSidebarCollapsed(v => !v)}
