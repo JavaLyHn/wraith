@@ -5,14 +5,11 @@ import { isValidCronShape, approvalModeLabel, parseDeliverTo, buildDeliverTo, de
 import { buildCron, parseCron, describeCron, CRON_MODE_OPTIONS, CRON_DEFAULT_STATE, type CronMode, type CronBuilderState } from '../lib/cronBuilder'
 import { IM_PLATFORMS } from '../lib/imPlatforms'
 import Select from './ui/select'
+import { CARD, SECTION_TITLE, INPUT, BTN_PRIMARY, BTN_GHOST, BTN_DANGER_GHOST } from '../lib/formStyles'
 
 // 投递平台:桌面通知(总是)+ 所有「可用」IM 平台(qq/weixin/wecom/feishu),顺序稳定。
 // 后端 Deliverer 按 platform 路由到对应 adapter(投递给该平台绑定的主人)。
 const DELIVER_PLATFORMS: string[] = ['desktop', ...IM_PLATFORMS.filter(p => p.status === 'available').map(p => p.id)]
-
-const CARD = 'flex flex-col gap-3 rounded-lg border border-border p-4'
-const SECTION_TITLE = 'text-2xs font-semibold uppercase tracking-wider text-fg-subtle'
-const INPUT = 'mt-1 w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs text-fg outline-none focus:border-accent'
 
 /** 覆盖行含稳定 UI-only id,不写入 AutomationTask */
 interface ToolOverrideRow { id: string; tool: string; mode: ApprovalMode }
@@ -228,7 +225,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
           {kind === 'interval' && (
             <label>分钟
               <input data-testid="automation-form-schedule-minutes" value={minutes} onChange={e => setMinutes(e.target.value)}
-                className="mt-1 w-20 rounded-lg border border-border bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
+                className="mt-1 w-20 rounded-lg border border-transparent bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
             </label>
           )}
           {kind === 'weekly' && (
@@ -245,7 +242,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
           {(kind === 'daily' || kind === 'weekly') && (
             <label>时刻
               <input data-testid="automation-form-schedule-time" type="time" value={time} onChange={e => setTime(e.target.value)}
-                className="mt-1 rounded-lg border border-border bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
+                className="mt-1 rounded-lg border border-transparent bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
             </label>
           )}
         </div>
@@ -261,27 +258,27 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
                 <label>第 N 分
                   <input data-testid="automation-form-cron-minute" type="number" min="0" max="59"
                     value={cronMinute} onChange={e => setCronMinute(e.target.value)}
-                    className="mt-1 w-20 rounded-lg border border-border bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
+                    className="mt-1 w-20 rounded-lg border border-transparent bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
                 </label>
               )}
               {cronMode === 'everyNHours' && (
                 <label>每 N 小时
                   <input data-testid="automation-form-cron-everyn" type="number" min="1" max="23"
                     value={cronEveryN} onChange={e => setCronEveryN(e.target.value)}
-                    className="mt-1 w-20 rounded-lg border border-border bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
+                    className="mt-1 w-20 rounded-lg border border-transparent bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
                 </label>
               )}
               {cronMode === 'monthly' && (
                 <label>几号
                   <input data-testid="automation-form-cron-monthday" type="number" min="1" max="31"
                     value={cronMonthDay} onChange={e => setCronMonthDay(e.target.value)}
-                    className="mt-1 w-20 rounded-lg border border-border bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
+                    className="mt-1 w-20 rounded-lg border border-transparent bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
                 </label>
               )}
               {(cronMode === 'monthly' || cronMode === 'weekdays') && (
                 <label>时刻
                   <input data-testid="automation-form-cron-time" type="time" value={cronTime} onChange={e => setCronTime(e.target.value)}
-                    className="mt-1 rounded-lg border border-border bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
+                    className="mt-1 rounded-lg border border-transparent bg-bg px-2 py-2 text-xs text-fg outline-none focus:border-accent" />
                 </label>
               )}
             </div>
@@ -290,14 +287,14 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
                 <input data-testid="automation-form-schedule-cron"
                   value={cronRaw} onChange={e => setCronRaw(e.target.value)}
                   placeholder="如: 0 9 * * 1"
-                  className="w-full rounded-lg border border-border bg-bg px-3 py-2 font-mono text-xs text-fg outline-none focus:border-accent" />
+                  className="w-full rounded-lg border border-transparent bg-bg px-3 py-2 font-mono text-xs text-fg outline-none focus:border-accent" />
                 <div className="text-3xs text-fg-subtle">
                   5 段空格分隔: 分 时 日 月 周 (如 <code className="font-mono">0 9 * * 1</code> = 每周一 09:00)。守护进程做权威校验。
                 </div>
               </div>
             ) : (
               <div data-testid="automation-form-cron-preview"
-                className="rounded-lg border border-border bg-surface/40 px-3 py-2 text-3xs text-fg-subtle">
+                className="rounded-lg bg-bg px-3 py-2 text-3xs text-fg-subtle">
                 {describeCron(cronState)} · <code className="font-mono text-fg-muted">{buildCron(cronState)}</code>
               </div>
             )}
@@ -332,7 +329,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
       </section>
 
       {/* ── 高级设置(折叠):工具调用审批 ──────────────────── */}
-      <section className="rounded-lg border border-border">
+      <section className="rounded-xl bg-surface shadow-sm">
         <button type="button" data-testid="automation-form-advanced-toggle"
           onClick={() => setAdvancedOpen(v => !v)}
           className="flex w-full items-center gap-2 px-4 py-3 text-left">
@@ -361,7 +358,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
                     <input data-testid={`automation-form-tool-override-name-${idx}`}
                       value={row.tool} onChange={e => updateToolOverride(row.id, 'tool', e.target.value)}
                       placeholder="工具名"
-                      className="flex-1 rounded-lg border border-border bg-bg px-2 py-1.5 text-xs text-fg outline-none focus:border-accent" />
+                      className="flex-1 rounded-lg border border-transparent bg-bg px-2 py-1.5 text-xs text-fg outline-none focus:border-accent" />
                     <Select
                       testId={`automation-form-tool-override-mode-${idx}`}
                       value={row.mode}
@@ -377,7 +374,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
             )}
             <button data-testid="automation-form-add-tool-override" type="button"
               onClick={addToolOverride}
-              className="w-fit rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-fg">
+              className={'w-fit ' + BTN_GHOST + ' !py-1 !px-2'}>
               ＋ 添加工具覆盖
             </button>
 
@@ -389,7 +386,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
                   type="number" min="1" value={askTimeoutMinutes}
                   onChange={e => setAskTimeoutMinutes(e.target.value)}
                   placeholder="不填=无限等待"
-                  className="w-28 rounded-lg border border-border bg-bg px-2 py-1.5 text-xs text-fg outline-none focus:border-accent" />
+                  className="w-28 rounded-lg border border-transparent bg-bg px-2 py-1.5 text-xs text-fg outline-none focus:border-accent" />
               </label>
             )}
           </div>
@@ -401,24 +398,22 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
       {/* ── 操作 ───────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-2 border-t border-border pt-3">
         <button data-testid="automation-save" disabled={saving} onClick={() => void saveOnly()}
-          className="rounded-lg bg-accent px-4 py-2 text-xs text-white disabled:opacity-60">保存</button>
+          className={BTN_PRIMARY}>保存</button>
         <button data-testid="automation-run-now" disabled={saving}
           onClick={() => void handleRunNow()}
-          className="rounded-lg border border-border px-4 py-2 text-xs text-fg hover:border-accent disabled:opacity-60">
+          className={BTN_GHOST}>
           立即运行
         </button>
         {initial && (
           <button data-testid="automation-toggle-form" title={initial.enabled ? '暂停后不再按时触发' : '启用后从现在起重新计时'}
             onClick={() => void onToggle(initial)}
-            className={'ml-auto rounded-lg border px-4 py-2 text-xs ' +
-              (initial.enabled ? 'border-border text-fg-muted hover:text-accent' : 'border-success text-success')}>
+            className={'ml-auto ' + BTN_GHOST + (initial.enabled ? '' : ' text-success hover:text-success')}>
             {initial.enabled ? '⏸ 暂停' : '▶ 启用'}
           </button>
         )}
         {initial && (
           <button data-testid="automation-remove" onClick={() => onRemove(initial.id)}
-            className={'rounded-lg border px-4 py-2 text-xs ' +
-              (removeConfirming ? 'border-danger text-danger' : 'border-border text-fg-muted hover:text-danger')}>
+            className={BTN_DANGER_GHOST + (removeConfirming ? ' bg-danger/10' : '')}>
             {removeConfirming ? '确认删除?' : '删除任务'}
           </button>
         )}

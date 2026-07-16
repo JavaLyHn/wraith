@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isNarrowLayout } from '../lib/formStyles'
 import { ArrowLeft } from 'lucide-react'
 import type { AutomationTask, ProjectView, QqPendingItem } from '../../shared/types'
 import AutomationForm from './AutomationForm'
@@ -28,6 +29,19 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>({ state: 'stopped' })
   const [flushToast, setFlushToast] = useState<number | null>(null)
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const layoutRef = useRef<HTMLDivElement>(null)
+  const [narrow, setNarrow] = useState(false)
+  useEffect(() => {
+    const el = layoutRef.current
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      const w = entries[0]?.contentRect.width ?? 0
+      setNarrow(isNarrowLayout(w))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
 
   const fetchQqPending = useCallback(async () => {
     try { const { items } = await window.wraith.qqPending(); setQqPending(items) }
@@ -167,8 +181,8 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
           ✓ 已投递 {flushToast} 条到 QQ
         </div>
       )}
-      <div className="flex min-h-0 flex-1 panel-content">
-        <div className="flex w-60 shrink-0 flex-col border-r border-border">
+      <div ref={layoutRef} className="flex min-h-0 flex-1 panel-content">
+        <div className={'flex w-60 shrink-0 flex-col border-r border-border ' + (narrow ? 'hidden' : '')}>
           <div className="flex-1 overflow-y-auto p-2">
             {tasks.length === 0 && <div className="px-2 py-3 text-xs text-fg-subtle">还没有任务</div>}
             {tasks.map(t => (
@@ -198,6 +212,26 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
           </div>
         </div>
         <div className="flex min-w-0 flex-1 flex-col overflow-y-auto p-4">
+          {narrow && (
+            <div data-testid="automation-chipbar" className="mb-3 flex gap-2 overflow-x-auto pb-1">
+              {tasks.map(t => {
+                const sel = current?.id === t.id && !creating
+                const dot = !t.enabled ? 'bg-fg-subtle' : gatewayStatus.state === 'running' ? 'bg-success' : 'bg-fg-muted'
+                return (
+                  <button key={t.id} data-testid="automation-chip" onClick={() => { setCreating(false); setSelectedId(t.id) }}
+                    className={'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ' +
+                      (sel ? 'border-accent bg-accent/10 text-accent' : 'border-border text-fg-muted hover:border-fg-subtle hover:text-fg')}>
+                    <span className={'h-1.5 w-1.5 shrink-0 rounded-full ' + dot} />
+                    <span className="max-w-[8rem] truncate">{t.name}</span>
+                  </button>
+                )
+              })}
+              <button data-testid="automation-chip-add" onClick={() => { setCreating(true); setSelectedId(null) }}
+                className="inline-flex shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-3 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent">
+                ＋ 新建
+              </button>
+            </div>
+          )}
           {runNowBusy && (
             <div data-testid="runnow-busy-hint"
               className="mb-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
