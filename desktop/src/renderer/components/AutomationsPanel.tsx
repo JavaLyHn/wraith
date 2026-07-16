@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import type { AutomationTask, ProjectView } from '../../shared/types'
+import type { AutomationTask, ProjectView, QqPendingItem } from '../../shared/types'
 import AutomationForm from './AutomationForm'
 import AutomationRuns from './AutomationRuns'
+import QqPendingBlock from './QqPendingBlock'
 import { computeNextRunLabel } from '../lib/automationLabels'
 
 interface AutomationsPanelProps {
@@ -21,6 +22,12 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
   const [runNowBusy, setRunNowBusy] = useState(false)
   const runNowBusyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const [qqPending, setQqPending] = useState<QqPendingItem[]>([])
+  const fetchQqPending = useCallback(async () => {
+    try { const { items } = await window.wraith.qqPending(); setQqPending(items) }
+    catch { setQqPending([]) } // 后端断连等:视为无积压,不打扰
+  }, [])
+
   const fetchTasks = useCallback(async () => {
     try { const { tasks } = await window.wraith.automationList(); setTasks(tasks) }
     catch (err) { console.error('[wraith] automationList error:', err) }
@@ -28,6 +35,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
 
   useEffect(() => {
     void fetchTasks()
+    void fetchQqPending()
     void window.wraith.automationPanelOpened() // 清红点(spec §3)
     // runs-changed 后 lastFiredAt 可能更新 → 刷左侧任务列表使 computeNextRunLabel 更新
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -37,11 +45,12 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
       debounceTimer = setTimeout(() => {
         debounceTimer = null
         void fetchTasks()
+        void fetchQqPending()
         void window.wraith.automationPanelOpened()   // A4: 面板可见期间到达的终态即视为已读,红点不重亮
       }, 80)
     })
     return () => { unsub(); if (debounceTimer !== null) clearTimeout(debounceTimer) }
-  }, [fetchTasks])
+  }, [fetchTasks, fetchQqPending])
 
   useEffect(() => { setRemoveConfirming(false); setTab('def') }, [selectedId, creating])
 
@@ -88,6 +97,15 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
     void fetchTasks()
   }, [fetchTasks])
 
+  const handleQqRemove = useCallback(async (id: string) => {
+    await window.wraith.qqPendingClear(id)
+    setTimeout(() => { void fetchQqPending() }, 3500) // daemon poller 2-3s 消费,延后刷一次
+  }, [fetchQqPending])
+  const handleQqClearResults = useCallback(async () => {
+    await window.wraith.qqPendingClear()
+    setTimeout(() => { void fetchQqPending() }, 3500)
+  }, [fetchQqPending])
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
@@ -95,6 +113,12 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
           className="rounded-lg p-1.5 text-fg-muted hover:bg-surface hover:text-fg transition-colors"><ArrowLeft className="h-4 w-4" strokeWidth={1.5} /></button>
         <span className="text-sm font-bold text-fg">自动化</span>
         <span className="text-xs text-fg-subtle">定时任务</span>
+        {qqPending.length > 0 && (
+          <span data-testid="qq-pending-badge"
+            className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-2xs text-warning">
+            QQ 待发 {qqPending.length}
+          </span>
+        )}
       </div>
       <div className="flex min-h-0 flex-1 panel-content">
         <div className="flex w-60 shrink-0 flex-col border-r border-border">
@@ -152,6 +176,8 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
               )}
             </>
           )}
+          <QqPendingBlock items={qqPending} onRemove={id => { void handleQqRemove(id) }}
+            onClearResults={() => { void handleQqClearResults() }} />
         </div>
       </div>
     </div>
