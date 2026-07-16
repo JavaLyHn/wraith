@@ -895,7 +895,7 @@ export default function App(): JSX.Element {
       </SidebarDock>
 
       <div className="flex min-w-0 flex-1 flex-row">
-      <div className="relative flex min-w-0 flex-1 flex-col">
+      <div className={'relative flex min-w-0 flex-1 flex-col ' + (view === 'chat' ? 'bg-surface' : 'bg-bg')}>
         {state.connection === 'disconnected' && (
           <DisconnectedBanner onRestart={handleRestart} />
         )}
