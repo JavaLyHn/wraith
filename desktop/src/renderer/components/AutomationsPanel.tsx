@@ -5,6 +5,8 @@ import AutomationForm from './AutomationForm'
 import AutomationRuns from './AutomationRuns'
 import QqPendingBlock from './QqPendingBlock'
 import { computeNextRunLabel } from '../lib/automationLabels'
+import { taskStatusLabel, gatewayPillView } from '../lib/gatewayGate'
+import type { GatewayStatus } from '../../shared/gateway'
 
 interface AutomationsPanelProps {
   projects: ProjectView[]
@@ -23,6 +25,10 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
   const runNowBusyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [qqPending, setQqPending] = useState<QqPendingItem[]>([])
+  const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>({ state: 'stopped' })
+  const [flushToast, setFlushToast] = useState<number | null>(null)
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const fetchQqPending = useCallback(async () => {
     try { const { items } = await window.wraith.qqPending(); setQqPending(items) }
     catch { setQqPending([]) } // 后端断连等:视为无积压,不打扰
@@ -52,6 +58,28 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
     return () => { unsub(); if (debounceTimer !== null) clearTimeout(debounceTimer) }
   }, [fetchTasks, fetchQqPending])
 
+  // 网关状态感知 + QQ flush 即时反馈 + 轻轮询兜底
+  useEffect(() => {
+    void window.wraith.gatewayStatus().then(setGatewayStatus).catch(() => { /* 断连:保持 stopped */ })
+    const unsub = window.wraith.onGatewayEvent(evt => {
+      if (evt.kind === 'status') {
+        setGatewayStatus(evt.status)
+      } else if (evt.kind === 'qq-flushed') {
+        void fetchQqPending()
+        setFlushToast(evt.count)
+        if (flushTimerRef.current !== null) clearTimeout(flushTimerRef.current)
+        flushTimerRef.current = setTimeout(() => setFlushToast(null), 3000)
+      }
+    })
+    // 兜底:面板打开期每 6s 拉一次(覆盖终端起的网关/漏标记;只刷新不弹提示)
+    const poll = setInterval(() => { void fetchQqPending() }, 6000)
+    return () => {
+      unsub()
+      clearInterval(poll)
+      if (flushTimerRef.current !== null) clearTimeout(flushTimerRef.current)
+    }
+  }, [fetchQqPending])
+
   useEffect(() => { setRemoveConfirming(false); setTab('def') }, [selectedId, creating])
 
   // Cleanup runNow busy hint timer on unmount
@@ -60,6 +88,10 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
   }, [])
 
   const current = creating ? null : tasks.find(t => t.id === selectedId) ?? tasks[0] ?? null
+
+  const pill = gatewayPillView(gatewayStatus)
+  const pillToneCls = { ok: 'text-success', warn: 'text-warning', err: 'text-danger', muted: 'text-fg-subtle' }[pill.tone]
+  const pillGlyph = { ok: '● ', warn: '⚠ ', err: '✕ ', muted: '' }[pill.tone]
 
   const handleSave = useCallback(async (t: AutomationTask): Promise<void> => {
     // upsert 失败(如非法 cron、后端断连)直接抛 —— 由 AutomationForm catch 后透出权威原因,不在此吞成布尔
@@ -119,7 +151,22 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
             QQ 待发 {qqPending.length}
           </span>
         )}
+        <span className="ml-auto flex items-center gap-1.5 text-2xs">
+          <span data-testid="gateway-pill" className={pillToneCls} title={pill.hint}>{pillGlyph}{pill.text}</span>
+          {pill.action && (
+            <button data-testid="gateway-pill-action" onClick={() => void window.wraith.gatewayStart()}
+              className="rounded bg-accent px-2 py-0.5 text-white">
+              {pill.action === 'start' ? '启动网关' : '重试'}
+            </button>
+          )}
+        </span>
       </div>
+      {flushToast !== null && (
+        <div data-testid="qq-flush-toast"
+          className="border-b border-border bg-success/10 px-4 py-1.5 text-2xs text-success">
+          ✓ 已投递 {flushToast} 条到 QQ
+        </div>
+      )}
       <div className="flex min-h-0 flex-1 panel-content">
         <div className="flex w-60 shrink-0 flex-col border-r border-border">
           <div className="flex-1 overflow-y-auto p-2">
@@ -135,8 +182,10 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
                 <button data-testid="automation-toggle" title={t.enabled ? '点击暂停' : '点击启用'}
                   onClick={() => void handleToggle(t)}
                   className={'shrink-0 rounded px-1.5 py-1 text-3xs whitespace-nowrap ' +
-                    (t.enabled ? 'text-success hover:bg-surface/60' : 'text-fg-subtle hover:bg-surface/60')}>
-                  {t.enabled ? '● 运行中' : '⏸ 已暂停'}
+                    (t.enabled
+                      ? (gatewayStatus.state === 'running' ? 'text-success hover:bg-surface/60' : 'text-fg-muted hover:bg-surface/60')
+                      : 'text-fg-subtle hover:bg-surface/60')}>
+                  {taskStatusLabel(t.enabled, gatewayStatus.state)}
                 </button>
               </div>
             ))}
