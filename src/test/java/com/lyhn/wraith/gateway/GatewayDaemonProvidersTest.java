@@ -1,5 +1,6 @@
 package com.lyhn.wraith.gateway;
 
+import com.lyhn.wraith.automation.delivery.QqPendingStore;
 import com.lyhn.wraith.config.WraithConfig;
 import com.lyhn.wraith.gateway.spi.ImProvider;
 import com.lyhn.wraith.hitl.ApprovalResult;
@@ -34,7 +35,7 @@ class GatewayDaemonProvidersTest {
         Map<String, CompletableFuture<ApprovalResult>> pending = new ConcurrentHashMap<>();
         // client=null: buildProviders does not touch the LLM (session factory is lazy).
         List<ImProvider> providers =
-                GatewayDaemon.buildProviders(cfgWithQq(), null, dir, pending);
+                GatewayDaemon.buildProviders(cfgWithQq(), null, new QqPendingStore(dir), pending);
         assertEquals(1, providers.size());
         assertEquals("qq", providers.get(0).platform());
         assertTrue(providers.get(0).deliveryAdapter().isPresent());
@@ -44,7 +45,7 @@ class GatewayDaemonProvidersTest {
     void buildsEmptyWhenNoGateway(@TempDir Path dir) {
         Map<String, CompletableFuture<ApprovalResult>> pending = new ConcurrentHashMap<>();
         List<ImProvider> providers =
-                GatewayDaemon.buildProviders(new WraithConfig(), null, dir, pending);
+                GatewayDaemon.buildProviders(new WraithConfig(), null, new QqPendingStore(dir), pending);
         assertTrue(providers.isEmpty());
     }
 
@@ -54,7 +55,7 @@ class GatewayDaemonProvidersTest {
         WraithConfig cfg = new WraithConfig();
         cfg.setGateway(new WraithConfig.GatewayConfig()); // qq == null
         List<ImProvider> providers =
-                GatewayDaemon.buildProviders(cfg, null, dir, pending);
+                GatewayDaemon.buildProviders(cfg, null, new QqPendingStore(dir), pending);
         assertTrue(providers.isEmpty());
     }
 
@@ -75,7 +76,7 @@ class GatewayDaemonProvidersTest {
     @Test
     void buildsFeishuProviderWhenFeishuConfigured(@TempDir Path dir) {
         Map<String, CompletableFuture<ApprovalResult>> pending = new ConcurrentHashMap<>();
-        List<ImProvider> providers = GatewayDaemon.buildProviders(cfgWithFeishu(), null, dir, pending);
+        List<ImProvider> providers = GatewayDaemon.buildProviders(cfgWithFeishu(), null, new QqPendingStore(dir), pending);
         assertEquals(1, providers.size());
         assertEquals("feishu", providers.get(0).platform());
         assertTrue(providers.get(0).deliveryAdapter().isPresent());
@@ -86,7 +87,7 @@ class GatewayDaemonProvidersTest {
         WraithConfig cfg = cfgWithQq();
         cfg.getGateway().setFeishu(cfgWithFeishu().getGateway().getFeishu());
         Map<String, CompletableFuture<ApprovalResult>> pending = new ConcurrentHashMap<>();
-        List<ImProvider> providers = GatewayDaemon.buildProviders(cfg, null, dir, pending);
+        List<ImProvider> providers = GatewayDaemon.buildProviders(cfg, null, new QqPendingStore(dir), pending);
         assertEquals(2, providers.size());
         assertEquals("qq", providers.get(0).platform());     // QQ 在前
         assertEquals("feishu", providers.get(1).platform());

@@ -17,7 +17,6 @@ import okhttp3.OkHttpClient;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
@@ -47,13 +46,13 @@ public final class QqProvider implements ImProvider {
      */
     public QqProvider(WraithConfig.GatewayQqConfig qq,
                       LlmClient client,
-                      Path wraithDir,
+                      QqPendingStore qqPending,
                       Map<String, CompletableFuture<ApprovalResult>> pendingApprovals) {
         OkHttpClient http = new OkHttpClient(); // 单个共享 OkHttpClient(api + ws 复用)
         QqApiClient api = new QqApiClient(qq.getAppId(), qq.getClientSecret(),
                 "https://api.sgroup.qq.com", "https://bots.qq.com/app/getAppAccessToken", http);
 
-        this.qqPending = new QqPendingStore(wraithDir);
+        this.qqPending = qqPending;
 
         // 被动窗口状态:openid → 最近入站 msg_id / 时间戳;60 分钟窗口。
         Map<String, String> lastMsgId = new ConcurrentHashMap<>();

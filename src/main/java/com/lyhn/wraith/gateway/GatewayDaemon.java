@@ -8,6 +8,7 @@ import com.lyhn.wraith.automation.Scheduler;
 import com.lyhn.wraith.automation.delivery.Deliverer;
 import com.lyhn.wraith.automation.delivery.DesktopDeliveryAdapter;
 import com.lyhn.wraith.automation.delivery.DeliveryAdapter;
+import com.lyhn.wraith.automation.delivery.QqPendingStore;
 import com.lyhn.wraith.config.WraithConfig;
 import com.lyhn.wraith.gateway.qq.QqProvider;
 import com.lyhn.wraith.gateway.spi.ImProvider;
@@ -55,12 +56,15 @@ public final class GatewayDaemon {
         Path wraithDir = Path.of(home, ".wraith");
         AutomationStore store = new AutomationStore(wraithDir);
 
+        // QQ 待发队列:与 QqProvider 共享同一实例(实例级锁,双实例会对同一文件竞态)
+        QqPendingStore qqPending = new QqPendingStore(wraithDir);
+
         // ── Step 3: pendingApprovals(askSurface + provider 回调 + inbox 三方共享)
         Map<String, CompletableFuture<ApprovalResult>> pendingApprovals = new ConcurrentHashMap<>();
         AtomicLong approvalCounter = new AtomicLong(0);
 
         // ── Step 4: 按 config 构造 IM provider 列表 ──────────────────────────
-        List<ImProvider> providers = buildProviders(cfg, client, wraithDir, pendingApprovals);
+        List<ImProvider> providers = buildProviders(cfg, client, qqPending, pendingApprovals);
 
         // ── Step 5: 真实 AskSurface — 广播给每个 provider 做平台原生呈现 ──────
         final AutomationStore storeRef = store;
@@ -119,16 +123,7 @@ public final class GatewayDaemon {
             try {
                 for (RequestInbox.Request r : inbox.drain()) {
                     try {
-                        if ("run-now".equals(r.type())) {
-                            sch.requestRunNow(r.id());
-                        } else if ("approval".equals(r.type())) {
-                            CompletableFuture<ApprovalResult> ff = pendingApprovals.remove(r.id());
-                            if (ff != null) {
-                                ff.complete("approve".equals(r.payload())
-                                        ? ApprovalResult.approve()
-                                        : ApprovalResult.reject("desktop rejected"));
-                            }
-                        }
+                        handleInboxRequest(r, sch, pendingApprovals, qqPending);
                     } catch (Exception e) {
                         System.err.println("[gateway] inbox 处理单条请求失败: " + e.getMessage());
                     }
@@ -177,17 +172,49 @@ public final class GatewayDaemon {
     }
 
     /**
+     * 处理一条 RequestInbox 请求(package-private 供单测;run-now 需要 Scheduler,
+     * approval / qq-pending-clear 不需要)。
+     */
+    static void handleInboxRequest(RequestInbox.Request r,
+                                   Scheduler sch,
+                                   Map<String, CompletableFuture<ApprovalResult>> pendingApprovals,
+                                   QqPendingStore qqPending) {
+        switch (r.type()) {
+            case "run-now" -> sch.requestRunNow(r.id());
+            case "approval" -> {
+                CompletableFuture<ApprovalResult> ff = pendingApprovals.remove(r.id());
+                if (ff != null) {
+                    ff.complete("approve".equals(r.payload())
+                            ? ApprovalResult.approve()
+                            : ApprovalResult.reject("desktop rejected"));
+                }
+                // 审批已定 → 清掉队列中同 approvalId 的待发卡片(防冲刷发已失效键盘);
+                // future 已不在(QQ 端已批/超时)也要清,故不放 if 内。
+                qqPending.removeByApprovalId(r.id());
+            }
+            case "qq-pending-clear" -> {
+                if (r.id() == null || r.id().isBlank()) {
+                    qqPending.clearResults();
+                } else {
+                    qqPending.removeById(r.id()); // 审批项在 store 层拒删(防御)
+                }
+            }
+            default -> { /* 未知类型:忽略,向前兼容 */ }
+        }
+    }
+
+    /**
      * 按 config 构造已配置的 IM provider 列表(package-private,供测试)。
      * 构造 provider 不触网;传输连接在各 provider 的 {@code start()} 里才发生。
      */
     static List<ImProvider> buildProviders(WraithConfig cfg,
                                            LlmClient client,
-                                           Path wraithDir,
+                                           QqPendingStore qqPending,
                                            Map<String, CompletableFuture<ApprovalResult>> pendingApprovals) {
         List<ImProvider> providers = new ArrayList<>();
         WraithConfig.GatewayConfig gw = cfg.getGateway();
         if (gw != null && gw.getQq() != null) {
-            providers.add(new QqProvider(gw.getQq(), client, wraithDir, pendingApprovals));
+            providers.add(new QqProvider(gw.getQq(), client, qqPending, pendingApprovals));
         }
         if (gw != null && gw.getFeishu() != null) {
             providers.add(new com.lyhn.wraith.gateway.feishu.FeishuProvider(
