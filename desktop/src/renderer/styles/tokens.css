@@ -80,7 +80,30 @@ body {
 
 /* macOS 磨砂皮肤:body 与侧栏透明,露出窗口 vibrancy(非 mac 无 .is-mac,走上面实色) */
 html.is-mac body { background: transparent; }
-html.is-mac .sidebar-gradient { background: transparent; }
+
+/* ── mac 玻璃皮肤:纱(压壁纸饱和度)+ 墨字(可读)+ 墨线(蚀刻不发光) ── */
+html.is-mac .sidebar-gradient { background: linear-gradient(180deg, rgba(255,255,255,.42), rgba(255,255,255,.30)); }
+html.is-mac[data-theme="dark"] .sidebar-gradient { background: linear-gradient(180deg, rgba(15,20,25,.50), rgba(13,17,23,.42)); }
+
+/* 玻璃上次级文字各深/亮一档(hex 与 rgb 同步) */
+html.is-mac [data-testid="sidebar"] {
+  --fg-muted: #38424f; --fg-muted-rgb: 56 66 79;
+  --fg-subtle: #5b6675; --fg-subtle-rgb: 91 102 117;
+}
+html.is-mac[data-theme="dark"] [data-testid="sidebar"] {
+  --fg-muted: #b6c2cf; --fg-muted-rgb: 182 194 207;
+  --fg-subtle: #8b98a5; --fg-subtle-rgb: 139 152 165;
+}
+
+/* 玻璃上发丝线换半透明墨(覆盖 aside 自身 border-r、footer border-t、菜单分隔线)。
+   耦合 Tailwind 类名 .border-border:局部两条,替代方案是 JSX 全改,churn 更大。 */
+html.is-mac :is([data-testid="sidebar"], [data-testid="sidebar"] *).border-border { border-color: rgba(28,36,48,.16); }
+html.is-mac[data-theme="dark"] :is([data-testid="sidebar"], [data-testid="sidebar"] *).border-border { border-color: rgba(230,237,243,.14); }
+
+/* 会话列表 sticky 表头真底(滚动内容不透叠);mac 上与纱同族 */
+.sidebar-sticky { background: rgb(var(--bg-rgb) / .92); }
+html.is-mac .sidebar-sticky { background: rgba(255,255,255,.55); }
+html.is-mac[data-theme="dark"] .sidebar-sticky { background: rgba(22,27,34,.55); }
 
 /* 主题感知 logo 切换:与颜色 token 同一套 [data-theme] 机制(不依赖 Tailwind dark: 变体) */
 /* brand-logo-dark = 深色墨 logo(浅色主题显);brand-logo-light = 浅色 logo(深色主题显) */

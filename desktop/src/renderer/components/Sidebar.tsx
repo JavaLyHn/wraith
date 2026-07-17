@@ -229,7 +229,7 @@ export default function Sidebar({
           <button
             data-testid="new-conversation"
             onClick={onNewConversation}
-            className="w-full rounded-lg border border-border bg-surface/60 px-3 py-2 text-left text-xs text-fg hover:border-accent hover:text-accent"
+            className="w-full rounded-lg bg-fg/5 px-3 py-2 text-left text-xs text-fg hover:bg-fg/10 hover:text-accent"
           >
             <span className="flex items-center gap-2"><Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />新对话</span>
           </button>
@@ -403,8 +403,8 @@ export default function Sidebar({
                   onRename={onRenameSession} onDelete={onDeleteSession} />
               ))
               // sticky 表头:滚动时标题不动,内容从下方滑过(半透明 + 模糊)
-              const headerCls = 'sticky top-0 z-20 mt-4 bg-bg/90 px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
-              const groupLabelCls = 'sticky top-7 z-10 bg-bg/90 px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
+              const headerCls = 'sticky top-0 z-20 mt-4 sidebar-sticky px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
+              const groupLabelCls = 'sticky top-7 z-10 sidebar-sticky px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
               return (
                 <>
                   {sessions.length === 0 && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}

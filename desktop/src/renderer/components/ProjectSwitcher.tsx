@@ -43,7 +43,7 @@ export default function ProjectSwitcher({
         <button
           data-testid="project-switcher"
           title={activePath || '默认工作目录'}
-          className="mx-3 mb-1 flex w-[calc(100%-1.5rem)] items-center gap-1 rounded-lg border border-border bg-surface/60 px-3 py-2 text-left text-xs text-fg hover:border-accent"
+          className="mx-3 mb-1 flex w-[calc(100%-1.5rem)] items-center gap-1 rounded-lg bg-fg/5 px-3 py-2 text-left text-xs text-fg hover:bg-fg/10"
         >
           <span className="truncate">📁 {active ? displayName(active) : baseName(activePath)}</span>
           <span className="ml-auto shrink-0 text-fg-subtle">▾</span>
