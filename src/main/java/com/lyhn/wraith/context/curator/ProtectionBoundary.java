@@ -35,24 +35,17 @@ public final class ProtectionBoundary {
             idx = i;
             if (acc >= budget) break;
         }
-        // 外扩到 user 边界(含该 user):仅向前检查一条消息是否直接是 user,
-        // 避免跨多轮追溯把整段工具交互轮全部纳入保护区。
+        // 外扩到 user 边界(含该 user)
         int anchor = idx;
-        if (anchor > systemEnd && "user".equals(history.get(anchor - 1).role())) {
-            anchor = anchor - 1;
-        } else if ("user".equals(history.get(anchor).role())) {
-            // anchor 本身已经是 user,保持不变
-        } else {
-            // 当前位置不是 user、且前驱也不是 user:不外扩,保持 idx
-        }
+        while (anchor > systemEnd && !"user".equals(history.get(anchor).role())) anchor--;
+        if (!"user".equals(history.get(anchor).role())) anchor = idx;
 
-        // 至少最近 2 个 user 轮(仅在历史有超过 2 个 user 时才向前扩展)
-        // 若仅有 2 个 user,整段历史本属同一任务对话,不强制回退到最老的 user
+        // 至少最近 2 个 user 轮
         List<Integer> users = new ArrayList<>();
         for (int i = systemEnd; i < history.size(); i++) {
             if ("user".equals(history.get(i).role())) users.add(i);
         }
-        if (users.size() > 2) anchor = Math.min(anchor, users.get(users.size() - 2));
+        if (users.size() >= 2) anchor = Math.min(anchor, users.get(users.size() - 2));
         else if (users.size() == 1) anchor = Math.min(anchor, users.get(0));
 
         return Math.max(anchor, systemEnd);

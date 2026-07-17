@@ -9,13 +9,14 @@ import static org.junit.jupiter.api.Assertions.*;
 class ContextCuratorTest {
 
     private static List<Message> bigHistory() {
-        LlmClient.ToolCall tc = new LlmClient.ToolCall("c1", new LlmClient.ToolCall.Function("grep_code", "{}"));
         List<Message> h = new ArrayList<>();
         h.add(Message.system("sys"));
-        h.add(Message.user("start"));
-        for (int i = 0; i < 6; i++) {
-            h.add(Message.assistant("a", List.of(tc)));
-            h.add(Message.tool("c1", ("data" + i).repeat(3000)));
+        for (int round = 0; round < 4; round++) {
+            h.add(Message.user("round " + round));
+            LlmClient.ToolCall tc = new LlmClient.ToolCall("c" + round,
+                    new LlmClient.ToolCall.Function("grep_code", "{}"));
+            h.add(Message.assistant("searching", List.of(tc)));
+            h.add(Message.tool("c" + round, ("match-" + round + " ").repeat(2500)));
         }
         h.add(Message.user("tail"));
         h.add(Message.assistant("done"));
