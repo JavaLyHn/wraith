@@ -26,7 +26,7 @@ class ContextCuratorTest {
     record Ev(String method, Map<String, Object> payload) {}
 
     private static ContextCurator curator(List<Ev> events, long window) {
-        return new ContextCurator(() -> window, new ToolTierPolicy(), CurationSink.NOOP,
+        return new ContextCurator(() -> window, () -> "test-model", new ToolTierPolicy(), CurationSink.NOOP,
                 (m, p) -> events.add(new Ev(m, p)));
     }
 

@@ -74,6 +74,7 @@ public class Agent {
         this.historyCompactor = new ConversationHistoryCompactor(llmClient);
         this.curator = new ContextCurator(
                 () -> this.llmClient == null ? 128_000 : this.llmClient.maxContextWindow(),
+                () -> this.llmClient == null ? "?" : this.llmClient.getModelName(),
                 new com.lyhn.wraith.context.curator.ToolTierPolicy(),
                 new com.lyhn.wraith.context.curator.CurationSink() {   // 委托可替换的 curationSink 字段
                     @Override public java.util.Optional<java.nio.file.Path> writeToolLog(String t, CharSequence c) {

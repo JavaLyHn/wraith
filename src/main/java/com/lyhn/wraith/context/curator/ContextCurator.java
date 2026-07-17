@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 import java.util.function.IntConsumer;
 import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 /**
  * 四级水位线编排(spec §1/§2):判档 → Tier1 Snip → Tier2 Prune → 仍 ≥95% 交 tier3Fallback。
@@ -25,10 +26,13 @@ public final class ContextCurator {
     private final CurationStats stats;
     private final BiConsumer<String, Map<String, Object>> eventOut;
     private final LongSupplier windowSupplier;
+    private final Supplier<String> modelSupplier;
+    private final CalibratedTokenCounter counter = new CalibratedTokenCounter();
 
-    public ContextCurator(LongSupplier windowSupplier, ToolTierPolicy policy,
+    public ContextCurator(LongSupplier windowSupplier, Supplier<String> modelSupplier, ToolTierPolicy policy,
                           CurationSink sink, BiConsumer<String, Map<String, Object>> eventOut) {
         this.windowSupplier = windowSupplier;
+        this.modelSupplier = modelSupplier;
         this.gauge = new WatermarkGauge(windowSupplier);
         this.policy = policy;
         this.stats = new CurationStats(sink);
@@ -37,12 +41,17 @@ public final class ContextCurator {
 
     public CurationStats stats() { return stats; }
 
+    CalibratedTokenCounter counter() { return counter; }
+
     /** LLM 响应到达后调用:锚定真实水位 + metrics 行 + watermark 事件。 */
     public void onUsage(long input, long output, long cached, List<Message> history) {
         try {
-            long estNow = TokenBudget.estimateMessagesTokens(history);
-            gauge.onRealUsage(input, estNow);
-            WatermarkGauge.Reading r = gauge.read(estNow);
+            String model = modelSupplier.get();
+            long rawEst = TokenBudget.estimateMessagesTokens(history);
+            counter.calibrate(model, input, rawEst);
+            long estNow = counter.estimate(model, history);
+            gauge.onRealUsage(model, input, estNow);
+            WatermarkGauge.Reading r = gauge.read(model, estNow);
             stats.recordUsage(input, output, cached, r);
             Map<String, Object> p = new LinkedHashMap<>();
             p.put("usedTokens", r.usedTokens());
@@ -58,8 +67,9 @@ public final class ContextCurator {
     /** 调 LLM 前治理。返回是否发生任何动作。 */
     public boolean curate(List<Message> history, IntConsumer tier3Fallback) {
         try {
-            long estBefore = TokenBudget.estimateMessagesTokens(history);
-            WatermarkGauge.Reading r = gauge.read(estBefore);
+            String model = modelSupplier.get();
+            long estBefore = counter.estimate(model, history);
+            WatermarkGauge.Reading r = gauge.read(model, estBefore);
             if (r.tier() == 0) return false;
 
             long start = System.nanoTime();
@@ -80,13 +90,13 @@ public final class ContextCurator {
             }
 
             boolean summarized = false;
-            long estAfterPasses = TokenBudget.estimateMessagesTokens(history);
-            if (r.tier() >= 3 && gauge.read(estAfterPasses).tier() >= 3 && tier3Fallback != null) {
+            long estAfterPasses = counter.estimate(model, history);
+            if (r.tier() >= 3 && gauge.read(model, estAfterPasses).tier() >= 3 && tier3Fallback != null) {
                 tier3Fallback.accept(protectedFrom);   // Phase A:旧 ConversationHistoryCompactor 代位(带保护区上限);Phase B 换增量摘要
                 summarized = true;
             }
 
-            long estAfter = TokenBudget.estimateMessagesTokens(history);
+            long estAfter = counter.estimate(model, history);
             int snipped = snip.changes().size();
             if (snipped == 0 && pruned == 0 && !summarized) return false;
 

@@ -17,21 +17,25 @@ public final class WatermarkGauge {
     private final LongSupplier windowSupplier;
     private long lastRealInput = -1;
     private long estimateAtReal = 0;
+    private String anchorModel;
 
     public WatermarkGauge(LongSupplier windowSupplier) {
         this.windowSupplier = windowSupplier;
     }
 
-    /** LLM 响应到达时调用:真实 inputTokens + 该次调用前 history 的估算值(作差分锚点)。 */
-    public synchronized void onRealUsage(long inputTokens, long historyEstimateAtCall) {
+    /** LLM 响应到达时调用:真实 inputTokens + 该次调用前 history 的(校准)估算值 + 所属模型。 */
+    public synchronized void onRealUsage(String modelKey, long inputTokens, long historyEstimateAtCall) {
         if (inputTokens <= 0) return;
         this.lastRealInput = inputTokens;
         this.estimateAtReal = historyEstimateAtCall;
+        this.anchorModel = modelKey;
     }
 
-    public synchronized Reading read(long historyEstimateNow) {
+    public synchronized Reading read(String modelKey, long historyEstimateNow) {
         long window = Math.max(1, windowSupplier.getAsLong());
-        long used = lastRealInput < 0
+        boolean anchored = lastRealInput >= 0
+                && anchorModel != null && anchorModel.equals(modelKey);
+        long used = !anchored
                 ? historyEstimateNow
                 : Math.max(0, lastRealInput + (historyEstimateNow - estimateAtReal));
         double ratio = (double) used / window;
