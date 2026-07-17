@@ -174,6 +174,44 @@ class ConversationHistoryCompactorTest {
         assertEquals(before, history.size());
     }
 
+    @Test
+    void protectingCompactionNeverCrossesProtectedFrom() {
+        // 6 轮,retainRecent=2 → 默认只保留最近 2 轮(Q4/Q5);但 protectedFrom 指向更早的
+        // Q2(索引 5),tier3 代位的摘要边界必须让位,保留 [Q2, end),不吞掉保护区内近端轮次。
+        StubCompactor c = new StubCompactor("OLD SUMMARY", 2);
+        List<LlmClient.Message> history = new ArrayList<>();
+        history.add(LlmClient.Message.system("SYSTEM_PROMPT"));
+        for (int i = 0; i < 6; i++) {
+            history.add(LlmClient.Message.user("Q" + i + ": " + longText(5_000)));
+            history.add(LlmClient.Message.assistant("A" + i + ": " + longText(5_000)));
+        }
+
+        boolean compacted = c.compactIfNeededProtecting(history, 100, 5 /* Q2 的索引 */);
+
+        assertTrue(compacted);
+        assertTrue(history.get(1).content().contains("已压缩的历史对话摘要"));
+        assertTrue(history.get(3).content().startsWith("Q2"),
+                "protectedFrom=Q2 时,Q2 及之后必须原样保留,不被摘要吞掉");
+    }
+
+    @Test
+    void protectingCompactionDegradesToDefaultWhenProtectedFromIsLate() {
+        // protectedFrom 晚于默认保留边界(retain=2 的 Q4)时,不得缩小保护——退化为默认。
+        StubCompactor c = new StubCompactor("OLD SUMMARY", 2);
+        List<LlmClient.Message> history = new ArrayList<>();
+        history.add(LlmClient.Message.system("SYSTEM_PROMPT"));
+        for (int i = 0; i < 6; i++) {
+            history.add(LlmClient.Message.user("Q" + i + ": " + longText(5_000)));
+            history.add(LlmClient.Message.assistant("A" + i + ": " + longText(5_000)));
+        }
+
+        boolean compacted = c.compactIfNeededProtecting(history, 100, 11 /* Q5,晚于默认 Q4 边界 */);
+
+        assertTrue(compacted);
+        assertTrue(history.get(3).content().startsWith("Q4"),
+                "protectedFrom 晚于默认边界时保护不应缩小,仍保留最近 2 轮");
+    }
+
     private static String longText(int chars) {
         StringBuilder sb = new StringBuilder(chars);
         for (int i = 0; i < chars; i++) sb.append('x');

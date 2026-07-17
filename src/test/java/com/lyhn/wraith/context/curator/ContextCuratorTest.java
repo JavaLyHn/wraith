@@ -35,7 +35,7 @@ class ContextCuratorTest {
         List<Ev> events = new ArrayList<>();
         ContextCurator c = curator(events, 10_000_000);  // 巨大窗口 → ratio≈0
         List<Message> h = bigHistory();
-        assertFalse(c.curate(h, () -> fail("不该走 tier3")));
+        assertFalse(c.curate(h, pf -> fail("不该走 tier3")));
         assertTrue(events.isEmpty());
     }
 
@@ -44,7 +44,7 @@ class ContextCuratorTest {
         List<Ev> events = new ArrayList<>();
         ContextCurator c = curator(events, 30_000);      // bigHistory 估算远超 60%
         List<Message> h = bigHistory();
-        assertTrue(c.curate(h, () -> {}));
+        assertTrue(c.curate(h, pf -> {}));
         assertEquals("context.compaction", events.get(events.size() - 1).method());
         Map<String, Object> p = events.get(events.size() - 1).payload();
         assertTrue((int) p.get("snipped") > 0);
@@ -77,7 +77,7 @@ class ContextCuratorTest {
         List<Ev> events = new ArrayList<>();
         ContextCurator c = curator(events, 12_000);
         boolean[] ran = {false};
-        c.curate(h, () -> ran[0] = true);
+        c.curate(h, pf -> ran[0] = true);
         assertTrue(ran[0]);
         // 保护名单未被任何 pass 碰过
         assertTrue(h.stream().noneMatch(m -> m.content() != null && m.content().contains(CurationMarks.SNIP_MARK)));

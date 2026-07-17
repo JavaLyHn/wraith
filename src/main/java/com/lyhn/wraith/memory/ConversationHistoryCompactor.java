@@ -75,7 +75,15 @@ public class ConversationHistoryCompactor {
      * @return 是否真的压缩了
      */
     public boolean compactIfNeeded(List<LlmClient.Message> history, int triggerTokens) {
-        return compact(history, triggerTokens, false, retainRecentRounds);
+        return compact(history, triggerTokens, false, retainRecentRounds, -1);
+    }
+
+    /**
+     * tier3 代位专用:与 {@link #compactIfNeeded} 相同,但保证摘要边界不越过 curator 保护区
+     * 起始索引 protectedFrom —— [protectedFrom, size) 一律保留,不被旧全量摘要吞掉。
+     */
+    public boolean compactIfNeededProtecting(List<LlmClient.Message> history, int triggerTokens, int protectedFrom) {
+        return compact(history, triggerTokens, false, retainRecentRounds, protectedFrom);
     }
 
     /**
@@ -85,10 +93,10 @@ public class ConversationHistoryCompactor {
      * @return 是否真的压缩了
      */
     public boolean compactNow(List<LlmClient.Message> history) {
-        return compact(history, 0, true, 1);
+        return compact(history, 0, true, 1, -1);
     }
 
-    private boolean compact(List<LlmClient.Message> history, int triggerTokens, boolean force, int retainRounds) {
+    private boolean compact(List<LlmClient.Message> history, int triggerTokens, boolean force, int retainRounds, int protectedCeil) {
         if (history == null || history.isEmpty()) return false;
         int currentTokens = TokenBudget.estimateMessagesTokens(history);
         if (!force && currentTokens < triggerTokens) return false;
@@ -109,6 +117,9 @@ public class ConversationHistoryCompactor {
         }
 
         int splitIdx = userIndices.get(userIndices.size() - effectiveRetainRounds);
+        // tier3 代位:摘要边界不得越过 curator 保护区起始 protectedFrom(<0 表示无约束),
+        // 否则会把 [protectedFrom, size) 保护区内的近端轮次一起摘掉。
+        if (protectedCeil >= 0 && protectedCeil < splitIdx) splitIdx = protectedCeil;
         if (splitIdx <= systemEnd) return false;
 
         List<LlmClient.Message> oldMsgs = new ArrayList<>(history.subList(systemEnd, splitIdx));

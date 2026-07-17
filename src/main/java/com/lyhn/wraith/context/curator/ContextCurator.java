@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
+import java.util.function.IntConsumer;
 import java.util.function.LongSupplier;
 
 /**
@@ -55,7 +56,7 @@ public final class ContextCurator {
     }
 
     /** 调 LLM 前治理。返回是否发生任何动作。 */
-    public boolean curate(List<Message> history, Runnable tier3Fallback) {
+    public boolean curate(List<Message> history, IntConsumer tier3Fallback) {
         try {
             long estBefore = TokenBudget.estimateMessagesTokens(history);
             WatermarkGauge.Reading r = gauge.read(estBefore);
@@ -81,7 +82,7 @@ public final class ContextCurator {
             boolean summarized = false;
             long estAfterPasses = TokenBudget.estimateMessagesTokens(history);
             if (r.tier() >= 3 && gauge.read(estAfterPasses).tier() >= 3 && tier3Fallback != null) {
-                tier3Fallback.run();   // Phase A:旧 ConversationHistoryCompactor 代位;Phase B 换增量摘要
+                tier3Fallback.accept(protectedFrom);   // Phase A:旧 ConversationHistoryCompactor 代位(带保护区上限);Phase B 换增量摘要
                 summarized = true;
             }
 

@@ -479,10 +479,17 @@ public class Agent {
 
     /** 旧路径(回退开关 + Phase A 的 Tier3 代位;Phase B 换增量摘要后仅剩回退用途)。 */
     private void legacyAutoCompact() {
+        legacyAutoCompact(-1);   // 回退路径(curator 关):无保护区约束,逐字节等价旧行为
+    }
+
+    /** tier3 代位:protectedFrom>=0 时保证旧全量摘要不越过 curator 保护区;<0 为无约束回退。 */
+    private void legacyAutoCompact(int protectedFrom) {
         if (historyCompactor == null) return;
         int trigger = memoryManager.getContextProfile().compressionTriggerTokens();
         try {
-            boolean compacted = historyCompactor.compactIfNeeded(conversationHistory, trigger);
+            boolean compacted = protectedFrom < 0
+                    ? historyCompactor.compactIfNeeded(conversationHistory, trigger)
+                    : historyCompactor.compactIfNeededProtecting(conversationHistory, trigger, protectedFrom);
             if (compacted) {
                 renderer().stream().println("📦 上下文接近窗口上限，已把早期对话压缩为摘要后继续。");
             }

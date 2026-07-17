@@ -43,7 +43,7 @@ public final class PrunePass {
                     && content.length() > ToolTierPolicy.ASSISTANT_PRUNE_MIN_CHARS) {
                 String rebuilt = firstSentences(content) + "…[truncated]" + CurationMarks.PRUNE_MARK;
                 long delta = estimate(content) - estimate(rebuilt);
-                history.set(i, new Message("assistant", rebuilt, null, m.toolCalls(), null));
+                history.set(i, Message.assistant(rebuilt, m.toolCalls()));
                 released += Math.max(0, delta);
                 changes.add(new SnipPass.Change(i, null, Math.max(0, delta), null));
             }
