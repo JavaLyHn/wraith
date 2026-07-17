@@ -30,13 +30,17 @@ class ProtectionBoundaryTest {
 
     @Test
     void boundaryExpandsBackToUserEdge() {
-        // 大预算把累计推进到中段的 assistant 上 → 必须外扩到其前最近 user
+        // budget=1000 使累计恰好停在中段 assistant(idx=2) → 必须外扩到其前最近 user(idx=1)
+        // idx=2: asst(4000) → 1004 tokens (首次突破预算)
+        // 外扩逻辑: idx=2 不是 user → 向前 → idx=1 是 user ✓
         List<Message> h = new ArrayList<>(List.of(
-                Message.system("sys"),
-                user("x".repeat(4000)), asst("y".repeat(4000)),
+                Message.system("sys"),              // idx=0
+                user("x".repeat(4000)),             // idx=1 (预期外扩目标)
+                asst("y".repeat(4000)),             // idx=2 (累计停止位置)
                 user("tail1"), asst("t"), user("tail2"), asst("t")));
-        int from = ProtectionBoundary.protectedFrom(h, 3_000);
-        assertEquals("user", h.get(from).role());
+        int from = ProtectionBoundary.protectedFrom(h, 1_000);
+        assertEquals(1, from);  // 强化断言：具体索引必须是 1（第一个 user）
+        assertEquals("user", h.get(from).role());  // 保留 role 断言
     }
 
     @Test
