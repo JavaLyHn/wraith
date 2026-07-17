@@ -100,9 +100,25 @@ public class Agent {
         this.historyCompactor.setLlmClient(llmClient);
         this.toolRegistry.setContextProfile(memoryManager.getContextProfile());
         this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
-        // 换模型立即推一帧状态:窗口/模型/价格口径同步刷新(spec §5/§6);
-        // summarizer/gauge/counter 无需手动同步——curator 持 supplier,天然跟当前 client
-        renderer().updateStatus(currentStatus(turnActive ? "running" : "idle"));
+        // 换模型立即推一帧状态(修"换模型不刷新"):
+        // - 仅非回合期推:turn 运行中 history 正被写,无锁读有 CME 风险(与 contextStateCore 同一守卫);
+        //   且运行中的 turn 下一次 pushStatus 本就会带上新模型,无需此帧。
+        // - 累计/成本取自 curator.stats()(会话累计)而非 StatusInfo.idle 的零值,避免桌面芯片被清零。
+        if (!turnActive) {
+            var stats = curator.stats();
+            String cost = TokenUsageFormatter.estimatedCost(llmClient, pricingTable,
+                    (int) Math.min(Integer.MAX_VALUE, stats.totalInput()),
+                    (int) Math.min(Integer.MAX_VALUE, stats.totalOutput()),
+                    (int) Math.min(Integer.MAX_VALUE, stats.totalCached()));
+            renderer().updateStatus(new StatusInfo(
+                    llmClient.getModelName(),
+                    (long) estimateCurrentContextTokens(),
+                    llmClient.maxContextWindow(),
+                    stats.totalInput(), stats.totalOutput(), stats.totalCached(),
+                    cost,
+                    Boolean.TRUE.equals(hitlEnabledSupplier.get()),
+                    0L, "idle"));
+        }
     }
 
     /** 会话治理落地通道(工具全量日志/metrics);装配点在建好 SessionStore 后注入,同时透传工具层。 */
