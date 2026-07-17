@@ -70,6 +70,8 @@ public final class AppServer {
          * 默认返回 null(-32000)。
          */
         default java.util.Map<String, Object> modelList() { return null; }
+        /** context.state.get 快照(spec Phase B §6)。默认 null(-32000)。 */
+        default java.util.Map<String, Object> contextState() { return null; }
         /**
          * 会话级切换 provider(不写 config)。
          * 成功返回 {@code {provider, model}}；无 key/未知 provider → 抛 {@link IllegalArgumentException}(-32602)。
@@ -402,6 +404,14 @@ public final class AppServer {
                 // 压缩会调一次 LLM 生成摘要,耗时 → 后台线程,避免占用单线程分发循环
                 final SessionRunner s = session;
                 dispatchAsync(msg.id(), s::compactHistory);
+            }
+            case "context.state.get" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try {
+                    java.util.Map<String, Object> st = session.contextState();
+                    if (st == null) writer.error(msg.id(), -32000, "not supported");
+                    else writer.result(msg.id(), st);
+                } catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "task.list" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }

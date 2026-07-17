@@ -461,6 +461,34 @@ public class Agent {
         return StatusInfo.active(model, contextWindow, contextTokens, hitl, normalizedPhase);
     }
 
+    /** context.state.get 快照核(spec §6):与 status 通知同形,便于桌面直接复用 reducer。 */
+    public java.util.Map<String, Object> contextStateCore() {
+        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("model", llmClient == null ? "—" : llmClient.getModelName());
+        m.put("contextWindow", llmClient == null ? 0L : llmClient.maxContextWindow());
+        m.put("totalTokens", (long) estimateCurrentContextTokens());
+        m.put("estimated", true);   // 核只有估算;runner 用 JSONL 尾行覆盖时置 false(spec §6"估算,待首轮校准")
+        m.put("phase", turnActive ? "running" : "idle");
+        String liveSummary = null;
+        for (LlmClient.Message msg : conversationHistory) {
+            String c = msg.content();
+            if (c != null && c.contains(com.lyhn.wraith.context.curator.CurationMarks.SUMMARY_MARK)) {
+                liveSummary = c.replace(com.lyhn.wraith.context.curator.CurationMarks.SUMMARY_MARK, "").trim();
+                break;
+            }
+        }
+        m.put("liveSummary", liveSummary);
+        var stats = curator.stats();
+        m.put("inputTokens", stats.totalInput());
+        m.put("outputTokens", stats.totalOutput());
+        m.put("cachedInputTokens", stats.totalCached());
+        m.put("estimatedCost", TokenUsageFormatter.estimatedCost(llmClient, pricingTable,
+                (int) Math.min(Integer.MAX_VALUE, stats.totalInput()),
+                (int) Math.min(Integer.MAX_VALUE, stats.totalOutput()),
+                (int) Math.min(Integer.MAX_VALUE, stats.totalCached())));
+        return m;
+    }
+
     /**
      * 将记忆上下文注入到 system prompt 中（替换 conversationHistory[0]）
      */

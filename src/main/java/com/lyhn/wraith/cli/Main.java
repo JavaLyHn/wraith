@@ -1257,6 +1257,42 @@ public class Main {
                     public java.util.List<com.lyhn.wraith.session.SessionMeta> listSessions() {
                         return sessionStore.list(50);
                     }
+                    public java.util.Map<String, Object> contextState() {
+                        java.util.Map<String, Object> m = agent.contextStateCore();
+                        // 会话累计以 metrics JSONL 为准(覆盖重启前轮次;in-process 行也在文件里)
+                        sessionStore.artifactDir().ifPresent(dir -> {
+                            java.nio.file.Path f = dir.resolve("context-metrics.jsonl");
+                            if (!java.nio.file.Files.isRegularFile(f)) return;
+                            try {
+                                long in = 0, out = 0, cached = 0;
+                                com.fasterxml.jackson.databind.ObjectMapper om =
+                                        new com.fasterxml.jackson.databind.ObjectMapper();
+                                com.fasterxml.jackson.databind.JsonNode last = null;
+                                for (String line : java.nio.file.Files.readAllLines(f)) {
+                                    if (line.isBlank()) continue;
+                                    try {
+                                        com.fasterxml.jackson.databind.JsonNode n = om.readTree(line);
+                                        if (n.has("compaction")) continue;   // 压缩行不计入 usage 累计
+                                        in += n.path("inputTokens").asLong(0);
+                                        out += n.path("outputTokens").asLong(0);
+                                        cached += n.path("cachedInputTokens").asLong(0);
+                                        last = n;
+                                    } catch (Exception ignored) { /* 坏行跳过 */ }
+                                }
+                                if (last != null) {
+                                    m.put("inputTokens", in);
+                                    m.put("outputTokens", out);
+                                    m.put("cachedInputTokens", cached);
+                                    m.put("ratio", last.path("ratio").asDouble(0));
+                                    m.put("tier", last.path("tier").asInt(0));
+                                    m.put("estimated", false);   // 有真实 usage 尾行,水位不再是纯估算
+                                }
+                            } catch (Exception e) {
+                                // 聚合失败不影响快照主体
+                            }
+                        });
+                        return m;
+                    }
                     public java.util.List<com.lyhn.wraith.llm.LlmClient.Message> resume(String id) {
                         java.util.List<com.lyhn.wraith.llm.LlmClient.Message> msgs = sessionStore.resume(id);
                         agent.restoreHistory(msgs);
