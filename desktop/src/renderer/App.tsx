@@ -888,7 +888,7 @@ export default function App(): JSX.Element {
               data-testid="sidebar-expand"
               onClick={() => setSidebarCollapsed(false)}
               title="展开侧栏"
-              className="rounded-lg p-1.5 text-fg-muted transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-surface/60 hover:text-fg [-webkit-app-region:no-drag]"
+              className="rounded-lg p-1.5 text-fg-muted transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-fg/5 hover:text-fg [-webkit-app-region:no-drag]"
             >
               <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
             </button>
@@ -896,12 +896,12 @@ export default function App(): JSX.Element {
           {view === 'chat' && (
             <div className="ml-auto flex items-center gap-1 pr-2 [-webkit-app-region:no-drag]">
               <button data-testid="terminal-toggle" onClick={() => setTerminalOpen(v => !v)}
-                className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-surface hover:text-fg ' + (terminalOpen ? 'text-accent' : 'text-fg-muted')}
+                className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-fg/5 hover:text-fg ' + (terminalOpen ? 'text-accent' : 'text-fg-muted')}
                 title="终端">
                 <SquareTerminal className="h-4 w-4" strokeWidth={1.5} />
               </button>
               <button data-testid="rightdock-toggle" onClick={() => setRightDockOpen(v => !v)}
-                className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-surface hover:text-fg ' + (rightDockOpen ? 'text-accent' : 'text-fg-muted')}
+                className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-fg/5 hover:text-fg ' + (rightDockOpen ? 'text-accent' : 'text-fg-muted')}
                 title="右侧面板(浏览器/终端)">
                 <PanelRight className="h-4 w-4" strokeWidth={1.5} />
               </button>
@@ -1012,7 +1012,7 @@ export default function App(): JSX.Element {
                       onClick={() => void handleCompact()}
                       disabled={compactBusy || state.turn === 'running' || !pv.items.length}
                       title="压缩上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
-                      className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface hover:text-fg disabled:cursor-not-allowed disabled:opacity-40'}
+                      className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40'}
                     >
                       <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '压缩中…' : '压缩'}
                     </button>
@@ -1021,7 +1021,7 @@ export default function App(): JSX.Element {
                       onClick={() => void handleExport()}
                       disabled={!pv.items.length}
                       title="导出当前对话为 Markdown"
-                      className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-surface hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                      className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />导出
                     </button>

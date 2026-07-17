@@ -100,10 +100,10 @@ html.is-mac[data-theme="dark"] [data-testid="sidebar"] {
 html.is-mac :is([data-testid="sidebar"], [data-testid="sidebar"] *).border-border { border-color: rgba(28,36,48,.16); }
 html.is-mac[data-theme="dark"] :is([data-testid="sidebar"], [data-testid="sidebar"] *).border-border { border-color: rgba(230,237,243,.14); }
 
-/* 会话列表 sticky 表头真底(滚动内容不透叠);mac 上与纱同族 */
-.sidebar-sticky { background: rgb(var(--bg-rgb) / .92); }
-html.is-mac .sidebar-sticky { background: rgba(255,255,255,.55); }
-html.is-mac[data-theme="dark"] .sidebar-sticky { background: rgba(22,27,34,.55); }
+/* 会话列表 sticky 表头:上实下透渐隐纱,滚动内容从纱下淡出(无硬边) */
+.sidebar-sticky { background: linear-gradient(180deg, rgb(var(--bg-rgb) / .95) 55%, rgb(var(--bg-rgb) / 0)); }
+html.is-mac .sidebar-sticky { background: linear-gradient(180deg, rgba(255,255,255,.72) 55%, rgba(255,255,255,0)); }
+html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180deg, rgba(22,27,34,.72) 55%, rgba(22,27,34,0)); }
 
 /* 主题感知 logo 切换:与颜色 token 同一套 [data-theme] 机制(不依赖 Tailwind dark: 变体) */
 /* brand-logo-dark = 深色墨 logo(浅色主题显);brand-logo-light = 浅色 logo(深色主题显) */

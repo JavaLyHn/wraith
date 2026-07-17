@@ -44,7 +44,7 @@ function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDe
 
   if (editing) {
     return (
-      <div className="mb-0.5 flex items-center rounded-lg bg-surface px-1">
+      <div className="mb-0.5 flex items-center rounded-lg bg-fg/10 px-1">
         <input ref={editRef} data-testid="session-rename-input" value={draft}
           onChange={e => setDraft(e.target.value)}
           onBlur={() => finishEdit(true)}
@@ -59,7 +59,7 @@ function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDe
 
   return (
     <div className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 ' +
-      (active ? 'bg-surface' : 'hover:bg-surface/60')}
+      (active ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent' : 'hover:bg-fg/5')}
       onMouseLeave={() => setConfirmDel(false)}>
       {running && (
         <span data-testid="session-running-dot" className="relative ml-1 flex h-2 w-2 shrink-0" title="运行中">
@@ -196,7 +196,7 @@ export default function Sidebar({
             data-testid="sidebar-collapse"
             onClick={onToggleCollapsed}
             title={collapsed ? '展开侧栏' : '折叠侧栏'}
-            className="rounded-lg p-1.5 text-fg-muted transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-surface/60 hover:text-fg [-webkit-app-region:no-drag]"
+            className="rounded-lg p-1.5 text-fg-muted transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-fg/5 hover:text-fg [-webkit-app-region:no-drag]"
           >
             <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
           </button>
@@ -241,7 +241,7 @@ export default function Sidebar({
           <button
             data-testid="nav-search"
             onClick={onOpenSearch}
-            className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60"
+            className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-fg/5"
           >
             <span className="flex items-center gap-2"><Search className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />搜索</span>
           </button>
@@ -250,7 +250,7 @@ export default function Sidebar({
           <button
             data-testid="nav-tools-toggle"
             onClick={() => setToolsExpanded(v => !v)}
-            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60"
+            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-fg/5"
           >
             <Wrench className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />工具
             {!showTools && automationBadge && (
@@ -268,7 +268,7 @@ export default function Sidebar({
             data-testid="nav-plugins"
             onClick={onOpenPlugins}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'plugins' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'plugins' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2"><Blocks className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />MCP</span>
           </button>
@@ -278,7 +278,7 @@ export default function Sidebar({
             data-testid="nav-automations"
             onClick={onOpenAutomations}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'automations' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'automations' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2">
               <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />自动化
@@ -296,7 +296,7 @@ export default function Sidebar({
             data-testid="nav-im-gateway"
             onClick={onOpenImGateway}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'im-gateway' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'im-gateway' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2"><MessageSquare className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />IM 网关</span>
           </button>
@@ -306,7 +306,7 @@ export default function Sidebar({
             data-testid="nav-providers"
             onClick={onOpenProviders}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'providers' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'providers' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2"><Plug className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />Provider 配置</span>
           </button>
@@ -316,7 +316,7 @@ export default function Sidebar({
             data-testid="nav-skills"
             onClick={onOpenSkills}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'skills' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'skills' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2"><BookOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />技能</span>
           </button>
@@ -325,7 +325,7 @@ export default function Sidebar({
             data-testid="nav-memory"
             onClick={onOpenMemory}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'memory' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'memory' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2"><Brain className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />记忆</span>
           </button>
@@ -334,7 +334,7 @@ export default function Sidebar({
             data-testid="nav-snapshots"
             onClick={onOpenSnapshots}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'snapshots' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'snapshots' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2"><History className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />快照</span>
           </button>
@@ -343,7 +343,7 @@ export default function Sidebar({
             data-testid="nav-tasks"
             onClick={onOpenTasks}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'tasks' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'tasks' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2"><ListTodo className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />后台任务</span>
           </button>
@@ -352,7 +352,7 @@ export default function Sidebar({
             data-testid="nav-policy"
             onClick={onOpenPolicy}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'policy' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'policy' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />安全</span>
           </button>
@@ -361,7 +361,7 @@ export default function Sidebar({
             data-testid="nav-browser"
             onClick={onOpenBrowser}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'browser' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'browser' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2"><Globe className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />浏览器</span>
           </button>
@@ -370,7 +370,7 @@ export default function Sidebar({
             data-testid="nav-rag"
             onClick={onOpenRag}
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'rag' ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}
+              (activeNav === 'rag' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
             <span className="flex items-center gap-2"><ScanSearch className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />代码检索</span>
           </button>
@@ -388,7 +388,7 @@ export default function Sidebar({
                 data-testid="session-draft"
                 onClick={onNewConversation}
                 title="当前新对话(发送消息后自动保存到列表)"
-                className="mt-2 flex w-full items-center gap-2 rounded-lg bg-surface px-3 py-1.5 text-left text-xs text-fg"
+                className="mt-2 flex w-full items-center gap-2 rounded-lg relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent px-3 py-1.5 text-left text-xs text-fg"
               >
                 <span className="truncate">新对话</span>
                 <span className="ml-auto shrink-0 text-3xs text-fg-subtle">草稿</span>
@@ -403,8 +403,8 @@ export default function Sidebar({
                   onRename={onRenameSession} onDelete={onDeleteSession} />
               ))
               // sticky 表头:滚动时标题不动,内容从下方滑过(半透明 + 模糊)
-              const headerCls = 'sticky top-0 z-20 mt-4 sidebar-sticky px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
-              const groupLabelCls = 'sticky top-7 z-10 sidebar-sticky px-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle backdrop-blur-sm'
+              const headerCls = 'sticky top-0 z-20 mt-4 sidebar-sticky pl-5 pr-3 pb-1.5 pt-2 text-3xs uppercase tracking-wider text-fg-subtle'
+              const groupLabelCls = 'sticky top-7 z-10 sidebar-sticky pl-5 pr-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle'
               return (
                 <>
                   {sessions.length === 0 && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
@@ -447,7 +447,7 @@ export default function Sidebar({
           <button
             data-testid="nav-settings"
             onClick={onOpenSettings}
-            className="mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-fg-muted hover:bg-surface hover:text-accent"
+            className="mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-fg-muted hover:bg-fg/5 hover:text-accent"
           >
             <Settings aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} /><span>设置</span>
           </button>
