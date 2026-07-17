@@ -64,7 +64,8 @@ public final class GatewayDaemon {
         AtomicLong approvalCounter = new AtomicLong(0);
 
         // ── Step 4: 按 config 构造 IM provider 列表 ──────────────────────────
-        List<ImProvider> providers = buildProviders(cfg, client, qqPending, pendingApprovals);
+        List<ImProvider> providers = buildProviders(cfg, client, qqPending,
+                com.lyhn.wraith.wechat.WechatAccountStore.createDefault(), pendingApprovals);
 
         // ── Step 5: 真实 AskSurface — 广播给每个 provider 做平台原生呈现 ──────
         final AutomationStore storeRef = store;
@@ -210,6 +211,7 @@ public final class GatewayDaemon {
     static List<ImProvider> buildProviders(WraithConfig cfg,
                                            LlmClient client,
                                            QqPendingStore qqPending,
+                                           com.lyhn.wraith.wechat.WechatAccountStore weixinStore,
                                            Map<String, CompletableFuture<ApprovalResult>> pendingApprovals) {
         List<ImProvider> providers = new ArrayList<>();
         WraithConfig.GatewayConfig gw = cfg.getGateway();
@@ -227,7 +229,7 @@ public final class GatewayDaemon {
         // weixin: 判据是 wechat 账号店(~/.wraith/wechat/accounts/latest.json)有绑定账号,
         // 而非 config.json —— token/游标由账号店管理(游标高频写,不进 config)。
         try {
-            com.lyhn.wraith.wechat.WechatAccountStore.createDefault().loadLatest()
+            weixinStore.loadLatest()
                     .ifPresent(acc -> providers.add(
                             new com.lyhn.wraith.gateway.weixin.WeixinProvider(acc, client, pendingApprovals)));
         } catch (Exception e) {

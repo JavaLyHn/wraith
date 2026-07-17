@@ -92,7 +92,7 @@ class AppServerSkillsTest {
                 return v;
             }
             public Map<String,Object> skillsUpsert(String scope, String name, String description,
-                    String version, String author, List<String> tags, String body) {
+                    String version, String author, List<String> tags, String body, java.util.List<java.util.Map<String, String>> references) {
                 try { store.upsert(scope, name, description, version, author, tags, body); }
                 catch (java.io.IOException e) { throw new RuntimeException(e); }
                 registry.reload();
