@@ -365,6 +365,7 @@ public class Main {
             SessionStore sessionStore = SessionStore.open(home,
                     reactAgent.getToolRegistry().getProjectPath(),
                     llmClient.getProviderName(), llmClient.getModelName());
+            reactAgent.setCurationSink(new com.lyhn.wraith.session.SessionCurationSink(sessionStore));
             applyResumeAtLaunch(resumeIntent, sessionStore, reactAgent, renderer, ui);
             reactAgent.getToolRegistry().setTodoSink(renderer::renderTodos); // 实时 TODO 面板(todo_write)
 

@@ -1,5 +1,6 @@
 package com.lyhn.wraith.agent;
 
+import com.lyhn.wraith.context.curator.ContextCurator;
 import com.lyhn.wraith.llm.LlmClient;
 import com.lyhn.wraith.llm.LlmTraceLogger;
 import com.lyhn.wraith.context.ContextProfile;
@@ -49,6 +50,10 @@ public class Agent {
     private final List<LlmClient.Message> conversationHistory;
     private final MemoryManager memoryManager;
     private final ConversationHistoryCompactor historyCompactor;
+    private final ContextCurator curator;
+    private com.lyhn.wraith.context.curator.CurationSink curationSink =
+            com.lyhn.wraith.context.curator.CurationSink.NOOP;
+    private volatile boolean turnActive = false;
     private Supplier<String> externalContextSupplier = () -> "";
     private SkillRegistry skillRegistry;
     private SkillContextBuffer skillContextBuffer;
@@ -67,6 +72,16 @@ public class Agent {
         this.conversationHistory = new ArrayList<>();
         this.memoryManager = new MemoryManager(llmClient);
         this.historyCompactor = new ConversationHistoryCompactor(llmClient);
+        this.curator = new ContextCurator(
+                () -> this.llmClient == null ? 128_000 : this.llmClient.maxContextWindow(),
+                new com.lyhn.wraith.context.curator.ToolTierPolicy(),
+                new com.lyhn.wraith.context.curator.CurationSink() {   // 委托可替换的 curationSink 字段
+                    @Override public java.util.Optional<java.nio.file.Path> writeToolLog(String t, CharSequence c) {
+                        return curationSink.writeToolLog(t, c);
+                    }
+                    @Override public void appendMetrics(String j) { curationSink.appendMetrics(j); }
+                },
+                (method, payload) -> renderer().contextEvent(method, payload));
         this.toolRegistry.setContextProfile(memoryManager.getContextProfile());
         this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
         this.memoryManager.setProjectPath(this.toolRegistry.getProjectPath());
@@ -80,6 +95,12 @@ public class Agent {
         this.historyCompactor.setLlmClient(llmClient);
         this.toolRegistry.setContextProfile(memoryManager.getContextProfile());
         this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
+    }
+
+    /** 会话治理落地通道(工具全量日志/metrics);装配点在建好 SessionStore 后注入,同时透传工具层。 */
+    public void setCurationSink(com.lyhn.wraith.context.curator.CurationSink sink) {
+        this.curationSink = sink == null ? com.lyhn.wraith.context.curator.CurationSink.NOOP : sink;
+        if (toolRegistry != null) toolRegistry.setCurationSink(this.curationSink);
     }
 
     public void setExternalContextSupplier(Supplier<String> externalContextSupplier) {
@@ -201,6 +222,16 @@ public class Agent {
      */
     private String runReActLoop(StringBuilder reasoningTranscript, StreamRenderer streamRenderer,
                                 AgentBudget budget, long startNanos) {
+        turnActive = true;
+        try {
+        return runReActLoopInner(reasoningTranscript, streamRenderer, budget, startNanos);
+        } finally {
+            turnActive = false;
+        }
+    }
+
+    private String runReActLoopInner(StringBuilder reasoningTranscript, StreamRenderer streamRenderer,
+                                AgentBudget budget, long startNanos) {
 
         // 主退出条件 = LLM 自己决定（不再调用工具就返回）；
         // budget 仅在 token 用尽 / 检测到死循环 / 超出硬轮数时兜底。
@@ -248,6 +279,8 @@ public class Agent {
                 }
 
                 budget.recordTokens(response.inputTokens(), response.outputTokens(), response.cachedInputTokens());
+                curator.onUsage(response.inputTokens(), response.outputTokens(),
+                        response.cachedInputTokens(), conversationHistory);
 
                 // 如果有工具调用
                 if (response.hasToolCalls()) {
@@ -351,6 +384,10 @@ public class Agent {
      * 手动压缩当前 ReAct 对话历史，不等待上下文窗口阈值触发。
      */
     public CompactionResult compactHistoryNow() {
+        if (turnActive) {
+            long tokens = estimateCurrentContextTokens();
+            return new CompactionResult(false, tokens, tokens, "busy: 回合运行中,稍后再试");
+        }
         long beforeTokens = estimateCurrentContextTokens();
         try {
             boolean compacted = historyCompactor.compactNow(conversationHistory);
@@ -428,7 +465,20 @@ public class Agent {
                 .build());
     }
 
+    private static boolean curatorEnabled() {
+        return !"false".equals(System.getProperty("wraith.context.curator.enabled"));
+    }
+
     private void maybeCompactHistory() {
+        if (curatorEnabled()) {
+            curator.curate(conversationHistory, this::legacyAutoCompact);
+            return;
+        }
+        legacyAutoCompact();
+    }
+
+    /** 旧路径(回退开关 + Phase A 的 Tier3 代位;Phase B 换增量摘要后仅剩回退用途)。 */
+    private void legacyAutoCompact() {
         if (historyCompactor == null) return;
         int trigger = memoryManager.getContextProfile().compressionTriggerTokens();
         try {
