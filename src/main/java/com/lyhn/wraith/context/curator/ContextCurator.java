@@ -1,5 +1,6 @@
 package com.lyhn.wraith.context.curator;
 
+import com.lyhn.wraith.context.PricingTable;
 import com.lyhn.wraith.llm.LlmClient;
 import com.lyhn.wraith.llm.LlmClient.Message;
 import com.lyhn.wraith.memory.TokenBudget;
@@ -33,6 +34,7 @@ public final class ContextCurator {
     private java.util.function.Consumer<String> noticeOut = s -> {};
     private int cooldown = 0;
     private boolean pressureNotified = false;
+    private PricingTable pricingTable = new PricingTable(java.util.List.of());
 
     public ContextCurator(LongSupplier windowSupplier, Supplier<String> modelSupplier,
                           Supplier<LlmClient> clientSupplier, ToolTierPolicy policy,
@@ -64,6 +66,11 @@ public final class ContextCurator {
         this.noticeOut = out == null ? s -> {} : out;
     }
 
+    /** 设置计价表(默认空表)。 */
+    public void setPricingTable(PricingTable pricingTable) {
+        this.pricingTable = pricingTable == null ? new PricingTable(java.util.List.of()) : pricingTable;
+    }
+
     private static int intProp(String prop, int dflt) {
         try {
             String v = System.getProperty(prop);
@@ -80,7 +87,9 @@ public final class ContextCurator {
             long estNow = counter.estimate(model, history);
             gauge.onRealUsage(model, input, estNow);
             WatermarkGauge.Reading r = gauge.read(model, estNow);
-            stats.recordUsage(input, output, cached, r);
+            Double cost = pricingTable.cost(model, input, output, cached).orElse(null);
+            String currency = pricingTable.resolve(model).map(PricingTable.Price::currency).orElse(null);
+            stats.recordUsage(input, output, cached, r, cost, currency);
             Map<String, Object> p = new LinkedHashMap<>();
             p.put("usedTokens", r.usedTokens());
             p.put("window", r.window());

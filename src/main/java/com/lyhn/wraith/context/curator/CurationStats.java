@@ -10,14 +10,23 @@ public final class CurationStats {
     private int totalSnipped;
     private int totalPruned;
     private int compactions;
+    private long totalInput;
+    private long totalOutput;
+    private long totalCached;
 
     public CurationStats(CurationSink sink) { this.sink = sink; }
 
-    public synchronized void recordUsage(long input, long output, long cached, WatermarkGauge.Reading r) {
+    public synchronized void recordUsage(long input, long output, long cached, WatermarkGauge.Reading r,
+                                         Double cost, String currency) {
         step++;
+        totalInput += Math.max(0, input);
+        totalOutput += Math.max(0, output);
+        totalCached += Math.max(0, cached);
+        String costPart = cost == null ? "" : String.format(Locale.ROOT,
+                ",\"cost\":%.6f,\"currency\":\"%s\"", cost, currency == null ? "CNY" : currency);
         sink.appendMetrics(String.format(Locale.ROOT,
-                "{\"ts\":%d,\"step\":%d,\"inputTokens\":%d,\"outputTokens\":%d,\"cachedInputTokens\":%d,\"ratio\":%.4f,\"tier\":%d}",
-                System.currentTimeMillis(), step, input, output, cached, r.ratio(), r.tier()));
+                "{\"ts\":%d,\"step\":%d,\"inputTokens\":%d,\"outputTokens\":%d,\"cachedInputTokens\":%d,\"ratio\":%.4f,\"tier\":%d%s}",
+                System.currentTimeMillis(), step, input, output, cached, r.ratio(), r.tier(), costPart));
     }
 
     public synchronized void recordCompaction(int tier, long before, long after,
@@ -36,4 +45,7 @@ public final class CurationStats {
     public synchronized int totalSnipped() { return totalSnipped; }
     public synchronized int totalPruned() { return totalPruned; }
     public synchronized int compactions() { return compactions; }
+    public synchronized long totalInput() { return totalInput; }
+    public synchronized long totalOutput() { return totalOutput; }
+    public synchronized long totalCached() { return totalCached; }
 }

@@ -111,6 +111,7 @@ public class Agent {
     /** 计价表(config 用户口径 > 内置官方种子 > 缺席);装配点在 Main 建 Agent 处注入。 */
     public void setPricingTable(PricingTable pricingTable) {
         this.pricingTable = pricingTable == null ? new PricingTable(java.util.List.of()) : pricingTable;
+        curator.setPricingTable(this.pricingTable);
     }
 
     public void setExternalContextSupplier(Supplier<String> externalContextSupplier) {
