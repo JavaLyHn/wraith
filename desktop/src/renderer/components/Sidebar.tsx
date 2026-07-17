@@ -382,18 +382,6 @@ export default function Sidebar({
         <div className="flex-1 overflow-y-auto">
           {/* ⭐重点分区 + 对话分区 */}
           <>
-            {newDraftActive && (
-              <button
-                type="button"
-                data-testid="session-draft"
-                onClick={onNewConversation}
-                title="当前新对话(发送消息后自动保存到列表)"
-                className="mt-2 flex w-full items-center gap-2 rounded-lg relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent px-3 py-1.5 text-left text-xs text-fg"
-              >
-                <span className="truncate">新对话</span>
-                <span className="ml-auto shrink-0 text-3xs text-fg-subtle">草稿</span>
-              </button>
-            )}
             {(() => {
               const { starred, rest } = partitionStarred(sessions)
               const renderRows = (list: SessionMeta[]): JSX.Element[] => list.map(s => (
@@ -407,12 +395,12 @@ export default function Sidebar({
               const groupLabelCls = 'sticky top-7 z-10 sidebar-sticky pl-5 pr-3 py-1 text-3xs uppercase tracking-wider text-fg-subtle'
               return (
                 <>
-                  {sessions.length === 0 && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
+                  {sessions.length === 0 && !newDraftActive && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
                   {starred.length > 0 && <>
                     <div className={headerCls + ' flex items-center gap-1'}><Star className="h-3 w-3 shrink-0" strokeWidth={1.5} />重点</div>
                     <div className="px-2">{renderRows(starred)}</div>
                   </>}
-                  {rest.length > 0 && <>
+                  {(rest.length > 0 || newDraftActive) && <>
                     <div className={headerCls + ' flex items-center'}>
                       <span>对话</span>
                       <button
@@ -427,6 +415,21 @@ export default function Sidebar({
                           : <List className="h-3 w-3" strokeWidth={1.5} />}
                       </button>
                     </div>
+                    {/* 草稿行:归属「对话」分区,置顶于列表 */}
+                    {newDraftActive && (
+                      <div className="px-2">
+                        <button
+                          type="button"
+                          data-testid="session-draft"
+                          onClick={onNewConversation}
+                          title="当前新对话(发送消息后自动保存到列表)"
+                          className="relative mb-0.5 flex w-full items-center gap-2 rounded-lg bg-fg/10 px-3 py-1.5 text-left text-xs text-fg before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent"
+                        >
+                          <span className="truncate">新对话</span>
+                          <span className="ml-auto shrink-0 text-3xs text-fg-subtle">草稿</span>
+                        </button>
+                      </div>
+                    )}
                     {groupMode === 'time'
                       ? groupSessionsByTime(rest, Date.now()).map(g => (
                         <div key={g.label}>
