@@ -33,7 +33,7 @@ import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { compactionNotice } from './lib/compactView'
-import { Download, PanelRight, SquareTerminal, Wand2 } from 'lucide-react'
+import { Download, PanelLeft, PanelRight, SquareTerminal, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -48,7 +48,7 @@ import { selectAction, resolveOnIdle, deriveView, type Preview } from '../shared
 import PluginsPanel from './components/PluginsPanel'
 import AutomationsPanel from './components/AutomationsPanel'
 import ImGatewayPanel from './components/ImGatewayPanel'
-import TopBar from './components/TopBar'
+import { topBarLeftPad } from './lib/topBar'
 import ProvidersPanel from './components/ProvidersPanel'
 import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
@@ -837,25 +837,7 @@ export default function App(): JSX.Element {
   }, [pv.items, state.model, state.workspace])
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden text-fg">
-      <TopBar
-        collapsed={sidebarCollapsed}
-        onToggleCollapsed={() => setSidebarCollapsed(v => !v)}
-        right={view === 'chat' ? (
-          <>
-            <button data-testid="terminal-toggle" onClick={() => setTerminalOpen(v => !v)}
-              className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (terminalOpen ? 'text-accent' : 'text-fg-muted')}
-              title="终端">
-              <SquareTerminal className="h-4 w-4" strokeWidth={1.5} />
-            </button>
-            <button data-testid="rightdock-toggle" onClick={() => setRightDockOpen(v => !v)}
-              className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (rightDockOpen ? 'text-accent' : 'text-fg-muted')}
-              title="右侧面板(浏览器/终端)">
-              <PanelRight className="h-4 w-4" strokeWidth={1.5} />
-            </button>
-          </>
-        ) : undefined}
-      />
+    <div className="flex h-screen overflow-hidden text-fg">
       <div className="flex min-h-0 flex-1 overflow-hidden">
       <SidebarDock collapsed={sidebarCollapsed} peek={sidebarPeek} onPeekChange={setSidebarPeek}>
         <Sidebar
@@ -891,11 +873,41 @@ export default function App(): JSX.Element {
           onOpenSettings={() => setView('settings')}
           automationBadge={automationBadge}
           onOpenSearch={() => setPaletteOpen(true)}
+          collapsed={sidebarCollapsed}
+          onToggleCollapsed={() => setSidebarCollapsed(v => !v)}
         />
       </SidebarDock>
 
       <div className="flex min-w-0 flex-1 flex-row">
       <div className={'relative flex min-w-0 flex-1 flex-col ' + (view === 'chat' ? 'bg-surface' : 'bg-bg')}>
+        {/* 内容列顶行:拖拽区,继承列实底(白/灰)。折叠时承展开键(交通灯右);chat 视图右簇终端/右侧面板键 */}
+        <div className={'flex h-[38px] shrink-0 items-center [-webkit-app-region:drag] ' + (sidebarCollapsed ? topBarLeftPad(window.wraith.platform) : 'pl-2')}>
+          {sidebarCollapsed && (
+            <button
+              type="button"
+              data-testid="sidebar-expand"
+              onClick={() => setSidebarCollapsed(false)}
+              title="展开侧栏"
+              className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-surface/60 hover:text-fg [-webkit-app-region:no-drag]"
+            >
+              <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
+            </button>
+          )}
+          {view === 'chat' && (
+            <div className="ml-auto flex items-center gap-1 pr-2 [-webkit-app-region:no-drag]">
+              <button data-testid="terminal-toggle" onClick={() => setTerminalOpen(v => !v)}
+                className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (terminalOpen ? 'text-accent' : 'text-fg-muted')}
+                title="终端">
+                <SquareTerminal className="h-4 w-4" strokeWidth={1.5} />
+              </button>
+              <button data-testid="rightdock-toggle" onClick={() => setRightDockOpen(v => !v)}
+                className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs hover:bg-surface hover:text-fg ' + (rightDockOpen ? 'text-accent' : 'text-fg-muted')}
+                title="右侧面板(浏览器/终端)">
+                <PanelRight className="h-4 w-4" strokeWidth={1.5} />
+              </button>
+            </div>
+          )}
+        </div>
         {state.connection === 'disconnected' && (
           <DisconnectedBanner onRestart={handleRestart} />
         )}
@@ -989,7 +1001,7 @@ export default function App(): JSX.Element {
             )
             return (
               <>
-                {/* 顶部工具条:压缩/导出仅活跃对话显示;终端/右侧面板键已移至 TopBar 右簇 */}
+                {/* 顶部工具条:压缩/导出仅活跃对话显示;终端/右侧面板键在内容列顶行右簇 */}
                 {!pv.showWelcome && (
                   <div className="flex shrink-0 items-center justify-end gap-2 px-4 py-1.5">
                     {compactNotice && (

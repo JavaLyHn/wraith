@@ -8,12 +8,13 @@ import {
 import {
   Plus, Search, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
   Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown,
-  Shield, ShieldAlert, ShieldCheck, ListTodo,
+  Shield, ShieldAlert, ShieldCheck, ListTodo, PanelLeft,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
 import Logo from './Logo'
 import { sessionDisplayName, partitionStarred, groupSessionsByTime } from '../lib/sessionView'
 import type { SessionMeta, ProjectView } from '../../shared/types'
+import { topBarLeftPad } from '../lib/topBar'
 
 function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDelete }: {
   s: SessionMeta; active: boolean; running: boolean
@@ -129,6 +130,8 @@ interface SidebarProps {
   automationBadge: boolean
   /** 打开命令面板(搜索)。 */
   onOpenSearch: () => void
+  collapsed: boolean
+  onToggleCollapsed: () => void
 }
 
 export default function Sidebar({
@@ -164,6 +167,8 @@ export default function Sidebar({
   onOpenSettings,
   automationBadge,
   onOpenSearch,
+  collapsed,
+  onToggleCollapsed,
 }: SidebarProps): JSX.Element {
   const [toolsExpanded, setToolsExpanded] = useState(false)
   // 进入某工具页时强制展开(高亮可见);否则由用户折叠状态决定
@@ -184,6 +189,18 @@ export default function Sidebar({
         data-testid="sidebar"
         className="sidebar-gradient flex h-full w-60 flex-col border-r border-border"
       >
+        {/* 顶段:交通灯让位 + 折叠键;拖拽区。mac 下透明露磨砂 */}
+        <div className={'flex h-[38px] shrink-0 items-center [-webkit-app-region:drag] ' + topBarLeftPad(window.wraith.platform)}>
+          <button
+            type="button"
+            data-testid="sidebar-collapse"
+            onClick={onToggleCollapsed}
+            title={collapsed ? '展开侧栏' : '折叠侧栏'}
+            className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-surface/60 hover:text-fg [-webkit-app-region:no-drag]"
+          >
+            <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+        </div>
         <div className="flex items-center">
           <button
             type="button"
