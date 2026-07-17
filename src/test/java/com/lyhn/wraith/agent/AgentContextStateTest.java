@@ -45,6 +45,36 @@ class AgentContextStateTest {
     }
 
     /**
+     * 回合运行中(turnActive=true)时 conversationHistory 正被 turn 线程写,contextStateCore
+     * 的 history 派生字段(totalTokens/liveSummary)必须降级为骨架帧,不做无锁读——防 CME。
+     * Agent 未暴露 turnActive 的 setter,同包用反射直接改私有字段(最小侵入)。
+     */
+    @Test
+    void degradesToSkeletonFrameWhenTurnActive() {
+        withIsolatedMemoryDir(() -> {
+            Agent agent = new Agent(new FakeClient());
+            agent.restoreHistory(List.of(
+                    LlmClient.Message.user(CurationMarks.SUMMARY_MARK + "\n[活摘要]\n这是活摘要正文"),
+                    LlmClient.Message.assistant("好的，我已了解之前的上下文，请继续。")));
+            setTurnActive(agent, true);
+            Map<String, Object> m = agent.contextStateCore();
+            assertEquals(0L, m.get("totalTokens"));
+            assertNull(m.get("liveSummary"));
+            assertEquals("running", m.get("phase"));
+        });
+    }
+
+    private static void setTurnActive(Agent agent, boolean value) {
+        try {
+            java.lang.reflect.Field f = Agent.class.getDeclaredField("turnActive");
+            f.setAccessible(true);
+            f.set(agent, value);
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(e);
+        }
+    }
+
+    /**
      * Agent 构造经 MemoryManager -&gt; LongTermMemory 会在磁盘上创建/加载 wraith.memory.dir
      * (未设置时默认落在真实 ~/.wraith/memory)。仿照 AgentClearHistoryTest / AgentMemoryHintTest
      * 的既有先例：临时接管该系统属性指向 @TempDir，测试结束还原，避免写真实用户目录。

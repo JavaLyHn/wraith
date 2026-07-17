@@ -461,20 +461,27 @@ public class Agent {
         return StatusInfo.active(model, contextWindow, contextTokens, hitl, normalizedPhase);
     }
 
-    /** context.state.get 快照核(spec §6):与 status 通知同形,便于桌面直接复用 reducer。 */
+    /** context.state.get 快照核(spec §6):字段命名对齐 StatusInfo 便于桌面映射,
+     *  但注意线上 status 通知是 {sessionId,turnId,status:{...}} 信封——桌面接入需嵌套包裹,不能平铺直发。 */
     public java.util.Map<String, Object> contextStateCore() {
         java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
         m.put("model", llmClient == null ? "—" : llmClient.getModelName());
         m.put("contextWindow", llmClient == null ? 0L : llmClient.maxContextWindow());
-        m.put("totalTokens", (long) estimateCurrentContextTokens());
+        // history 派生字段(totalTokens/liveSummary)只在非回合期计算——回合运行中 turn 线程
+        // 正在写 conversationHistory,无锁读有 CME 风险;运行期真实 status 推送本就在流动,
+        // 快照降级为骨架帧(totalTokens=0/liveSummary=null/estimated=true)不影响其用途(启动/切会话时拉)。
+        boolean active = turnActive;
+        m.put("totalTokens", active ? 0L : (long) estimateCurrentContextTokens());
         m.put("estimated", true);   // 核只有估算;runner 用 JSONL 尾行覆盖时置 false(spec §6"估算,待首轮校准")
-        m.put("phase", turnActive ? "running" : "idle");
+        m.put("phase", active ? "running" : "idle");
         String liveSummary = null;
-        for (LlmClient.Message msg : conversationHistory) {
-            String c = msg.content();
-            if (c != null && c.contains(com.lyhn.wraith.context.curator.CurationMarks.SUMMARY_MARK)) {
-                liveSummary = c.replace(com.lyhn.wraith.context.curator.CurationMarks.SUMMARY_MARK, "").trim();
-                break;
+        if (!active) {
+            for (LlmClient.Message msg : conversationHistory) {
+                String c = msg.content();
+                if (c != null && c.contains(com.lyhn.wraith.context.curator.CurationMarks.SUMMARY_MARK)) {
+                    liveSummary = c.replace(com.lyhn.wraith.context.curator.CurationMarks.SUMMARY_MARK, "").trim();
+                    break;
+                }
             }
         }
         m.put("liveSummary", liveSummary);
