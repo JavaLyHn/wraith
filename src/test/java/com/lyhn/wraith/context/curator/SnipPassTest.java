@@ -1,0 +1,82 @@
+package com.lyhn.wraith.context.curator;
+
+import com.lyhn.wraith.llm.LlmClient;
+import com.lyhn.wraith.llm.LlmClient.Message;
+import org.junit.jupiter.api.Test;
+import java.util.*;
+import static org.junit.jupiter.api.Assertions.*;
+
+class SnipPassTest {
+    private final ToolTierPolicy policy = new ToolTierPolicy();
+
+    private static List<Message> historyWithTool(String tool, String content) {
+        LlmClient.ToolCall tc = new LlmClient.ToolCall("c1",
+                new LlmClient.ToolCall.Function(tool, "{}"));
+        return new ArrayList<>(List.of(
+                Message.system("sys"),
+                Message.user("do it"),
+                Message.assistant("run", List.of(tc)),
+                Message.tool("c1", content),
+                Message.user("next"),
+                Message.assistant("ok")));
+    }
+
+    @Test
+    void snipsLongToolOutputOutsideProtection() {
+        List<Message> h = historyWithTool("grep_code", "L".repeat(5000) + "\n[完整输出: /tmp/x.log]");
+        SnipPass.Result r = SnipPass.apply(h, 4, policy, Long.MAX_VALUE);
+        assertEquals(1, r.changes().size());
+        String c = h.get(3).content();
+        assertTrue(c.contains(CurationMarks.SNIP_MARK));
+        assertTrue(c.contains("[完整输出: /tmp/x.log]"));          // 指针行保留
+        assertTrue(c.length() < 1200);
+        assertEquals("c1", h.get(3).toolCallId());                 // 协议字段不动
+    }
+
+    @Test
+    void monotonicSecondRunChangesNothing() {
+        List<Message> h = historyWithTool("grep_code", "L".repeat(5000));
+        SnipPass.apply(h, 4, policy, Long.MAX_VALUE);
+        SnipPass.Result second = SnipPass.apply(h, 4, policy, Long.MAX_VALUE);
+        assertTrue(second.changes().isEmpty());
+    }
+
+    @Test
+    void protectedToolAndProtectedZoneUntouched() {
+        List<Message> h = historyWithTool("load_skill", "S".repeat(5000));
+        assertTrue(SnipPass.apply(h, 4, policy, Long.MAX_VALUE).changes().isEmpty());
+        List<Message> h2 = historyWithTool("grep_code", "L".repeat(5000));
+        assertTrue(SnipPass.apply(h2, 0, policy, Long.MAX_VALUE).changes().isEmpty()); // 全在保护区
+    }
+
+    @Test
+    void userPlainTextNeverTouchedButHugeCodeblockClipped() {
+        String code = "```java\n" + "line;\n".repeat(100) + "```";
+        List<Message> h = new ArrayList<>(List.of(
+                Message.system("sys"),
+                Message.user("前言\n" + code + "\n后记"),
+                Message.assistant("a"),
+                Message.user("tail"), Message.assistant("t")));
+        SnipPass.apply(h, 3, policy, Long.MAX_VALUE);
+        String c = h.get(1).content();
+        assertTrue(c.startsWith("前言"));
+        assertTrue(c.endsWith("后记"));
+        assertTrue(c.contains(CurationMarks.SNIP_MARK));
+        assertTrue(c.lines().count() < 30);
+    }
+
+    @Test
+    void stopsWhenReleaseTargetReached() {
+        LlmClient.ToolCall t1 = new LlmClient.ToolCall("c1", new LlmClient.ToolCall.Function("grep_code", "{}"));
+        LlmClient.ToolCall t2 = new LlmClient.ToolCall("c2", new LlmClient.ToolCall.Function("grep_code", "{}"));
+        List<Message> h = new ArrayList<>(List.of(
+                Message.system("sys"),
+                Message.user("u"),
+                Message.assistant("a", List.of(t1)), Message.tool("c1", "A".repeat(8000)),
+                Message.assistant("a", List.of(t2)), Message.tool("c2", "B".repeat(8000)),
+                Message.user("tail"), Message.assistant("t")));
+        SnipPass.Result r = SnipPass.apply(h, 6, policy, 100); // 极小目标:第一条就够
+        assertEquals(1, r.changes().size());
+        assertFalse(h.get(5).content().contains(CurationMarks.SNIP_MARK)); // 第二条未动
+    }
+}
