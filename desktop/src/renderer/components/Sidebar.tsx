@@ -196,7 +196,7 @@ export default function Sidebar({
             data-testid="sidebar-collapse"
             onClick={onToggleCollapsed}
             title={collapsed ? '展开侧栏' : '折叠侧栏'}
-            className="rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-surface/60 hover:text-fg [-webkit-app-region:no-drag]"
+            className="rounded-lg p-1.5 text-fg-muted transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-surface/60 hover:text-fg [-webkit-app-region:no-drag]"
           >
             <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
           </button>

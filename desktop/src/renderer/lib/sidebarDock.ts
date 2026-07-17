@@ -7,10 +7,12 @@ export function dockPlaceholderWidth(collapsed: boolean): number {
   return collapsed ? 0 : SIDEBAR_WIDTH
 }
 
-/** 承 <Sidebar/> 的内层 wrapper 的定位/动画类,编码三态:
- *  展开 → 流内;折叠 → 绝对浮层,peek 控制丝滑滑入/滑出(始终 absolute 以保证 transform 过渡生效)。 */
+/** 承 <Sidebar/> 的内层 wrapper 的定位/动画类,编码三态(恒绝对定位,展开/收起双向滑动):
+ *  展开 → translate-x-0(占位 240 推挤内容,视觉与流内等价);
+ *  折叠 → 浮层滑出;peek 控制丝滑滑入/滑出。 */
 export function dockInnerClass(collapsed: boolean, peek: boolean): string {
-  if (!collapsed) return 'h-full w-60'
-  const base = 'absolute left-0 top-0 z-50 h-full w-60 rounded-r-xl shadow-2xl transition-transform duration-200 ease-out'
-  return peek ? base + ' translate-x-0' : base + ' -translate-x-full pointer-events-none'
+  const base = 'absolute left-0 top-0 h-full w-60 transition-transform duration-200 ease-out motion-reduce:transition-none'
+  if (!collapsed) return base + ' translate-x-0'
+  const overlay = base + ' z-50 rounded-r-xl shadow-2xl'
+  return peek ? overlay + ' translate-x-0' : overlay + ' -translate-x-full pointer-events-none'
 }
