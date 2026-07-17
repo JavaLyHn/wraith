@@ -156,7 +156,7 @@ public class WraithConfig {
         public double getOutputPerM() { return outputPerM; }
         public void setOutputPerM(double v) { this.outputPerM = v; }
         public String getCurrency() { return currency; }
-        public void setCurrency(String v) { this.currency = v == null ? "CNY" : v; }
+        public void setCurrency(String v) { this.currency = (v == null || v.isBlank()) ? "CNY" : v; }
     }
 
     public String getDefaultProvider() { return defaultProvider; }

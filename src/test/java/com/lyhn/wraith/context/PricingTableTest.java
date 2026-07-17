@@ -65,4 +65,29 @@ class PricingTableTest {
         PricingTable t = new PricingTable(List.of(entry("v4", 0.0028, 0.14, 0.28, "USD")));
         assertTrue(t.formatCost("v4-flash", 1_000_000, 0, 0).orElseThrow().startsWith("$"));
     }
+
+    @Test
+    void seedRequiresExactMatch() {
+        // 纯种子表(无 config 覆盖):种子只认"确切标识符",不认前缀家族。
+        PricingTable t = new PricingTable(List.of());
+        // "glm-5" 是种子的确切标识符 → 精确命中
+        assertEquals(60.0, t.resolve("glm-5").orElseThrow().outputPerM(), 1e-9);
+        // "glm-5.1" 是本仓库默认模型,未核对过价格,种子层不能静默套用 "glm-5" 的价——必须缺席
+        assertTrue(t.resolve("glm-5.1").isEmpty(),
+                "glm-5.1 未核对,种子精确匹配下不应命中 glm-5 的价");
+        assertTrue(t.resolve("glm-5.1-nonexistent-variant").isEmpty());
+    }
+
+    @Test
+    void configPrefixOverridesRealSeed() {
+        // 用真实 SEEDS(而非纯合成条目):config 里配一条 "glm-5" 前缀,应覆盖同名种子。
+        WraithConfig.PricingEntry userGlm5 = entry("glm-5", 1.0, 1.0, 1.0, "CNY");
+        PricingTable t = new PricingTable(List.of(userGlm5));
+        // "glm-5" 本身:config(前缀,长度5)与种子(精确,长度5)同长度,config 先命中。
+        assertEquals(1.0, t.resolve("glm-5").orElseThrow().outputPerM(), 1e-9,
+                "同长度时 config 先于种子命中");
+        // config 是前缀匹配,所以连未核对的 glm-5.1 变体也会被用户口径接住(用户自己的选择)。
+        assertEquals(1.0, t.resolve("glm-5.1").orElseThrow().outputPerM(), 1e-9,
+                "config 前缀覆盖到变体,是用户自己承担的模糊范围");
+    }
 }
