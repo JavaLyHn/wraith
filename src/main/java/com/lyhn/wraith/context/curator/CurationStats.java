@@ -23,10 +23,15 @@ public final class CurationStats {
         totalOutput += Math.max(0, output);
         totalCached += Math.max(0, cached);
         String costPart = cost == null ? "" : String.format(Locale.ROOT,
-                ",\"cost\":%.6f,\"currency\":\"%s\"", cost, currency == null ? "CNY" : currency);
+                ",\"cost\":%.6f,\"currency\":\"%s\"", cost, sanitizeCurrency(currency));
         sink.appendMetrics(String.format(Locale.ROOT,
                 "{\"ts\":%d,\"step\":%d,\"inputTokens\":%d,\"outputTokens\":%d,\"cachedInputTokens\":%d,\"ratio\":%.4f,\"tier\":%d%s}",
                 System.currentTimeMillis(), step, input, output, cached, r.ratio(), r.tier(), costPart));
+    }
+
+    private String sanitizeCurrency(String currency) {
+        String cur = currency == null ? "CNY" : currency.replaceAll("[^A-Za-z]", "");
+        return cur.isEmpty() ? "CNY" : cur;
     }
 
     public synchronized void recordCompaction(int tier, long before, long after,
