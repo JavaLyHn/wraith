@@ -13,6 +13,8 @@ export function dockPlaceholderWidth(collapsed: boolean): number {
 export function dockInnerClass(collapsed: boolean, peek: boolean): string {
   const base = 'absolute left-0 top-0 h-full w-60 transition-transform duration-200 ease-out motion-reduce:transition-none'
   if (!collapsed) return base + ' translate-x-0'
-  const overlay = base + ' z-50 rounded-r-xl shadow-2xl'
+  // 折叠浮层悬于不透明内容之上:侧栏自身是半透明纱(为"贴窗缘透磨砂"设计),
+  // 浮层壳必须补玻璃底(bg-bg/70+backdrop-blur)防内容透叠;overflow-hidden 让纱随圆角裁切。
+  const overlay = base + ' z-50 overflow-hidden rounded-r-xl bg-bg/70 shadow-2xl backdrop-blur-xl'
   return peek ? overlay + ' translate-x-0' : overlay + ' -translate-x-full pointer-events-none'
 }
