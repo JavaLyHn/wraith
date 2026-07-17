@@ -341,6 +341,7 @@ public class Main {
             hitlToolRegistry.setSkillContextBuffer(skillContextBuffer);
 
             Agent reactAgent = new Agent(llmClient, hitlToolRegistry);
+            reactAgent.setPricingTable(new com.lyhn.wraith.context.PricingTable(config.getPricing()));
             reactAgent.setExternalContextSupplier(mcpServerManager::resourceIndexForPrompt);
             reactAgent.setSkillRegistry(skillRegistry);
             reactAgent.setSkillContextBuffer(skillContextBuffer);

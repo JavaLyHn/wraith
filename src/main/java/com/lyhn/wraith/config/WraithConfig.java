@@ -25,6 +25,7 @@ public class WraithConfig {
     private GatewayConfig gateway;
     private SttConfig stt;
     private EmbeddingConfig embedding;
+    private java.util.List<PricingEntry> pricing = new java.util.ArrayList<>();
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ProviderConfig {
@@ -138,6 +139,26 @@ public class WraithConfig {
         public void setApiKey(String v) { this.apiKey = v; }
     }
 
+    /** 模型计价条目(用户自配;官方牌价≠实付价,换算率由掌握合同的人提供)。 */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class PricingEntry {
+        private String modelPrefix;
+        private double cacheHitPerM;
+        private double cacheMissPerM;
+        private double outputPerM;
+        private String currency = "CNY";
+        public String getModelPrefix() { return modelPrefix; }
+        public void setModelPrefix(String v) { this.modelPrefix = v; }
+        public double getCacheHitPerM() { return cacheHitPerM; }
+        public void setCacheHitPerM(double v) { this.cacheHitPerM = v; }
+        public double getCacheMissPerM() { return cacheMissPerM; }
+        public void setCacheMissPerM(double v) { this.cacheMissPerM = v; }
+        public double getOutputPerM() { return outputPerM; }
+        public void setOutputPerM(double v) { this.outputPerM = v; }
+        public String getCurrency() { return currency; }
+        public void setCurrency(String v) { this.currency = v == null ? "CNY" : v; }
+    }
+
     public String getDefaultProvider() { return defaultProvider; }
     public void setDefaultProvider(String defaultProvider) { this.defaultProvider = defaultProvider; }
     public Map<String, ProviderConfig> getProviders() { return providers; }
@@ -148,6 +169,10 @@ public class WraithConfig {
     public void setStt(SttConfig stt) { this.stt = stt; }
     public EmbeddingConfig getEmbedding() { return embedding; }
     public void setEmbedding(EmbeddingConfig embedding) { this.embedding = embedding; }
+    public java.util.List<PricingEntry> getPricing() { return pricing; }
+    public void setPricing(java.util.List<PricingEntry> pricing) {
+        this.pricing = pricing == null ? new java.util.ArrayList<>() : pricing;
+    }
 
     /** STT 借用的 provider id;缺省 siliconflow。 */
     public String getSttProviderId() {

@@ -4,6 +4,7 @@ import com.lyhn.wraith.context.curator.ContextCurator;
 import com.lyhn.wraith.llm.LlmClient;
 import com.lyhn.wraith.llm.LlmTraceLogger;
 import com.lyhn.wraith.context.ContextProfile;
+import com.lyhn.wraith.context.PricingTable;
 import com.lyhn.wraith.context.TokenUsageFormatter;
 import com.lyhn.wraith.lsp.LspDiagnosticReport;
 import com.lyhn.wraith.memory.ConversationHistoryCompactor;
@@ -53,6 +54,7 @@ public class Agent {
     private final ContextCurator curator;
     private com.lyhn.wraith.context.curator.CurationSink curationSink =
             com.lyhn.wraith.context.curator.CurationSink.NOOP;
+    private PricingTable pricingTable = new PricingTable(java.util.List.of());
     private volatile boolean turnActive = false;
     private Supplier<String> externalContextSupplier = () -> "";
     private SkillRegistry skillRegistry;
@@ -104,6 +106,11 @@ public class Agent {
     public void setCurationSink(com.lyhn.wraith.context.curator.CurationSink sink) {
         this.curationSink = sink == null ? com.lyhn.wraith.context.curator.CurationSink.NOOP : sink;
         if (toolRegistry != null) toolRegistry.setCurationSink(this.curationSink);
+    }
+
+    /** 计价表(config 用户口径 > 内置官方种子 > 缺席);装配点在 Main 建 Agent 处注入。 */
+    public void setPricingTable(PricingTable pricingTable) {
+        this.pricingTable = pricingTable == null ? new PricingTable(java.util.List.of()) : pricingTable;
     }
 
     public void setExternalContextSupplier(Supplier<String> externalContextSupplier) {
@@ -795,8 +802,9 @@ public class Agent {
             long contextWindow = llmClient == null ? 0L : llmClient.maxContextWindow();
             boolean hitl = Boolean.TRUE.equals(hitlEnabledSupplier.get());
             long elapsed = (System.nanoTime() - startNanos) / 1_000_000L;
-            String cost = budget == null ? null : TokenUsageFormatter.estimatedCostCny(
+            String cost = budget == null ? null : TokenUsageFormatter.estimatedCost(
                     llmClient,
+                    pricingTable,
                     budget.totalInputTokens(),
                     budget.totalOutputTokens(),
                     budget.totalCachedInputTokens());
