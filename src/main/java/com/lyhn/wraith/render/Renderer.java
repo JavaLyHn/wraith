@@ -168,4 +168,8 @@ public interface Renderer extends AutoCloseable {
      * @return 选中项的下标；用户取消（Esc）返回 -1
      */
     int openPalette(String title, List<String> items);
+
+    /** 上下文治理事件(context.watermark / context.compaction)。终端渲染器默认忽略;事件流渲染器转发桌面。 */
+    default void contextEvent(String method, java.util.Map<String, Object> payload) {
+    }
 }

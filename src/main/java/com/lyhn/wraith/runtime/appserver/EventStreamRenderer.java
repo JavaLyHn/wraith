@@ -351,4 +351,10 @@ public final class EventStreamRenderer implements Renderer {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId); p.put("text", text);
         emit("team.review.output", p);
     }
+
+    @Override public void contextEvent(String method, java.util.Map<String, Object> payload) {
+        java.util.Map<String, Object> p = base();
+        p.putAll(payload);
+        writer.notify(method, p);
+    }
 }
