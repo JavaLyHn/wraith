@@ -251,7 +251,7 @@ function createWindow(): void {
       ? {
           titleBarStyle: 'hidden' as const,
           trafficLightPosition: { x: 12, y: 11 },
-          vibrancy: 'sidebar' as const,
+          vibrancy: 'fullscreen-ui' as const,
           visualEffectState: 'active' as const,
           backgroundColor: '#00000000',
         }
