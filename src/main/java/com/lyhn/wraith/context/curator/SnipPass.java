@@ -32,7 +32,8 @@ public final class SnipPass {
         for (int i = systemEnd; i < Math.min(protectedFrom, history.size()) && released < releaseTarget; i++) {
             Message m = history.get(i);
             String content = m.content();
-            if (content == null || content.contains(CurationMarks.SNIP_MARK)) continue;
+            if (content == null || content.contains(CurationMarks.SNIP_MARK)
+                    || content.contains(CurationMarks.SUMMARY_MARK)) continue;
 
             if ("tool".equals(m.role())) {
                 String tool = toolNames.get(m.toolCallId());

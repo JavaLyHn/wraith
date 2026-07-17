@@ -54,4 +54,18 @@ class PrunePassTest {
                 Message.system("s"), Message.user("u"), Message.assistant("长".repeat(3000))));
         assertTrue(PrunePass.apply(h2, 1, policy, Long.MAX_VALUE).changes().isEmpty()); // 全保护
     }
+
+    @Test
+    void skipsMessageCarryingSummaryMark() {
+        // 防御:任何带 SUMMARY_MARK 的消息(即使 assistant 长文)prune 不碰
+        String longText = ("句子。").repeat(400) + CurationMarks.SUMMARY_MARK;
+        List<Message> h = new ArrayList<>(List.of(
+                Message.system("sys"),
+                Message.assistant(longText),
+                Message.user("q1"), Message.assistant("a1"),
+                Message.user("q2"), Message.assistant("a2")));
+        SnipPass.Result r = PrunePass.apply(h, h.size(), new ToolTierPolicy(), Long.MAX_VALUE);
+        assertEquals(longText, h.get(1).content());
+        assertTrue(r.changes().isEmpty());
+    }
 }

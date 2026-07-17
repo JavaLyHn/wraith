@@ -4,6 +4,8 @@ package com.lyhn.wraith.context.curator;
 public final class CurationMarks {
     public static final String SNIP_MARK = "⟦wraith:snip⟧";
     public static final String PRUNE_MARK = "⟦wraith:prune⟧";
+    /** 活摘要消息标识:pass 见标整条跳过;summarizer 靠它定位替换。 */
+    public static final String SUMMARY_MARK = "⟦wraith:summary⟧";
     /** 完整日志指针行前缀(spill 与 pass 共用,pass 改写时必须保留该行)。 */
     public static final String LOG_POINTER_PREFIX = "[完整输出: ";
     private CurationMarks() {}

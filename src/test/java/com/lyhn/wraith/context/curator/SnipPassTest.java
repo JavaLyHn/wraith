@@ -117,4 +117,18 @@ class SnipPassTest {
         assertTrue(resultLines < originalLines,
                    "截后行数(" + resultLines + ")应小于原始(" + originalLines + ")");
     }
+
+    @Test
+    void skipsLiveSummaryMessageEntirely() {
+        // 活摘要是 user 消息且可能含大代码块;snip 见 SUMMARY_MARK 必须整条跳过
+        String big = "```java\n" + "int x = 1;\n".repeat(100) + "```";
+        List<Message> h = new ArrayList<>(List.of(
+                Message.system("sys"),
+                Message.user(CurationMarks.SUMMARY_MARK + "\n[活摘要]\n" + big),
+                Message.user("q1"), Message.assistant("a1"),
+                Message.user("q2"), Message.assistant("a2")));
+        SnipPass.Result r = SnipPass.apply(h, h.size(), new ToolTierPolicy(), Long.MAX_VALUE);
+        assertTrue(h.get(1).content().contains("int x = 1;"), "活摘要内容不得被截");
+        assertTrue(r.changes().stream().noneMatch(c -> c.index() == 1));
+    }
 }
