@@ -686,6 +686,12 @@ ipcMain.handle('wraith:compactHistory', async () => {
   return client.request('session.compact', {})
 })
 
+// 上下文状态快照(启动/切会话时拉一次,修"发消息前空白")
+ipcMain.handle('wraith:contextState', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('context.state.get', {})
+})
+
 // 后台任务(转发 AppServer task.*;与 CLI /task 共享 ~/.wraith/tasks/tasks.db)
 ipcMain.handle('wraith:taskList', async (_e, limit: number) => {
   if (!client) throw new Error('Backend not connected')

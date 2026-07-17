@@ -310,6 +310,10 @@ export default function App(): JSX.Element {
     dispatch({ type: 'markResumed' })
     if (model) dispatch({ type: 'setModel', model })
     setModelFallbackNotice(modelFallback === true)
+    try {
+      const snap = await window.wraith.contextState()
+      dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
+    } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
     void fetchSessions()
   }, [fetchSessions])
 
@@ -371,6 +375,10 @@ export default function App(): JSX.Element {
         }
         dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(initObj.capabilities?.sandbox) })
         await window.wraith.startSession(ws)
+        try {
+          const snap = await window.wraith.contextState()
+          dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
+        } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
         void fetchSessions()
         void fetchProjects()
         void fetchMcp()

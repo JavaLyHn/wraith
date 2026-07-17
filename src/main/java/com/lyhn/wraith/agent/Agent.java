@@ -100,6 +100,9 @@ public class Agent {
         this.historyCompactor.setLlmClient(llmClient);
         this.toolRegistry.setContextProfile(memoryManager.getContextProfile());
         this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
+        // 换模型立即推一帧状态:窗口/模型/价格口径同步刷新(spec §5/§6);
+        // summarizer/gauge/counter 无需手动同步——curator 持 supplier,天然跟当前 client
+        renderer().updateStatus(currentStatus(turnActive ? "running" : "idle"));
     }
 
     /** 会话治理落地通道(工具全量日志/metrics);装配点在建好 SessionStore 后注入,同时透传工具层。 */

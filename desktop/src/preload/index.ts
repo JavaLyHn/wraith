@@ -135,6 +135,8 @@ export interface WraithApi {
   transcribe(audioBase64: string, mime: string): Promise<{ text: string }>
   /** 手动压缩当前对话历史,释放上下文窗口。 */
   compactHistory(): Promise<{ compacted: boolean; beforeTokens: number; afterTokens: number; error?: string | null }>
+  /** 上下文状态快照(context.state.get);启动/切会话时拉一次,修"发消息前空白"。 */
+  contextState(): Promise<Record<string, unknown>>
   /** 后台任务:列表 / 提交 / 取详情 / 取消(与 CLI /task 共享 ~/.wraith/tasks/tasks.db)。 */
   taskList(limit?: number): Promise<TaskListResult>
   taskAdd(prompt: string): Promise<{ ok: boolean; id?: string; message?: string }>
@@ -565,6 +567,9 @@ const wraith: WraithApi = {
   },
   compactHistory() {
     return ipcRenderer.invoke('wraith:compactHistory') as Promise<{ compacted: boolean; beforeTokens: number; afterTokens: number; error?: string | null }>
+  },
+  contextState() {
+    return ipcRenderer.invoke('wraith:contextState') as Promise<Record<string, unknown>>
   },
   taskList(limit) {
     return ipcRenderer.invoke('wraith:taskList', limit ?? 20) as Promise<TaskListResult>
