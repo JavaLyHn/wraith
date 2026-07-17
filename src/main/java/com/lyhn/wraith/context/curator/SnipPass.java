@@ -36,6 +36,7 @@ public final class SnipPass {
 
             if ("tool".equals(m.role())) {
                 String tool = toolNames.get(m.toolCallId());
+                if (tool == null) continue;
                 if (!policy.compressible(tool) || content.length() <= ToolTierPolicy.SNIP_MIN_CHARS) continue;
                 String pointer = extractPointer(content);
                 String rebuilt = content.substring(0, ToolTierPolicy.SNIP_KEEP_HEAD_CHARS)

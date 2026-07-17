@@ -79,4 +79,42 @@ class SnipPassTest {
         assertEquals(1, r.changes().size());
         assertFalse(h.get(5).content().contains(CurationMarks.SNIP_MARK)); // 第二条未动
     }
+
+    @Test
+    void multipleCodeblocksPreserveInterleavedText() {
+        // 构造：前言 + 代码块A(≥60行) + 中间文本 + 代码块B(≥60行) + 后记
+        String preamble = "块A前言\n";
+        String blockA = "```java\n" + "line;\n".repeat(80) + "```";
+        String interleaved = "\n块间正文\n";
+        String blockB = "```python\n" + "line;\n".repeat(80) + "```";
+        String postscript = "\n块B后记";
+        String userContent = preamble + blockA + interleaved + blockB + postscript;
+
+        // 构造 history：system / user(待测) / assistant / user tail / assistant
+        // protectedFrom=3 让待测 user 在保护区外(index=1 < 3)，可被 snip
+        List<Message> h = new ArrayList<>(List.of(
+                Message.system("sys"),
+                Message.user(userContent),
+                Message.assistant("a"),
+                Message.user("tail"),
+                Message.assistant("t")));
+
+        // 执行 SnipPass
+        SnipPass.apply(h, 3, policy, Long.MAX_VALUE);
+        String resultContent = h.get(1).content();
+
+        // 断言 1：块外文本完整保留
+        assertTrue(resultContent.startsWith("块A前言"), "前言应保留在开头");
+        assertTrue(resultContent.contains("块间正文"), "块间正文应完整保留");
+        assertTrue(resultContent.endsWith("块B后记"), "后记应保留在结尾");
+
+        // 断言 2：包含截标
+        assertTrue(resultContent.contains(CurationMarks.SNIP_MARK), "应包含 SNIP_MARK");
+
+        // 断言 3：代码块被截（总行数明显小于原始）
+        long originalLines = userContent.lines().count();
+        long resultLines = resultContent.lines().count();
+        assertTrue(resultLines < originalLines,
+                   "截后行数(" + resultLines + ")应小于原始(" + originalLines + ")");
+    }
 }
