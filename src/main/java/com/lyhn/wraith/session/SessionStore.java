@@ -138,7 +138,7 @@ public final class SessionStore {
     }
 
     /** 当前会话的治理产物目录(工具全量日志/metrics):<dir>/<safeId(currentId)>-artifacts/。无会话返回 empty。 */
-    public java.util.Optional<java.nio.file.Path> artifactDir() {
+    public synchronized java.util.Optional<java.nio.file.Path> artifactDir() {
         if (currentId == null || currentId.isBlank()) return java.util.Optional.empty();
         java.nio.file.Path p = dir.resolve(safeId(currentId) + "-artifacts");
         try {
