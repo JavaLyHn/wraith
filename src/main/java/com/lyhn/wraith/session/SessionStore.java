@@ -137,6 +137,18 @@ public final class SessionStore {
         return currentId;
     }
 
+    /** 当前会话的治理产物目录(工具全量日志/metrics):<dir>/<safeId(currentId)>-artifacts/。无会话返回 empty。 */
+    public java.util.Optional<java.nio.file.Path> artifactDir() {
+        if (currentId == null || currentId.isBlank()) return java.util.Optional.empty();
+        java.nio.file.Path p = dir.resolve(safeId(currentId) + "-artifacts");
+        try {
+            java.nio.file.Files.createDirectories(p);
+            return java.util.Optional.of(p);
+        } catch (java.io.IOException e) {
+            return java.util.Optional.empty();
+        }
+    }
+
     /**
      * 轮次开始即为"新会话"落一份仅含用户消息的最小记录,使其**立刻**出现在会话列表
      * (无需等 turn 结束的 persist)。已有会话(currentId!=null)直接返回其 id 且**不重写**

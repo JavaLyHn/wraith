@@ -118,6 +118,11 @@ public class ToolRegistry {
     private boolean customSnapshotService;
     private volatile String currentProvider = "";
     private volatile String currentModel = "";
+    private com.lyhn.wraith.context.curator.CurationSink curationSink =
+            com.lyhn.wraith.context.curator.CurationSink.NOOP;
+    public void setCurationSink(com.lyhn.wraith.context.curator.CurationSink sink) {
+        this.curationSink = sink == null ? com.lyhn.wraith.context.curator.CurationSink.NOOP : sink;
+    }
 
     public ToolRegistry() {
         this(DEFAULT_COMMAND_TIMEOUT_SECONDS, DEFAULT_TOOL_BATCH_TIMEOUT_SECONDS);
@@ -495,6 +500,18 @@ public class ToolRegistry {
         if (result.matches().isEmpty()) {
             return "未找到匹配内容: " + query;
         }
+        RenderedGrep rendered = renderGrepMatches(result, query, maxChars);
+        if (!rendered.truncated()) return rendered.text();
+        // 截断:全量(2MB 帽)重渲一次落盘,截断版尾部附指针
+        RenderedGrep full = renderGrepMatches(result, query, com.lyhn.wraith.context.curator.SpillingTruncator.SPILL_MAX_CHARS);
+        return curationSink.writeToolLog("grep_code", full.text())
+                .map(p -> rendered.text() + "\n" + com.lyhn.wraith.context.curator.CurationMarks.LOG_POINTER_PREFIX + p + "]")
+                .orElse(rendered.text());
+    }
+
+    private record RenderedGrep(String text, boolean truncated) {}
+
+    private RenderedGrep renderGrepMatches(CodeSearchResult result, String query, int maxChars) {
         StringBuilder sb = new StringBuilder();
         sb.append("匹配结果 ").append(result.matches().size()).append(" 条")
                 .append(" (engine=").append(result.engine()).append(")");
@@ -503,7 +520,7 @@ public class ToolRegistry {
         }
         sb.append(":\n");
         boolean truncatedByChars = false;
-        int rendered = 0;
+        int renderedCount = 0;
         for (int i = 0; i < result.matches().size(); i++) {
             GrepMatch match = result.matches().get(i);
             String matchHeader = (i + 1) + ". " + match.file() + ":" + match.lineNumber() + "\n";
@@ -521,7 +538,7 @@ public class ToolRegistry {
                 }
                 sb.append(contextLine);
             }
-            rendered++;
+            renderedCount++;
             if (truncatedByChars) {
                 break;
             }
@@ -531,8 +548,10 @@ public class ToolRegistry {
         } else if (result.partial()) {
             sb.append("\npartial: true（").append(result.partialReason()).append("，请缩小 path/glob/pattern 继续搜索）");
         }
-        appendSuggestedReads(sb, result.matches().subList(0, Math.min(rendered, result.matches().size())));
-        return sb.toString().trim();
+        // truncatedByChars=false(含全量重渲):正常输出 suggestions;
+        // truncatedByChars=true(截断版,maxChars=正常值):也输出 suggestions 保持原行为。
+        appendSuggestedReads(sb, result.matches().subList(0, Math.min(renderedCount, result.matches().size())));
+        return new RenderedGrep(sb.toString().trim(), truncatedByChars);
     }
 
     private void appendSuggestedReads(StringBuilder sb, List<GrepMatch> matches) {
@@ -1531,11 +1550,15 @@ public class ToolRegistry {
 
     private String readProcessOutput(Process process, String callId) throws Exception {
         StringBuilder output = new StringBuilder();
+        StringBuilder fullBuf = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (callId != null) {
                     safeOnChunk(callId, "stdout", line);   // 逐行流给 UI(不受 8000 字符缓冲上限约束)
+                }
+                if (fullBuf.length() < com.lyhn.wraith.context.curator.SpillingTruncator.SPILL_MAX_CHARS) {
+                    fullBuf.append(line).append('\n');
                 }
                 if (output.length() < MAX_COMMAND_OUTPUT_CHARS) {
                     int remaining = MAX_COMMAND_OUTPUT_CHARS - output.length();
@@ -1549,7 +1572,10 @@ public class ToolRegistry {
             }
         }
         if (output.length() >= MAX_COMMAND_OUTPUT_CHARS) {
-            return output.substring(0, MAX_COMMAND_OUTPUT_CHARS) + "\n...(输出已截断)";
+            String truncated = output.substring(0, MAX_COMMAND_OUTPUT_CHARS) + "\n...(输出已截断)";
+            return curationSink.writeToolLog("execute_command", fullBuf)
+                    .map(p -> truncated + "\n" + com.lyhn.wraith.context.curator.CurationMarks.LOG_POINTER_PREFIX + p + "]")
+                    .orElse(truncated);
         }
         return output.toString();
     }
