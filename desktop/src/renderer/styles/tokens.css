@@ -23,6 +23,17 @@ button,
   --danger: #c0392b;
   --warn: #e67e22;
   --ok: #1f9d63;
+  /* RGB 三元组(供 Tailwind rgb(var(--x-rgb)/<alpha-value>) 用;与上方 hex 必须同步改) */
+  --bg-rgb: 247 248 250;
+  --bg-elevated-rgb: 255 255 255;
+  --fg-rgb: 28 36 48;
+  --fg-muted-rgb: 91 102 117;
+  --fg-subtle-rgb: 152 162 179;
+  --border-rgb: 226 230 236;
+  --accent-fg-rgb: 255 255 255;
+  --danger-rgb: 192 57 43;
+  --warn-rgb: 230 126 34;
+  --ok-rgb: 31 157 99;
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
   --font-scale: 1;
@@ -41,6 +52,17 @@ button,
   --danger: #f0645a;
   --warn: #e8a13c;
   --ok: #3fb984;
+  /* RGB 三元组(与上方 hex 同步) */
+  --bg-rgb: 15 20 25;
+  --bg-elevated-rgb: 22 27 34;
+  --fg-rgb: 230 237 243;
+  --fg-muted-rgb: 154 167 180;
+  --fg-subtle-rgb: 107 118 132;
+  --border-rgb: 43 49 56;
+  --accent-fg-rgb: 255 255 255;
+  --danger-rgb: 240 100 90;
+  --warn-rgb: 232 161 60;
+  --ok-rgb: 63 185 132;
 }
 
 html, body, #root { height: 100%; }

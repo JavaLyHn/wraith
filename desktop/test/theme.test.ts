@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveThemeVars, ACCENTS } from '../src/renderer/settings/theme'
+import { resolveThemeVars, ACCENTS, hexToRgbTriplet } from '../src/renderer/settings/theme'
 import type { UiPrefs } from '../src/renderer/settings/prefs'
 
 const base: UiPrefs = { theme: 'system', accent: 'teal', fontSize: 'md', fontFamily: 'system' }
@@ -22,5 +22,21 @@ describe('resolveThemeVars', () => {
   })
   it('字体映射为字体栈(mono 含 JetBrains Mono)', () => {
     expect(resolveThemeVars({ ...base, fontFamily: 'mono' }, false).vars['--font-sans']).toContain('JetBrains Mono')
+  })
+})
+
+describe('hexToRgbTriplet', () => {
+  it('#0ea5b7 → 14 165 183', () => {
+    expect(hexToRgbTriplet('#0ea5b7')).toBe('14 165 183')
+  })
+  it('#fff → 255 255 255(3位简写)', () => {
+    expect(hexToRgbTriplet('#fff')).toBe('255 255 255')
+  })
+})
+
+describe('resolveThemeVars --accent-rgb', () => {
+  it('rose accent 下发正确 --accent-rgb', () => {
+    const result = resolveThemeVars({ ...base, accent: 'rose' }, false)
+    expect(result.vars['--accent-rgb']).toBe(hexToRgbTriplet(ACCENTS.rose.value))
   })
 })

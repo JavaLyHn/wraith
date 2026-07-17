@@ -8,6 +8,14 @@ export const ACCENTS: Record<AccentKey, { label: string; value: string }> = {
   amber: { label: '琥珀', value: '#f59e0b' },
 }
 
+/** '#0ea5b7' → '14 165 183':Tailwind rgb(var(--accent-rgb)/<alpha>) 需要的空格三元组。 */
+export function hexToRgbTriplet(hex: string): string {
+  const h = hex.replace('#', '')
+  const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h
+  const n = parseInt(full, 16)
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`
+}
+
 const FONT_SCALE: Record<UiPrefs['fontSize'], string> = { sm: '0.925', md: '1', lg: '1.075' }
 const FONT_SANS: Record<UiPrefs['fontFamily'], string> = {
   system: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
@@ -23,6 +31,7 @@ export function resolveThemeVars(ui: UiPrefs, systemDark: boolean): ResolvedThem
     dataTheme,
     vars: {
       '--accent': ACCENTS[ui.accent].value,
+      '--accent-rgb': hexToRgbTriplet(ACCENTS[ui.accent].value),
       '--font-scale': FONT_SCALE[ui.fontSize],
       '--font-sans': FONT_SANS[ui.fontFamily],
     },
