@@ -104,7 +104,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
   const current = creating ? null : tasks.find(t => t.id === selectedId) ?? tasks[0] ?? null
 
   const pill = gatewayPillView(gatewayStatus)
-  const pillToneCls = { ok: 'text-success', warn: 'text-warning', err: 'text-danger', muted: 'text-fg-subtle' }[pill.tone]
+  const pillToneCls = { ok: 'text-ok', warn: 'text-warn', err: 'text-danger', muted: 'text-fg-subtle' }[pill.tone]
   const pillGlyph = { ok: '● ', warn: '⚠ ', err: '✕ ', muted: '' }[pill.tone]
 
   const handleSave = useCallback(async (t: AutomationTask): Promise<void> => {
@@ -161,7 +161,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
         <span className="text-xs text-fg-subtle">定时任务</span>
         {qqPending.length > 0 && (
           <span data-testid="qq-pending-badge"
-            className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-2xs text-warning">
+            className="ml-2 rounded-full bg-warn/15 px-2 py-0.5 text-2xs text-warn">
             QQ 待发 {qqPending.length}
           </span>
         )}
@@ -177,7 +177,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
       </div>
       {flushToast !== null && (
         <div data-testid="qq-flush-toast"
-          className="border-b border-border bg-success/10 px-4 py-1.5 text-2xs text-success">
+          className="border-b border-border bg-ok/10 px-4 py-1.5 text-2xs text-ok">
           ✓ 已投递 {flushToast} 条到 QQ
         </div>
       )}
@@ -197,7 +197,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
                   onClick={() => void handleToggle(t)}
                   className={'shrink-0 rounded px-1.5 py-1 text-3xs whitespace-nowrap ' +
                     (t.enabled
-                      ? (gatewayStatus.state === 'running' ? 'text-success hover:bg-surface/60' : 'text-fg-muted hover:bg-surface/60')
+                      ? (gatewayStatus.state === 'running' ? 'text-ok hover:bg-surface/60' : 'text-fg-muted hover:bg-surface/60')
                       : 'text-fg-subtle hover:bg-surface/60')}>
                   {taskStatusLabel(t.enabled, gatewayStatus.state)}
                 </button>
@@ -216,7 +216,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
             <div data-testid="automation-chipbar" className="mb-3 flex gap-2 overflow-x-auto pb-1">
               {tasks.map(t => {
                 const sel = current?.id === t.id && !creating
-                const dot = !t.enabled ? 'bg-fg-subtle' : gatewayStatus.state === 'running' ? 'bg-success' : 'bg-fg-muted'
+                const dot = !t.enabled ? 'bg-fg-subtle' : gatewayStatus.state === 'running' ? 'bg-ok' : 'bg-fg-muted'
                 return (
                   <button key={t.id} data-testid="automation-chip" onClick={() => { setCreating(false); setSelectedId(t.id) }}
                     className={'inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-colors ' +

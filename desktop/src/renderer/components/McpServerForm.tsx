@@ -120,7 +120,7 @@ export default function McpServerForm({ mode, initial, prefill, busy, onCancel, 
       {testResult && (
         <div data-testid="mcp-form-test-result"
           className={'whitespace-pre-wrap break-words font-mono text-xs ' +
-            (testResult.kind === 'ok' ? 'text-success' : 'text-danger')}>
+            (testResult.kind === 'ok' ? 'text-ok' : 'text-danger')}>
           {testResult.text}
         </div>
       )}

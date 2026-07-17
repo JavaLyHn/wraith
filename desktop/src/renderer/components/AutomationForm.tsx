@@ -407,7 +407,7 @@ export default function AutomationForm({ initial, projects, onSave, onRunNow, on
         {initial && (
           <button data-testid="automation-toggle-form" title={initial.enabled ? '暂停后不再按时触发' : '启用后从现在起重新计时'}
             onClick={() => void onToggle(initial)}
-            className={'ml-auto ' + BTN_GHOST + (initial.enabled ? '' : ' text-success hover:text-success')}>
+            className={'ml-auto ' + BTN_GHOST + (initial.enabled ? '' : ' text-ok hover:text-ok')}>
             {initial.enabled ? '⏸ 暂停' : '▶ 启用'}
           </button>
         )}

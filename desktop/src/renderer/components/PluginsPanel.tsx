@@ -20,8 +20,8 @@ interface PluginsPanelProps {
 }
 
 const STATE_DOT: Record<string, string> = {
-  starting: 'bg-warning animate-pulse',
-  ready: 'bg-success',
+  starting: 'bg-warn animate-pulse',
+  ready: 'bg-ok',
   disabled: 'bg-fg-subtle',
   error: 'bg-danger',
 }

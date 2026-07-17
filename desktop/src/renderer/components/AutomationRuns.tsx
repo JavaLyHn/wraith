@@ -26,7 +26,7 @@ const STATUS_LABEL: Record<AutomationRun['status'], string> = {
   running: '运行中', waiting_approval: '等待审批', success: '成功', failed: '失败', interrupted: '中断',
 }
 const STATUS_COLOR: Record<AutomationRun['status'], string> = {
-  running: 'text-warning', waiting_approval: 'text-warning', success: 'text-success',
+  running: 'text-warn', waiting_approval: 'text-warn', success: 'text-ok',
   failed: 'text-danger', interrupted: 'text-fg-subtle',
 }
 
@@ -83,7 +83,7 @@ export default function AutomationRuns({ taskId, projectPath, onOpenSession, onA
                 <button
                   data-testid="automation-run-approve"
                   onClick={() => void handleRespondApproval(r.approvalId!, 'approve', fetchRuns)}
-                  className="rounded border border-success/60 bg-success/10 px-2 py-0.5 text-2xs text-success hover:bg-success/20">
+                  className="rounded border border-ok/60 bg-ok/10 px-2 py-0.5 text-2xs text-ok hover:bg-ok/20">
                   批准
                 </button>
                 <button

@@ -20,7 +20,7 @@ const STATUS_LABEL: Record<GatewayState, string> = {
 const STATUS_COLOR: Record<GatewayState, string> = {
   stopped: 'text-fg-subtle',
   starting: 'text-amber-500',
-  running: 'text-success',
+  running: 'text-ok',
   error: 'text-danger',
 }
 
@@ -271,7 +271,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
                     {PlatformIcon({ id: p.id, className: 'h-5 w-5' }) ?? <span className="text-xl leading-none">{p.icon}</span>}
                   </span>
                   <span className="max-w-full truncate text-2xs text-fg">{p.name}</span>
-                  <span className={'text-3xs ' + (isSelected && bound ? 'text-success' : 'text-fg-subtle')}>{statusText}</span>
+                  <span className={'text-3xs ' + (isSelected && bound ? 'text-ok' : 'text-fg-subtle')}>{statusText}</span>
                 </div>
               )
             })}
@@ -314,7 +314,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
               </div>
               {bind && (
                 <div data-testid="im-bind-status"
-                  className={'mt-2 text-xs ' + (bind.phase === 'bound' ? 'text-success' : bind.phase === 'failed' || bind.phase === 'secret-invalid' ? 'text-danger' : 'text-fg-muted')}>
+                  className={'mt-2 text-xs ' + (bind.phase === 'bound' ? 'text-ok' : bind.phase === 'failed' || bind.phase === 'secret-invalid' ? 'text-danger' : 'text-fg-muted')}>
                   {bindPhaseLabel(bind.phase, bind.message)}
                 </div>
               )}
@@ -325,7 +325,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
               <div className="mb-1 text-xs font-bold text-fg">机器人密钥（手填兜底）</div>
               <div className="text-2xs text-fg-subtle">openclaw 偶发返回失效密钥;可到 q.qq.com 后台复制「机器人密钥」直接填入。</div>
               <label className="mt-2 block text-xs text-fg-muted">
-                AppSecret {config?.hasSecret && <span className="text-3xs text-success">(已存,留空则保持)</span>}
+                AppSecret {config?.hasSecret && <span className="text-3xs text-ok">(已存,留空则保持)</span>}
                 <input data-testid="im-secret" type="password" value={secretInput}
                   onChange={e => setSecretInput(e.target.value)}
                   placeholder={config?.hasSecret ? '••••••(留空保持已存)' : '粘贴机器人密钥'}
@@ -352,7 +352,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
                 placeholder="cli_xxx" className={INPUT} />
             </label>
             <label className="mt-2 block text-xs text-fg-muted">
-              App Secret {config?.hasSecret && <span className="text-3xs text-success">(已存,留空则保持)</span>}
+              App Secret {config?.hasSecret && <span className="text-3xs text-ok">(已存,留空则保持)</span>}
               <input data-testid="im-fs-secret" type="password" value={fsAppSecret} onChange={e => setFsAppSecret(e.target.value)}
                 placeholder={config?.hasSecret ? '••••••(留空保持已存)' : '粘贴 App Secret'} className={INPUT} />
             </label>
@@ -397,7 +397,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
                 placeholder="机器人 BotID" className={INPUT} />
             </label>
             <label className="mt-2 block text-xs text-fg-muted">
-              Secret {config?.hasSecret && <span className="text-3xs text-success">(已存,留空则保持)</span>}
+              Secret {config?.hasSecret && <span className="text-3xs text-ok">(已存,留空则保持)</span>}
               <input data-testid="im-wc-secret" type="password" value={wcSecret} onChange={e => setWcSecret(e.target.value)}
                 placeholder={config?.hasSecret ? '••••••(留空保持已存)' : '粘贴长连接 Secret'} className={INPUT} />
             </label>
@@ -458,7 +458,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
             </div>
             {bind && selectedPlatform === 'weixin' && (
               <div data-testid="im-wx-bind-status"
-                className={'mt-2 text-xs ' + (bind.phase === 'bound' ? 'text-success' : bind.phase === 'failed' ? 'text-danger' : 'text-fg-muted')}>
+                className={'mt-2 text-xs ' + (bind.phase === 'bound' ? 'text-ok' : bind.phase === 'failed' ? 'text-danger' : 'text-fg-muted')}>
                 {bindPhaseLabel(bind.phase, bind.message)}
               </div>
             )}

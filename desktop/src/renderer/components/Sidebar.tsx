@@ -74,7 +74,7 @@ function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDe
       </button>
       <button data-testid="session-star" title={s.starred ? '取消重点' : '标记重点'}
         onClick={() => onToggleStar(s.id, !s.starred)}
-        className={'shrink-0 px-1 ' + (s.starred ? 'text-warning' : 'text-fg-subtle opacity-0 hover:text-fg group-hover:opacity-100')}>
+        className={'shrink-0 px-1 ' + (s.starred ? 'text-warn' : 'text-fg-subtle opacity-0 hover:text-fg group-hover:opacity-100')}>
         <Star className="h-3 w-3" strokeWidth={1.5} fill={s.starred ? 'currentColor' : 'none'} />
       </button>
       <button data-testid="session-rename" title="改名"

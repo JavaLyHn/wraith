@@ -22,7 +22,7 @@ export default function QqPendingBlock(
             {it.kind === 'approval' ? (
               <>
                 <span className="shrink-0">⚠️</span>
-                <span className="min-w-0 flex-1 text-warning">
+                <span className="min-w-0 flex-1 text-warn">
                   <span className="font-medium">{it.taskName}</span> 等待审批 —— 在「运行历史」中同意/拒绝
                 </span>
               </>
