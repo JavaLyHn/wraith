@@ -75,6 +75,7 @@ public class Agent {
         this.curator = new ContextCurator(
                 () -> this.llmClient == null ? 128_000 : this.llmClient.maxContextWindow(),
                 () -> this.llmClient == null ? "?" : this.llmClient.getModelName(),
+                () -> this.llmClient,
                 new com.lyhn.wraith.context.curator.ToolTierPolicy(),
                 new com.lyhn.wraith.context.curator.CurationSink() {   // 委托可替换的 curationSink 字段
                     @Override public java.util.Optional<java.nio.file.Path> writeToolLog(String t, CharSequence c) {
@@ -83,6 +84,7 @@ public class Agent {
                     @Override public void appendMetrics(String j) { curationSink.appendMetrics(j); }
                 },
                 (method, payload) -> renderer().contextEvent(method, payload));
+        this.curator.setNoticeOut(msg -> renderer().stream().println(msg));
         this.toolRegistry.setContextProfile(memoryManager.getContextProfile());
         this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
         this.memoryManager.setProjectPath(this.toolRegistry.getProjectPath());
@@ -391,7 +393,9 @@ public class Agent {
         }
         long beforeTokens = estimateCurrentContextTokens();
         try {
-            boolean compacted = historyCompactor.compactNow(conversationHistory);
+            boolean compacted = curatorEnabled()
+                    ? curator.compactNow(conversationHistory)
+                    : historyCompactor.compactNow(conversationHistory);
             return new CompactionResult(compacted, beforeTokens, estimateCurrentContextTokens(), null);
         } catch (Exception e) {
             log.warn("manual conversationHistory compaction failed", e);
@@ -472,25 +476,18 @@ public class Agent {
 
     private void maybeCompactHistory() {
         if (curatorEnabled()) {
-            curator.curate(conversationHistory, this::legacyAutoCompact);
+            curator.curate(conversationHistory);
             return;
         }
         legacyAutoCompact();
     }
 
-    /** 旧路径(回退开关 + Phase A 的 Tier3 代位;Phase B 换增量摘要后仅剩回退用途)。 */
+    /** 旧路径:仅回退开关(wraith.context.curator.enabled=false)用途,curator 内化摘要后不再被 curator 代位。 */
     private void legacyAutoCompact() {
-        legacyAutoCompact(-1);   // 回退路径(curator 关):无保护区约束,逐字节等价旧行为
-    }
-
-    /** tier3 代位:protectedFrom>=0 时保证旧全量摘要不越过 curator 保护区;<0 为无约束回退。 */
-    private void legacyAutoCompact(int protectedFrom) {
         if (historyCompactor == null) return;
         int trigger = memoryManager.getContextProfile().compressionTriggerTokens();
         try {
-            boolean compacted = protectedFrom < 0
-                    ? historyCompactor.compactIfNeeded(conversationHistory, trigger)
-                    : historyCompactor.compactIfNeededProtecting(conversationHistory, trigger, protectedFrom);
+            boolean compacted = historyCompactor.compactIfNeeded(conversationHistory, trigger);
             if (compacted) {
                 renderer().stream().println("📦 上下文接近窗口上限，已把早期对话压缩为摘要后继续。");
             }

@@ -1,5 +1,6 @@
 package com.lyhn.wraith.context.curator;
 
+import com.lyhn.wraith.llm.LlmClient;
 import com.lyhn.wraith.llm.LlmClient.Message;
 import com.lyhn.wraith.memory.TokenBudget;
 import org.slf4j.Logger;
@@ -10,13 +11,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.BiConsumer;
-import java.util.function.IntConsumer;
 import java.util.function.LongSupplier;
 import java.util.function.Supplier;
 
 /**
- * 四级水位线编排(spec §1/§2):判档 → Tier1 Snip → Tier2 Prune → 仍 ≥95% 交 tier3Fallback。
- * 一切异常内部吞掉并 log(治理绝不拖垮主循环);事件通过 eventOut 外发。
+ * 四级水位线编排(spec §1/§2):判档 → Tier1 Snip → Tier2 Prune → 仍 ≥95% 交内化增量摘要(tier3)。
+ * 摘要失败或处于冷却期时以 EMERGENCY prune 兜底(防兜);压完仍 ≥95% 一次性 noticeOut 提示(防报),
+ * 绝不静默、绝不破保护区。一切异常内部吞掉并 log(治理绝不拖垮主循环);事件通过 eventOut 外发。
  */
 public final class ContextCurator {
     private static final Logger log = LoggerFactory.getLogger(ContextCurator.class);
@@ -28,20 +29,47 @@ public final class ContextCurator {
     private final LongSupplier windowSupplier;
     private final Supplier<String> modelSupplier;
     private final CalibratedTokenCounter counter = new CalibratedTokenCounter();
+    private final IncrementalSummarizer summarizer;
+    private java.util.function.Consumer<String> noticeOut = s -> {};
+    private int cooldown = 0;
+    private boolean pressureNotified = false;
 
-    public ContextCurator(LongSupplier windowSupplier, Supplier<String> modelSupplier, ToolTierPolicy policy,
+    public ContextCurator(LongSupplier windowSupplier, Supplier<String> modelSupplier,
+                          Supplier<LlmClient> clientSupplier, ToolTierPolicy policy,
                           CurationSink sink, BiConsumer<String, Map<String, Object>> eventOut) {
+        this(windowSupplier, modelSupplier, clientSupplier, policy, sink, eventOut, null);
+    }
+
+    /** 测试注入摘要器用重载。 */
+    public ContextCurator(LongSupplier windowSupplier, Supplier<String> modelSupplier,
+                          Supplier<LlmClient> clientSupplier, ToolTierPolicy policy,
+                          CurationSink sink, BiConsumer<String, Map<String, Object>> eventOut,
+                          IncrementalSummarizer summarizer) {
         this.windowSupplier = windowSupplier;
         this.modelSupplier = modelSupplier;
         this.gauge = new WatermarkGauge(windowSupplier);
         this.policy = policy;
         this.stats = new CurationStats(sink);
         this.eventOut = eventOut;
+        this.summarizer = summarizer != null ? summarizer
+                : new IncrementalSummarizer(clientSupplier, counter);
     }
 
     public CurationStats stats() { return stats; }
 
     CalibratedTokenCounter counter() { return counter; }
+
+    /** 压不动时一次性提示(默认 no-op);Agent 侧接到渲染器输出通道。 */
+    public void setNoticeOut(java.util.function.Consumer<String> out) {
+        this.noticeOut = out == null ? s -> {} : out;
+    }
+
+    private static int intProp(String prop, int dflt) {
+        try {
+            String v = System.getProperty(prop);
+            return v == null ? dflt : Integer.parseInt(v);
+        } catch (NumberFormatException e) { return dflt; }
+    }
 
     /** LLM 响应到达后调用:锚定真实水位 + metrics 行 + watermark 事件。 */
     public void onUsage(long input, long output, long cached, List<Message> history) {
@@ -65,12 +93,12 @@ public final class ContextCurator {
     }
 
     /** 调 LLM 前治理。返回是否发生任何动作。 */
-    public boolean curate(List<Message> history, IntConsumer tier3Fallback) {
+    public boolean curate(List<Message> history) {
         try {
             String model = modelSupplier.get();
             long estBefore = counter.estimate(model, history);
             WatermarkGauge.Reading r = gauge.read(model, estBefore);
-            if (r.tier() == 0) return false;
+            if (r.tier() == 0) { pressureNotified = false; return false; }
 
             long start = System.nanoTime();
             long target = gauge.tokensToRelease(r);
@@ -85,18 +113,44 @@ public final class ContextCurator {
             if (r.tier() >= 2 && releasedSoFar < target) {
                 SnipPass.Result prune = PrunePass.apply(history, protectedFrom, policy, target - releasedSoFar);
                 all.addAll(prune.changes());
-                pruned = prune.changes().size();
+                pruned += prune.changes().size();
                 releasedSoFar += prune.releasedEstTokens();
             }
 
             boolean summarized = false;
+            String fallback = null;
             long estAfterPasses = counter.estimate(model, history);
-            if (r.tier() >= 3 && gauge.read(model, estAfterPasses).tier() >= 3 && tier3Fallback != null) {
-                tier3Fallback.accept(protectedFrom);   // Phase A:旧 ConversationHistoryCompactor 代位(带保护区上限);Phase B 换增量摘要
-                summarized = true;
+            if (r.tier() >= 3 && gauge.read(model, estAfterPasses).tier() >= 3) {
+                if (cooldown > 0) {
+                    cooldown--;
+                    fallback = "cooldown";
+                    SnipPass.Result em = PrunePass.apply(history, protectedFrom, policy,
+                            Long.MAX_VALUE, PrunePass.Mode.EMERGENCY);
+                    all.addAll(em.changes());
+                    pruned += em.changes().size();
+                } else if (summarizer.summarize(history, protectedFrom, model, r.window())) {
+                    summarized = true;
+                } else {
+                    cooldown = intProp("wraith.context.summary.cooldown", 3);
+                    fallback = "emergency";
+                    SnipPass.Result em = PrunePass.apply(history, protectedFrom, policy,
+                            Long.MAX_VALUE, PrunePass.Mode.EMERGENCY);
+                    all.addAll(em.changes());
+                    pruned += em.changes().size();
+                }
             }
 
             long estAfter = counter.estimate(model, history);
+            // 压完仍 ≥95% → 一次性提示(绝不静默,也绝不破保护区)
+            if (gauge.read(model, estAfter).tier() >= 3) {
+                if (!pressureNotified) {
+                    pressureNotified = true;
+                    noticeOut.accept("⚠️ 上下文已满,零成本压缩手段已用尽,建议开新会话或收窄任务。");
+                }
+            } else {
+                pressureNotified = false;
+            }
+
             int snipped = snip.changes().size();
             if (snipped == 0 && pruned == 0 && !summarized) return false;
 
@@ -109,6 +163,7 @@ public final class ContextCurator {
             p.put("snipped", snipped);
             p.put("pruned", pruned);
             p.put("summarized", summarized);
+            if (fallback != null) p.put("fallback", fallback);
             p.put("savedTokens", Math.max(0, estBefore - estAfter));
             p.put("durationMs", durationMs);
             List<Map<String, Object>> items = new ArrayList<>();
@@ -127,6 +182,43 @@ public final class ContextCurator {
             return true;
         } catch (Exception e) {
             log.warn("context curation failed: {}", e.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    /** 手动压缩(spec §7):force 跑 1+2+3,保护区不动;返回是否有任何变化。 */
+    public boolean compactNow(List<Message> history) {
+        try {
+            String model = modelSupplier.get();
+            long estBefore = counter.estimate(model, history);
+            WatermarkGauge.Reading r = gauge.read(model, estBefore);
+            long start = System.nanoTime();
+            int protectedFrom = ProtectionBoundary.protectedFrom(
+                    history, ProtectionBoundary.protectedBudget(r.window()));
+            List<SnipPass.Change> all = new ArrayList<>();
+            SnipPass.Result snip = SnipPass.apply(history, protectedFrom, policy, Long.MAX_VALUE);
+            all.addAll(snip.changes());
+            SnipPass.Result prune = PrunePass.apply(history, protectedFrom, policy, Long.MAX_VALUE);
+            all.addAll(prune.changes());
+            boolean summarized = summarizer.summarize(history, protectedFrom, model, r.window());
+            long estAfter = counter.estimate(model, history);
+            boolean any = !all.isEmpty() || summarized;
+            if (any) {
+                long durationMs = (System.nanoTime() - start) / 1_000_000;
+                stats.recordCompaction(r.tier(), estBefore, estAfter,
+                        snip.changes().size(), prune.changes().size(), summarized, durationMs);
+                Map<String, Object> p = new LinkedHashMap<>();
+                p.put("tier", r.tier());
+                p.put("manual", true);
+                p.put("beforeTokens", estBefore);
+                p.put("afterTokens", estAfter);
+                p.put("summarized", summarized);
+                p.put("savedTokens", Math.max(0, estBefore - estAfter));
+                eventOut.accept("context.compaction", p);
+            }
+            return any;
+        } catch (Exception e) {
+            log.warn("manual curation failed: {}", e.getClass().getSimpleName());
             return false;
         }
     }
