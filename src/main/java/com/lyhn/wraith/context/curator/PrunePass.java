@@ -11,6 +11,9 @@ import java.util.regex.Pattern;
 
 /** Tier 2 Prune:snip 产物→占位符;老 assistant 长文裁前两句。零 LLM,同样尾标单调。 */
 public final class PrunePass {
+    /** NORMAL=常规(只压已 snip 的工具输出);EMERGENCY=tier3 摘要失败兜底(零 LLM 强压)。 */
+    public enum Mode { NORMAL, EMERGENCY }
+
     private static final Pattern POINTER_LINE =
             Pattern.compile("^" + Pattern.quote(CurationMarks.LOG_POINTER_PREFIX) + ".*\\]$", Pattern.MULTILINE);
     private static final Pattern SENTENCE_END = Pattern.compile("[。.!?\\n]");
@@ -19,6 +22,11 @@ public final class PrunePass {
 
     public static SnipPass.Result apply(List<Message> history, int protectedFrom,
                                         ToolTierPolicy policy, long releaseTarget) {
+        return apply(history, protectedFrom, policy, releaseTarget, Mode.NORMAL);
+    }
+
+    public static SnipPass.Result apply(List<Message> history, int protectedFrom,
+                                        ToolTierPolicy policy, long releaseTarget, Mode mode) {
         List<SnipPass.Change> changes = new ArrayList<>();
         long released = 0;
         Map<String, String> toolNames = ProtectionBoundary.toolNamesById(history);
@@ -30,7 +38,10 @@ public final class PrunePass {
             if (content == null || content.contains(CurationMarks.PRUNE_MARK)
                     || content.contains(CurationMarks.SUMMARY_MARK)) continue;
 
-            if ("tool".equals(m.role()) && content.contains(CurationMarks.SNIP_MARK)) {
+            boolean emergency = mode == Mode.EMERGENCY;
+            if ("tool".equals(m.role())
+                    && (content.contains(CurationMarks.SNIP_MARK)
+                        || (emergency && content.length() > ToolTierPolicy.EMERGENCY_TOOL_MIN_CHARS))) {
                 String tool = toolNames.get(m.toolCallId());
                 if (!policy.compressible(tool)) continue;
                 Matcher p = POINTER_LINE.matcher(content);
@@ -41,7 +52,9 @@ public final class PrunePass {
                 released += Math.max(0, delta);
                 changes.add(new SnipPass.Change(i, tool, Math.max(0, delta), null));
             } else if ("assistant".equals(m.role())
-                    && content.length() > ToolTierPolicy.ASSISTANT_PRUNE_MIN_CHARS) {
+                    && content.length() > (emergency
+                        ? ToolTierPolicy.ASSISTANT_EMERGENCY_MIN_CHARS
+                        : ToolTierPolicy.ASSISTANT_PRUNE_MIN_CHARS)) {
                 String rebuilt = firstSentences(content) + "…[truncated]" + CurationMarks.PRUNE_MARK;
                 long delta = estimate(content) - estimate(rebuilt);
                 history.set(i, Message.assistant(rebuilt, m.toolCalls()));

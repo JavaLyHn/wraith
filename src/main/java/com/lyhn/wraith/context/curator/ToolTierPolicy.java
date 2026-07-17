@@ -12,6 +12,10 @@ public final class ToolTierPolicy {
     public static final int CODEBLOCK_KEEP_LINES = 8;
     public static final int CODEBLOCK_MIN_LINES = 60;        // 用户代码块超过此行数才截
     public static final int ASSISTANT_PRUNE_MIN_CHARS = 1_200;
+    /** EMERGENCY 档(tier3 摘要失败兜底):assistant 裁剪阈值大幅下调。 */
+    public static final int ASSISTANT_EMERGENCY_MIN_CHARS = 200;
+    /** EMERGENCY 档:工具输出超过此长度即占位(占位符自身 ~几十字符,再短无收益)。 */
+    public static final int EMERGENCY_TOOL_MIN_CHARS = 80;
 
     public boolean compressible(String toolName) {
         return toolName == null || !PROTECTED_TOOLS.contains(toolName);
