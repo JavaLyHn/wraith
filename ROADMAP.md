@@ -652,3 +652,7 @@ Git       Prompt    异步后台    图片
 ---
 
 *已完成第 16 期 TUI 产品化（含 16.1 形态修正：默认切换为 inline 流式 TUI，Lanterna 全屏 TUI 通过 `WRAITH_RENDERER=lanterna` 保留）、第 17 期 LSP 诊断注入 MVP、第 18 期 Git Side-History 快照与回滚 MVP、第 19 期 Prompt 分层架构 MVP、第 20 期后台任务 + Runtime API MVP、第 21 期图片复制粘贴输入 MVP。*
+
+## 待交付：桌面宠物内置角色美术资产
+
+桌面宠物系统（`desktop/`，spec `docs/superpowers/specs/2026-07-18-desktop-pets-design.md`）的选择 / 导入 / 检测 / 聊天浮件展示机制已完整落地，但**内置 Wraith 默认角色（自有轻量机械形象）的美术资产（spritesheet 或单图）尚未交付**——当前 built-in 条目在宠物库中为占位，开箱可用的宠物形象需用户自行导入单图/精灵包或检测本地已安装的 Petdex 条目（如 `Noir Webling`）。美术资产独立于本期机制补齐，留作后续期。
