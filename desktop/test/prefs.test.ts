@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loadPrefs, savePrefs, DEFAULT_PREFS } from '../src/renderer/settings/prefs'
+import { loadPrefs, savePrefs, DEFAULT_PREFS, normalizePetPrefs } from '../src/renderer/settings/prefs'
 
 describe('loadPrefs', () => {
   it('无存储 → 全默认', () => {
@@ -52,8 +52,16 @@ describe('loadPrefs', () => {
 
   it('保留边界内的宠物位置和缩放值', () => {
     expect(loadPrefs(() => JSON.stringify({
-      pets: { scale: 0.75, position: { x: -160, y: 160 } },
-    })).pets).toMatchObject({ scale: 0.75, position: { x: -160, y: 160 } })
+      pets: { enabled: false, scale: 1.5, position: { x: -160, y: 160 } },
+    })).pets).toMatchObject({ enabled: false, scale: 1.5, position: { x: -160, y: 160 } })
+  })
+
+  it('将过小缩放和非有限位置回落默认，并钳制有限位置', () => {
+    const raw = '{"pets":{"scale":0.74,"position":{"x":161,"y":1e400}}}'
+    expect(loadPrefs(() => raw).pets).toMatchObject({
+      scale: DEFAULT_PREFS.pets.scale,
+      position: { x: 160, y: 0 },
+    })
   })
 })
 
@@ -64,5 +72,15 @@ describe('savePrefs', () => {
     savePrefs(next, (k, v) => { store[k] = v })
     expect(store['wraith.prefs']).toBeTruthy()
     expect(loadPrefs((k) => store[k] ?? null)).toEqual(next)
+  })
+})
+
+describe('normalizePetPrefs', () => {
+  it('规范化运行时合并后的宠物偏好', () => {
+    expect(normalizePetPrefs({
+      ...DEFAULT_PREFS.pets,
+      scale: 4,
+      position: { x: -200, y: Number.POSITIVE_INFINITY },
+    })).toEqual({ ...DEFAULT_PREFS.pets, position: { x: -160, y: 0 } })
   })
 })

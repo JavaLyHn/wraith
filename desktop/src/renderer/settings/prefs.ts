@@ -47,6 +47,19 @@ function normalizedPosition(value: unknown): PetPrefs['position'] {
   }
 }
 
+export function normalizePetPrefs(value: unknown): PetPrefs {
+  const pets = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  return {
+    enabled: typeof pets.enabled === 'boolean' ? pets.enabled : DEFAULT_PREFS.pets.enabled,
+    selectedId: typeof pets.selectedId === 'string' ? pets.selectedId : DEFAULT_PREFS.pets.selectedId,
+    motion: oneOf(pets.motion, MOTION_STYLES, DEFAULT_PREFS.pets.motion),
+    scale: typeof pets.scale === 'number' && Number.isFinite(pets.scale) && pets.scale >= 0.75 && pets.scale <= 1.5
+      ? pets.scale
+      : DEFAULT_PREFS.pets.scale,
+    position: normalizedPosition(pets.position),
+  }
+}
+
 export function loadPrefs(read: (k: string) => string | null = (k) => localStorage.getItem(k)): Prefs {
   let raw: unknown = {}
   try { const s = read(KEY); if (s) raw = JSON.parse(s) } catch { raw = {} }
@@ -70,15 +83,7 @@ export function loadPrefs(read: (k: string) => string | null = (k) => localStora
       autoCheck: typeof upd.autoCheck === 'boolean' ? (upd.autoCheck as boolean) : DEFAULT_PREFS.update.autoCheck,
       beta: typeof upd.beta === 'boolean' ? (upd.beta as boolean) : DEFAULT_PREFS.update.beta,
     },
-    pets: {
-      enabled: typeof pets.enabled === 'boolean' ? pets.enabled : DEFAULT_PREFS.pets.enabled,
-      selectedId: typeof pets.selectedId === 'string' ? pets.selectedId : DEFAULT_PREFS.pets.selectedId,
-      motion: oneOf(pets.motion, MOTION_STYLES, DEFAULT_PREFS.pets.motion),
-      scale: typeof pets.scale === 'number' && Number.isFinite(pets.scale) && pets.scale >= 0.75 && pets.scale <= 1.5
-        ? pets.scale
-        : DEFAULT_PREFS.pets.scale,
-      position: normalizedPosition(pets.position),
-    },
+    pets: normalizePetPrefs(pets),
   }
 }
 
