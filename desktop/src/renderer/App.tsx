@@ -1082,6 +1082,9 @@ export default function App(): JSX.Element {
         pane={rightDockPane}
         onPaneChange={setRightDockPane}
         onClose={() => setRightDockOpen(false)}
+        context={state.context}
+        status={state.status}
+        onCompact={() => void handleCompact()}
       />
       </div>
       </div>

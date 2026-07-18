@@ -2,17 +2,23 @@ import { useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import BrowserPane from './BrowserPane'
 import TerminalPane from './TerminalPane'
+import ContextPanel from './ContextPanel'
 import { clampColumnWidth } from '../lib/rightDock'
+import type { ContextObservability } from '../../shared/transcriptReducer'
+import type { StatusData } from '../../shared/types'
 
 export type RightDockPane = 'browser' | 'terminal' | 'context'
 
 /** 右侧停靠列:分段切换 浏览器|终端|上下文,常挂三面板 CSS 显隐;左边缘拖拽调宽;open 宽度动画。pane 受控(由 App 上提)。 */
-export default function RightDock({ open, cwd, pane, onPaneChange, onClose }: {
+export default function RightDock({ open, cwd, pane, onPaneChange, onClose, context, status, onCompact }: {
   open: boolean
   cwd: string | null
   pane: RightDockPane
   onPaneChange: (pane: RightDockPane) => void
   onClose: () => void
+  context: ContextObservability
+  status: StatusData | null
+  onCompact: () => void
 }): JSX.Element {
   const [width, setWidth] = useState(() => clampColumnWidth(Math.round(window.innerWidth * 0.4), window.innerWidth))
   const [dragging, setDragging] = useState(false)
@@ -66,7 +72,7 @@ export default function RightDock({ open, cwd, pane, onPaneChange, onClose }: {
             <TerminalPane active={open && pane === 'terminal'} cwd={cwd} />
           </div>
           <div className={'absolute inset-0 flex flex-col ' + (pane === 'context' ? '' : 'hidden')}>
-            <div data-testid="context-panel-placeholder" />
+            <ContextPanel context={context} status={status} onCompact={onCompact} />
           </div>
         </div>
       </div>
