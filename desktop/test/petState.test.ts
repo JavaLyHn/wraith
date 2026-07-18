@@ -20,6 +20,12 @@ describe('petStateFromEvent', () => {
     expect(petStateFromEvent(notification('turn.failed', { error: 'private error' }))).toEqual({ state: 'error', transient: true })
   })
 
+  it('returns to tool state when an approved tool starts producing output', () => {
+    expect(petStateFromEvent(notification('approval.requested', { argsJson: '/secret' }))).toEqual({ state: 'approval', transient: false })
+    expect(petStateFromEvent(notification('tool.output.delta', { output: 'private output' }))).toEqual({ state: 'tool', transient: false })
+    expect(petStateFromEvent(notification('tool.result', { output: 'private result' }))).toEqual({ state: 'tool', transient: false })
+  })
+
   it('ignores connection events and unrelated notifications', () => {
     expect(petStateFromEvent({ kind: 'connection', state: 'connected' })).toBeNull()
     expect(petStateFromEvent(notification('message.delta', { text: 'private text' }))).toBeNull()

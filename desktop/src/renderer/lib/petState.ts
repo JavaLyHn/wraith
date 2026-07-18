@@ -14,6 +14,8 @@ export function petStateFromEvent(event: BackendEvent): PetStateSignal | null {
     case 'thinking.begin':
       return { state: 'thinking', transient: false }
     case 'tool.call':
+    case 'tool.output.delta':
+    case 'tool.result':
       return { state: 'tool', transient: false }
     case 'approval.requested':
     case 'plan.review.requested':
