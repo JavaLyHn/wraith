@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { ArrowLeft, User, Palette, Info, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, User, Palette, Bot, Info, type LucideIcon } from 'lucide-react'
 import SettingsInterface from './SettingsInterface'
 import SettingsMe from './SettingsMe'
+import PetsSettings from './PetsSettings'
 import SettingsAbout from './SettingsAbout'
 
-type Section = 'me' | 'interface' | 'about'
+type Section = 'me' | 'interface' | 'pets' | 'about'
 const NAV: { key: Section; label: string; Icon: LucideIcon }[] = [
   { key: 'me', label: '我', Icon: User },
   { key: 'interface', label: '界面', Icon: Palette },
+  { key: 'pets', label: '宠物', Icon: Bot },
   { key: 'about', label: '关于', Icon: Info },
 ]
 
@@ -34,6 +36,7 @@ export default function SettingsPanel({ onBack, onOpenProviders }: { onBack: () 
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {active === 'interface' && <SettingsInterface />}
           {active === 'me' && <SettingsMe onOpenProviders={onOpenProviders} />}
+          {active === 'pets' && <PetsSettings />}
           {active === 'about' && <SettingsAbout />}
         </div>
       </div>
