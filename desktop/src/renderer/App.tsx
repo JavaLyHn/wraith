@@ -313,6 +313,7 @@ export default function App(): JSX.Element {
     try {
       const snap = await window.wraith.contextState()
       dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
+      dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
     } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
     void fetchSessions()
   }, [fetchSessions])
@@ -378,6 +379,7 @@ export default function App(): JSX.Element {
         try {
           const snap = await window.wraith.contextState()
           dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
+          dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
         } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
         void fetchSessions()
         void fetchProjects()
@@ -421,6 +423,11 @@ export default function App(): JSX.Element {
             dispatch({ type: 'setModel', model })
           }
         }
+        try {
+          const snap = await window.wraith.contextState()
+          dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
+          dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
+        } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
         void fetchSessions()
       } catch (err) {
         console.error('[wraith] reconnect error:', err)
@@ -703,6 +710,11 @@ export default function App(): JSX.Element {
             setModelFallbackNotice(true) // key 失效回退也要在切项目自动恢复时提示
           }
         }
+        try {
+          const snap = await window.wraith.contextState()
+          dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
+          dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
+        } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
         void fetchProjects() // lastUsedAt 刷新 → 浮顶
         void fetchMcp()
         void fetchMcpResources()

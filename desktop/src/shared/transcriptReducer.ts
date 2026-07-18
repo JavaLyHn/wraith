@@ -89,6 +89,40 @@ export interface TeamItem {
 /** 用户消息里附带的附件引用(仅展示用:路径/名字/类型)。 */
 export interface AttachmentRef { path: string; name: string; kind: string }
 
+/** 单条压缩记录('context.compaction' 事件平铺 payload 的前端形态)。ts 为前端收到时刻写入——reducer 允许的例外(见文件头)。 */
+export interface CompactionEntry {
+  ts: number
+  tier: number
+  beforeTokens: number
+  afterTokens: number
+  snipped: number
+  pruned: number
+  summarized: boolean
+  fallback?: 'cooldown' | 'emergency'
+  manual?: boolean
+  savedTokens: number
+  items?: { index: number; tool?: string; releasedEstTokens: number; logPath?: string }[]
+}
+
+/**
+ * 上下文治理可观测切片(Phase C,spec §1)。三来源合并:
+ *  - `context.watermark` 事件 → 覆盖 watermark(真实锚点口径,最高优先,estimated 恒 false)。
+ *  - `context.compaction` 事件 → push 进 compactions(上限 200,超出丢最老)。
+ *  - `context.state.get` 快照(App 合成为 `context.snapshot`)→ 初始化 watermark(带 estimated 标注)/liveSummary/totalsFromSnapshot。
+ */
+export interface ContextObservability {
+  watermark: { usedTokens: number; window: number; ratio: number; tier: number; estimated: boolean } | null
+  compactions: CompactionEntry[]
+  liveSummary: string | null
+  totalsFromSnapshot: {
+    inputTokens: number
+    outputTokens: number
+    cachedInputTokens: number
+    estimatedCost?: string
+    estimated: boolean
+  } | null
+}
+
 export type Item =
   | { type: 'user'; text: string; attachments?: AttachmentRef[] }
   | { type: 'message'; text: string }
@@ -126,6 +160,8 @@ export interface TranscriptState {
   sandbox: 'macos-seatbelt' | 'none' | 'unknown'
   /** token 状态(status 事件,resetSession 清空)。 */
   status: StatusData | null
+  /** 上下文治理可观测(Phase C;watermark/compaction 事件 + snapshot 合成事件三源合并,resetSession 显式清零)。 */
+  context: ContextObservability
   /** Internal flag: true when the last message item is still open for appending. */
   _messageOpen: boolean
 }
@@ -146,6 +182,7 @@ export const initialState: TranscriptState = {
   sessionId: '',
   sandbox: 'unknown',
   status: null,
+  context: { watermark: null, compactions: [], liveSummary: null, totalsFromSnapshot: null },
   _messageOpen: false,
 }
 
@@ -382,6 +419,55 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
           estimatedCost: typeof s['estimatedCost'] === 'string' ? (s['estimatedCost'] as string) : null,
           elapsedMillis: num('elapsedMillis'),
           phase: typeof s['phase'] === 'string' ? (s['phase'] as string) : '',
+        },
+      }
+    }
+
+    // ── context 治理可观测(Phase C;payload 平铺,见 EventStreamRenderer.contextEvent)──
+    case 'context.watermark': {
+      const num = (k: string): number => (typeof p[k] === 'number' ? (p[k] as number) : 0)
+      return {
+        ...state,
+        context: {
+          ...state.context,
+          watermark: { usedTokens: num('usedTokens'), window: num('window'), ratio: num('ratio'), tier: num('tier'), estimated: false },
+        },
+      }
+    }
+    case 'context.compaction': {
+      const num = (k: string): number => (typeof p[k] === 'number' ? (p[k] as number) : 0)
+      const entry = {
+        ts: Date.now(),
+        tier: num('tier'), beforeTokens: num('beforeTokens'), afterTokens: num('afterTokens'),
+        snipped: num('snipped'), pruned: num('pruned'),
+        summarized: p['summarized'] === true,
+        ...(typeof p['fallback'] === 'string' ? { fallback: p['fallback'] as 'cooldown' | 'emergency' } : {}),
+        ...(p['manual'] === true ? { manual: true } : {}),
+        savedTokens: num('savedTokens'),
+        ...(Array.isArray(p['items']) ? { items: p['items'] as never } : {}),
+      }
+      const compactions = [...state.context.compactions, entry].slice(-200)
+      return { ...state, context: { ...state.context, compactions } }
+    }
+    case 'context.snapshot': {
+      const num = (k: string): number => (typeof p[k] === 'number' ? (p[k] as number) : 0)
+      return {
+        ...state,
+        context: {
+          ...state.context,
+          watermark: {
+            usedTokens: num('usedTokens'),
+            window: num('contextWindow') || num('window'),
+            ratio: num('ratio'), tier: num('tier'),
+            estimated: p['estimated'] !== false,
+          },
+          liveSummary: typeof p['liveSummary'] === 'string' ? (p['liveSummary'] as string) : null,
+          totalsFromSnapshot: {
+            inputTokens: num('inputTokens'), outputTokens: num('outputTokens'),
+            cachedInputTokens: num('cachedInputTokens'),
+            ...(typeof p['estimatedCost'] === 'string' ? { estimatedCost: p['estimatedCost'] as string } : {}),
+            estimated: p['estimated'] !== false,
+          },
         },
       }
     }
@@ -662,6 +748,9 @@ export function resetSession(state: TranscriptState, ws: string): TranscriptStat
     workspace: ws,
     sessionId: '',
     status: null,
+    // resetSession 是逐字段部分重置（非整体回 initialState），context 切片须显式清零，
+    // 否则旧会话的 watermark/compactions/liveSummary 会随 `...state` 悬挂到新会话。
+    context: { watermark: null, compactions: [], liveSummary: null, totalsFromSnapshot: null },
   }
 }
 
@@ -718,6 +807,9 @@ export function transcriptReducer(
   if (typeof method !== 'string') return state
   return reduce(state, { kind: 'notification', method, params: rest })
 }
+
+/** 公开别名：核心 reduce 的直调形式（标准 BackendEvent），供测试用简短名 `reducer` 引用。 */
+export const reducer = reduce
 
 /** 返回一份新的 initialState 拷贝（防止测试间共享同一引用）。 */
 export function initialTranscriptState(): TranscriptState {
