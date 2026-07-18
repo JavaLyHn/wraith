@@ -19,4 +19,13 @@ describe('compactionNotice', () => {
   it('失败优先', () =>
     expect(compactionNotice({ compacted: false, beforeTokens: 0, afterTokens: 0, error: 'X' }))
       .toBe('❌ 压缩失败:X'))
+  it('summarized result mentions incremental summary', () =>
+    expect(compactionNotice({ compacted: true, beforeTokens: 12300, afterTokens: 4100, summarized: true }))
+      .toBe('✅ 已压缩上下文:12.3k → 4.1k tokens(含增量摘要)'))
+  it('fallback result warns summary unavailable', () =>
+    expect(compactionNotice({ compacted: true, beforeTokens: 12300, afterTokens: 9000, summarized: false, fallback: 'emergency' }))
+      .toBe('⚠️ 摘要暂不可用,已零成本压缩:12.3k → 9k tokens'))
+  it('plain compaction text unchanged', () =>
+    expect(compactionNotice({ compacted: true, beforeTokens: 12300, afterTokens: 4100 }))
+      .toBe('✅ 已压缩上下文:12.3k → 4.1k tokens'))
 })

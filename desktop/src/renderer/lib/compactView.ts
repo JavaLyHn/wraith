@@ -5,6 +5,8 @@ export interface CompactionView {
   beforeTokens: number
   afterTokens: number
   error?: string | null
+  summarized?: boolean
+  fallback?: string
 }
 
 /** token 数 → 紧凑可读:1234→"1.2k",980→"980",1200000→"1.2M"。 */
@@ -19,5 +21,8 @@ export function formatTokens(n: number): string {
 export function compactionNotice(r: CompactionView): string {
   if (r.error) return `❌ 压缩失败:${r.error}`
   if (!r.compacted) return '上下文未超阈值,无需压缩'
-  return `✅ 已压缩上下文:${formatTokens(r.beforeTokens)} → ${formatTokens(r.afterTokens)} tokens`
+  const range = `${formatTokens(r.beforeTokens)} → ${formatTokens(r.afterTokens)} tokens`
+  if (r.fallback) return `⚠️ 摘要暂不可用,已零成本压缩:${range}`
+  if (r.summarized) return `✅ 已压缩上下文:${range}(含增量摘要)`
+  return `✅ 已压缩上下文:${range}`
 }
