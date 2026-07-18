@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { motionFor, selectedPet } from '../src/renderer/lib/petMotion'
+import { motionFor, selectedPet, spriteRowFor } from '../src/renderer/lib/petMotion'
 import type { PetView } from '../src/shared/pets'
 
 describe('motionFor', () => {
@@ -23,6 +23,29 @@ describe('motionFor', () => {
   it('为等待确认和普通待机提供各自的稳定动作', () => {
     expect(motionFor('approval', 'calm', false)).toEqual({ className: 'pet-approval', durationMs: 1800 })
     expect(motionFor('idle', 'calm', false)).toEqual({ className: 'pet-idle', durationMs: 2200 })
+  })
+})
+
+describe('spriteRowFor', () => {
+  it('行数足够时,每个状态直接取自己在固定行序里的下标', () => {
+    expect(spriteRowFor('idle', 9)).toBe(0)
+    expect(spriteRowFor('thinking', 9)).toBe(1)
+    expect(spriteRowFor('tool', 9)).toBe(2)
+    expect(spriteRowFor('approval', 9)).toBe(3)
+    expect(spriteRowFor('success', 9)).toBe(4)
+    expect(spriteRowFor('error', 9)).toBe(5)
+  })
+
+  it('行数不足时越界状态回退到 idle 行(0),不取模去撞别的、存在的行', () => {
+    // rows=3 只够 idle/thinking/tool 三行;approval/success/error 的固有下标(3/4/5)越界。
+    // 取模会让 approval(3%3=0)撞 idle、success(4%3=1)撞 thinking——这里必须全部落回 0。
+    expect(spriteRowFor('approval', 3)).toBe(0)
+    expect(spriteRowFor('success', 3)).toBe(0)
+    expect(spriteRowFor('error', 3)).toBe(0)
+    // 行内状态不受越界回退影响,仍取各自本来的行
+    expect(spriteRowFor('idle', 3)).toBe(0)
+    expect(spriteRowFor('thinking', 3)).toBe(1)
+    expect(spriteRowFor('tool', 3)).toBe(2)
   })
 })
 

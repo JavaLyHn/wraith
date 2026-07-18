@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nextPetState, petStateFromEvent } from '../src/renderer/lib/petState'
+import { nextPetState, petStateFromEvent, TRANSIENT_MS } from '../src/renderer/lib/petState'
 import type { BackendEvent } from '../src/shared/types'
 
 function notification(method: string, params: unknown = {}): BackendEvent {
@@ -57,5 +57,12 @@ describe('nextPetState', () => {
 
   it('keeps a persistent state without an expiry', () => {
     expect(nextPetState({ state: 'tool', expiresAt: null }, Number.MAX_SAFE_INTEGER)).toBe('tool')
+  })
+})
+
+describe('TRANSIENT_MS', () => {
+  it('locks the success/error transient durations shared by App.applyPetSignal and petMotion.motionFor', () => {
+    expect(TRANSIENT_MS.success).toBe(560)
+    expect(TRANSIENT_MS.error).toBe(420)
   })
 })

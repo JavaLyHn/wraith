@@ -6,6 +6,11 @@ export interface PetStateSignal {
   transient: boolean
 }
 
+// 瞬态状态过期时长的唯一来源——App.tsx(applyPetSignal 排 setTimeout)与
+// petMotion.ts(motionFor 的 pet-success/pet-error CSS 动画时长)都引用这里,
+// 避免两处硬编码 560/420 各自漂移。
+export const TRANSIENT_MS = { success: 560, error: 420 } as const
+
 export function petStateFromEvent(event: BackendEvent): PetStateSignal | null {
   if (event.kind !== 'notification') return null
 

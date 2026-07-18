@@ -33,7 +33,7 @@ import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { compactionNotice } from './lib/compactView'
-import { petStateFromEvent, nextPetState, type PetStateSignal } from './lib/petState'
+import { petStateFromEvent, nextPetState, TRANSIENT_MS, type PetStateSignal } from './lib/petState'
 import { selectedPet } from './lib/petMotion'
 import type { PetState, PetView } from '../shared/pets'
 import { Download, PanelLeft, PanelRight, SquareTerminal, Wand2 } from 'lucide-react'
@@ -226,7 +226,7 @@ export default function App(): JSX.Element {
       setPetSignal({ state: signal.state, expiresAt: null })
       return
     }
-    const ms = signal.state === 'success' ? 560 : 420
+    const ms = signal.state === 'success' ? TRANSIENT_MS.success : TRANSIENT_MS.error
     const expiresAt = Date.now() + ms
     setPetSignal({ state: signal.state, expiresAt })
     petTimerRef.current = setTimeout(() => {

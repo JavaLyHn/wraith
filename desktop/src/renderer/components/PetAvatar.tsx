@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { PetState, PetView } from '../../shared/pets'
 import type { PetPrefs } from '../settings/prefs'
-import { motionFor } from '../lib/petMotion'
-
-// 精灵表按状态分行取帧:仅决定读哪一行,不影响 tokens.css 里管位移/缩放的 pet-* keyframes。
-const SPRITE_ROWS: PetState[] = ['idle', 'thinking', 'tool', 'approval', 'success', 'error']
+import { motionFor, spriteRowFor } from '../lib/petMotion'
 
 function clampAxis(value: number): number {
   return Math.max(-160, Math.min(160, value))
@@ -77,18 +74,21 @@ export default function PetAvatar({ pet, state, prefs, onPositionChange }: PetAv
   if (!prefs.enabled || !pet.available || !pet.previewUrl) return null
 
   const position = dragPosition ?? prefs.position
-  const row = sprite ? SPRITE_ROWS.indexOf(state) % sprite.rows : 0
+  const row = sprite ? spriteRowFor(state, sprite.rows) : 0
 
   return (
+    // 外层只管定位/可见性(inline transform: translate+scale)+ testid,
+    // 承拖拽手柄——两层各管自己的 transform,CSS 动效(内层 motion.className)
+    // 不会覆盖这里的 inline transform,拖动/缩放才总能生效。
     <div
       data-testid="chat-pet"
-      className={'pointer-events-none absolute bottom-3 right-4 z-20 ' + motion.className}
+      className="pointer-events-none absolute bottom-3 right-4 z-20"
       style={{ transform: `translate(${position.x}px, ${position.y}px) scale(${prefs.scale})` }}
     >
       {sprite ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none"
+          className={'pointer-events-none ' + motion.className}
           style={{
             width: sprite.frameWidth,
             height: sprite.frameHeight,
@@ -98,9 +98,9 @@ export default function PetAvatar({ pet, state, prefs, onPositionChange }: PetAv
           }}
         />
       ) : (
-        <img alt="" className="pointer-events-none" src={pet.previewUrl} />
+        <img alt="" className={'pointer-events-none ' + motion.className} src={pet.previewUrl} />
       )}
-      {/* 拖拽手柄:覆盖浮件可视区的唯一可交互层;事件永远落在手柄上而不是图片/精灵本体 */}
+      {/* 拖拽手柄:挂在外层,覆盖浮件可视区的唯一可交互层;事件永远落在手柄上而不是图片/精灵本体 */}
       <div
         data-testid="chat-pet-drag-handle"
         className="pointer-events-auto absolute inset-0 cursor-grab active:cursor-grabbing"
