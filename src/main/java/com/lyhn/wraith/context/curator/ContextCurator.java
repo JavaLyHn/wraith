@@ -61,6 +61,9 @@ public final class ContextCurator {
 
     CalibratedTokenCounter counter() { return counter; }
 
+    /** 手动压缩回报(spec Phase C §4):fallback null=未走兜底。 */
+    public record ManualCompaction(boolean any, boolean summarized, String fallback) {}
+
     /** 压不动时一次性提示(默认 no-op);Agent 侧接到渲染器输出通道。 */
     public void setNoticeOut(java.util.function.Consumer<String> out) {
         this.noticeOut = out == null ? s -> {} : out;
@@ -202,8 +205,8 @@ public final class ContextCurator {
         }
     }
 
-    /** 手动压缩(spec §7):force 跑 1+2+3,保护区不动;返回是否有任何变化。 */
-    public boolean compactNow(List<Message> history) {
+    /** 手动压缩(spec §7):force 跑 1+2+3,保护区不动;返回压缩结果与是否走兜底。 */
+    public ManualCompaction compactNow(List<Message> history) {
         try {
             String model = modelSupplier.get();
             long estBefore = counter.estimate(model, history);
@@ -216,7 +219,17 @@ public final class ContextCurator {
             all.addAll(snip.changes());
             SnipPass.Result prune = PrunePass.apply(history, protectedFrom, policy, Long.MAX_VALUE);
             all.addAll(prune.changes());
-            boolean summarized = summarizer.summarize(history, protectedFrom, model, r.window());
+            boolean summarized = false;
+            String fallback = null;
+            if (summarizer.summarize(history, protectedFrom, model, r.window())) {
+                summarized = true;
+            } else {
+                cooldown = intProp("wraith.context.summary.cooldown", 3);
+                fallback = "emergency";
+                SnipPass.Result em = PrunePass.apply(history, protectedFrom, policy,
+                        Long.MAX_VALUE, PrunePass.Mode.EMERGENCY);
+                all.addAll(em.changes());
+            }
             long estAfter = counter.estimate(model, history);
             boolean any = !all.isEmpty() || summarized;
             if (any) {
@@ -229,13 +242,14 @@ public final class ContextCurator {
                 p.put("beforeTokens", estBefore);
                 p.put("afterTokens", estAfter);
                 p.put("summarized", summarized);
+                if (fallback != null) p.put("fallback", fallback);
                 p.put("savedTokens", Math.max(0, estBefore - estAfter));
                 eventOut.accept("context.compaction", p);
             }
-            return any;
+            return new ManualCompaction(any, summarized, fallback);
         } catch (Exception e) {
             log.warn("manual curation failed: {}", e.getClass().getSimpleName());
-            return false;
+            return new ManualCompaction(false, false, null);
         }
     }
 }

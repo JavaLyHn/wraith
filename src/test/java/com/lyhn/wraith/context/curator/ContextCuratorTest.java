@@ -157,7 +157,50 @@ class ContextCuratorTest {
         FakeSummarizer fs = new FakeSummarizer(true);
         ContextCurator c = curatorWith(fs);
         List<Message> h = bigHistory();
-        assertTrue(c.compactNow(h));
+        assertTrue(c.compactNow(h).any());
         assertEquals(1, fs.calls, "手动压缩必须走到摘要");
+    }
+
+    @Test
+    void manualCompactFailureFallsBackAndReports() {
+        FakeSummarizer fs = new FakeSummarizer(false);
+        ContextCurator c = curatorWith(fs);
+        List<Message> h = bigHistory();
+        ContextCurator.ManualCompaction r = c.compactNow(h);
+        assertEquals(1, fs.calls);
+        assertTrue(r.any(), "snip/prune 有动作");
+        assertFalse(r.summarized());
+        assertEquals("emergency", r.fallback(), "摘要失败必须走兜底并如实回报");
+        Map<String, Object> evt = lastEvent("context.compaction");
+        assertEquals(true, evt.get("manual"));
+        assertEquals("emergency", evt.get("fallback"));
+        // 失败进入 cooldown:随后自动 curate 冷却期内不再调 LLM
+        c.curate(h);
+        assertEquals(1, fs.calls, "manual 失败也应进入 cooldown");
+    }
+
+    @Test
+    void cooldownExpiryRetriesSummarizeEndToEnd() {
+        // spec §7 顺带补:Phase B 留档的 cooldown 到期重试 e2e——默认 cooldown=3,
+        // 失败轮 + 3 个冷却轮之后,第 5 次 curate 必须重试 summarize
+        FakeSummarizer fs = new FakeSummarizer(false);
+        ContextCurator c = curatorWith(fs);
+        List<Message> h = bigHistory();
+        c.curate(h);                       // 失败,calls=1,cooldown=3
+        c.curate(h); c.curate(h); c.curate(h);   // 冷却 3→2→1→0,不调 LLM
+        assertEquals(1, fs.calls);
+        c.curate(h);                       // 冷却耗尽,重试
+        assertEquals(2, fs.calls, "cooldown 到期后必须重试摘要");
+    }
+
+    @Test
+    void manualCompactSuccessReportsSummarizedNoFallback() {
+        FakeSummarizer fs = new FakeSummarizer(true);
+        ContextCurator c = curatorWith(fs);
+        ContextCurator.ManualCompaction r = c.compactNow(bigHistory());
+        assertTrue(r.any());
+        assertTrue(r.summarized());
+        assertNull(r.fallback(), "成功路径 fallback 必须为 null");
+        assertNull(lastEvent("context.compaction").get("fallback"), "成功事件不带 fallback 键");
     }
 }

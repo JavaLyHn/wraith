@@ -1574,6 +1574,8 @@ public class Main {
                             m.put("beforeTokens", r.beforeTokens());
                             m.put("afterTokens", r.afterTokens());
                             m.put("error", r.error());   // 已是简单消息;null 表示无错
+                            m.put("summarized", r.summarized());
+                            if (r.fallback() != null) m.put("fallback", r.fallback());
                             return m;
                         } catch (Exception e) {
                             return java.util.Map.of("compacted", false, "beforeTokens", 0, "afterTokens", 0,

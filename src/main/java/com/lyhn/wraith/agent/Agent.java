@@ -424,9 +424,12 @@ public class Agent {
         }
         long beforeTokens = estimateCurrentContextTokens();
         try {
-            boolean compacted = curatorEnabled()
-                    ? curator.compactNow(conversationHistory)
-                    : historyCompactor.compactNow(conversationHistory);
+            if (curatorEnabled()) {
+                ContextCurator.ManualCompaction mc = curator.compactNow(conversationHistory);
+                return new CompactionResult(mc.any(), beforeTokens, estimateCurrentContextTokens(), null,
+                        mc.summarized(), mc.fallback());
+            }
+            boolean compacted = historyCompactor.compactNow(conversationHistory);
             return new CompactionResult(compacted, beforeTokens, estimateCurrentContextTokens(), null);
         } catch (Exception e) {
             log.warn("manual conversationHistory compaction failed", e);
@@ -434,7 +437,11 @@ public class Agent {
         }
     }
 
-    public record CompactionResult(boolean compacted, long beforeTokens, long afterTokens, String error) {
+    public record CompactionResult(boolean compacted, long beforeTokens, long afterTokens, String error,
+                                   boolean summarized, String fallback) {
+        public CompactionResult(boolean compacted, long beforeTokens, long afterTokens, String error) {
+            this(compacted, beforeTokens, afterTokens, error, false, null);
+        }
     }
 
     /** 非命令工具结果回发卡片的字符上限(超出截断,防事件爆炸)。 */
