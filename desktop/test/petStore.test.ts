@@ -79,6 +79,30 @@ describe('petStore', () => {
     expect(fs.existsSync(path.join(petdexRoot, 'noir-webling', 'spritesheet.png'))).toBe(true)
   })
 
+  it('lists the optional Noir catalog entry as unavailable when Petdex is absent', async () => {
+    const noir = (await listPets({ userDataDir, petdexRoot })).find(pet => pet.id === 'noir-webling')
+    expect(noir).toMatchObject({ id: 'noir-webling', displayName: 'Noir Webling', source: 'petdex', available: false, removable: false })
+  })
+
+  it('does not follow Petdex manifest or asset symlinks outside a package', async () => {
+    const outsideManifest = path.join(root, 'outside.json')
+    fs.writeFileSync(outsideManifest, manifest('linked-manifest'))
+    const manifestDir = path.join(petdexRoot, 'linked-manifest')
+    fs.mkdirSync(manifestDir, { recursive: true })
+    fs.symlinkSync(outsideManifest, path.join(manifestDir, 'pet.json'))
+    fs.writeFileSync(path.join(manifestDir, 'spritesheet.png'), png())
+
+    const outsideSprite = path.join(root, 'outside.png')
+    fs.writeFileSync(outsideSprite, png())
+    writePet(petdexRoot, 'linked-asset')
+    fs.rmSync(path.join(petdexRoot, 'linked-asset', 'spritesheet.png'))
+    fs.symlinkSync(outsideSprite, path.join(petdexRoot, 'linked-asset', 'spritesheet.png'))
+
+    const pets = await listPets({ userDataDir, petdexRoot })
+    expect(pets.some(pet => pet.id === 'linked-manifest' || pet.id === 'linked-asset')).toBe(false)
+    await expect(previewDataUrl({ userDataDir, petdexRoot, id: 'linked-asset' })).resolves.toBeNull()
+  })
+
   it('rejects an SVG disguised as PNG without creating an import', async () => {
     const source = path.join(root, 'fake.png')
     fs.writeFileSync(source, '<svg xmlns="http://www.w3.org/2000/svg"/>')
@@ -117,6 +141,23 @@ describe('petStore', () => {
     const pack = path.join(root, 'imported'); writePet(pack, 'same')
     await importPackage({ userDataDir, sourcePath: path.join(pack, 'same') })
     expect((await listPets({ userDataDir, petdexRoot })).find(pet => pet.id === 'same')?.source).toBe('imported')
+  })
+
+  it('accepts and propagates a valid Wraith sprite layout', async () => {
+    const pack = path.join(root, 'layout')
+    writePet(pack, 'layout', JSON.stringify({
+      id: 'layout', displayName: 'layout', description: 'test pet', spritesheetPath: 'spritesheet.png',
+      sprite: { columns: 4, rows: 3, frameWidth: 64, frameHeight: 80 },
+    }))
+    const imported = await importPackage({ userDataDir, sourcePath: path.join(pack, 'layout') })
+    expect(imported.sprite).toEqual({ columns: 4, rows: 3, frameWidth: 64, frameHeight: 80 })
+    expect((await listPets({ userDataDir, petdexRoot })).find(pet => pet.id === 'layout')?.sprite).toEqual(imported.sprite)
+  })
+
+  it('rejects conflicting static asset metadata in a spritesheet package', async () => {
+    const pack = path.join(root, 'conflict')
+    writePet(pack, 'conflict', JSON.stringify({ id: 'conflict', displayName: 'conflict', description: 'test', spritesheetPath: 'spritesheet.png', assetPath: 'image.png' }))
+    await expect(importPackage({ userDataDir, sourcePath: path.join(pack, 'conflict') })).rejects.toThrow('冲突')
   })
 
   it('removes only imported data and keeps a Petdex pet discoverable', async () => {

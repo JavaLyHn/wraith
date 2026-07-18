@@ -43,6 +43,21 @@ function assertBasename(value: unknown, label: string): string {
   return value
 }
 
+function assertRegularPackageFile(root: string, file: string): void {
+  if (!isWithin(root, file)) throw new Error('非法宠物路径')
+  const stat = fs.lstatSync(file)
+  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('宠物资源不能是符号链接')
+}
+
+function parseSprite(value: unknown): PetSprite | undefined {
+  if (value === undefined) return undefined
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('无效精灵布局')
+  const sprite = value as Record<string, unknown>
+  const values = ['columns', 'rows', 'frameWidth', 'frameHeight'].map(key => sprite[key])
+  if (values.some(item => !Number.isInteger(item) || (item as number) <= 0 || (item as number) > MAX_DIMENSION)) throw new Error('无效精灵布局')
+  return { columns: values[0] as number, rows: values[1] as number, frameWidth: values[2] as number, frameHeight: values[3] as number }
+}
+
 function imageKind(buffer: Buffer): 'png' | 'jpeg' | 'webp' | null {
   if (buffer.length >= 24 && buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png'
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'jpeg'
@@ -95,7 +110,11 @@ async function validateImage(file: string, maxBytes: number) {
 
 function parseManifest(directory: string): Manifest {
   let input: unknown
-  try { input = JSON.parse(fs.readFileSync(path.join(directory, 'pet.json'), 'utf8')) } catch { throw new Error('缺少或无效 pet.json') }
+  try {
+    const file = path.join(directory, 'pet.json')
+    assertRegularPackageFile(directory, file)
+    input = JSON.parse(fs.readFileSync(file, 'utf8'))
+  } catch { throw new Error('缺少或无效 pet.json') }
   if (!input || typeof input !== 'object') throw new Error('无效 pet.json')
   const value = input as Record<string, unknown>
   if (typeof value.id !== 'string') throw new Error('无效宠物 ID')
@@ -104,20 +123,24 @@ function parseManifest(directory: string): Manifest {
   const spritesheetPath = value.spritesheetPath === undefined ? undefined : assertBasename(value.spritesheetPath, '精灵图')
   const assetPath = value.assetPath === undefined ? undefined : assertBasename(value.assetPath, '图片')
   if (!spritesheetPath && !assetPath) throw new Error('缺少精灵图')
-  return { id: value.id, displayName: value.displayName, description: value.description, spritesheetPath, assetPath, kind: value.kind === 'static' ? 'static' : undefined }
+  if (spritesheetPath && assetPath) throw new Error('精灵图与静态图片配置冲突')
+  return { id: value.id, displayName: value.displayName, description: value.description, spritesheetPath, assetPath, kind: value.kind === 'static' ? 'static' : undefined, sprite: parseSprite(value.sprite) }
 }
 
 function makeView(manifest: Manifest, directory: string, source: PetView['source'], removable: boolean): ResolvedPet {
   const asset = manifest.spritesheetPath ?? manifest.assetPath!
   const assetPath = path.join(directory, asset)
   const kind: PetKind = manifest.spritesheetPath ? 'spritesheet' : 'static'
-  return { id: manifest.id, displayName: manifest.displayName, description: manifest.description, source, kind, available: true, removable, previewUrl: null, sprite: kind === 'spritesheet' ? DEFAULT_SPRITE : null, assetPath }
+  return { id: manifest.id, displayName: manifest.displayName, description: manifest.description, source, kind, available: true, removable, previewUrl: null, sprite: kind === 'spritesheet' ? manifest.sprite ?? DEFAULT_SPRITE : null, assetPath }
 }
 
 function readPackage(directory: string, source: PetView['source'], removable: boolean): ResolvedPet | null {
   try {
+    const directoryStat = fs.lstatSync(directory)
+    if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) return null
     const manifest = parseManifest(directory)
     const pet = makeView(manifest, directory, source, removable)
+    assertRegularPackageFile(directory, pet.assetPath)
     validateImageBuffer(fs.readFileSync(pet.assetPath), pet.kind === 'spritesheet' ? MAX_SPRITE_BYTES : MAX_STATIC_BYTES)
     return pet
   } catch { return null }
@@ -131,7 +154,10 @@ function listDirectory(root: string, source: PetView['source'], removable: boole
 }
 
 function builtIns(): ResolvedPet[] {
-  return [{ id: 'wraith-companion', displayName: 'Wraith Companion', description: 'Wraith official pet', source: 'built-in', kind: 'static', available: false, removable: false, previewUrl: null, sprite: null, assetPath: '' }]
+  return [
+    { id: 'wraith-companion', displayName: 'Wraith Companion', description: 'Wraith official pet', source: 'built-in', kind: 'static', available: false, removable: false, previewUrl: null, sprite: null, assetPath: '' },
+    { id: 'noir-webling', displayName: 'Noir Webling', description: 'Optional Petdex pet', source: 'petdex', kind: 'spritesheet', available: false, removable: false, previewUrl: null, sprite: DEFAULT_SPRITE, assetPath: '' },
+  ]
 }
 
 export async function listPets(args: { userDataDir: string; petdexRoot: string }): Promise<PetView[]> {
@@ -246,6 +272,7 @@ export async function importPackage(args: { userDataDir: string; sourcePath: str
     if (!manifest.spritesheetPath) throw new Error('缺少精灵图')
     const spritePath = path.join(staging, manifest.spritesheetPath)
     if (!fs.existsSync(spritePath)) throw new Error('缺少精灵图')
+    assertRegularPackageFile(staging, spritePath)
     await validateImage(spritePath, MAX_SPRITE_BYTES)
     await replaceFromStaging(root, manifest.id, staging)
     return makeView(manifest, path.join(root, manifest.id), 'imported', true)
@@ -272,6 +299,8 @@ export async function previewDataUrl(args: { userDataDir: string; petdexRoot: st
   const pet = findResolved(args, args.id)
   if (!pet?.available || !pet.assetPath) return null
   try {
+    // Recheck at the point of use so a package cannot swap its asset for a link after discovery.
+    assertRegularPackageFile(path.dirname(pet.assetPath), pet.assetPath)
     const data = await fs.promises.readFile(pet.assetPath)
     const kind = imageKind(data)
     return kind ? `data:image/${kind === 'jpeg' ? 'jpeg' : kind};base64,${data.toString('base64')}` : null
