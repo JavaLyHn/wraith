@@ -3,13 +3,14 @@ import type { ContextObservability } from '../../shared/transcriptReducer'
 import type { StatusData } from '../../shared/types'
 import { tierOf, TIER_HEX, TIER_LABEL } from '../../shared/contextTier'
 import { formatTokens } from '../lib/compactView'
-import { totalsView, compactionLine, savedTotal } from '../lib/contextPanelView'
+import { totalsView, compactionLine, savedTotal, dotColor } from '../lib/contextPanelView'
 
 /** 上下文治理面板(spec Phase C §3):水位/累计/压缩历史/活摘要预览/手动压缩。 */
-export default function ContextPanel({ context, status, onCompact }: {
+export default function ContextPanel({ context, status, onCompact, compactDisabled }: {
   context: ContextObservability
   status: StatusData | null
   onCompact: () => void
+  compactDisabled: boolean
 }): JSX.Element {
   const [expanded, setExpanded] = useState<number | null>(null)
   const [pricingHintDismissed, setPricingHintDismissed] = useState(false)
@@ -55,7 +56,7 @@ export default function ContextPanel({ context, status, onCompact }: {
           <div key={i}>
             <button className="w-full text-left hover:bg-surface/60"
               onClick={() => setExpanded(expanded === i ? null : i)}>
-              <span style={{ color: TIER_HEX[(e.tier >= 0 && e.tier <= 3 ? e.tier : 0) as 0 | 1 | 2 | 3] }}>●</span>{' '}
+              <span style={{ color: dotColor(e.tier) }}>●</span>{' '}
               {compactionLine(e)}
             </button>
             {expanded === i && e.items && (
@@ -76,8 +77,8 @@ export default function ContextPanel({ context, status, onCompact }: {
           : <div className="text-fg-muted">尚未生成活摘要</div>}
       </div>
       {/* 手动压缩 */}
-      <button data-testid="context-panel-compact" onClick={onCompact}
-        className="rounded border border-border px-2 py-1 hover:bg-surface/60">立即压缩</button>
+      <button data-testid="context-panel-compact" onClick={onCompact} disabled={compactDisabled}
+        className="rounded border border-border px-2 py-1 hover:bg-surface/60 disabled:cursor-not-allowed disabled:opacity-50">立即压缩</button>
     </div>
   )
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { totalsView, compactionLine, savedTotal } from '../src/renderer/lib/contextPanelView'
+import { totalsView, compactionLine, savedTotal, dotColor } from '../src/renderer/lib/contextPanelView'
+import { TIER_HEX } from '../src/shared/contextTier'
 
 describe('totalsView', () => {
   it('prefers live status over snapshot', () => {
@@ -39,4 +40,15 @@ describe('compactionLine', () => {
 describe('savedTotal', () => {
   it('sums savedTokens', () =>
     expect(savedTotal([{ savedTokens: 10 }, { savedTokens: 5 }] as never)).toBe(15))
+})
+
+describe('dotColor', () => {
+  it('returns the tier color for a legal tier', () => {
+    expect(dotColor(2)).toBe(TIER_HEX[2])
+  })
+  it('falls back to neutral gray for an out-of-range tier (never fakes tier0 green)', () => {
+    expect(dotColor(4)).toBe('#9ca3af')
+    expect(dotColor(-1)).toBe('#9ca3af')
+    expect(dotColor(NaN)).toBe('#9ca3af')
+  })
 })

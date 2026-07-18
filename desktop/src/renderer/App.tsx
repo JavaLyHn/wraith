@@ -842,6 +842,8 @@ export default function App(): JSX.Element {
       setCompactBusy(false)
     }
   }, [state.turn])
+  // 压缩按钮共享禁用态:忙碌中/回合运行中/无消息可压——工具栏按钮与 ContextPanel 面板按钮两处复用同一表达式
+  const compactDisabled = compactBusy || state.turn === 'running' || !pv.items.length
 
   // 导出当前对话为 Markdown(纯前端序列化 + Electron 保存对话框,不经 Java 后端)
   const handleExport = useCallback(async (): Promise<void> => {
@@ -1034,7 +1036,7 @@ export default function App(): JSX.Element {
                     <button
                       data-testid="chat-compact"
                       onClick={() => void handleCompact()}
-                      disabled={compactBusy || state.turn === 'running' || !pv.items.length}
+                      disabled={compactDisabled}
                       title="压缩上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
                       className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40'}
                     >
@@ -1085,6 +1087,7 @@ export default function App(): JSX.Element {
         context={state.context}
         status={state.status}
         onCompact={() => void handleCompact()}
+        compactDisabled={compactDisabled}
       />
       </div>
       </div>

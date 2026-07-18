@@ -1,6 +1,10 @@
 import { formatTokens } from './compactView'
+import { TIER_HEX } from '../../shared/contextTier'
 import type { CompactionEntry, ContextObservability } from '../../shared/transcriptReducer'
 import type { StatusData } from '../../shared/types'
+
+/** 中性灰:tier 越界/非法(CompactionEntry 无 ratio 可回退,不能伪装成"宽裕"绿)。 */
+const TIER_UNKNOWN_HEX = '#9ca3af'
 
 export function totalsView(
   status: StatusData | null,
@@ -26,4 +30,10 @@ export function compactionLine(e: CompactionEntry): string {
 
 export function savedTotal(compactions: CompactionEntry[]): number {
   return compactions.reduce((a, e) => a + Math.max(0, e.savedTokens), 0)
+}
+
+/** 压缩历史行的圆点色:合法 tier(0-3)取对应档位色,越界/非数字诚实回退中性灰(不伪装成 tier0 宽裕绿)。 */
+export function dotColor(tier: number): string {
+  const known = Number.isFinite(tier) && tier >= 0 && tier <= 3
+  return known ? TIER_HEX[Math.trunc(tier) as 0 | 1 | 2 | 3] : TIER_UNKNOWN_HEX
 }

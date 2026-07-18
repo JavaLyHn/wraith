@@ -10,7 +10,7 @@ import type { StatusData } from '../../shared/types'
 export type RightDockPane = 'browser' | 'terminal' | 'context'
 
 /** 右侧停靠列:分段切换 浏览器|终端|上下文,常挂三面板 CSS 显隐;左边缘拖拽调宽;open 宽度动画。pane 受控(由 App 上提)。 */
-export default function RightDock({ open, cwd, pane, onPaneChange, onClose, context, status, onCompact }: {
+export default function RightDock({ open, cwd, pane, onPaneChange, onClose, context, status, onCompact, compactDisabled }: {
   open: boolean
   cwd: string | null
   pane: RightDockPane
@@ -19,6 +19,7 @@ export default function RightDock({ open, cwd, pane, onPaneChange, onClose, cont
   context: ContextObservability
   status: StatusData | null
   onCompact: () => void
+  compactDisabled: boolean
 }): JSX.Element {
   const [width, setWidth] = useState(() => clampColumnWidth(Math.round(window.innerWidth * 0.4), window.innerWidth))
   const [dragging, setDragging] = useState(false)
@@ -72,7 +73,7 @@ export default function RightDock({ open, cwd, pane, onPaneChange, onClose, cont
             <TerminalPane active={open && pane === 'terminal'} cwd={cwd} />
           </div>
           <div className={'absolute inset-0 flex flex-col ' + (pane === 'context' ? '' : 'hidden')}>
-            <ContextPanel context={context} status={status} onCompact={onCompact} />
+            <ContextPanel context={context} status={status} onCompact={onCompact} compactDisabled={compactDisabled} />
           </div>
         </div>
       </div>
