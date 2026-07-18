@@ -18,4 +18,11 @@ describe('chipView', () => {
     expect(v.suffix).toBe('~')
     expect(v.tw).toBe('text-green-500')
   })
+  it('out-of-range tier falls back to tierOf(ratio)', () => {
+    const v = chipView(status, { ratio: 0.62, tier: 5, estimated: false })
+    expect(v.tw).toBe('text-yellow-500') // tierOf(0.62)=1
+  })
+  it('negative ratio clamps pct to 0', () => {
+    expect(chipView(status, { ratio: -0.5, tier: 0, estimated: false }).pct).toBe(0)
+  })
 })

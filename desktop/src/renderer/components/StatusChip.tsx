@@ -10,9 +10,13 @@ export function chipView(
   watermark: WatermarkView | null,
 ): { pct: number; tw: string; suffix: '' | '~' } {
   if (watermark) {
-    const pct = Math.min(100, Math.round(watermark.ratio * 100))
-    // 档位取后端算好的 watermark.tier(权威口径),不用本地 ratio 重推——后端可能有防抖/滞回等本地不掌握的判定。
-    return { pct, tw: TIER_TW[watermark.tier as 0 | 1 | 2 | 3], suffix: watermark.estimated ? '~' : '' }
+    const pct = Math.max(0, Math.min(100, Math.round(watermark.ratio * 100)))
+    // 档位优先信后端算好的 watermark.tier(权威口径,可能有本地不掌握的防抖/滞回判定);
+    // 但越界(后端异常给出 0~3 外的值)时不能钳到边界糊弄过去,回退用同一 payload 里的 ratio 重推——更诚实。
+    const tier = (Number.isFinite(watermark.tier) && watermark.tier >= 0 && watermark.tier <= 3
+      ? Math.trunc(watermark.tier)
+      : tierOf(watermark.ratio)) as 0 | 1 | 2 | 3
+    return { pct, tw: TIER_TW[tier], suffix: watermark.estimated ? '~' : '' }
   }
   const ratio = status.contextWindow > 0 ? status.totalTokens / status.contextWindow : 0
   return { pct: Math.min(100, Math.round(ratio * 100)), tw: TIER_TW[tierOf(ratio)], suffix: '~' }
