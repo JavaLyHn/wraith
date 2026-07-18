@@ -39,3 +39,6 @@ test-results/
 
 # Workflow scratch (SDD reports, planning artifacts — stay on disk, not in git)
 .superpowers/
+
+# Isolated implementation worktrees
+.worktrees/
