@@ -231,3 +231,55 @@ html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180
   100% { background-position: -60% 0; opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .welcome-logo::after { animation: none; } }
+
+/* 聊天列悬浮宠物:六态动效均只位移/缩放整只浮件本身,不进入 flex 布局流,
+   时长与 petMotion.ts 的 motionFor durationMs 一一对应。 */
+@keyframes pet-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+@keyframes pet-idle-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+@keyframes pet-thinking {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-3deg); }
+}
+@keyframes pet-thinking-lively {
+  0%, 100% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(6deg) scale(1.05); }
+}
+@keyframes pet-tool {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+@keyframes pet-approval {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+@keyframes pet-success {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.18); }
+  100% { transform: scale(1); }
+}
+@keyframes pet-error {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  75% { transform: translateX(4px); }
+}
+.pet-idle { animation: pet-idle 2200ms ease-in-out infinite; }
+.pet-idle-float { animation: pet-idle-float 2200ms ease-in-out infinite; }
+.pet-thinking { animation: pet-thinking 1400ms ease-in-out infinite; }
+.pet-thinking-lively { animation: pet-thinking-lively 1400ms ease-in-out infinite; }
+.pet-tool { animation: pet-tool 900ms ease-in-out infinite; }
+.pet-approval { animation: pet-approval 1800ms ease-in-out infinite; }
+.pet-success { animation: pet-success 560ms ease-out 1; }
+.pet-error { animation: pet-error 420ms ease-out 1; }
+@media (prefers-reduced-motion: reduce) {
+  .pet-idle, .pet-idle-float, .pet-thinking, .pet-thinking-lively,
+  .pet-tool, .pet-approval, .pet-success, .pet-error {
+    animation: none;
+  }
+}

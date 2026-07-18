@@ -42,6 +42,11 @@ describe('petStateFromEvent', () => {
 })
 
 describe('nextPetState', () => {
+  it('returns to idle after a success transient expires', () => {
+    expect(nextPetState({ state: 'success', expiresAt: 500 }, 499)).toBe('success')
+    expect(nextPetState({ state: 'success', expiresAt: 500 }, 500)).toBe('idle')
+  })
+
   it('keeps an active state before its expiry', () => {
     expect(nextPetState({ state: 'success', expiresAt: 1_000 }, 999)).toBe('success')
   })
