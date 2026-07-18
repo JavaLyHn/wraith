@@ -128,9 +128,10 @@ export function validateImageBuffer(buffer: Buffer, maxBytes: number): { kind: '
   return { kind, width: size[0], height: size[1] }
 }
 
-async function validateImage(file: string, maxBytes: number) {
+async function readValidatedImage(file: string, maxBytes: number): Promise<{ data: Buffer; image: ReturnType<typeof validateImageBuffer> }> {
   const oversizedMessage = maxBytes === MAX_SPRITE_BYTES ? '精灵图过大' : '图片过大'
-  return validateImageBuffer(await readPackageFile(path.dirname(file), file, maxBytes, oversizedMessage), maxBytes)
+  const data = await readPackageFile(path.dirname(file), file, maxBytes, oversizedMessage)
+  return { data, image: validateImageBuffer(data, maxBytes) }
 }
 
 async function parseManifest(directory: string): Promise<Manifest> {
@@ -220,14 +221,14 @@ function staticId(sourcePath: string): string {
 }
 
 export async function importStaticImage(args: { userDataDir: string; sourcePath: string }): Promise<PetView> {
-  const asset = await validateImage(args.sourcePath, MAX_STATIC_BYTES)
+  const { data, image: asset } = await readValidatedImage(args.sourcePath, MAX_STATIC_BYTES)
   const id = staticId(args.sourcePath); assertId(id)
   const root = importedRoot(args.userDataDir); await fs.promises.mkdir(root, { recursive: true })
   const staging = await fs.promises.mkdtemp(path.join(root, '.staging-'))
   try {
     const ext = asset.kind === 'jpeg' ? 'jpg' : asset.kind
     const assetPath = `image.${ext}`
-    await fs.promises.copyFile(args.sourcePath, path.join(staging, assetPath))
+    await fs.promises.writeFile(path.join(staging, assetPath), data, { flag: 'wx' })
     const manifest: Manifest = { id, displayName: path.basename(args.sourcePath, path.extname(args.sourcePath)), description: 'Imported image pet', assetPath, kind: 'static' }
     await fs.promises.writeFile(path.join(staging, 'pet.json'), JSON.stringify(manifest), 'utf8')
     await replaceFromStaging(root, id, staging)

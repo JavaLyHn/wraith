@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -215,6 +215,23 @@ describe('petStore', () => {
     await expect(importStaticImage({ userDataDir, sourcePath: source })).rejects.toThrow('图片过大')
     const destination = path.join(userDataDir, 'pets', 'imported')
     expect(fs.existsSync(destination) ? fs.readdirSync(destination) : []).toEqual([])
+  })
+
+  it('writes the already validated static-image buffer without reopening through copyFile', async () => {
+    const source = path.join(root, 'bounded.png')
+    const expected = Buffer.concat([png(), Buffer.from('validated payload')])
+    fs.writeFileSync(source, expected)
+    const copyFile = vi.spyOn(fs.promises, 'copyFile')
+    try {
+      const imported = await importStaticImage({ userDataDir, sourcePath: source })
+      const destination = path.join(userDataDir, 'pets', 'imported', imported.id, 'image.png')
+      const written = fs.readFileSync(destination)
+      expect(copyFile).not.toHaveBeenCalled()
+      expect(written).toEqual(expected)
+      expect(written.length).toBeLessThanOrEqual(8 * 1024 * 1024)
+    } finally {
+      copyFile.mockRestore()
+    }
   })
 
   it('preflights an oversized directory sprite before staging a copied package', async () => {
