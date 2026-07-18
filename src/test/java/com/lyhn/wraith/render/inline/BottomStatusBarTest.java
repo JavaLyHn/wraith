@@ -105,9 +105,9 @@ class BottomStatusBarTest {
         assertTrue(lines.get(0).toString().contains("YOLO"), "status row should show current mode");
         if (AnsiStyle.isEnabled()) {
             assertFalse(lines.get(1).toAnsi().contains("[2m"), "footer row should no longer be dim/faint");
-            assertTrue(lines.get(1).toAnsi().contains("["), "footer row should be styled (bold cyan)");
+            assertTrue(lines.get(1).toAnsi().contains("\u001B["), "footer row should be styled (bold cyan)");
         } else {
-            assertFalse(lines.get(1).toAnsi().contains("["), "NO_COLOR should keep footer plain");
+            assertFalse(lines.get(1).toAnsi().contains("\u001B["), "NO_COLOR should keep footer plain");
         }
     }
 
@@ -240,5 +240,17 @@ class BottomStatusBarTest {
         assertEquals("\u001B[33m● 整理\u001B[0m", BottomStatusBar.tierBadge(60));
         assertEquals("\u001B[38;5;208m● 释压\u001B[0m", BottomStatusBar.tierBadge(80));
         assertEquals("\u001B[31m● 兜底\u001B[0m", BottomStatusBar.tierBadge(95));
+    }
+
+    @Test
+    void tierBadgeAppearsOnRealFooterRenderPath() {
+        StatusInfo tier2Info = StatusInfo.idle("glm-5.1", 200_000L, 160_000L, false);
+        var tier2Lines = BottomStatusBar.formatStatusLines(tier2Info, 140);
+        assertTrue(tier2Lines.get(1).toString().contains("● 释压"),
+                tier2Lines.get(1).toString());
+
+        StatusInfo tier0Info = new StatusInfo("glm-5.1", 0L, 200_000L, false, 0L);
+        var tier0Lines = BottomStatusBar.formatStatusLines(tier0Info, 80);
+        assertFalse(tier0Lines.get(1).toString().contains("●"), tier0Lines.get(1).toString());
     }
 }

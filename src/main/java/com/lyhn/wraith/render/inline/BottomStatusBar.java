@@ -419,6 +419,11 @@ public final class BottomStatusBar implements AutoCloseable {
     private static void appendContextField(AttributedStringBuilder builder, StatusInfo info) {
         ContextGauge gauge = contextGauge(info);
         builder.append("  ", BASE_STYLE);
+        int tier = tierOfPercent(gauge.percent());
+        if (tier > 0) {
+            builder.append("● " + tierLabel(tier), tierStyle(tier));
+            builder.append(" ", BASE_STYLE);
+        }
         builder.append("ctx", CTX_LABEL_STYLE);
         builder.append(" ", BASE_STYLE);
         if (gauge.filled() > 0) {
@@ -478,11 +483,45 @@ public final class BottomStatusBar implements AutoCloseable {
     }
 
     /** tier 徽标(spec Phase C §6):tier0 不加噪音;阈值与 WatermarkGauge 一致(60/80/95)。 */
+    static int tierOfPercent(int percent) {
+        if (percent >= 95) return 3;
+        if (percent >= 80) return 2;
+        if (percent >= 60) return 1;
+        return 0;
+    }
+
     static String tierBadge(int percent) {
-        if (percent >= 95) return "\u001B[31m● 兜底\u001B[0m";
-        if (percent >= 80) return "\u001B[38;5;208m● 释压\u001B[0m";
-        if (percent >= 60) return "\u001B[33m● 整理\u001B[0m";
-        return "";
+        int tier = tierOfPercent(percent);
+        if (tier == 0) {
+            return "";
+        }
+        return "\u001B[" + tierAnsiColor(tier) + "m● " + tierLabel(tier) + "\u001B[0m";
+    }
+
+    private static String tierAnsiColor(int tier) {
+        switch (tier) {
+            case 3: return "31";
+            case 2: return "38;5;208";
+            default: return "33";
+        }
+    }
+
+    private static String tierLabel(int tier) {
+        switch (tier) {
+            case 3: return "兜底";
+            case 2: return "释压";
+            case 1: return "整理";
+            default: return "";
+        }
+    }
+
+    private static AttributedStyle tierStyle(int tier) {
+        switch (tier) {
+            case 3: return style(AttributedStyle.DEFAULT.foreground(AttributedStyle.RED));
+            case 2: return style(AttributedStyle.DEFAULT.foreground(208));
+            case 1: return style(AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW));
+            default: return BASE_STYLE;
+        }
     }
 
     private static String contextSegment(StatusInfo info) {
