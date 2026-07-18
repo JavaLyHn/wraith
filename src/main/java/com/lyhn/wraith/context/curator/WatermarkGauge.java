@@ -31,6 +31,13 @@ public final class WatermarkGauge {
         this.anchorModel = modelKey;
     }
 
+    /** 会话边界复位:清真实用量锚点,下一次 read() 回退到纯估算(防旧会话锚点污染新会话首轮差分)。 */
+    public synchronized void reset() {
+        lastRealInput = -1;
+        estimateAtReal = 0;
+        anchorModel = null;
+    }
+
     public synchronized Reading read(String modelKey, long historyEstimateNow) {
         long window = Math.max(1, windowSupplier.getAsLong());
         boolean anchored = lastRealInput >= 0

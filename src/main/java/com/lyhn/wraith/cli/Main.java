@@ -1265,6 +1265,8 @@ public class Main {
                             if (!java.nio.file.Files.isRegularFile(f)) return;
                             try {
                                 long in = 0, out = 0, cached = 0;
+                                double costSum = 0;
+                                java.util.Set<String> currencies = new java.util.LinkedHashSet<>();
                                 com.fasterxml.jackson.databind.ObjectMapper om =
                                         new com.fasterxml.jackson.databind.ObjectMapper();
                                 com.fasterxml.jackson.databind.JsonNode last = null;
@@ -1276,6 +1278,10 @@ public class Main {
                                         in += n.path("inputTokens").asLong(0);
                                         out += n.path("outputTokens").asLong(0);
                                         cached += n.path("cachedInputTokens").asLong(0);
+                                        if (n.has("cost")) {
+                                            costSum += n.path("cost").asDouble(0);
+                                            currencies.add(n.path("currency").asText(""));
+                                        }
                                         last = n;
                                     } catch (Exception ignored) { /* 坏行跳过 */ }
                                 }
@@ -1286,6 +1292,16 @@ public class Main {
                                     m.put("ratio", last.path("ratio").asDouble(0));
                                     m.put("tier", last.path("tier").asInt(0));
                                     m.put("estimated", false);   // 有真实 usage 尾行,水位不再是纯估算
+                                    // 成本以 JSONL 累计为准(重启后 in-process stats 归零,防"$0.0000"误显);
+                                    // 零条 cost 行或混币口径不一致 → 缺席优于伪造(StatusChip 条件渲染自动隐藏)
+                                    if (currencies.size() == 1 && costSum > 0) {
+                                        String currency = currencies.iterator().next();
+                                        String symbol = "USD".equalsIgnoreCase(currency) ? "$" : "¥";
+                                        m.put("estimatedCost", symbol
+                                                + String.format(java.util.Locale.ROOT, "%.4f", costSum));
+                                    } else {
+                                        m.remove("estimatedCost");
+                                    }
                                 }
                             } catch (Exception e) {
                                 // 聚合失败不影响快照主体

@@ -49,6 +49,9 @@ public class IncrementalSummarizer {
             int summaryIdx = findSummaryIdx(history);
             String oldSummary = summaryIdx < 0 ? ""
                     : history.get(summaryIdx).content().replace(CurationMarks.SUMMARY_MARK, "").trim();
+            if (oldSummary.startsWith("[活摘要]")) {
+                oldSummary = oldSummary.substring("[活摘要]".length()).trim();
+            }
             int deltaStart = summaryIdx < 0 ? systemEnd : summaryIdx + 1;
             // 跳过驻留 ack(摘要后固定跟一条 assistant 确认)
             if (summaryIdx >= 0 && deltaStart < history.size()

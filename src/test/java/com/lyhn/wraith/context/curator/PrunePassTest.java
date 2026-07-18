@@ -94,6 +94,22 @@ class PrunePassTest {
     }
 
     @Test
+    void emergencyStillRespectsProtectedTools() {
+        List<LlmClient.ToolCall> tcs = List.of(new LlmClient.ToolCall("c1",
+                new LlmClient.ToolCall.Function("load_skill", "{}")));
+        String skillBody = "s".repeat(500);
+        List<Message> h = new ArrayList<>(List.of(
+                Message.system("sys"),
+                Message.assistant(null, null, tcs),
+                Message.tool("c1", skillBody),
+                Message.user("q1"), Message.assistant("a1"),
+                Message.user("q2"), Message.assistant("a2")));
+        SnipPass.Result em = PrunePass.apply(h, 3, new ToolTierPolicy(), Long.MAX_VALUE, PrunePass.Mode.EMERGENCY);
+        assertEquals(skillBody, h.get(2).content(), "保护名单工具输出 EMERGENCY 也不许碰");
+        assertTrue(em.changes().isEmpty());
+    }
+
+    @Test
     void emergencyPrunesShorterAssistantButKeepsRedlines() {
         List<Message> h = new ArrayList<>(List.of(
                 Message.system("sys"),

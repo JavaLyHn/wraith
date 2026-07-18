@@ -41,6 +41,17 @@ class WatermarkGaugeTest {
     }
 
     @Test
+    void resetClearsAnchorAndFallsBackToEstimate() {
+        WatermarkGauge g = gauge(100_000);
+        g.onRealUsage("m", 90_000, 50_000);
+        assertEquals(90_000, g.read("m", 50_000).usedTokens());   // 锚定生效
+        g.reset();
+        WatermarkGauge.Reading r = g.read("m", 30_000);
+        assertEquals(30_000, r.usedTokens(), "reset 后应回退纯估算,不再受旧会话锚点影响");
+        assertEquals(0, r.tier());
+    }
+
+    @Test
     void anchorInvalidatesOnModelSwitch() {
         WatermarkGauge g = new WatermarkGauge(() -> 100_000);
         g.onRealUsage("deepseek-chat", 90_000, 50_000);   // 旧模型锚:真实 90k

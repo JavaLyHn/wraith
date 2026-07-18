@@ -389,6 +389,8 @@ public class Agent {
         if (skillContextBuffer != null) {
             skillContextBuffer.clear();
         }
+        // 会话边界复位:防旧会话的水位锚点/冷却/一次性提示位污染新会话
+        curator.resetConversationState();
     }
 
     /**
@@ -408,6 +410,8 @@ public class Agent {
                 }
             }
         }
+        // 会话边界复位:防旧会话的水位锚点/冷却/一次性提示位污染新会话首轮差分
+        curator.resetConversationState();
     }
 
     /**
@@ -499,6 +503,9 @@ public class Agent {
                 String c = msg.content();
                 if (c != null && c.contains(com.lyhn.wraith.context.curator.CurationMarks.SUMMARY_MARK)) {
                     liveSummary = c.replace(com.lyhn.wraith.context.curator.CurationMarks.SUMMARY_MARK, "").trim();
+                    if (liveSummary.startsWith("[活摘要]")) {
+                        liveSummary = liveSummary.substring("[活摘要]".length()).trim();
+                    }
                     break;
                 }
             }

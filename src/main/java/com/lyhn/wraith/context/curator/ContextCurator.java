@@ -71,6 +71,13 @@ public final class ContextCurator {
         this.pricingTable = pricingTable == null ? new PricingTable(java.util.List.of()) : pricingTable;
     }
 
+    /** 会话边界复位:清水位锚点/冷却/一次性提示位。校准系数(per-model,跨会话仍有效)与累计 stats(会话累计经 JSONL 聚合校正)不清。 */
+    public void resetConversationState() {
+        gauge.reset();
+        cooldown = 0;
+        pressureNotified = false;
+    }
+
     private static int intProp(String prop, int dflt) {
         try {
             String v = System.getProperty(prop);
@@ -161,7 +168,7 @@ public final class ContextCurator {
             }
 
             int snipped = snip.changes().size();
-            if (snipped == 0 && pruned == 0 && !summarized) return false;
+            if (snipped == 0 && pruned == 0 && !summarized && fallback == null) return false;
 
             long durationMs = (System.nanoTime() - start) / 1_000_000;
             stats.recordCompaction(r.tier(), estBefore, estAfter, snipped, pruned, summarized, durationMs);

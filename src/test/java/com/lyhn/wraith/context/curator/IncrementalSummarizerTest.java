@@ -64,6 +64,7 @@ class IncrementalSummarizerTest {
         int protectedFrom2 = h.size() - 2;   // 只保 Q6 轮
         assertTrue(s2.summarize(h, protectedFrom2, "m", 128_000));
         assertTrue(s2.lastPrompt.get().contains("旧摘要ABC"), "旧活摘要必须进合并 prompt");
+        assertFalse(s2.lastPrompt.get().contains("[活摘要]"), "活摘要标签不应残留混入合并 prompt");
         assertTrue(h.get(1).content().contains("合并后新摘要"));
         assertFalse(h.get(1).content().contains("旧摘要ABC"), "旧摘要消息已被替换");
     }

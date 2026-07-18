@@ -109,9 +109,35 @@ class ContextCuratorTest {
         assertEquals(false, evt.get("summarized"));
         assertEquals("emergency", evt.get("fallback"));
         // 冷却期内不再调 LLM 摘要
+        int eventsBeforeCooldownRounds = events.size();
         c.curate(h);
         c.curate(h);
         assertEquals(1, fs.calls, "cooldown 期间 summarize 不得重试");
+        // Fix 2: 冷却轮零变更(已全压过/无可再压,round3 保护区永远落不下 tier3)也不许静默——必须留痕
+        assertTrue(events.size() > eventsBeforeCooldownRounds,
+                "cooldown 零变更轮也应发 context.compaction 事件,不许静默");
+        Map<String, Object> coolEvt = lastEvent("context.compaction");
+        assertEquals("cooldown", coolEvt.get("fallback"));
+        assertEquals(0, coolEvt.get("snipped"));
+        assertEquals(0, coolEvt.get("pruned"));
+        assertEquals(false, coolEvt.get("summarized"));
+    }
+
+    @Test
+    void resetConversationStateEndsCooldownAndAllowsImmediateRetry() {
+        FakeSummarizer fs = new FakeSummarizer(false);
+        ContextCurator c = curatorWith(fs);
+        List<Message> h = bigHistory();
+        c.curate(h);
+        assertEquals(1, fs.calls);
+        assertEquals("emergency", lastEvent("context.compaction").get("fallback"));
+        // 未复位:冷却期内 curate 不再调用 summarize
+        c.curate(h);
+        assertEquals(1, fs.calls);
+        // 会话边界复位(对应 Agent.clearHistory/restoreHistory):冷却清零,下一轮立即重试摘要
+        c.resetConversationState();
+        c.curate(h);
+        assertEquals(2, fs.calls, "resetConversationState 后应立即重试摘要,不再受旧会话冷却压制");
     }
 
     @Test
