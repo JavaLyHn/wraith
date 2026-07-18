@@ -22,6 +22,39 @@ describe('loadPrefs', () => {
   it('空昵称回落默认名', () => {
     expect(loadPrefs(() => JSON.stringify({ profile: { name: '   ' } })).profile.name).toBe('我')
   })
+
+  it('补全旧偏好中的宠物默认值，同时保留有效宠物偏好', () => {
+    expect(loadPrefs(() => JSON.stringify({
+      pets: { enabled: true, selectedId: 'noir-webling', motion: 'float', scale: 1.2 },
+    })).pets).toEqual({
+      enabled: true,
+      selectedId: 'noir-webling',
+      motion: 'float',
+      scale: 1.2,
+      position: { x: 0, y: 0 },
+    })
+  })
+
+  it('将非法宠物偏好回落为默认值，并钳制有效位置', () => {
+    expect(loadPrefs(() => JSON.stringify({
+      pets: {
+        enabled: 'yes',
+        selectedId: 123,
+        motion: 'fast',
+        scale: 1.6,
+        position: { x: Infinity, y: -161 },
+      },
+    })).pets).toEqual({
+      ...DEFAULT_PREFS.pets,
+      position: { x: 0, y: -160 },
+    })
+  })
+
+  it('保留边界内的宠物位置和缩放值', () => {
+    expect(loadPrefs(() => JSON.stringify({
+      pets: { scale: 0.75, position: { x: -160, y: 160 } },
+    })).pets).toMatchObject({ scale: 0.75, position: { x: -160, y: 160 } })
+  })
 })
 
 describe('savePrefs', () => {
