@@ -20,8 +20,7 @@ export function petStateFromEvent(event: BackendEvent): PetStateSignal | null {
       const ok = typeof event.params === 'object' && event.params !== null
         ? (event.params as { ok?: unknown }).ok
         : undefined
-      if (ok === true) return { state: 'tool', transient: false }
-      if (ok === false) return { state: 'thinking', transient: false }
+      if (typeof ok === 'boolean') return { state: 'thinking', transient: false }
       return null
     }
     case 'approval.requested':
