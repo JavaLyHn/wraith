@@ -59,7 +59,7 @@ import BrowserPanel from './components/BrowserPanel'
 import RagPanel from './components/RagPanel'
 import SettingsPanel from './components/SettingsPanel'
 import TerminalDrawer from './components/TerminalDrawer'
-import RightDock from './components/RightDock'
+import RightDock, { type RightDockPane } from './components/RightDock'
 import { useSettings } from './settings/SettingsContext'
 
 // ---------------------------------------------------------------------------
@@ -171,6 +171,7 @@ export default function App(): JSX.Element {
   const [composerFocus, setComposerFocus] = useState(0)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [rightDockOpen, setRightDockOpen] = useState(false)
+  const [rightDockPane, setRightDockPane] = useState<RightDockPane>('browser')
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('wraith.sidebar.collapsed') === '1' } catch { return false }
@@ -1009,6 +1010,8 @@ export default function App(): JSX.Element {
                 onSwitchWorkspace={handleAddProject}
                 centered={pv.showWelcome}
                 status={state.status}
+                watermark={state.context.watermark}
+                onOpenContextPanel={() => { setRightDockPane('context'); setRightDockOpen(true) }}
                 resources={mcpResources}
                 attachments={attachments}
                 onPickAttachments={handlePickAttachments}
@@ -1073,7 +1076,13 @@ export default function App(): JSX.Element {
           })()
         )}
       </div>
-      <RightDock open={rightDockOpen} cwd={state.workspace ?? null} onClose={() => setRightDockOpen(false)} />
+      <RightDock
+        open={rightDockOpen}
+        cwd={state.workspace ?? null}
+        pane={rightDockPane}
+        onPaneChange={setRightDockPane}
+        onClose={() => setRightDockOpen(false)}
+      />
       </div>
       </div>
 

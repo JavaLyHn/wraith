@@ -12,6 +12,7 @@ import StatusChip from './StatusChip'
 import ModelSwitcher from './ModelSwitcher'
 import ModeSwitcher from './ModeSwitcher'
 import type { StatusData, McpResourceView, RunMode } from '../../shared/types'
+import type { WatermarkView } from './StatusChip'
 import { detectMention, filterMentionItems, insertMention } from '../../shared/mentionTrigger'
 import type { MentionState } from '../../shared/mentionTrigger'
 import { isImageMime, imageExtFromMime, pathsToAttachments } from '../lib/composerAttachments'
@@ -39,6 +40,8 @@ interface ComposerProps {
   /** 欢迎态用居中窄版，对话态用贴底宽版。 */
   centered?: boolean
   status?: StatusData | null
+  watermark?: WatermarkView | null
+  onOpenContextPanel?: () => void
   resources?: McpResourceView[]
   attachments?: AttachmentItem[]
   onPickAttachments?: () => void
@@ -63,6 +66,8 @@ export default function Composer({
   onSwitchWorkspace,
   centered = false,
   status,
+  watermark = null,
+  onOpenContextPanel,
   resources = [],
   attachments = [],
   onPickAttachments,
@@ -505,8 +510,8 @@ export default function Composer({
           {/* model chip — interactive switcher */}
           <ModelSwitcher initialModel={model} running={running} onSwitched={onModelSwitched} />
 
-          {/* token 状态 — status 事件驱动 */}
-          <StatusChip status={status} />
+          {/* token 状态 — status 事件驱动,四档色 + 点击打开右侧上下文面板 */}
+          <StatusChip status={status} watermark={watermark} onOpenPanel={onOpenContextPanel} />
 
           {/* workspace switch — functional */}
           <button

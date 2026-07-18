@@ -4,9 +4,16 @@ import BrowserPane from './BrowserPane'
 import TerminalPane from './TerminalPane'
 import { clampColumnWidth } from '../lib/rightDock'
 
-/** 右侧停靠列:分段切换 浏览器|终端,常挂两面板 CSS 显隐;左边缘拖拽调宽;open 宽度动画。 */
-export default function RightDock({ open, cwd, onClose }: { open: boolean; cwd: string | null; onClose: () => void }): JSX.Element {
-  const [pane, setPane] = useState<'browser' | 'terminal'>('browser')
+export type RightDockPane = 'browser' | 'terminal' | 'context'
+
+/** 右侧停靠列:分段切换 浏览器|终端|上下文,常挂三面板 CSS 显隐;左边缘拖拽调宽;open 宽度动画。pane 受控(由 App 上提)。 */
+export default function RightDock({ open, cwd, pane, onPaneChange, onClose }: {
+  open: boolean
+  cwd: string | null
+  pane: RightDockPane
+  onPaneChange: (pane: RightDockPane) => void
+  onClose: () => void
+}): JSX.Element {
   const [width, setWidth] = useState(() => clampColumnWidth(Math.round(window.innerWidth * 0.4), window.innerWidth))
   const [dragging, setDragging] = useState(false)
   const dragRef = useRef<{ startX: number; startW: number } | null>(null)
@@ -28,8 +35,8 @@ export default function RightDock({ open, cwd, onClose }: { open: boolean; cwd: 
     ;(e.target as HTMLElement).releasePointerCapture(e.pointerId)
   }
 
-  const seg = (id: 'browser' | 'terminal', label: string): JSX.Element => (
-    <button data-testid={`rightdock-seg-${id}`} onClick={() => setPane(id)}
+  const seg = (id: RightDockPane, label: string): JSX.Element => (
+    <button data-testid={`rightdock-seg-${id}`} onClick={() => onPaneChange(id)}
       className={'rounded-md px-2 py-0.5 text-2xs ' + (pane === id ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>{label}</button>
   )
 
@@ -47,15 +54,19 @@ export default function RightDock({ open, cwd, onClose }: { open: boolean; cwd: 
         <div className="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1">
           {seg('browser', '浏览器')}
           {seg('terminal', '终端')}
+          {seg('context', '上下文')}
           <button data-testid="right-dock-close" onClick={onClose} className="ml-auto rounded p-1 text-fg-muted hover:bg-surface/60" title="收起"><X className="h-3.5 w-3.5" strokeWidth={1.5} /></button>
         </div>
-        {/* 两面板常挂,CSS 显隐 */}
+        {/* 三面板常挂,CSS 显隐 */}
         <div className="relative min-h-0 flex-1">
           <div className={'absolute inset-0 flex flex-col ' + (pane === 'browser' ? '' : 'hidden')}>
             <BrowserPane active={open && pane === 'browser'} />
           </div>
           <div className={'absolute inset-0 flex flex-col ' + (pane === 'terminal' ? '' : 'hidden')}>
             <TerminalPane active={open && pane === 'terminal'} cwd={cwd} />
+          </div>
+          <div className={'absolute inset-0 flex flex-col ' + (pane === 'context' ? '' : 'hidden')}>
+            <div data-testid="context-panel-placeholder" />
           </div>
         </div>
       </div>
