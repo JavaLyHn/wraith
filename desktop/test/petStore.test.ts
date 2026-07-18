@@ -202,4 +202,27 @@ describe('petStore', () => {
     expect(pets.some(pet => pet.id === 'zz-beyond-cap')).toBe(false)
     expect(pets.some(pet => pet.id === '000')).toBe(false)
   })
+
+  it('still discovers Noir Webling after the normal Petdex candidate cap', async () => {
+    for (let index = 0; index < 256; index++) fs.mkdirSync(path.join(petdexRoot, String(index).padStart(3, '0')), { recursive: true })
+    writePet(petdexRoot, 'noir-webling')
+    expect((await listPets({ userDataDir, petdexRoot })).find(pet => pet.id === 'noir-webling')).toMatchObject({ available: true, source: 'petdex' })
+  })
+
+  it('rejects an oversized single-image source before creating imported content', async () => {
+    const source = path.join(root, 'too-large.png')
+    fs.writeFileSync(source, Buffer.alloc(8 * 1024 * 1024 + 1))
+    await expect(importStaticImage({ userDataDir, sourcePath: source })).rejects.toThrow('图片过大')
+    const destination = path.join(userDataDir, 'pets', 'imported')
+    expect(fs.existsSync(destination) ? fs.readdirSync(destination) : []).toEqual([])
+  })
+
+  it('preflights an oversized directory sprite before staging a copied package', async () => {
+    const pack = path.join(root, 'preflight-large')
+    writePet(pack, 'preflight-large')
+    fs.writeFileSync(path.join(pack, 'preflight-large', 'spritesheet.png'), Buffer.alloc(16 * 1024 * 1024 + 1))
+    await expect(importPackage({ userDataDir, sourcePath: path.join(pack, 'preflight-large') })).rejects.toThrow('精灵图过大')
+    const destination = path.join(userDataDir, 'pets', 'imported')
+    expect(fs.existsSync(destination) ? fs.readdirSync(destination) : []).toEqual([])
+  })
 })

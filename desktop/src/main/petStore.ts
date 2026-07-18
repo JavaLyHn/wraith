@@ -10,6 +10,7 @@ export const MAX_ARCHIVE_FILES = 64
 export const MAX_ARCHIVE_BYTES = 24 * 1024 * 1024
 const MAX_MANIFEST_BYTES = 64 * 1024
 const MAX_CANDIDATE_DIRECTORIES = 256
+const MAX_DISCOVERY_CONCURRENCY = 4
 
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 const DEFAULT_SPRITE: PetSprite = { columns: 8, rows: 9, frameWidth: 192, frameHeight: 208 }
@@ -57,6 +58,19 @@ async function readPackageFile(root: string, file: string, maxBytes: number, ove
   } finally {
     await handle.close()
   }
+}
+
+async function mapBounded<T, R>(items: T[], mapper: (item: T) => Promise<R>): Promise<R[]> {
+  const result = new Array<R>(items.length)
+  let cursor = 0
+  const worker = async () => {
+    while (cursor < items.length) {
+      const index = cursor++
+      result[index] = await mapper(items[index]!)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(MAX_DISCOVERY_CONCURRENCY, items.length) }, worker))
+  return result
 }
 
 function parseSprite(value: unknown): PetSprite | undefined {
@@ -115,7 +129,8 @@ export function validateImageBuffer(buffer: Buffer, maxBytes: number): { kind: '
 }
 
 async function validateImage(file: string, maxBytes: number) {
-  return validateImageBuffer(await fs.promises.readFile(file), maxBytes)
+  const oversizedMessage = maxBytes === MAX_SPRITE_BYTES ? '精灵图过大' : '图片过大'
+  return validateImageBuffer(await readPackageFile(path.dirname(file), file, maxBytes, oversizedMessage), maxBytes)
 }
 
 async function parseManifest(directory: string): Promise<Manifest> {
@@ -159,8 +174,11 @@ async function readPackage(directory: string, source: PetView['source'], removab
 async function listDirectory(root: string, source: PetView['source'], removable: boolean): Promise<ResolvedPet[]> {
   try {
     const entries = await fs.promises.readdir(root, { withFileTypes: true })
-    const candidates = entries.filter(entry => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name)).slice(0, MAX_CANDIDATE_DIRECTORIES)
-    const pets = await Promise.all(candidates.map(entry => readPackage(path.join(root, entry.name), source, removable)))
+    const directories = entries.filter(entry => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))
+    const candidates = directories.slice(0, MAX_CANDIDATE_DIRECTORIES)
+    const noir = directories.find(entry => entry.name === 'noir-webling')
+    if (noir && !candidates.some(entry => entry.name === noir.name)) candidates.push(noir)
+    const pets = await mapBounded(candidates, entry => readPackage(path.join(root, entry.name), source, removable))
     return pets.filter((pet): pet is ResolvedPet => pet !== null)
   } catch { return [] }
 }
@@ -174,7 +192,8 @@ function builtIns(): ResolvedPet[] {
 
 export async function listPets(args: { userDataDir: string; petdexRoot: string }): Promise<PetView[]> {
   const merged = new Map<string, ResolvedPet>()
-  const [petdex, imported] = await Promise.all([listDirectory(args.petdexRoot, 'petdex', false), listDirectory(importedRoot(args.userDataDir), 'imported', true)])
+  const petdex = await listDirectory(args.petdexRoot, 'petdex', false)
+  const imported = await listDirectory(importedRoot(args.userDataDir), 'imported', true)
   for (const pet of [...builtIns(), ...petdex, ...imported]) merged.set(pet.id, pet)
   return [...merged.values()].map(({ assetPath: _assetPath, ...pet }) => pet)
 }
@@ -264,23 +283,36 @@ async function extractZip(source: string, staging: string): Promise<void> {
   }))
 }
 
-async function copyFolder(source: string, staging: string): Promise<void> {
+interface PreflightFile { name: string; data: Buffer }
+
+async function preflightFolder(source: string): Promise<PreflightFile[]> {
+  const sourceStat = await fs.promises.lstat(source)
+  if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) throw new Error('仅支持宠物文件夹或 ZIP 包')
   const entries = await fs.promises.readdir(source, { withFileTypes: true })
   if (entries.length > MAX_ARCHIVE_FILES) throw new Error('宠物包文件过多')
-  for (const entry of entries) {
+  const files = entries.filter(entry => !entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name))
+  if (files.length !== entries.length) throw new Error('宠物包包含不支持的文件')
+  return mapBounded(files, async entry => {
     if (!entry.isFile() || !['pet.json', 'spritesheet.png', 'spritesheet.webp'].includes(entry.name)) throw new Error('宠物包包含不支持的文件')
-    await fs.promises.copyFile(path.join(source, entry.name), path.join(staging, entry.name))
-  }
+    const maxBytes = entry.name === 'pet.json' ? MAX_MANIFEST_BYTES : MAX_SPRITE_BYTES
+    const oversizedMessage = entry.name === 'pet.json' ? 'pet.json 过大' : '精灵图过大'
+    return { name: entry.name, data: await readPackageFile(source, path.join(source, entry.name), maxBytes, oversizedMessage) }
+  })
+}
+
+async function writePreflightFiles(staging: string, files: PreflightFile[]): Promise<void> {
+  for (const file of files) await fs.promises.writeFile(path.join(staging, file.name), file.data, { flag: 'wx' })
 }
 
 export async function importPackage(args: { userDataDir: string; sourcePath: string }): Promise<PetView> {
+  const stat = await fs.promises.lstat(args.sourcePath)
+  const folderFiles = stat.isDirectory() ? await preflightFolder(args.sourcePath) : null
+  if (!folderFiles && path.extname(args.sourcePath).toLowerCase() !== '.zip') throw new Error('仅支持宠物文件夹或 ZIP 包')
   const root = importedRoot(args.userDataDir); await fs.promises.mkdir(root, { recursive: true })
   const staging = await fs.promises.mkdtemp(path.join(root, '.staging-'))
   try {
-    const stat = await fs.promises.stat(args.sourcePath)
-    if (stat.isDirectory()) await copyFolder(args.sourcePath, staging)
-    else if (path.extname(args.sourcePath).toLowerCase() === '.zip') await extractZip(args.sourcePath, staging)
-    else throw new Error('仅支持宠物文件夹或 ZIP 包')
+    if (folderFiles) await writePreflightFiles(staging, folderFiles)
+    else await extractZip(args.sourcePath, staging)
     const manifest = await parseManifest(staging)
     if (!manifest.spritesheetPath) throw new Error('缺少精灵图')
     const spritePath = path.join(staging, manifest.spritesheetPath)
@@ -305,7 +337,8 @@ export async function removeImportedPet(args: { userDataDir: string; id: string 
 
 async function findResolved(args: { userDataDir: string; petdexRoot: string }, id: string): Promise<ResolvedPet | null> {
   try { assertId(id) } catch { return null }
-  const [petdex, imported] = await Promise.all([listDirectory(args.petdexRoot, 'petdex', false), listDirectory(importedRoot(args.userDataDir), 'imported', true)])
+  const petdex = await listDirectory(args.petdexRoot, 'petdex', false)
+  const imported = await listDirectory(importedRoot(args.userDataDir), 'imported', true)
   const found = [...builtIns(), ...petdex, ...imported]
   return found.filter(pet => pet.id === id).at(-1) ?? null
 }
