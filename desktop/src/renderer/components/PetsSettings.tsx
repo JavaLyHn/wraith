@@ -27,6 +27,9 @@ export default function PetsSettings(): JSX.Element {
   const [pets, setLibrary] = useState<PetView[]>([])
   const [error, setError] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [importingImage, setImportingImage] = useState(false)
+  const [importingPackage, setImportingPackage] = useState(false)
+  const [removingIds, setRemovingIds] = useState<ReadonlySet<string>>(new Set())
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -40,29 +43,38 @@ export default function PetsSettings(): JSX.Element {
   useEffect(() => { void refresh() }, [refresh])
 
   const importImage = async (): Promise<void> => {
+    if (importingImage) return // in-flight 守卫:防快速双击开出两个并发对话框
+    setImportingImage(true)
     setError(null)
     try {
       const result = await window.wraith.petsImportImage()
       if (result.error) setError(result.error)
       else await refresh()
     } catch (e) { setError((e as Error).message) }
+    finally { setImportingImage(false) }
   }
 
   const importPackage = async (): Promise<void> => {
+    if (importingPackage) return
+    setImportingPackage(true)
     setError(null)
     try {
       const result = await window.wraith.petsImportPackage()
       if (result.error) setError(result.error)
       else await refresh()
     } catch (e) { setError((e as Error).message) }
+    finally { setImportingPackage(false) }
   }
 
   const removePet = async (id: string): Promise<void> => {
+    if (removingIds.has(id)) return
+    setRemovingIds(prev => new Set(prev).add(id))
     setError(null)
     try {
       await window.wraith.petsRemove(id)
       await refresh()
     } catch (e) { setError((e as Error).message) }
+    finally { setRemovingIds(prev => { const next = new Set(prev); next.delete(id); return next }) }
   }
 
   const active = selectedPet(pets, prefs.pets.selectedId)
@@ -81,12 +93,12 @@ export default function PetsSettings(): JSX.Element {
 
   return (
     <div className="flex max-w-xl flex-col gap-6">
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
-        <div>
-          <div className="text-xs font-semibold text-fg">启用桌面宠物</div>
-          <div className="text-2xs text-fg-subtle">关闭后不挂载浮件、不解码宠物图片</div>
-        </div>
-        <Switch data-testid="pet-enabled" checked={prefs.pets.enabled} onCheckedChange={(checked) => setPets({ enabled: checked })} />
+      <div className="rounded-lg border border-border px-3 py-2">
+        <label className="flex cursor-pointer select-none items-center justify-between gap-3 text-xs font-semibold text-fg">
+          启用桌面宠物
+          <Switch data-testid="pet-enabled" checked={prefs.pets.enabled} onCheckedChange={(checked) => setPets({ enabled: checked })} />
+        </label>
+        <div className="mt-1 text-2xs text-fg-subtle">关闭后不挂载浮件、不解码宠物图片</div>
       </div>
 
       <div>
@@ -103,10 +115,10 @@ export default function PetsSettings(): JSX.Element {
       <div>
         <div className={lbl}>宠物库</div>
         <div className="mb-3 flex items-center gap-2">
-          <button data-testid="pet-import-image" onClick={() => void importImage()}
-            className="rounded-lg border border-accent px-3 py-1.5 text-xs text-accent hover:bg-accent/10">导入图片</button>
-          <button data-testid="pet-import-package" onClick={() => void importPackage()}
-            className="rounded-lg border border-accent px-3 py-1.5 text-xs text-accent hover:bg-accent/10">导入精灵包</button>
+          <button data-testid="pet-import-image" disabled={importingImage} onClick={() => void importImage()}
+            className="rounded-lg border border-accent px-3 py-1.5 text-xs text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50">导入图片</button>
+          <button data-testid="pet-import-package" disabled={importingPackage} onClick={() => void importPackage()}
+            className="rounded-lg border border-accent px-3 py-1.5 text-xs text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50">导入精灵包</button>
         </div>
         {error && <div className="mb-2 text-xs text-danger">{error}</div>}
         <div data-testid="pet-library" className="grid grid-cols-2 gap-2">
@@ -128,8 +140,9 @@ export default function PetsSettings(): JSX.Element {
                   <button
                     data-testid={`pet-remove-${pet.id}`}
                     aria-label={`删除${pet.displayName}`}
+                    disabled={removingIds.has(pet.id)}
                     onClick={() => void removePet(pet.id)}
-                    className="absolute right-1 top-1 rounded px-1 text-fg-subtle hover:text-danger"
+                    className="absolute right-1 top-1 rounded px-1 text-fg-subtle hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
                   >×</button>
                 )}
               </div>
@@ -150,7 +163,7 @@ export default function PetsSettings(): JSX.Element {
         </div>
       </div>
 
-      <div>
+      <label className="block">
         <div className={lbl}>缩放 {prefs.pets.scale.toFixed(2)}×</div>
         <input
           data-testid="pet-scale"
@@ -162,7 +175,7 @@ export default function PetsSettings(): JSX.Element {
           onChange={(e) => setPets({ scale: Number(e.target.value) })}
           className="w-full"
         />
-      </div>
+      </label>
     </div>
   )
 }
