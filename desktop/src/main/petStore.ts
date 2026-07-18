@@ -8,6 +8,8 @@ export const MAX_SPRITE_BYTES = 16 * 1024 * 1024
 export const MAX_DIMENSION = 4096
 export const MAX_ARCHIVE_FILES = 64
 export const MAX_ARCHIVE_BYTES = 24 * 1024 * 1024
+const MAX_MANIFEST_BYTES = 64 * 1024
+const MAX_CANDIDATE_DIRECTORIES = 256
 
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/
 const DEFAULT_SPRITE: PetSprite = { columns: 8, rows: 9, frameWidth: 192, frameHeight: 208 }
@@ -43,10 +45,18 @@ function assertBasename(value: unknown, label: string): string {
   return value
 }
 
-function assertRegularPackageFile(root: string, file: string): void {
+async function readPackageFile(root: string, file: string, maxBytes: number, oversizedMessage = '宠物资源过大'): Promise<Buffer> {
   if (!isWithin(root, file)) throw new Error('非法宠物路径')
-  const stat = fs.lstatSync(file)
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('宠物资源不能是符号链接')
+  const constants = fs.constants as typeof fs.constants & { O_NOFOLLOW?: number }
+  const handle = await fs.promises.open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+  try {
+    const stat = await handle.stat()
+    if (!stat.isFile()) throw new Error('宠物资源必须是普通文件')
+    if (stat.size > maxBytes) throw new Error(oversizedMessage)
+    return await handle.readFile()
+  } finally {
+    await handle.close()
+  }
 }
 
 function parseSprite(value: unknown): PetSprite | undefined {
@@ -108,12 +118,11 @@ async function validateImage(file: string, maxBytes: number) {
   return validateImageBuffer(await fs.promises.readFile(file), maxBytes)
 }
 
-function parseManifest(directory: string): Manifest {
+async function parseManifest(directory: string): Promise<Manifest> {
   let input: unknown
   try {
     const file = path.join(directory, 'pet.json')
-    assertRegularPackageFile(directory, file)
-    input = JSON.parse(fs.readFileSync(file, 'utf8'))
+    input = JSON.parse((await readPackageFile(directory, file, MAX_MANIFEST_BYTES)).toString('utf8'))
   } catch { throw new Error('缺少或无效 pet.json') }
   if (!input || typeof input !== 'object') throw new Error('无效 pet.json')
   const value = input as Record<string, unknown>
@@ -134,22 +143,25 @@ function makeView(manifest: Manifest, directory: string, source: PetView['source
   return { id: manifest.id, displayName: manifest.displayName, description: manifest.description, source, kind, available: true, removable, previewUrl: null, sprite: kind === 'spritesheet' ? manifest.sprite ?? DEFAULT_SPRITE : null, assetPath }
 }
 
-function readPackage(directory: string, source: PetView['source'], removable: boolean): ResolvedPet | null {
+async function readPackage(directory: string, source: PetView['source'], removable: boolean): Promise<ResolvedPet | null> {
   try {
-    const directoryStat = fs.lstatSync(directory)
+    const directoryStat = await fs.promises.lstat(directory)
     if (!directoryStat.isDirectory() || directoryStat.isSymbolicLink()) return null
-    const manifest = parseManifest(directory)
+    const manifest = await parseManifest(directory)
     const pet = makeView(manifest, directory, source, removable)
-    assertRegularPackageFile(directory, pet.assetPath)
-    validateImageBuffer(fs.readFileSync(pet.assetPath), pet.kind === 'spritesheet' ? MAX_SPRITE_BYTES : MAX_STATIC_BYTES)
+    const maxBytes = pet.kind === 'spritesheet' ? MAX_SPRITE_BYTES : MAX_STATIC_BYTES
+    const image = validateImageBuffer(await readPackageFile(directory, pet.assetPath, maxBytes, pet.kind === 'spritesheet' ? '精灵图过大' : '图片过大'), maxBytes)
+    if (pet.sprite && (pet.sprite.columns * pet.sprite.frameWidth > image.width || pet.sprite.rows * pet.sprite.frameHeight > image.height)) throw new Error('精灵布局超出图片尺寸')
     return pet
   } catch { return null }
 }
 
-function listDirectory(root: string, source: PetView['source'], removable: boolean): ResolvedPet[] {
+async function listDirectory(root: string, source: PetView['source'], removable: boolean): Promise<ResolvedPet[]> {
   try {
-    return fs.readdirSync(root, { withFileTypes: true }).filter(entry => entry.isDirectory())
-      .map(entry => readPackage(path.join(root, entry.name), source, removable)).filter((pet): pet is ResolvedPet => pet !== null)
+    const entries = await fs.promises.readdir(root, { withFileTypes: true })
+    const candidates = entries.filter(entry => entry.isDirectory()).sort((a, b) => a.name.localeCompare(b.name)).slice(0, MAX_CANDIDATE_DIRECTORIES)
+    const pets = await Promise.all(candidates.map(entry => readPackage(path.join(root, entry.name), source, removable)))
+    return pets.filter((pet): pet is ResolvedPet => pet !== null)
   } catch { return [] }
 }
 
@@ -162,7 +174,8 @@ function builtIns(): ResolvedPet[] {
 
 export async function listPets(args: { userDataDir: string; petdexRoot: string }): Promise<PetView[]> {
   const merged = new Map<string, ResolvedPet>()
-  for (const pet of [...builtIns(), ...listDirectory(args.petdexRoot, 'petdex', false), ...listDirectory(importedRoot(args.userDataDir), 'imported', true)]) merged.set(pet.id, pet)
+  const [petdex, imported] = await Promise.all([listDirectory(args.petdexRoot, 'petdex', false), listDirectory(importedRoot(args.userDataDir), 'imported', true)])
+  for (const pet of [...builtIns(), ...petdex, ...imported]) merged.set(pet.id, pet)
   return [...merged.values()].map(({ assetPath: _assetPath, ...pet }) => pet)
 }
 
@@ -268,12 +281,13 @@ export async function importPackage(args: { userDataDir: string; sourcePath: str
     if (stat.isDirectory()) await copyFolder(args.sourcePath, staging)
     else if (path.extname(args.sourcePath).toLowerCase() === '.zip') await extractZip(args.sourcePath, staging)
     else throw new Error('仅支持宠物文件夹或 ZIP 包')
-    const manifest = parseManifest(staging)
+    const manifest = await parseManifest(staging)
     if (!manifest.spritesheetPath) throw new Error('缺少精灵图')
     const spritePath = path.join(staging, manifest.spritesheetPath)
     if (!fs.existsSync(spritePath)) throw new Error('缺少精灵图')
-    assertRegularPackageFile(staging, spritePath)
-    await validateImage(spritePath, MAX_SPRITE_BYTES)
+    const image = validateImageBuffer(await readPackageFile(staging, spritePath, MAX_SPRITE_BYTES, '精灵图过大'), MAX_SPRITE_BYTES)
+    const sprite = manifest.sprite ?? DEFAULT_SPRITE
+    if (sprite.columns * sprite.frameWidth > image.width || sprite.rows * sprite.frameHeight > image.height) throw new Error('精灵布局超出图片尺寸')
     await replaceFromStaging(root, manifest.id, staging)
     return makeView(manifest, path.join(root, manifest.id), 'imported', true)
   } catch (error) {
@@ -289,20 +303,20 @@ export async function removeImportedPet(args: { userDataDir: string; id: string 
   await fs.promises.rm(target, { recursive: true, force: true })
 }
 
-function findResolved(args: { userDataDir: string; petdexRoot: string }, id: string): ResolvedPet | null {
+async function findResolved(args: { userDataDir: string; petdexRoot: string }, id: string): Promise<ResolvedPet | null> {
   try { assertId(id) } catch { return null }
-  const found = [...builtIns(), ...listDirectory(args.petdexRoot, 'petdex', false), ...listDirectory(importedRoot(args.userDataDir), 'imported', true)]
+  const [petdex, imported] = await Promise.all([listDirectory(args.petdexRoot, 'petdex', false), listDirectory(importedRoot(args.userDataDir), 'imported', true)])
+  const found = [...builtIns(), ...petdex, ...imported]
   return found.filter(pet => pet.id === id).at(-1) ?? null
 }
 
 export async function previewDataUrl(args: { userDataDir: string; petdexRoot: string; id: string }): Promise<string | null> {
-  const pet = findResolved(args, args.id)
+  const pet = await findResolved(args, args.id)
   if (!pet?.available || !pet.assetPath) return null
   try {
-    // Recheck at the point of use so a package cannot swap its asset for a link after discovery.
-    assertRegularPackageFile(path.dirname(pet.assetPath), pet.assetPath)
-    const data = await fs.promises.readFile(pet.assetPath)
-    const kind = imageKind(data)
+    const maxBytes = pet.kind === 'spritesheet' ? MAX_SPRITE_BYTES : MAX_STATIC_BYTES
+    const data = await readPackageFile(path.dirname(pet.assetPath), pet.assetPath, maxBytes, pet.kind === 'spritesheet' ? '精灵图过大' : '图片过大')
+    const kind = validateImageBuffer(data, maxBytes).kind
     return kind ? `data:image/${kind === 'jpeg' ? 'jpeg' : kind};base64,${data.toString('base64')}` : null
   } catch { return null }
 }

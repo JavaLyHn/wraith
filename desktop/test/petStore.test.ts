@@ -22,7 +22,7 @@ beforeEach(() => {
 })
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }))
 
-function png(width = 1, height = 1): Buffer {
+function png(width = 1536, height = 1872): Buffer {
   const bytes = Buffer.alloc(24)
   bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
   bytes.writeUInt32BE(13, 8)
@@ -171,5 +171,35 @@ describe('petStore', () => {
 
   it('returns no preview for an unknown id', async () => {
     await expect(previewDataUrl({ userDataDir, petdexRoot, id: 'missing' })).resolves.toBeNull()
+  })
+
+  it('rejects a preview when its imported asset becomes a symlink or exceeds the byte limit', async () => {
+    const source = path.join(root, 'preview.png'); fs.writeFileSync(source, png())
+    const imported = await importStaticImage({ userDataDir, sourcePath: source })
+    const asset = path.join(userDataDir, 'pets', 'imported', imported.id, 'image.png')
+    const outside = path.join(root, 'outside.png'); fs.writeFileSync(outside, png())
+    fs.rmSync(asset); fs.symlinkSync(outside, asset)
+    await expect(previewDataUrl({ userDataDir, petdexRoot, id: imported.id })).resolves.toBeNull()
+    fs.rmSync(asset); fs.writeFileSync(asset, Buffer.alloc(8 * 1024 * 1024 + 1))
+    await expect(previewDataUrl({ userDataDir, petdexRoot, id: imported.id })).resolves.toBeNull()
+  })
+
+  it('rejects a spritesheet whose declared grid exceeds its decoded dimensions', async () => {
+    const pack = path.join(root, 'small-grid')
+    writePet(pack, 'small-grid', JSON.stringify({
+      id: 'small-grid', displayName: 'small-grid', description: 'test', spritesheetPath: 'spritesheet.png',
+      sprite: { columns: 4, rows: 3, frameWidth: 64, frameHeight: 80 },
+    }), png(255, 240))
+    await expect(importPackage({ userDataDir, sourcePath: path.join(pack, 'small-grid') })).rejects.toThrow('精灵布局超出图片尺寸')
+  })
+
+  it('bounds Petdex candidates and rejects oversized manifests without throwing', async () => {
+    for (let index = 0; index < 256; index++) fs.mkdirSync(path.join(petdexRoot, String(index).padStart(3, '0')), { recursive: true })
+    writePet(petdexRoot, 'zz-beyond-cap')
+    const huge = path.join(petdexRoot, '000', 'pet.json')
+    fs.writeFileSync(huge, Buffer.alloc(64 * 1024 + 1, '{'))
+    const pets = await listPets({ userDataDir, petdexRoot })
+    expect(pets.some(pet => pet.id === 'zz-beyond-cap')).toBe(false)
+    expect(pets.some(pet => pet.id === '000')).toBe(false)
   })
 })
