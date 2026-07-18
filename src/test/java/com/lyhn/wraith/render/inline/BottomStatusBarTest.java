@@ -105,9 +105,9 @@ class BottomStatusBarTest {
         assertTrue(lines.get(0).toString().contains("YOLO"), "status row should show current mode");
         if (AnsiStyle.isEnabled()) {
             assertFalse(lines.get(1).toAnsi().contains("[2m"), "footer row should no longer be dim/faint");
-            assertTrue(lines.get(1).toAnsi().contains("["), "footer row should be styled (bold cyan)");
+            assertTrue(lines.get(1).toAnsi().contains("["), "footer row should be styled (bold cyan)");
         } else {
-            assertFalse(lines.get(1).toAnsi().contains("\u001B["), "NO_COLOR should keep footer plain");
+            assertFalse(lines.get(1).toAnsi().contains("["), "NO_COLOR should keep footer plain");
         }
     }
 
@@ -228,5 +228,17 @@ class BottomStatusBarTest {
         } else {
             assertEquals(AttributedStyle.DEFAULT, line.styleAt(index), segment + " should stay plain under NO_COLOR");
         }
+    }
+
+    @Test
+    void tier0IsSilent() {
+        assertEquals("", BottomStatusBar.tierBadge(59));
+    }
+
+    @Test
+    void tiersCarryAnsiColorAndLabel() {
+        assertEquals("\u001B[33m● 整理\u001B[0m", BottomStatusBar.tierBadge(60));
+        assertEquals("\u001B[38;5;208m● 释压\u001B[0m", BottomStatusBar.tierBadge(80));
+        assertEquals("\u001B[31m● 兜底\u001B[0m", BottomStatusBar.tierBadge(95));
     }
 }

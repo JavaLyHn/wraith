@@ -477,11 +477,20 @@ public final class BottomStatusBar implements AutoCloseable {
         return builder.toAttributedString();
     }
 
+    /** tier 徽标(spec Phase C §6):tier0 不加噪音;阈值与 WatermarkGauge 一致(60/80/95)。 */
+    static String tierBadge(int percent) {
+        if (percent >= 95) return "\u001B[31m● 兜底\u001B[0m";
+        if (percent >= 80) return "\u001B[38;5;208m● 释压\u001B[0m";
+        if (percent >= 60) return "\u001B[33m● 整理\u001B[0m";
+        return "";
+    }
+
     private static String contextSegment(StatusInfo info) {
         ContextGauge gauge = contextGauge(info);
         String bar = "█".repeat(Math.max(0, gauge.filled()))
                 + "░".repeat(Math.max(0, gauge.empty()));
-        return "ctx " + bar + " " + gauge.percent() + "% ("
+        String badge = tierBadge(gauge.percent());
+        return (badge.isEmpty() ? "" : badge + " ") + "ctx " + bar + " " + gauge.percent() + "% ("
                 + formatTokens(gauge.total()) + "/" + formatTokens(gauge.window()) + ")";
     }
 
