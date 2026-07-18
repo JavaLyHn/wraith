@@ -231,7 +231,7 @@ public final class ContextCurator {
                 all.addAll(em.changes());
             }
             long estAfter = counter.estimate(model, history);
-            boolean any = !all.isEmpty() || summarized;
+            boolean any = !all.isEmpty() || summarized || fallback != null;
             if (any) {
                 long durationMs = (System.nanoTime() - start) / 1_000_000;
                 stats.recordCompaction(r.tier(), estBefore, estAfter,

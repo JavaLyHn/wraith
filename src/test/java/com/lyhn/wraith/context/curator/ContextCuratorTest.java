@@ -203,4 +203,22 @@ class ContextCuratorTest {
         assertNull(r.fallback(), "成功路径 fallback 必须为 null");
         assertNull(lastEvent("context.compaction").get("fallback"), "成功事件不带 fallback 键");
     }
+
+    @Test
+    void manualCompactOnShortHistoryStillReportsAndEmits() {
+        // 短会话:全在保护区,snip/prune/EMERGENCY 均零变更,摘要 false →
+        // 防静默:仍须 any=true、发事件带 fallback,绝不返回自相矛盾的 (false,·,"emergency")
+        FakeSummarizer fs = new FakeSummarizer(false);
+        ContextCurator c = curatorWith(fs);
+        List<Message> h = new ArrayList<>(List.of(
+                Message.system("sys"),
+                Message.user("q1"), Message.assistant("a1"),
+                Message.user("q2"), Message.assistant("a2")));
+        ContextCurator.ManualCompaction r = c.compactNow(h);
+        assertTrue(r.any(), "fallback 轮零变更也不许静默");
+        assertEquals("emergency", r.fallback());
+        Map<String, Object> evt = lastEvent("context.compaction");
+        assertEquals(true, evt.get("manual"));
+        assertEquals("emergency", evt.get("fallback"));
+    }
 }
