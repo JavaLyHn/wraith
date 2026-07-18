@@ -62,6 +62,16 @@ describe('context observability slice', () => {
     expect(s.context.watermark?.ratio).toBe(0.6)
   })
 
+  it('snapshot without watermark keys leaves watermark untouched (no fake 0%)', () => {
+    let s = reducer(initialState, notif('context.watermark', { usedTokens: 60, window: 100, ratio: 0.6, tier: 1 }))
+    s = reducer(s, notif('context.snapshot', { liveSummary: '摘要', inputTokens: 100, outputTokens: 1, cachedInputTokens: 0 }))
+    expect(s.context.watermark?.ratio).toBe(0.6)
+    expect(s.context.liveSummary).toBe('摘要')
+    // 初始 null 也不被捏造
+    const s2 = reducer(initialState, notif('context.snapshot', { liveSummary: null, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 }))
+    expect(s2.context.watermark).toBeNull()
+  })
+
   it('context.reset clears the whole slice (session switch)', () => {
     let s = reducer(initialState, notif('context.compaction', {
       tier: 1, beforeTokens: 100, afterTokens: 50, snipped: 1, pruned: 0, summarized: false, savedTokens: 50,

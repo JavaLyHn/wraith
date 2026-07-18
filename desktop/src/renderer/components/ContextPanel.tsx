@@ -3,7 +3,7 @@ import type { ContextObservability } from '../../shared/transcriptReducer'
 import type { StatusData } from '../../shared/types'
 import { tierOf, TIER_HEX, TIER_LABEL } from '../../shared/contextTier'
 import { formatTokens } from '../lib/compactView'
-import { totalsView, compactionLine, savedTotal, dotColor } from '../lib/contextPanelView'
+import { totalsView, compactionLine, savedTotal, dotColor, relativeTime } from '../lib/contextPanelView'
 
 /** 上下文治理面板(spec Phase C §3):水位/累计/压缩历史/活摘要预览/手动压缩。 */
 export default function ContextPanel({ context, status, onCompact, compactDisabled }: {
@@ -58,6 +58,7 @@ export default function ContextPanel({ context, status, onCompact, compactDisabl
               onClick={() => setExpanded(expanded === i ? null : i)}>
               <span style={{ color: dotColor(e.tier) }}>●</span>{' '}
               {compactionLine(e)}
+              <span className="ml-1 text-fg-muted">{relativeTime(e.ts, Date.now())}</span>
             </button>
             {expanded === i && e.items && (
               <ul className="ml-4 text-fg-muted">

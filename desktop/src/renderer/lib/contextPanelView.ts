@@ -32,6 +32,14 @@ export function savedTotal(compactions: CompactionEntry[]): number {
   return compactions.reduce((a, e) => a + Math.max(0, e.savedTokens), 0)
 }
 
+/** 相对时间:<60s "刚刚",<60m "N 分钟前",其余 "N 小时前"。 */
+export function relativeTime(ts: number, now: number): string {
+  const s = Math.max(0, Math.round((now - ts) / 1000))
+  if (s < 60) return '刚刚'
+  if (s < 3600) return `${Math.floor(s / 60)} 分钟前`
+  return `${Math.floor(s / 3600)} 小时前`
+}
+
 /** 压缩历史行的圆点色:合法 tier(0-3)取对应档位色,越界/非数字诚实回退中性灰(不伪装成 tier0 宽裕绿)。 */
 export function dotColor(tier: number): string {
   const known = Number.isFinite(tier) && tier >= 0 && tier <= 3

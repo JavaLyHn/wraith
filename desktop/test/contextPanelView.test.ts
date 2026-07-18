@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { totalsView, compactionLine, savedTotal, dotColor } from '../src/renderer/lib/contextPanelView'
+import { totalsView, compactionLine, savedTotal, dotColor, relativeTime } from '../src/renderer/lib/contextPanelView'
 import { TIER_HEX } from '../src/shared/contextTier'
 
 describe('totalsView', () => {
@@ -50,5 +50,19 @@ describe('dotColor', () => {
     expect(dotColor(4)).toBe('#9ca3af')
     expect(dotColor(-1)).toBe('#9ca3af')
     expect(dotColor(NaN)).toBe('#9ca3af')
+  })
+})
+
+describe('relativeTime', () => {
+  it('under 60s renders 刚刚', () => {
+    expect(relativeTime(1000, 1000)).toBe('刚刚')
+    expect(relativeTime(1000, 1000 + 59_000)).toBe('刚刚')
+  })
+  it('60s boundary renders 分钟前', () => {
+    expect(relativeTime(0, 60_000)).toBe('1 分钟前')
+    expect(relativeTime(0, 5 * 60_000)).toBe('5 分钟前')
+  })
+  it('60min boundary renders 小时前', () => {
+    expect(relativeTime(0, 3600_000)).toBe('1 小时前')
   })
 })

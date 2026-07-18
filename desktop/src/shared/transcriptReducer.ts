@@ -454,16 +454,24 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
     }
     case 'context.snapshot': {
       const num = (k: string): number => (typeof p[k] === 'number' ? (p[k] as number) : 0)
+      // Agent.contextStateCore 快照不一定带 usedTokens/ratio/tier(仅 metrics JSONL 尾行经 aggregator
+      // 补全时才有)——缺键时 num() 默认 0 会捏造 watermark={ratio:0,tier:0}("0% 宽裕"假象),
+      // 故仅当快照确实带水位数据时才覆盖,缺键时保留原 watermark(初始 null 时面板自动落回估算)。
+      const hasWatermark = typeof p['usedTokens'] === 'number'
       return {
         ...state,
         context: {
           ...state.context,
-          watermark: {
-            usedTokens: num('usedTokens'),
-            window: num('contextWindow') || num('window'),
-            ratio: num('ratio'), tier: num('tier'),
-            estimated: p['estimated'] !== false,
-          },
+          ...(hasWatermark
+            ? {
+                watermark: {
+                  usedTokens: num('usedTokens'),
+                  window: num('contextWindow') || num('window'),
+                  ratio: num('ratio'), tier: num('tier'),
+                  estimated: p['estimated'] !== false,
+                },
+              }
+            : {}),
           liveSummary: typeof p['liveSummary'] === 'string' ? (p['liveSummary'] as string) : null,
           totalsFromSnapshot: {
             inputTokens: num('inputTokens'), outputTokens: num('outputTokens'),

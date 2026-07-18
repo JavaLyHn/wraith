@@ -28,4 +28,7 @@ describe('compactionNotice', () => {
   it('plain compaction text unchanged', () =>
     expect(compactionNotice({ compacted: true, beforeTokens: 12300, afterTokens: 4100 }))
       .toBe('✅ 已压缩上下文:12.3k → 4.1k tokens'))
+  it('zero-change fallback admits nothing was compressed', () =>
+    expect(compactionNotice({ compacted: true, beforeTokens: 2000, afterTokens: 2000, summarized: false, fallback: 'emergency' }))
+      .toBe('上下文暂无可压缩内容(摘要不可用,已尝试零成本手段)'))
 })
