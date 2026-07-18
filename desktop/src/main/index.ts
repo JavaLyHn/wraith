@@ -456,7 +456,10 @@ ipcMain.handle('wraith:readImageDataUrl', async (_e, filePath: string) => {
 // 宠物库:Petdex(只读,~/.codex/pets)与导入副本(userData/pets/imported)的窄 IPC 暴露面。
 // 只经 petStore 的 5 个已校验函数;不透出任意文件读、目录列举或原始文件系统路径。
 function petdexRoot(): string {
-  return path.join(os.homedir(), '.codex', 'pets')
+  // E2E 隔离:重定向到临时 fixture 目录,镜像上面 WRAITH_E2E_USERDATA 的写法——
+  // 只看这一个变量是否设置,不读真实 ~/.codex/pets,也不读写真实用户 profile。
+  // 未设置时(生产环境恒未设置)行为完全不变。
+  return process.env['WRAITH_E2E_PETDEX_ROOT'] || path.join(os.homedir(), '.codex', 'pets')
 }
 
 async function importPetImageFromDialog(win: BrowserWindow | null, userDataDir: string): Promise<PetImportResult> {
