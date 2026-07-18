@@ -191,12 +191,18 @@ function builtIns(): ResolvedPet[] {
   ]
 }
 
+/** IPC 边界:剥掉 assetPath(绝对文件系统路径),只回传声明给 renderer 的 PetView 字段。 */
+function toPetView(resolved: ResolvedPet): PetView {
+  const { assetPath: _assetPath, ...pet } = resolved
+  return pet
+}
+
 export async function listPets(args: { userDataDir: string; petdexRoot: string }): Promise<PetView[]> {
   const merged = new Map<string, ResolvedPet>()
   const petdex = await listDirectory(args.petdexRoot, 'petdex', false)
   const imported = await listDirectory(importedRoot(args.userDataDir), 'imported', true)
   for (const pet of [...builtIns(), ...petdex, ...imported]) merged.set(pet.id, pet)
-  return [...merged.values()].map(({ assetPath: _assetPath, ...pet }) => pet)
+  return [...merged.values()].map(toPetView)
 }
 
 async function replaceFromStaging(root: string, id: string, staging: string): Promise<void> {
@@ -232,7 +238,7 @@ export async function importStaticImage(args: { userDataDir: string; sourcePath:
     const manifest: Manifest = { id, displayName: path.basename(args.sourcePath, path.extname(args.sourcePath)), description: 'Imported image pet', assetPath, kind: 'static' }
     await fs.promises.writeFile(path.join(staging, 'pet.json'), JSON.stringify(manifest), 'utf8')
     await replaceFromStaging(root, id, staging)
-    return makeView(manifest, path.join(root, id), 'imported', true)
+    return toPetView(makeView(manifest, path.join(root, id), 'imported', true))
   } catch (error) {
     await fs.promises.rm(staging, { recursive: true, force: true })
     throw error
@@ -322,7 +328,7 @@ export async function importPackage(args: { userDataDir: string; sourcePath: str
     const sprite = manifest.sprite ?? DEFAULT_SPRITE
     if (sprite.columns * sprite.frameWidth > image.width || sprite.rows * sprite.frameHeight > image.height) throw new Error('精灵布局超出图片尺寸')
     await replaceFromStaging(root, manifest.id, staging)
-    return makeView(manifest, path.join(root, manifest.id), 'imported', true)
+    return toPetView(makeView(manifest, path.join(root, manifest.id), 'imported', true))
   } catch (error) {
     await fs.promises.rm(staging, { recursive: true, force: true })
     throw error

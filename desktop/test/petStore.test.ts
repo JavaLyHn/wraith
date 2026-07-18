@@ -110,6 +110,18 @@ describe('petStore', () => {
     expect(fs.existsSync(path.join(userDataDir, 'pets', 'imported'))).toBe(false)
   })
 
+  it('never returns the absolute assetPath from importStaticImage', async () => {
+    const source = path.join(root, 'image.png'); fs.writeFileSync(source, png())
+    const imported = await importStaticImage({ userDataDir, sourcePath: source })
+    expect('assetPath' in imported).toBe(false)
+  })
+
+  it('never returns the absolute assetPath from importPackage', async () => {
+    const pack = path.join(root, 'no-leak'); writePet(pack, 'no-leak')
+    const imported = await importPackage({ userDataDir, sourcePath: path.join(pack, 'no-leak') })
+    expect('assetPath' in imported).toBe(false)
+  })
+
   it('does not replace an existing import when a package is incomplete', async () => {
     const source = path.join(root, 'image.png'); fs.writeFileSync(source, png())
     const old = await importStaticImage({ userDataDir, sourcePath: source })
@@ -173,8 +185,10 @@ describe('petStore', () => {
     await expect(previewDataUrl({ userDataDir, petdexRoot, id: 'missing' })).resolves.toBeNull()
   })
 
-  it('returns null rather than a filesystem path when preview id is unknown', async () => {
-    await expect(previewDataUrl({ userDataDir, petdexRoot, id: 'not-installed' })).resolves.toBeNull()
+  it('returns null rather than a filesystem path for a catalog id that is not installed', async () => {
+    // 'wraith-companion' 是 builtIns() 里的目录条目,但 available:false(没有磁盘资产)——
+    // 与纯粹不存在的 id('missing')不同分支:命中 findResolved 但 pet.available 为假。
+    await expect(previewDataUrl({ userDataDir, petdexRoot, id: 'wraith-companion' })).resolves.toBeNull()
   })
 
   it('rejects a preview when its imported asset becomes a symlink or exceeds the byte limit', async () => {
