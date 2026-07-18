@@ -157,6 +157,13 @@ src/main/java/com/lyhn/wraith/
 - system prompt 索引段注入三处提示词，上限 20 个 / 4KB
 - `load_skill` → SkillContextBuffer → 下一轮 user message 前置注入
 
+### 桌面宠物（Pets）
+
+- 文件：`desktop/src/shared/pets.ts`（类型）、`desktop/src/renderer/lib/petState.ts` + `petMotion.ts`（状态到动效映射）、`desktop/src/main/petStore.ts`（fs / 校验 / 落盘）、`desktop/src/renderer/components/PetAvatar.tsx` + `PetsSettings.tsx`（聊天浮件与设置页）
+- IPC 边界只开 5 个窄方法：`petsList` / `petsImportImage` / `petsImportPackage` / `petsRemove` / `petsPreview`；文件系统访问只在 main 的 `petStore.ts`，preload 只做类型约束桥，renderer 不直接碰 fs
+- **no-auto-download / no-third-party-code**：Wraith 不自动下载 Petdex 资源、不运行 `npx`、不执行任意第三方代码；`Noir Webling` 等 Petdex 目录条目只做本地检测（`~/.codex/pets/`）或读取用户已导入的包，缺资源时提示未安装，不联网获取
+- 导入需先过 MIME/签名、大小、像素尺寸与解压包边界（文件数/总大小）校验，并做 Zip Slip / 符号链接防护，通过后才把副本写入应用数据目录；删除只清理该副本，不改动用户原始目录
+
 ## 修改时的硬规则
 
 ### 1. 改行为 → 同步文档
@@ -222,6 +229,7 @@ src/main/java/com/lyhn/wraith/
 | Multi-Agent | AgentOrchestrator.java + SubAgent.java |
 | MCP | McpServerManager.java + McpClient.java |
 | TUI/渲染 | render/Renderer.java + RendererFactory.java |
+| 桌面宠物（Pets） | desktop/src/shared/pets.ts + desktop/src/main/petStore.ts + desktop/src/renderer/lib/petState.ts + petMotion.ts + desktop/src/renderer/components/PetAvatar.tsx + PetsSettings.tsx |
 
 ## 当前已知边界
 

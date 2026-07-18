@@ -846,3 +846,9 @@ src/main/java/com/lyhn/wraith
 ```
 
 > 桌面 App（Electron + React + TypeScript）在独立子工程 `desktop/`：renderer 组件（会话 / 计划 / MCP / IM 网关 / 自动化面板）、preload `window.wraith` 桥、main 进程（Java app-server sidecar + 网关进程管理），经 JSON-RPC 复用同一套 Java 内核（`~/.wraith/wraith.jar`）。
+
+## 桌面宠物（Pets）
+
+桌面设置页新增「宠物」页：总开关、宠物库、选择、工作预览、动态开关与四档单图风格（克制 / 悬浮 / 活泼 / 静态）、导入图片或精灵包、删除。聊天视图右下角有一枚紧凑浮件，随 Agent 状态（空闲 / 思考 / 工具执行 / 等待审批 / 成功 / 失败）切换姿态，不占用 transcript 布局、不遮挡输入框或审批控件，可隐藏、缩放、拖动位置；不发送文案、气泡或 Toast。
+
+宠物来源：内置 Wraith 角色、用户单张图片（PNG / JPEG / WebP）、Wraith 与 Petdex 兼容精灵包。官方目录中的 `Noir Webling` 等 Petdex 条目**需要用户自行安装或导入**——Wraith 只检测本地 `~/.codex/pets/` 目录或读取用户导入的包，不自动下载 Petdex 资源、不运行 `npx`、不执行任何第三方代码。导入的资源会先做格式与大小校验，再复制副本到应用数据目录；删除只清理该副本，不触碰用户原始目录。
