@@ -6,18 +6,28 @@ export interface PetMotion {
   durationMs: number
 }
 
-// 精灵表按状态分行取帧的固定行序;仅决定读哪一行,不影响 CSS 的 pet-* keyframes。
-const SPRITE_STATE_ROWS: PetState[] = ['idle', 'thinking', 'tool', 'approval', 'success', 'error']
+// Petdex 兼容精灵包的行序(spec §精灵包):idle、wave、run、failed、review、jump——
+// 这是包本身的物理行号,与 PetState 的取名顺序无关。下表把 Wraith 状态映射到
+// spec §状态映射表规定的那一行:tool→run、approval→review、success→jump、
+// error→failed;thinking 没有专属行,回退 idle(0)。
+const STATE_ROW: Record<PetState, number> = {
+  idle: 0, // idle
+  thinking: 0, // 无专属行→回退 idle
+  tool: 2, // run
+  approval: 4, // review
+  success: 5, // jump
+  error: 3, // failed
+}
 
 /**
  * 精灵包"行不存在时回退 idle,而不拒绝整个包"(spec §精灵包)的纯函数实现。
- * 越界状态(sprite.rows 小于该状态在固定行序里的下标)一律回退到第 0 行(idle),
- * 绝不用取模——取模会让越界状态 alias 撞到别的、存在的行(如 rows=3 时 approval%3
- * 撞 idle 行、success%3 撞 thinking 行),那不是"回退 idle",是读错了别的状态的帧。
+ * 越界状态(sprite.rows 小于该状态映射到的物理行号)一律回退到第 0 行(idle),
+ * 绝不用取模——取模会让越界状态 alias 撞到别的、存在的行,那不是"回退 idle",
+ * 是读错了别的状态的帧。
  */
 export function spriteRowFor(state: PetState, rows: number): number {
-  const idx = SPRITE_STATE_ROWS.indexOf(state)
-  return idx >= 0 && idx < rows ? idx : 0
+  const row = STATE_ROW[state]
+  return row < rows ? row : 0
 }
 
 /**

@@ -1132,8 +1132,10 @@ export default function App(): JSX.Element {
             )
           })()
         )}
-        {/* 悬浮宠物:绝对定位的 chat column 兄弟节点,不进入 flex 流,Transcript/Composer 尺寸不受影响 */}
-        {view === 'chat' && petView && (
+        {/* 悬浮宠物:绝对定位的 chat column 兄弟节点,不进入 flex 流,Transcript/Composer 尺寸不受影响。
+            enabled 显式入条件——关闭后整个组件不挂载,精灵宠物的 rAF 帧动效 effect 也不会起来
+            空转;仅靠 PetAvatar 内部 `!prefs.enabled` 的渲染期 early-return 不够,那时 effect 已经跑了。 */}
+        {view === 'chat' && appPrefs.pets.enabled && petView && (
           <PetAvatar
             pet={petView}
             state={petState}

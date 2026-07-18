@@ -462,6 +462,25 @@ function petdexRoot(): string {
   return process.env['WRAITH_E2E_PETDEX_ROOT'] || path.join(os.homedir(), '.codex', 'pets')
 }
 
+// 只放行 petStore 自己抛出的、已确认不含文件系统路径的校验文案;其余一切
+// (尤其是 Node fs 原生错误,如 ENOENT/ELOOP/EACCES——message 里会带 userData
+// 下的绝对路径)一律折叠成通用文案。不透传原始 error.message,不把路径带进 renderer。
+const SAFE_PET_IMPORT_ERRORS = new Set([
+  '非法宠物 ID', '非法精灵图路径', '非法图片路径', '非法宠物路径',
+  '宠物资源必须是普通文件', '宠物资源过大', 'pet.json 过大', '精灵图过大', '图片过大',
+  '无效精灵布局', '不支持的图片格式', '无法读取图片尺寸', '图片尺寸超限',
+  '缺少或无效 pet.json', '无效 pet.json', '无效宠物描述', '缺少精灵图',
+  '精灵图与静态图片配置冲突', '精灵布局超出图片尺寸', '非法压缩包路径',
+  '压缩包文件过多', '压缩包解压后过大', '压缩包包含不支持的文件',
+  '仅支持宠物文件夹或 ZIP 包', '宠物包文件过多', '宠物包包含不支持的文件',
+])
+const PET_IMPORT_FALLBACK_ERROR = '导入失败:文件无效或过大'
+
+function describePetImportError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return SAFE_PET_IMPORT_ERRORS.has(message) ? message : PET_IMPORT_FALLBACK_ERROR
+}
+
 async function importPetImageFromDialog(win: BrowserWindow | null, userDataDir: string): Promise<PetImportResult> {
   const options: Electron.OpenDialogOptions = {
     properties: ['openFile'],
@@ -473,7 +492,7 @@ async function importPetImageFromDialog(win: BrowserWindow | null, userDataDir: 
     const pet = await importStaticImage({ userDataDir, sourcePath: result.filePaths[0]! })
     return { pet, error: null }
   } catch (error) {
-    return { pet: null, error: error instanceof Error ? error.message : String(error) }
+    return { pet: null, error: describePetImportError(error) }
   }
 }
 
@@ -493,7 +512,7 @@ async function importPetPackageFromDialog(win: BrowserWindow | null, userDataDir
     const pet = await importPackage({ userDataDir, sourcePath: result.filePaths[0]! })
     return { pet, error: null }
   } catch (error) {
-    return { pet: null, error: error instanceof Error ? error.message : String(error) }
+    return { pet: null, error: describePetImportError(error) }
   }
 }
 

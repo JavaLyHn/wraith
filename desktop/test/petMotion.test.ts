@@ -27,24 +27,26 @@ describe('motionFor', () => {
 })
 
 describe('spriteRowFor', () => {
-  it('行数足够时,每个状态直接取自己在固定行序里的下标', () => {
-    expect(spriteRowFor('idle', 9)).toBe(0)
-    expect(spriteRowFor('thinking', 9)).toBe(1)
-    expect(spriteRowFor('tool', 9)).toBe(2)
-    expect(spriteRowFor('approval', 9)).toBe(3)
-    expect(spriteRowFor('success', 9)).toBe(4)
-    expect(spriteRowFor('error', 9)).toBe(5)
+  it('按 spec §状态映射表映射到 Petdex 行序(idle/wave/run/failed/review/jump)', () => {
+    // Petdex 兼容布局行号:idle=0、wave=1、run=2、failed=3、review=4、jump=5。
+    expect(spriteRowFor('idle', 9)).toBe(0) // idle
+    expect(spriteRowFor('thinking', 9)).toBe(0) // 无专属行→回退 idle
+    expect(spriteRowFor('tool', 9)).toBe(2) // run
+    expect(spriteRowFor('approval', 9)).toBe(4) // review
+    expect(spriteRowFor('success', 9)).toBe(5) // jump
+    expect(spriteRowFor('error', 9)).toBe(3) // failed
   })
 
   it('行数不足时越界状态回退到 idle 行(0),不取模去撞别的、存在的行', () => {
-    // rows=3 只够 idle/thinking/tool 三行;approval/success/error 的固有下标(3/4/5)越界。
-    // 取模会让 approval(3%3=0)撞 idle、success(4%3=1)撞 thinking——这里必须全部落回 0。
+    // rows=3 只够 idle(0)/run(2) 落在范围内;wave(1)存在但没有状态映射到它。
+    // approval(4)/success(5)/error(3) 的物理行号越界,取模会让它们各自撞到别的、
+    // 存在的行(如 error 4%3=1 撞 wave)——这里必须全部落回 0,不能取模。
     expect(spriteRowFor('approval', 3)).toBe(0)
     expect(spriteRowFor('success', 3)).toBe(0)
     expect(spriteRowFor('error', 3)).toBe(0)
     // 行内状态不受越界回退影响,仍取各自本来的行
     expect(spriteRowFor('idle', 3)).toBe(0)
-    expect(spriteRowFor('thinking', 3)).toBe(1)
+    expect(spriteRowFor('thinking', 3)).toBe(0)
     expect(spriteRowFor('tool', 3)).toBe(2)
   })
 })

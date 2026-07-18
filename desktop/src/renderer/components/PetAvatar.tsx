@@ -14,11 +14,21 @@ export interface PetAvatarProps {
   onPositionChange: (position: { x: number; y: number }) => void
 }
 
+// 拖拽手柄的高度:只占浮件顶部一条窄带,不是 inset-0 整块——锚点 bottom-3 right-4
+// 落在聊天列内,几何上会盖到 Composer 的发送/中断/审批控件,若手柄铺满整只宠物,
+// 点击会被当成拖拽而不是穿透到下面的按钮。窄带之外的区域(含图片/精灵本体)全部
+// pointer-events-none,点击照常穿透到 composer。
+const DRAG_HANDLE_HEIGHT = 22
+
+// 单张静态图片的紧凑固定尺寸上限(与精灵表 192×208 量级一致);精灵路径已有
+// 自己的固定 frameWidth/frameHeight,不走这个上限。
+const STATIC_IMAGE_MAX_PX = 112
+
 /**
  * 聊天列内的悬浮宠物浮件。绝对定位、展示用:外层 pointer-events-none,
- * 唯一可交互面是 data-testid="chat-pet-drag-handle" 的拖拽手柄——不在图片/精灵
- * 本体上挂任何事件,不发命令、不弹层、不发气泡/toast。拖动只即时改本地偏移,
- * pointer-up 才经 onPositionChange 落盘,并按 [-160,160] 逐轴 clamp。
+ * 唯一可交互面是 data-testid="chat-pet-drag-handle" 的拖拽手柄(仅顶部窄带)——
+ * 不在图片/精灵本体上挂任何事件,不发命令、不弹层、不发气泡/toast。拖动只即时
+ * 改本地偏移,pointer-up 才经 onPositionChange 落盘,并按 [-160,160] 逐轴 clamp。
  */
 export default function PetAvatar({ pet, state, prefs, onPositionChange }: PetAvatarProps): JSX.Element | null {
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
@@ -98,12 +108,19 @@ export default function PetAvatar({ pet, state, prefs, onPositionChange }: PetAv
           }}
         />
       ) : (
-        <img alt="" className={'pointer-events-none ' + motion.className} src={pet.previewUrl} />
+        <img
+          alt=""
+          className={'pointer-events-none object-contain ' + motion.className}
+          style={{ maxWidth: STATIC_IMAGE_MAX_PX, maxHeight: STATIC_IMAGE_MAX_PX }}
+          src={pet.previewUrl}
+        />
       )}
-      {/* 拖拽手柄:挂在外层,覆盖浮件可视区的唯一可交互层;事件永远落在手柄上而不是图片/精灵本体 */}
+      {/* 拖拽手柄:只占顶部一条窄带,而非整只宠物——其余区域(含图片/精灵本体)
+          pointer-events-none,点击穿透到下面可能几何重叠的 composer 控件。 */}
       <div
         data-testid="chat-pet-drag-handle"
-        className="pointer-events-auto absolute inset-0 cursor-grab active:cursor-grabbing"
+        className="pointer-events-auto absolute inset-x-0 top-0 cursor-grab active:cursor-grabbing"
+        style={{ height: DRAG_HANDLE_HEIGHT }}
         onPointerDown={onDragStart}
         onPointerMove={onDragMove}
         onPointerUp={onDragEnd}

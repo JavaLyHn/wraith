@@ -100,7 +100,15 @@ test('pets settings enables detected Noir and preserves chat geometry', async ()
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-pets-'))
   writeNoirFixture(petdexRoot)
 
-  const { app, win } = await launchApp({ WRAITH_E2E_USERDATA: userData, WRAITH_E2E_PETDEX_ROOT: petdexRoot })
+  // MOCK_NO_APPROVAL: this test submits a second message after the first completes
+  // (to exercise a real click on the send button, see below) — without it the first
+  // turn would hang in approval.requested and Send would stay disabled (running=true)
+  // forever, since nothing in this test responds to the approval.
+  const { app, win } = await launchApp({
+    WRAITH_E2E_USERDATA: userData,
+    WRAITH_E2E_PETDEX_ROOT: petdexRoot,
+    MOCK_NO_APPROVAL: '1',
+  })
 
   await win.locator('[data-testid="nav-settings"]').click()
   await win.locator('[data-testid="settings-nav-pets"]').click()
@@ -117,6 +125,19 @@ test('pets settings enables detected Noir and preserves chat geometry', async ()
   await input.fill('hi there')
   await input.press('Enter')
   await expect(win.locator('[data-testid="user-msg"]')).toHaveText('hi there', { timeout: 10000 })
+
+  // Real mouse click on the send button (not the Enter-key shortcut above): the pet's
+  // anchor (bottom-3 right-4) sits in this same relative chat column as the composer
+  // (App.tsx), so it geometrically overlaps the send button. Playwright's click does a
+  // hit-test at the button's center and clicks whatever element is actually on top —
+  // if the drag handle still covered the full pet (inset-0) instead of just its top
+  // band, this click would land on the handle and start a drag instead of submitting.
+  await input.fill('second message via click')
+  const sendButton = win.getByRole('button', { name: '发送', exact: true })
+  await expect(sendButton).toBeEnabled()
+  await sendButton.click()
+  await expect(win.locator('[data-testid="user-msg"]').nth(1)).toHaveText('second message via click', { timeout: 10000 })
+
   const transcript = win.locator('[data-testid="transcript"]')
   await expect(transcript).toBeVisible({ timeout: 10000 })
   const transcriptBox = await transcript.boundingBox()
