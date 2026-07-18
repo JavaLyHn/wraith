@@ -306,6 +306,7 @@ export default function App(): JSX.Element {
     const { sessionId, messages, model, modelFallback, cards } = await window.wraith.resumeSession(id)
     statusThrottleRef.current?.cancel()
     dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
+    dispatch({ kind: 'notification', method: 'context.reset', params: {} } as BackendEvent)
     dispatch({ type: 'setSessionId', sessionId })
     dispatch({ type: 'markResumed' })
     if (model) dispatch({ type: 'setModel', model })

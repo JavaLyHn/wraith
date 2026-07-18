@@ -123,6 +123,9 @@ export interface ContextObservability {
   } | null
 }
 
+/** `context` 切片的空白态——initialState/resetSession/`context.reset` 三处共用,防漂移。 */
+const CONTEXT_INITIAL: ContextObservability = { watermark: null, compactions: [], liveSummary: null, totalsFromSnapshot: null }
+
 export type Item =
   | { type: 'user'; text: string; attachments?: AttachmentRef[] }
   | { type: 'message'; text: string }
@@ -182,7 +185,7 @@ export const initialState: TranscriptState = {
   sessionId: '',
   sandbox: 'unknown',
   status: null,
-  context: { watermark: null, compactions: [], liveSummary: null, totalsFromSnapshot: null },
+  context: CONTEXT_INITIAL,
   _messageOpen: false,
 }
 
@@ -471,6 +474,11 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
         },
       }
     }
+    // 切会话整体清切片(commitSwitchTo 合成事件):防 compactions/liveSummary 跨会话残留
+    // ——context.snapshot 只覆盖 watermark/liveSummary/totals,不清 compactions,故需专门一枪清空。
+    case 'context.reset': {
+      return { ...state, context: CONTEXT_INITIAL }
+    }
 
     // ── plan mode 事件 ──────────────────────────────────────────────────────
     case 'plan.output': {
@@ -750,7 +758,7 @@ export function resetSession(state: TranscriptState, ws: string): TranscriptStat
     status: null,
     // resetSession 是逐字段部分重置（非整体回 initialState），context 切片须显式清零，
     // 否则旧会话的 watermark/compactions/liveSummary 会随 `...state` 悬挂到新会话。
-    context: { watermark: null, compactions: [], liveSummary: null, totalsFromSnapshot: null },
+    context: CONTEXT_INITIAL,
   }
 }
 

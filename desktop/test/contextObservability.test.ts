@@ -61,4 +61,13 @@ describe('context observability slice', () => {
     expect(s.context.watermark?.estimated).toBe(false)
     expect(s.context.watermark?.ratio).toBe(0.6)
   })
+
+  it('context.reset clears the whole slice (session switch)', () => {
+    let s = reducer(initialState, notif('context.compaction', {
+      tier: 1, beforeTokens: 100, afterTokens: 50, snipped: 1, pruned: 0, summarized: false, savedTokens: 50,
+    }))
+    s = reducer(s, notif('context.watermark', { usedTokens: 60, window: 100, ratio: 0.6, tier: 1 }))
+    s = reducer(s, notif('context.reset', {}))
+    expect(s.context).toEqual({ watermark: null, compactions: [], liveSummary: null, totalsFromSnapshot: null })
+  })
 })
