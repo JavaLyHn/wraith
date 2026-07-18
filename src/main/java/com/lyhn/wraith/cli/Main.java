@@ -1259,54 +1259,10 @@ public class Main {
                     }
                     public java.util.Map<String, Object> contextState() {
                         java.util.Map<String, Object> m = agent.contextStateCore();
-                        // 会话累计以 metrics JSONL 为准(覆盖重启前轮次;in-process 行也在文件里)
-                        sessionStore.artifactDir().ifPresent(dir -> {
-                            java.nio.file.Path f = dir.resolve("context-metrics.jsonl");
-                            if (!java.nio.file.Files.isRegularFile(f)) return;
-                            try {
-                                long in = 0, out = 0, cached = 0;
-                                double costSum = 0;
-                                java.util.Set<String> currencies = new java.util.LinkedHashSet<>();
-                                com.fasterxml.jackson.databind.ObjectMapper om =
-                                        new com.fasterxml.jackson.databind.ObjectMapper();
-                                com.fasterxml.jackson.databind.JsonNode last = null;
-                                for (String line : java.nio.file.Files.readAllLines(f)) {
-                                    if (line.isBlank()) continue;
-                                    try {
-                                        com.fasterxml.jackson.databind.JsonNode n = om.readTree(line);
-                                        if (n.has("compaction")) continue;   // 压缩行不计入 usage 累计
-                                        in += n.path("inputTokens").asLong(0);
-                                        out += n.path("outputTokens").asLong(0);
-                                        cached += n.path("cachedInputTokens").asLong(0);
-                                        if (n.has("cost")) {
-                                            costSum += n.path("cost").asDouble(0);
-                                            currencies.add(n.path("currency").asText(""));
-                                        }
-                                        last = n;
-                                    } catch (Exception ignored) { /* 坏行跳过 */ }
-                                }
-                                if (last != null) {
-                                    m.put("inputTokens", in);
-                                    m.put("outputTokens", out);
-                                    m.put("cachedInputTokens", cached);
-                                    m.put("ratio", last.path("ratio").asDouble(0));
-                                    m.put("tier", last.path("tier").asInt(0));
-                                    m.put("estimated", false);   // 有真实 usage 尾行,水位不再是纯估算
-                                    // 成本以 JSONL 累计为准(重启后 in-process stats 归零,防"$0.0000"误显);
-                                    // 零条 cost 行或混币口径不一致 → 缺席优于伪造(StatusChip 条件渲染自动隐藏)
-                                    if (currencies.size() == 1 && costSum > 0) {
-                                        String currency = currencies.iterator().next();
-                                        String symbol = "USD".equalsIgnoreCase(currency) ? "$" : "¥";
-                                        m.put("estimatedCost", symbol
-                                                + String.format(java.util.Locale.ROOT, "%.4f", costSum));
-                                    } else {
-                                        m.remove("estimatedCost");
-                                    }
-                                }
-                            } catch (Exception e) {
-                                // 聚合失败不影响快照主体
-                            }
-                        });
+                        long window = m.get("contextWindow") instanceof Number n ? n.longValue() : 0L;
+                        sessionStore.artifactDir().ifPresent(dir ->
+                                com.lyhn.wraith.runtime.appserver.ContextStateAggregator.merge(
+                                        m, dir.resolve("context-metrics.jsonl"), window));
                         return m;
                     }
                     public java.util.List<com.lyhn.wraith.llm.LlmClient.Message> resume(String id) {
@@ -2164,6 +2120,8 @@ public class Main {
         registry.setProjectPath(root == null || root.isBlank()
                 ? Path.of(".").toAbsolutePath().normalize().toString() : root);
         Agent agent = new Agent(llmClient, registry);
+        agent.setPricingTable(new com.lyhn.wraith.context.PricingTable(
+                com.lyhn.wraith.config.WraithConfig.load().getPricing()));
         return agent.run(prompt);
     }
 
