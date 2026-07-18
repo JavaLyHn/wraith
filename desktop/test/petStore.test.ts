@@ -173,6 +173,10 @@ describe('petStore', () => {
     await expect(previewDataUrl({ userDataDir, petdexRoot, id: 'missing' })).resolves.toBeNull()
   })
 
+  it('returns null rather than a filesystem path when preview id is unknown', async () => {
+    await expect(previewDataUrl({ userDataDir, petdexRoot, id: 'not-installed' })).resolves.toBeNull()
+  })
+
   it('rejects a preview when its imported asset becomes a symlink or exceeds the byte limit', async () => {
     const source = path.join(root, 'preview.png'); fs.writeFileSync(source, png())
     const imported = await importStaticImage({ userDataDir, sourcePath: source })

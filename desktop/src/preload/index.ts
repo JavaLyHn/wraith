@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
+import type { PetView, PetImportResult } from '../shared/pets'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -148,6 +149,12 @@ export interface WraithApi {
   ptyKill(id: string): Promise<void>
   onPtyData(cb: (p: { id: string; data: string }) => void): () => void
   onPtyExit(cb: (p: { id: string; code: number }) => void): () => void
+  /** 宠物库:窄 IPC——只有这 5 个方法,没有任意文件读/目录列举/shell。 */
+  petsList(): Promise<{ pets: PetView[] }>
+  petsImportImage(): Promise<PetImportResult>
+  petsImportPackage(): Promise<PetImportResult>
+  petsRemove(id: string): Promise<{ ok: boolean }>
+  petsPreview(id: string): Promise<string | null>
 }
 
 const wraith: WraithApi = {
@@ -596,6 +603,22 @@ const wraith: WraithApi = {
     const l = (_e: Electron.IpcRendererEvent, p: { id: string; code: number }) => cb(p)
     ipcRenderer.on('wraith:pty-exit', l)
     return () => { ipcRenderer.removeListener('wraith:pty-exit', l) }
+  },
+
+  petsList() {
+    return ipcRenderer.invoke('wraith:petsList') as Promise<{ pets: PetView[] }>
+  },
+  petsImportImage() {
+    return ipcRenderer.invoke('wraith:petsImportImage') as Promise<PetImportResult>
+  },
+  petsImportPackage() {
+    return ipcRenderer.invoke('wraith:petsImportPackage') as Promise<PetImportResult>
+  },
+  petsRemove(id) {
+    return ipcRenderer.invoke('wraith:petsRemove', id) as Promise<{ ok: boolean }>
+  },
+  petsPreview(id) {
+    return ipcRenderer.invoke('wraith:petsPreview', id) as Promise<string | null>
   },
 }
 

@@ -35,6 +35,8 @@ import { PtyManager } from './pty'
 import type { GatewayEvent } from '../shared/gateway'
 import { shouldDismissSplash, buildSplashHtml, SPLASH_EXIT_MS } from './splash'
 import { SPLASH_LOGO_DATA_URI } from './splashLogo'
+import { listPets, importStaticImage, importPackage, removeImportedPet, previewDataUrl } from './petStore'
+import type { PetImportResult } from '../shared/pets'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -450,6 +452,60 @@ ipcMain.handle('wraith:readImageDataUrl', async (_e, filePath: string) => {
     return null
   }
 })
+
+// 宠物库:Petdex(只读,~/.codex/pets)与导入副本(userData/pets/imported)的窄 IPC 暴露面。
+// 只经 petStore 的 5 个已校验函数;不透出任意文件读、目录列举或原始文件系统路径。
+function petdexRoot(): string {
+  return path.join(os.homedir(), '.codex', 'pets')
+}
+
+async function importPetImageFromDialog(win: BrowserWindow | null, userDataDir: string): Promise<PetImportResult> {
+  const options: Electron.OpenDialogOptions = {
+    properties: ['openFile'],
+    filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+  }
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
+  if (result.canceled || result.filePaths.length === 0) return { pet: null, error: null }
+  try {
+    const pet = await importStaticImage({ userDataDir, sourcePath: result.filePaths[0]! })
+    return { pet, error: null }
+  } catch (error) {
+    return { pet: null, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+async function importPetPackageFromDialog(win: BrowserWindow | null, userDataDir: string): Promise<PetImportResult> {
+  const zipOptions: Electron.OpenDialogOptions = {
+    properties: ['openFile'],
+    filters: [{ name: 'ZIP 宠物包', extensions: ['zip'] }],
+  }
+  let result = win ? await dialog.showOpenDialog(win, zipOptions) : await dialog.showOpenDialog(zipOptions)
+  if (result.canceled || result.filePaths.length === 0) {
+    // ZIP 选择器被取消 → 回落到目录选择器(文件夹形态的宠物包无扩展名可过滤)。
+    const dirOptions: Electron.OpenDialogOptions = { properties: ['openDirectory'] }
+    result = win ? await dialog.showOpenDialog(win, dirOptions) : await dialog.showOpenDialog(dirOptions)
+  }
+  if (result.canceled || result.filePaths.length === 0) return { pet: null, error: null }
+  try {
+    const pet = await importPackage({ userDataDir, sourcePath: result.filePaths[0]! })
+    return { pet, error: null }
+  } catch (error) {
+    return { pet: null, error: error instanceof Error ? error.message : String(error) }
+  }
+}
+
+ipcMain.handle('wraith:petsList', async () => ({
+  pets: await listPets({ userDataDir: app.getPath('userData'), petdexRoot: petdexRoot() }),
+}))
+ipcMain.handle('wraith:petsImportImage', async () => importPetImageFromDialog(mainWindow, app.getPath('userData')))
+ipcMain.handle('wraith:petsImportPackage', async () => importPetPackageFromDialog(mainWindow, app.getPath('userData')))
+ipcMain.handle('wraith:petsRemove', async (_e, id: string) => {
+  await removeImportedPet({ userDataDir: app.getPath('userData'), id })
+  return { ok: true }
+})
+ipcMain.handle('wraith:petsPreview', (_e, id: string) =>
+  previewDataUrl({ userDataDir: app.getPath('userData'), petdexRoot: petdexRoot(), id })
+)
 
 ipcMain.handle(
   'wraith:respondApproval',
