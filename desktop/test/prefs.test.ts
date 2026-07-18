@@ -35,7 +35,7 @@ describe('loadPrefs', () => {
     })
   })
 
-  it('将非法宠物偏好回落为默认值，并钳制有效位置', () => {
+  it('将非法宠物偏好和越界位置回落为默认值', () => {
     expect(loadPrefs(() => JSON.stringify({
       pets: {
         enabled: 'yes',
@@ -46,7 +46,7 @@ describe('loadPrefs', () => {
       },
     })).pets).toEqual({
       ...DEFAULT_PREFS.pets,
-      position: { x: 0, y: -160 },
+      position: { x: 0, y: 0 },
     })
   })
 
@@ -56,11 +56,11 @@ describe('loadPrefs', () => {
     })).pets).toMatchObject({ enabled: false, scale: 1.5, position: { x: -160, y: 160 } })
   })
 
-  it('将过小缩放和非有限位置回落默认，并钳制有限位置', () => {
+  it('将过小缩放、越界和非有限位置回落默认', () => {
     const raw = '{"pets":{"scale":0.74,"position":{"x":161,"y":1e400}}}'
     expect(loadPrefs(() => raw).pets).toMatchObject({
       scale: DEFAULT_PREFS.pets.scale,
-      position: { x: 160, y: 0 },
+      position: { x: 0, y: 0 },
     })
   })
 })
@@ -81,6 +81,6 @@ describe('normalizePetPrefs', () => {
       ...DEFAULT_PREFS.pets,
       scale: 4,
       position: { x: -200, y: Number.POSITIVE_INFINITY },
-    })).toEqual({ ...DEFAULT_PREFS.pets, position: { x: -160, y: 0 } })
+    })).toEqual(DEFAULT_PREFS.pets)
   })
 })

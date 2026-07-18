@@ -38,8 +38,8 @@ function oneOf<T>(v: unknown, allowed: T[], dflt: T): T {
 function normalizedPosition(value: unknown): PetPrefs['position'] {
   const position = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   const normalize = (coordinate: unknown, fallback: number): number =>
-    typeof coordinate === 'number' && Number.isFinite(coordinate)
-      ? Math.max(-160, Math.min(160, coordinate))
+    typeof coordinate === 'number' && Number.isFinite(coordinate) && coordinate >= -160 && coordinate <= 160
+      ? coordinate
       : fallback
   return {
     x: normalize(position.x, DEFAULT_PREFS.pets.position.x),
