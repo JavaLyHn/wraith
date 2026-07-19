@@ -13,6 +13,11 @@ export interface PetSpriteProps {
    * 供 PetWindowApp(Task 8 点击穿透)独立反算指针命中的 sheet 像素时定位当前帧,
    * 不必读取本组件任何内部 ref/state(canvas ImageData 等仍完全私有)。 */
   onFrame?: (frame: number) => void
+  /** 水平朝向:1=原朝向(右)、-1=水平镜像(左)。拖动时按拖动方向翻转,让宠物"向左/
+   * 向右奔跑"。翻转的 transform 施加在**非动画的根层**(data-testid="pet-sprite"),
+   * 与内层动画 className 各占各的 transform,不会互相覆盖(CSS 动画独占 transform)。
+   * 仅拖动期间用(拖动中命中测试已挂起),静息恒为 1,故不影响点击穿透的命中反算。 */
+  facing?: number
 }
 
 // 精灵表逐格 alpha 采样步长与阈值:一次性检测每行真实帧数用,越大越快、越小越准;
@@ -32,7 +37,7 @@ const ALPHA_THRESHOLD = 16
  * 反算公式见 shared/petWindow.ts 的 spriteHitPixel,必须和这里的渲染盒子保持同一套
  * 换算,否则命中会跟视觉画面对不上)。
  */
-export default function PetSprite({ previewUrl, sprite, state, motion: motionStyle, scale, onFrame }: PetSpriteProps): JSX.Element {
+export default function PetSprite({ previewUrl, sprite, state, motion: motionStyle, scale, onFrame, facing = 1 }: PetSpriteProps): JSX.Element {
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
   const anim = motionFor(state, motionStyle, reduced)
 
@@ -131,7 +136,7 @@ export default function PetSprite({ previewUrl, sprite, state, motion: motionSty
   const capRatio = imgSize ? containScale(imgSize.w, imgSize.h, STATIC_IMAGE_MAX_PX) : null
 
   return (
-    <div data-testid="pet-sprite">
+    <div data-testid="pet-sprite" style={{ transform: `scaleX(${facing})` }}>
       {!previewUrl ? null : sprite ? (
         <div
           aria-hidden="true"

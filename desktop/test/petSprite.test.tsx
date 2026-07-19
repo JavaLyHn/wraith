@@ -38,6 +38,21 @@ describe('PetSprite', () => {
     expect(match![2]).toBe(expectedY)
   })
 
+  it('facing 施加在非动画的根层:默认 scaleX(1),facing=-1 水平镜像 scaleX(-1)', () => {
+    // 翻转必须在根层(data-testid="pet-sprite"),不能和内层动画 className 抢 transform。
+    const { rerender } = render(
+      <PetSprite previewUrl="data:image/png;base64,AAAA" sprite={SPRITE} state="tool" motion="calm" scale={1} />
+    )
+    expect(screen.getByTestId('pet-sprite').style.transform).toBe('scaleX(1)')
+    rerender(
+      <PetSprite previewUrl="data:image/png;base64,AAAA" sprite={SPRITE} state="tool" motion="calm" scale={1} facing={-1} />
+    )
+    expect(screen.getByTestId('pet-sprite').style.transform).toBe('scaleX(-1)')
+    // 翻转在根层;动画 class 仍在内层,二者不互相覆盖
+    const cel = screen.getByTestId('pet-sprite').querySelector('[aria-hidden="true"]') as HTMLElement
+    expect(cel.style.transform).toBe('') // 内层不带 inline transform(动画 transform 由 CSS keyframes 提供)
+  })
+
   it('scale=1.5(精灵路径)→ 宽/高、backgroundSize、backgroundPosition(行+列)全部按 1.5 缩放', () => {
     // 回归锁:scale=1 时 row*frameHeight 恰好等于 row*frameHeight*scale,乘 scale 这一步会被
     // "巧合地"掩盖过去——必须在 scale≠1 时断言才能真正锁住 *scale 乘法(Task 8 code review flag)。

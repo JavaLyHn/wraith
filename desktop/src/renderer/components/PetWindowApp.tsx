@@ -79,6 +79,14 @@ export default function PetWindowApp(): JSX.Element {
   // 滚轮缩放节流:同一 rAF 内的重复 wheel 事件直接丢弃(而不是排队到下一帧才发),
   // 避免触控板连续触发的高频 wheel 把 IPC 刷爆。
   const wheelPendingRef = useRef(false)
+  // 拖动朝向:按拖动水平方向让宠物"向左/向右奔跑"。dragFacing 进 state(1=右/-1=左/
+  // null=非拖动)以触发重渲染,但只在方向翻转时 setState(不是每次 pointermove);
+  // dragDirRef 供高频 handler 比较、避免读到过期闭包;lastDragXRef 记上次判定落点的
+  // screenX,水平位移超阈值才判定新方向并更新落点(消抖,防原地微动来回翻)。
+  const [dragFacing, setDragFacing] = useState<number | null>(null)
+  const dragDirRef = useRef<number | null>(null)
+  const lastDragXRef = useRef(0)
+  const DRAG_FLIP_THRESHOLD_PX = 3
 
   useEffect(() => {
     window.wraithPet.ready()
@@ -222,11 +230,26 @@ export default function PetWindowApp(): JSX.Element {
     if (e.button !== 0) return
     draggingRef.current = true
     grabRef.current = { dx: e.screenX - window.screenX, dy: e.screenY - window.screenY }
+    // 拖动一开始先按原朝向(右)播 run,方向随后由 pointermove 的水平位移确定。
+    dragDirRef.current = 1
+    lastDragXRef.current = e.screenX
+    setDragFacing(1)
     e.currentTarget.setPointerCapture(e.pointerId)
   }, [])
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!draggingRef.current) return
+    // 水平位移超阈值才判定方向(消抖):向左(dx<0)镜像为 -1,向右为 1;只在方向真正
+    // 翻转时 setState,高频 pointermove 期间不无谓重渲染。
+    const dx = e.screenX - lastDragXRef.current
+    if (Math.abs(dx) >= DRAG_FLIP_THRESHOLD_PX) {
+      lastDragXRef.current = e.screenX
+      const dir = dx < 0 ? -1 : 1
+      if (dir !== dragDirRef.current) {
+        dragDirRef.current = dir
+        setDragFacing(dir)
+      }
+    }
     window.wraithPet.moveTo(e.screenX - grabRef.current.dx, e.screenY - grabRef.current.dy)
   }, [])
 
@@ -239,6 +262,8 @@ export default function PetWindowApp(): JSX.Element {
   // (capture 已经丢失时 release 本身是无害的空操作,用 try/catch 兜底跨浏览器差异)。
   const resetDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     draggingRef.current = false
+    dragDirRef.current = null
+    setDragFacing(null) // 拖动结束回到原朝向(右),run 停,恢复按会话状态显示
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* 已丢失/已释放,无害 */ }
   }, [])
 
@@ -279,10 +304,14 @@ export default function PetWindowApp(): JSX.Element {
       <PetSprite
         previewUrl={preview?.previewUrl ?? null}
         sprite={preview?.sprite ?? null}
-        state={state}
+        // 拖动期间覆盖为 'tool'(→run 行 row2),让宠物"奔跑";facing 按拖动方向翻转
+        // (向左镜像),于是有"向左奔跑 / 向右奔跑"两向。拖动结束(dragFacing=null)
+        // 恢复按真实会话状态显示、朝向复位为右。
+        state={dragFacing !== null ? 'tool' : state}
         motion={config?.motion ?? 'calm'}
         onFrame={handleFrame}
         scale={config?.scale ?? 1}
+        facing={dragFacing ?? 1}
       />
     </div>
   )
