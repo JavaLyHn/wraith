@@ -40,6 +40,7 @@ import { shouldDismissSplash, buildSplashHtml, SPLASH_EXIT_MS } from './splash'
 import { SPLASH_LOGO_DATA_URI } from './splashLogo'
 import { listPets, importStaticImage, importPackage, removeImportedPet, previewDataUrl } from './petStore'
 import type { PetImportResult } from '../shared/pets'
+import { initPetWindow, syncPetWindow, destroyPetWindow, getPetWindow } from './petWindow'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -549,7 +550,7 @@ ipcMain.handle('pet:getConfig', () => readPetConfig(app.getPath('userData')))
 ipcMain.handle('pet:setConfig', (_e, patch: Partial<PetConfig>) => {
   const next = writePetConfig(app.getPath('userData'), patch)
   broadcastPetConfig(next)
-  // TODO(Task6): syncPetWindow(next)
+  void syncPetWindow(next)
   return next
 })
 
@@ -1320,6 +1321,16 @@ app.whenReady().then(() => {
       showMainWindow()
     }
   })
+
+  // 桌宠:全局常驻窗口装配 + 首次按当前配置同步(E2E 下也走,以便 Task 10 e2e 断言第二窗出现;
+  // reduced-motion/穿透等手工眼验覆盖)。initPetWindow 只记依赖,syncPetWindow 异步查可用宠物再决定增删。
+  initPetWindow({
+    userDataDir: () => app.getPath('userData'),
+    petdexRoot: () => petdexRoot(),
+    preloadPath: path.join(__dirname, '../preload/pet.cjs'),
+    primaryWorkArea: () => screen.getPrimaryDisplay().workArea,
+  })
+  void syncPetWindow(readPetConfig(app.getPath('userData')))
 })
 
 app.on('window-all-closed', () => {
@@ -1349,6 +1360,11 @@ app.on('will-quit', () => {
   }
   try {
     ptyManager?.killAll()
+  } catch {
+    // best-effort
+  }
+  try {
+    destroyPetWindow()
   } catch {
     // best-effort
   }
