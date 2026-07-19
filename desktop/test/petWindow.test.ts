@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isOpaqueAt, stepScale, clampToDisplay, defaultPetPosition, buildPetMenuTemplate, spriteHitPixel, containScale } from '../src/shared/petWindow'
+import { isOpaqueAt, stepScale, clampScale, clampToDisplay, defaultPetPosition, buildPetMenuTemplate, spriteHitPixel, containScale } from '../src/shared/petWindow'
 import type { PetView } from '../src/shared/pets'
 
 describe('isOpaqueAt', () => {
@@ -22,6 +22,16 @@ describe('stepScale', () => {
     expect(stepScale(1, 100)).toBeCloseTo(0.9)
     expect(stepScale(0.5, 100)).toBe(0.5)
     expect(stepScale(2.0, -100)).toBe(2.0)
+  })
+})
+
+describe('clampScale', () => {
+  // 触控板捏合(gesturechange)= 起始缩放 × e.scale,再经 clampScale 夹取。
+  it('夹到 [0.5,2.0] 并四舍五入两位小数', () => {
+    expect(clampScale(1 * 1.333)).toBe(1.33) // 放大到 1.33
+    expect(clampScale(1 * 0.4)).toBe(0.5)     // 捏到超下限 → 0.5
+    expect(clampScale(1 * 3)).toBe(2.0)       // 张到超上限 → 2.0
+    expect(clampScale(1.5)).toBe(1.5)
   })
 })
 

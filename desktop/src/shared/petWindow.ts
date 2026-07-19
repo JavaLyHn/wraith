@@ -59,9 +59,15 @@ export function spriteHitPixel(
   }
 }
 
+// 缩放夹取:夹到 [min,max] 并四舍五入到两位小数(消抖)。滚轮步进(stepScale)与
+// 触控板捏合手势(PetWindowApp 的 gesturechange:起始缩放 × e.scale)共用同一夹取,
+// [0.5,2.0] 只此一处定义。
+export function clampScale(value: number, min = 0.5, max = 2.0): number {
+  return Math.min(max, Math.max(min, Math.round(value * 100) / 100))
+}
+
 export function stepScale(current: number, deltaY: number, min = 0.5, max = 2.0, step = 0.1): number {
-  const next = current + (deltaY < 0 ? step : -step)
-  return Math.min(max, Math.max(min, Math.round(next * 100) / 100))
+  return clampScale(current + (deltaY < 0 ? step : -step), min, max)
 }
 
 export function clampToDisplay(box: Box, workArea: Box): Box {

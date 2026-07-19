@@ -5,7 +5,7 @@ import type { PetSprite as PetSpriteType, PetState } from '../../shared/pets'
 import type { PetStateSignal } from '../../shared/petState'
 import { nextPetState, TRANSIENT_MS } from '../../shared/petState'
 import { spriteRowFor } from '../lib/petMotion'
-import { isOpaqueAt, spriteHitPixel, containScale, STATIC_IMAGE_MAX_PX, stepScale } from '../../shared/petWindow'
+import { isOpaqueAt, spriteHitPixel, containScale, STATIC_IMAGE_MAX_PX, stepScale, clampScale } from '../../shared/petWindow'
 
 interface PreviewState {
   previewUrl: string | null
@@ -181,6 +181,34 @@ export default function PetWindowApp(): JSX.Element {
     }
     window.addEventListener('mousemove', onMove)
     return () => window.removeEventListener('mousemove', onMove)
+  }, [])
+
+  // macOS 触控板捏合缩放:Chromium/Electron 把触控板捏合派发为 gesturestart/change/end
+  // (带累积倍率 e.scale),而非 wheel——所以两指上下滑动(wheel→handleWheel)能缩放,
+  // 但捏合此前无人接、毫无反应。这里补上:gesturestart 记住起始缩放,gesturechange 用
+  // 起始 × e.scale 经 clampScale 夹到 [0.5,2.0] 后 setScale;与滚轮共用 wheelPendingRef
+  // 做每帧≤1 次 IPC 节流,拖动期间(draggingRef)让位。手势事件与 wheel 一样只在窗口
+  // 捕获态(光标压在不透明像素上)才到达——真机已确认该态下滚轮缩放/拖动均正常。
+  useEffect(() => {
+    let base = 1
+    const onStart = (e: Event): void => { e.preventDefault(); base = scaleRef.current }
+    const onChange = (e: Event): void => {
+      e.preventDefault()
+      if (draggingRef.current || wheelPendingRef.current) return
+      wheelPendingRef.current = true
+      requestAnimationFrame(() => { wheelPendingRef.current = false })
+      const scale = (e as unknown as { scale?: number }).scale ?? 1
+      window.wraithPet.setScale(clampScale(base * scale))
+    }
+    const onEnd = (e: Event): void => { e.preventDefault() }
+    window.addEventListener('gesturestart', onStart)
+    window.addEventListener('gesturechange', onChange)
+    window.addEventListener('gestureend', onEnd)
+    return () => {
+      window.removeEventListener('gesturestart', onStart)
+      window.removeEventListener('gesturechange', onChange)
+      window.removeEventListener('gestureend', onEnd)
+    }
   }, [])
 
   // 全身拖动(Task 9):按下时记 grabDX/DY = 指针 - 窗口左上角(均为 screen 坐标),
