@@ -63,12 +63,16 @@ export function initPetWindow(d: PetWindowDeps): void {
 /** 建窗:以 createSplash() 为蓝本,失败(任何异常)即吞掉、保持无桌宠,绝不抛出。 */
 function createPetWindow(config: PetConfig): void {
   if (!deps) return
+  // win 提到 try 外层声明,使 catch 块在"已构造出原生窗、后续某个 setter 才抛"的
+  // 中途失败场景下也拿得到引用去 destroy() 它,避免泄漏一个既不在 petWindow 里、
+  // 也再没人能关掉的原生窗口。
+  let win: BrowserWindow | null = null
   try {
     const size = scaledPetSize(config.scale)
     const wa = deps.primaryWorkArea()
     const pos = config.position ?? defaultPetPosition(wa, size)
     const b = clampToDisplay({ ...pos, ...size }, wa)
-    const win = new BrowserWindow({
+    win = new BrowserWindow({
       x: b.x, y: b.y, width: b.width, height: b.height,
       frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
       resizable: false, movable: false, skipTaskbar: true, focusable: false, fullscreenable: false,
@@ -88,13 +92,22 @@ function createPetWindow(config: PetConfig): void {
     }
 
     win.once('ready-to-show', () => {
-      if (!win.isDestroyed()) win.show()
+      if (win && !win.isDestroyed()) win.show()
     })
     win.on('closed', () => {
-      petWindow = null
+      // 身份校验:destroy→create 快速切换时,Electron close() 是异步的,旧窗(win)
+      // 迟到的 closed 事件不能无条件清空——此时 petWindow 可能已经指向新窗了。
+      // 只有"我(win)仍是当前那扇窗"时才清空,否则会把新窗的引用误清成 null,
+      // 造成新窗变孤儿(destroyPetWindow 关不到它,syncPetWindow 又误判无窗再建)。
+      if (petWindow === win) petWindow = null
     })
   } catch {
-    // 建窗失败:降级为无桌宠,绝不阻塞应用其余部分
+    // 建窗失败(含构造成功但后续 setter 抛异常的中途失败):降级为无桌宠,
+    // 绝不阻塞应用其余部分。若原生窗已经构造出来,必须显式 destroy() 掉,
+    // 否则会在 petWindow 引用之外泄漏一个再也管不到的 OS 级窗口。
+    if (win) {
+      try { win.destroy() } catch { /* best-effort */ }
+    }
     petWindow = null
   }
 }

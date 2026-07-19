@@ -6,4 +6,8 @@ describe('petHtmlTarget', () => {
     expect(petHtmlTarget('http://localhost:5873', '/x/out/main')).toEqual({ url: 'http://localhost:5873/pet.html' })
     expect(petHtmlTarget(undefined, '/x/out/main')).toEqual({ file: '/x/out/renderer/pet.html' })
   })
+
+  it('去掉 URL 尾部斜杠再拼接,不产生双斜杠', () => {
+    expect(petHtmlTarget('http://localhost:5873/', '/x/out/main')).toEqual({ url: 'http://localhost:5873/pet.html' })
+  })
 })
