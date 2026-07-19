@@ -4,7 +4,7 @@ import type { PetConfig } from '../../main/settings'
 import type { PetSprite as PetSpriteType, PetState } from '../../shared/pets'
 import type { PetStateSignal } from '../../shared/petState'
 import { nextPetState, TRANSIENT_MS } from '../../shared/petState'
-import { spriteRowFor } from '../lib/petMotion'
+import { spriteRowFor, RUN_RIGHT_ROW, RUN_LEFT_ROW } from '../lib/petMotion'
 import { isOpaqueAt, spriteHitPixel, containScale, STATIC_IMAGE_MAX_PX, stepScale, clampScale } from '../../shared/petWindow'
 
 interface PreviewState {
@@ -291,6 +291,13 @@ export default function PetWindowApp(): JSX.Element {
     window.wraithPet.contextMenu()
   }, [])
 
+  // 拖动方向奔跑:精灵表若有左右行(rows>2),直接播 Run Right(1)/Run Left(2)真行——
+  // 比 scaleX 镜像更准(左右两向本就分绘)。单图或无左右行的表才回退 scaleX 镜像。
+  const dragging = dragFacing !== null
+  const hasRunRows = !!preview?.sprite && preview.sprite.rows > RUN_LEFT_ROW
+  const dragRowOverride = dragging && hasRunRows ? (dragFacing === -1 ? RUN_LEFT_ROW : RUN_RIGHT_ROW) : null
+  const spriteFacing = dragging && dragRowOverride === null ? (dragFacing ?? 1) : 1
+
   return (
     <div
       onPointerDown={handlePointerDown}
@@ -304,14 +311,15 @@ export default function PetWindowApp(): JSX.Element {
       <PetSprite
         previewUrl={preview?.previewUrl ?? null}
         sprite={preview?.sprite ?? null}
-        // 拖动期间覆盖为 'tool'(→run 行 row2),让宠物"奔跑";facing 按拖动方向翻转
-        // (向左镜像),于是有"向左奔跑 / 向右奔跑"两向。拖动结束(dragFacing=null)
-        // 恢复按真实会话状态显示、朝向复位为右。
-        state={dragFacing !== null ? 'tool' : state}
+        // 拖动期间:state='tool' 给一个奔跑节奏的动效时长(帧循环速度),真正的方向行由
+        // rowOverride 决定(Run Right/Left 真帧);无左右行的表/单图则 rowOverride=null、
+        // 用 spriteFacing 做 scaleX 镜像兜底。拖动结束恢复按真实会话状态显示、朝向复位。
+        state={dragging ? 'tool' : state}
         motion={config?.motion ?? 'calm'}
         onFrame={handleFrame}
         scale={config?.scale ?? 1}
-        facing={dragFacing ?? 1}
+        facing={spriteFacing}
+        rowOverride={dragRowOverride}
       />
     </div>
   )

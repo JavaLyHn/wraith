@@ -18,6 +18,9 @@ export interface PetSpriteProps {
    * 与内层动画 className 各占各的 transform,不会互相覆盖(CSS 动画独占 transform)。
    * 仅拖动期间用(拖动中命中测试已挂起),静息恒为 1,故不影响点击穿透的命中反算。 */
   facing?: number
+  /** 显式指定精灵行(优先于按 state 的映射),用于拖动时直接播 Run Right(1)/Run Left(2)
+   * 真行——精灵表分绘了左右两向奔跑帧,比 scaleX 镜像更准。越界或 null 时回退状态映射。 */
+  rowOverride?: number | null
 }
 
 // 精灵表逐格 alpha 采样步长与阈值:一次性检测每行真实帧数用,越大越快、越小越准;
@@ -37,7 +40,7 @@ const ALPHA_THRESHOLD = 16
  * 反算公式见 shared/petWindow.ts 的 spriteHitPixel,必须和这里的渲染盒子保持同一套
  * 换算,否则命中会跟视觉画面对不上)。
  */
-export default function PetSprite({ previewUrl, sprite, state, motion: motionStyle, scale, onFrame, facing = 1 }: PetSpriteProps): JSX.Element {
+export default function PetSprite({ previewUrl, sprite, state, motion: motionStyle, scale, onFrame, facing = 1, rowOverride = null }: PetSpriteProps): JSX.Element {
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
   const anim = motionFor(state, motionStyle, reduced)
 
@@ -86,7 +89,11 @@ export default function PetSprite({ previewUrl, sprite, state, motion: motionSty
     return () => { alive = false }
   }, [sprite, previewUrl])
 
-  const row = sprite ? spriteRowFor(state, sprite.rows) : 0
+  // rowOverride(拖动方向奔跑传入 Run Right/Left 真行)优先于状态映射,但须在行数界内,
+  // 否则回退到按状态映射的行(与无 override 一致)。
+  const row = sprite
+    ? (rowOverride != null && rowOverride >= 0 && rowOverride < sprite.rows ? rowOverride : spriteRowFor(state, sprite.rows))
+    : 0
   const frameCount = sprite ? Math.max(1, frameCounts?.[row] ?? sprite.columns) : 1
 
   // 精灵表帧动画:仅在允许动效且确有精灵表时用 rAF 推进当前行内的真实帧;

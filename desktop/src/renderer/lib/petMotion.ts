@@ -6,19 +6,25 @@ export interface PetMotion {
   durationMs: number
 }
 
-// Petdex 兼容精灵包的行序(spec §精灵包):idle、wave、run、failed、review、jump——
-// 这是包本身的物理行号,与 PetState 的取名顺序无关。下表把 Wraith 状态映射到
-// spec §状态映射表规定的那一行:tool→run、approval→review、success→jump、
-// error→failed;thinking 没有专属行,回退 idle(0)。
+// Noir 精灵表的真实行语义(9 行,经真机核对,非早期 spec 假设的 idle/wave/run/failed/
+// review/jump 序——那个假设错了,曾导致 success 播 Failed、error 播 Waving 等全盘错位):
+//   0 Idle  1 RunRight  2 RunLeft  3 Waving  4 Jumping  5 Failed  6 Waiting  7 Running  8 Review
+// 下表把 Wraith 运行状态映射到语义最贴的行(拖动方向奔跑另用 RUN_RIGHT_ROW/RUN_LEFT_ROW,
+// 不经此表)。这套映射即 Wraith 认定的规范布局(Noir 是唯一参考 Petdex 宠物,其 manifest
+// 未声明行语义,故以其实际布局为准;自制精灵包须按此行序,否则动画会错位)。
 const STATE_ROW: Record<PetState, number> = {
-  idle: 0, // idle
-  thinking: 1, // wave——thinking 是一次 turn 的主要时段,若回退 idle(0)则与静息完全同帧,
-               // 用户看不出"正在思考/工作";映射到无状态占用的 wave 行,让"工作中"可见区别于 idle。
-  tool: 2, // run
-  approval: 4, // review
-  success: 5, // jump
-  error: 3, // failed
+  idle: 0,     // Idle——无活动
+  thinking: 3, // Waving——模型思考/生成中,挥手示意"在忙",明显区别 idle(thinking 占 turn 主时段)
+  tool: 7,     // Running——执行工具/命令,原地奔跑=正在干活
+  approval: 8, // Review——等待用户确认/审批,审阅姿态
+  success: 4,  // Jumping——turn 成功,欢跳
+  error: 5,    // Failed——失败/报错
 }
+
+/** 拖动方向奔跑用的规范行:向右拖播 Run Right(1),向左拖播 Run Left(2)。
+ * 精灵表本就分绘了左右两向奔跑帧,故直接用真行而非 scaleX 镜像(镜像是无左右行时的兜底)。 */
+export const RUN_RIGHT_ROW = 1
+export const RUN_LEFT_ROW = 2
 
 /**
  * 精灵包"行不存在时回退 idle,而不拒绝整个包"(spec §精灵包)的纯函数实现。

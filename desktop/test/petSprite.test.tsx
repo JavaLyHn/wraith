@@ -38,6 +38,17 @@ describe('PetSprite', () => {
     expect(match![2]).toBe(expectedY)
   })
 
+  it('rowOverride 优先于状态映射:state=idle 但 rowOverride=2 → 用行 2(Run Left)', () => {
+    // 拖动方向奔跑靠 rowOverride 直接指定真行,盖过 spriteRowFor(state)。
+    render(
+      <PetSprite previewUrl="data:image/png;base64,AAAA" sprite={SPRITE} state="idle" motion="calm" scale={1} rowOverride={2} />
+    )
+    const cel = screen.getByTestId('pet-sprite').querySelector('[aria-hidden="true"]') as HTMLElement
+    const match = cel.style.backgroundPosition.match(/^(-?\d+px)\s+(-?\d+px)$/)
+    expect(match).not.toBeNull()
+    expect(match![2]).toBe(`-${2 * SPRITE.frameHeight}px`) // 行 2,而非 idle 的行 0
+  })
+
   it('facing 施加在非动画的根层:默认 scaleX(1),facing=-1 水平镜像 scaleX(-1)', () => {
     // 翻转必须在根层(data-testid="pet-sprite"),不能和内层动画 className 抢 transform。
     const { rerender } = render(

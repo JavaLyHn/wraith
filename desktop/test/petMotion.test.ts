@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectFrameCounts, motionFor, selectedPet, spriteRowFor } from '../src/renderer/lib/petMotion'
+import { detectFrameCounts, motionFor, selectedPet, spriteRowFor, RUN_RIGHT_ROW, RUN_LEFT_ROW } from '../src/renderer/lib/petMotion'
 import type { PetView } from '../src/shared/pets'
 
 describe('motionFor', () => {
@@ -27,27 +27,32 @@ describe('motionFor', () => {
 })
 
 describe('spriteRowFor', () => {
-  it('按 spec §状态映射表映射到 Petdex 行序(idle/wave/run/failed/review/jump)', () => {
-    // Petdex 兼容布局行号:idle=0、wave=1、run=2、failed=3、review=4、jump=5。
-    expect(spriteRowFor('idle', 9)).toBe(0) // idle
-    expect(spriteRowFor('thinking', 9)).toBe(1) // wave——让"思考/工作中"可见,区别于 idle
-    expect(spriteRowFor('tool', 9)).toBe(2) // run
-    expect(spriteRowFor('approval', 9)).toBe(4) // review
-    expect(spriteRowFor('success', 9)).toBe(5) // jump
-    expect(spriteRowFor('error', 9)).toBe(3) // failed
+  it('按 Noir 真实行语义映射(0 Idle/3 Waving/7 Running/8 Review/4 Jumping/5 Failed)', () => {
+    // 真实 Noir 9 行:0 Idle,1 RunRight,2 RunLeft,3 Waving,4 Jumping,5 Failed,
+    // 6 Waiting,7 Running,8 Review(经真机核对,非早期 spec 假设的 idle/wave/run/…)。
+    expect(spriteRowFor('idle', 9)).toBe(0) // Idle
+    expect(spriteRowFor('thinking', 9)).toBe(3) // Waving——思考/生成中,可见区别 idle
+    expect(spriteRowFor('tool', 9)).toBe(7) // Running——执行工具/命令
+    expect(spriteRowFor('approval', 9)).toBe(8) // Review——等待确认/审批
+    expect(spriteRowFor('success', 9)).toBe(4) // Jumping——成功欢跳
+    expect(spriteRowFor('error', 9)).toBe(5) // Failed——失败
+  })
+
+  it('拖动方向奔跑的规范行常量:Run Right=1、Run Left=2', () => {
+    expect(RUN_RIGHT_ROW).toBe(1)
+    expect(RUN_LEFT_ROW).toBe(2)
   })
 
   it('行数不足时越界状态回退到 idle 行(0),不取模去撞别的、存在的行', () => {
-    // rows=3 只够 idle(0)/wave(1)/run(2) 落在范围内。
-    // approval(4)/success(5)/error(3) 的物理行号越界,取模会让它们各自撞到别的、
-    // 存在的行(如 error 3%3=0、success 5%3=2 撞 run)——这里必须全部落回 0,不能取模。
-    expect(spriteRowFor('approval', 3)).toBe(0)
-    expect(spriteRowFor('success', 3)).toBe(0)
-    expect(spriteRowFor('error', 3)).toBe(0)
-    // 行内状态不受越界回退影响,仍取各自本来的行
-    expect(spriteRowFor('idle', 3)).toBe(0)
-    expect(spriteRowFor('thinking', 3)).toBe(1) // wave 在 rows=3 界内
-    expect(spriteRowFor('tool', 3)).toBe(2)
+    // rows=4 只够 0..3 落在范围内:idle(0)/thinking→Waving(3) 在界内;
+    // tool→Running(7)/approval→Review(8)/success→Jumping(4)/error→Failed(5) 越界 → 全回落 0,
+    // 绝不取模(取模会让 success 5%4=1 撞 RunRight、error 5%4=1 等,读错别的行)。
+    expect(spriteRowFor('idle', 4)).toBe(0)
+    expect(spriteRowFor('thinking', 4)).toBe(3) // Waving 在 rows=4 界内
+    expect(spriteRowFor('tool', 4)).toBe(0)
+    expect(spriteRowFor('approval', 4)).toBe(0)
+    expect(spriteRowFor('success', 4)).toBe(0)
+    expect(spriteRowFor('error', 4)).toBe(0)
   })
 })
 
@@ -92,15 +97,16 @@ describe('selectedPet', () => {
 describe('detectFrameCounts', () => {
   // Petdex 精灵表是固定网格 + 透明列补齐:每行真实帧数 = 最后一个非空列 + 1,
   // 尾部透明列不能被当成帧循环,否则动画会周期性停在空白格 → 宠物"消失一段时间"。
-  // 数据取自真实 Noir 精灵表逐格 alpha 采样:idle 6 / wave 8 / run 8 / failed 4 / review 5 / jump 8。
+  // 数据取自真实 Noir 精灵表逐格 alpha 采样(行 0-5):Idle 6 / RunRight 8 / RunLeft 8 /
+  // Waving 4 / Jumping 5 / Failed 8(帧数与后 3 行 Waiting6/Running6/Review6 见真机图)。
   it('取每行最后一个非空列+1 作为真实帧数,丢弃尾部透明列', () => {
     const grid = [
-      [true, true, true, true, true, true, false, false], // idle: 6
-      [true, true, true, true, true, true, true, true],    // wave: 8
-      [true, true, true, true, true, true, true, true],    // run: 8
-      [true, true, true, true, false, false, false, false], // failed: 4
-      [true, true, true, true, true, false, false, false], // review: 5
-      [true, true, true, true, true, true, true, true],    // jump: 8
+      [true, true, true, true, true, true, false, false], // Idle: 6
+      [true, true, true, true, true, true, true, true],    // RunRight: 8
+      [true, true, true, true, true, true, true, true],    // RunLeft: 8
+      [true, true, true, true, false, false, false, false], // Waving: 4
+      [true, true, true, true, true, false, false, false], // Jumping: 5
+      [true, true, true, true, true, true, true, true],    // Failed: 8
     ]
     expect(detectFrameCounts(grid, 8)).toEqual([6, 8, 8, 4, 5, 8])
   })
