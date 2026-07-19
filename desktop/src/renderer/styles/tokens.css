@@ -215,19 +215,29 @@ html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180
 /* 工具面板内容区:宽视口下舒适定宽居中(头部仍全宽)。改宽度只改此处。 */
 .panel-content { width: 100%; max-width: 1040px; margin-inline: auto; }
 
-/* 首页 logo:环境柔光 + 入场一次闪光扫;悬停增强辉光 + 再扫一次 + 轻放大(动效仅 logo) */
+/* 首页 logo:环境柔光 + 每隔一段扫一道闪光(周期循环,而非只入场一次);
+   悬停增强辉光 + 立即扫一次 + 轻放大(动效仅 logo) */
 .welcome-logo { position: relative; display: inline-block; filter: drop-shadow(0 0 18px rgba(150,195,255,.28)); transition: filter .3s ease, transform .3s ease; }
 .welcome-logo:hover { filter: drop-shadow(0 0 34px rgba(150,195,255,.6)); transform: scale(1.05); }
 .welcome-logo::after {
   content: ''; position: absolute; inset: -8%; pointer-events: none; border-radius: 22%;
   background: linear-gradient(115deg, transparent 44%, rgba(255,255,255,.5) 49%, rgba(180,220,255,.55) 51%, transparent 57%);
   background-size: 240% 100%; opacity: 0;
-  animation: welcomeShine 1200ms ease-out 400ms 1;
+  /* 6s 一轮:约前 1.1s 扫一道光,其余 ~4.9s 透明停顿,如此循环 → "过一段时间闪一下"。 */
+  animation: welcomeShineLoop 6000ms ease-out 400ms infinite;
 }
+/* 悬停仍用完整单次扫光(welcomeShine 整程扫过,更明显),覆盖循环版。 */
 .welcome-logo:hover::after { animation: welcomeShine 900ms ease-out 1; }
 @keyframes welcomeShine {
   0% { background-position: 150% 0; opacity: 0; }
   15% { opacity: 1; } 85% { opacity: 1; }
+  100% { background-position: -60% 0; opacity: 0; }
+}
+@keyframes welcomeShineLoop {
+  0% { background-position: 150% 0; opacity: 0; }
+  3% { opacity: 1; }
+  15% { opacity: 1; }
+  18% { background-position: -60% 0; opacity: 0; }
   100% { background-position: -60% 0; opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .welcome-logo::after { animation: none; } }
