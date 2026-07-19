@@ -77,7 +77,11 @@ function createPetWindow(config: PetConfig): void {
     win = new BrowserWindow({
       x: b.x, y: b.y, width: b.width, height: b.height,
       frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
-      resizable: false, movable: false, skipTaskbar: true, focusable: false, fullscreenable: false,
+      // frameless 无边框窗本就没有用户可拖拽的缩放手柄,这里的 resizable 只影响
+      // Electron 是否接受程序化 setBounds 改尺寸——resizable:false 会让 setBounds
+      // 的尺寸变更被静默 no-op(Task 9 滚轮缩放的已知坑),必须开 true 才能生效;
+      // movable 维持 false 不受影响(setBounds 移动窗口本就不受 movable 限制)。
+      resizable: true, movable: false, skipTaskbar: true, focusable: false, fullscreenable: false,
       show: false,
       webPreferences: { contextIsolation: true, nodeIntegration: false, preload: deps.preloadPath },
     })
@@ -163,12 +167,19 @@ export function petWindowMoveTo(x: number, y: number): void {
   petWindow.setBounds(c)
 }
 
-/** 滚轮缩放(Task 9)落点:按新 scale 重新算窗口尺寸,保持当前左上角不动地 resize。 */
+/**
+ * 滚轮缩放(Task 9)落点:按新 scale 重新算窗口尺寸,保持当前左上角不动地 resize。
+ * resize 后再夹一次目标屏工作区(与 petWindowMoveTo 同一份 clampToDisplay)——
+ * 靠近屏幕边缘时放大,右/下边可能因为尺寸变大而越出工作区,需要再夹一次左上角,
+ * 否则窗口会被裁到屏外(视觉上像是"放大后卡在边缘")。
+ */
 export function petWindowResizeToScale(scale: number): void {
   if (!petWindow) return
   const b = petWindow.getBounds()
   const size = scaledPetSize(scale)
-  petWindow.setBounds({ x: b.x, y: b.y, ...size })
+  const wa = screen.getDisplayMatching(b).workArea
+  const c = clampToDisplay({ x: b.x, y: b.y, ...size }, wa)
+  petWindow.setBounds(c)
 }
 
 /**

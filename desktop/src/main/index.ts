@@ -667,10 +667,12 @@ function handlePetMenu(id: string): void {
   }
   if (id === 'pet:reset-position') {
     const userDataDir = app.getPath('userData')
-    writePetConfig(userDataDir, { position: null })
     const cfg = readPetConfig(userDataDir)
-    const pos = petWindowResetPosition(cfg.scale) // 挪窗 + 算出夹紧后的新默认位置
-    const next = writePetConfig(userDataDir, { position: pos })
+    petWindowResetPosition(cfg.scale) // 物理挪窗到默认位;返回值不落盘(见下)
+    // 落盘写 null 而不是这一刻算出的具体夹紧坐标——对齐 brief 语义:null 代表
+    // "跟随默认位"这件事本身,换了台显示器/分辨率后应当重新按新工作区推导默认位,
+    // 而不是把这一次刚好算出的坐标当成"用户手动摆放过"的固定位置钉死。
+    const next = writePetConfig(userDataDir, { position: null })
     broadcastPetConfig(next)
     pushPetConfig(next)
     return
@@ -686,11 +688,16 @@ function handlePetMenu(id: string): void {
 // popup({ window: undefined }) 仍能弹出(退化为不依附特定窗口)。
 ipcMain.on('pet:contextMenu', () => {
   void (async () => {
-    const userDataDir = app.getPath('userData')
-    const pets = await listPets({ userDataDir, petdexRoot: petdexRoot() })
-    const cfg = readPetConfig(userDataDir)
-    const template = toElectronMenu(buildPetMenuTemplate(pets, cfg), handlePetMenu)
-    Menu.buildFromTemplate(template).popup({ window: getPetWindow() ?? undefined })
+    try {
+      const userDataDir = app.getPath('userData')
+      const pets = await listPets({ userDataDir, petdexRoot: petdexRoot() })
+      const cfg = readPetConfig(userDataDir)
+      const template = toElectronMenu(buildPetMenuTemplate(pets, cfg), handlePetMenu)
+      Menu.buildFromTemplate(template).popup({ window: getPetWindow() ?? undefined })
+    } catch {
+      // best-effort(与本文件其余风格一致):listPets 读盘失败等场景下菜单弹不出来,
+      // 但绝不能让一次未捕获的 promise rejection 冒出去砸崩主进程。
+    }
   })()
 })
 

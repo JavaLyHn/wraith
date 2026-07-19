@@ -186,8 +186,12 @@ export default function PetWindowApp(): JSX.Element {
   // 全身拖动(Task 9):按下时记 grabDX/DY = 指针 - 窗口左上角(均为 screen 坐标),
   // setPointerCapture 保证后续 pointermove/pointerup 持续打到这个 div 上,即便窗口
   // 跟随指针移动导致指针"跑出"当前窗口范围(否则窗口一旦落后于指针,原生 hover-based
-  // 事件路由会直接丢事件,拖拽半途中断)。
+  // 事件路由会直接丢事件,拖拽半途中断)。只响应左键(e.button===0):右键要留给
+  // onContextMenu,中键/其余键不应该启动拖动——否则会跟右键菜单同时抢状态:
+  // draggingRef=true + 命中测试被挂起,而原生 Menu.popup() 抢走输入焦点后,这次
+  // pointerdown 对应的 pointerup 可能永远送不到这个 div,draggingRef 卡死在 true。
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
     draggingRef.current = true
     grabRef.current = { dx: e.screenX - window.screenX, dy: e.screenY - window.screenY }
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -198,15 +202,26 @@ export default function PetWindowApp(): JSX.Element {
     window.wraithPet.moveTo(e.screenX - grabRef.current.dx, e.screenY - grabRef.current.dy)
   }, [])
 
+  // 拖动被外部打断的兜底:pointerup 不一定总会送达这个 div——原生右键菜单弹出、
+  // 系统手势、窗口失焦等都可能让浏览器直接派发 pointercancel,或者(capture 已经
+  // 被浏览器自己收回时)只派发 lostpointercapture 而没有 pointerup。没有这道兜底,
+  // draggingRef 会卡在 true:上面的 mousemove 命中测试永久短路,窗口永远停在
+  // "捕获鼠标"态,连透明区也会吞穿桌面点击,只能重启桌宠窗才能恢复。onPointerCancel
+  // 和 onLostPointerCapture 都只做同一件事:复位 draggingRef + 尽力释放 capture
+  // (capture 已经丢失时 release 本身是无害的空操作,用 try/catch 兜底跨浏览器差异)。
+  const resetDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    draggingRef.current = false
+    try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* 已丢失/已释放,无害 */ }
+  }, [])
+
   // 落盘用当前窗口屏幕原点(而非 pointerup 那一刻的指针坐标减 grab 偏移——理论上
   // 该相等,但直接读 window.screenX/Y 更贴近"主进程 setBounds 之后实际落地的位置",
   // 不受 moveTo IPC 异步/节流影响)。
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (!draggingRef.current) return
-    draggingRef.current = false
-    e.currentTarget.releasePointerCapture(e.pointerId)
+    resetDrag(e)
     void window.wraithPet.setConfig({ position: { x: window.screenX, y: window.screenY } })
-  }, [])
+  }, [resetDrag])
 
   // 滚轮缩放(Task 9):每帧最多发一次 setScale IPC,同帧内的重复 wheel 事件直接丢弃
   // (wheelPendingRef 挡住,不排队、不合并 deltaY)。stepScale 的"当前 scale"读
@@ -228,6 +243,8 @@ export default function PetWindowApp(): JSX.Element {
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
+      onPointerCancel={resetDrag}
+      onLostPointerCapture={resetDrag}
       onWheel={handleWheel}
       onContextMenu={handleContextMenu}
     >
