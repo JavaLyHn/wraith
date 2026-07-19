@@ -12,7 +12,8 @@ export interface PetMotion {
 // error→failed;thinking 没有专属行,回退 idle(0)。
 const STATE_ROW: Record<PetState, number> = {
   idle: 0, // idle
-  thinking: 0, // 无专属行→回退 idle
+  thinking: 1, // wave——thinking 是一次 turn 的主要时段,若回退 idle(0)则与静息完全同帧,
+               // 用户看不出"正在思考/工作";映射到无状态占用的 wave 行,让"工作中"可见区别于 idle。
   tool: 2, // run
   approval: 4, // review
   success: 5, // jump
