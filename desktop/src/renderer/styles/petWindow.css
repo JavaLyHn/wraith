@@ -1,0 +1,10 @@
+/* 桌宠窗是无边框透明窗:必须让整条文档链透明,压过 tokens.css 的
+   `body { background: var(--bg) }` —— 那条仅在主窗的 `html.is-mac` 下才转透明,
+   而桌宠窗不打 is-mac 标(它靠 BrowserWindow 的 transparent + backgroundColor
+   '#00000000' 直接透明,不走 vibrancy 磨砂皮肤)。用 `html body` / `html #pet-root`
+   抬高特异度(0,0,2 / 0,1,1,均高于 tokens 的 `body` 0,0,1),与 CSS 注入顺序无关,
+   无需 !important。否则 body 会被涂上 app 底色 #f7f8fa,桌宠背后出现一个不透明浅色盒。 */
+html body,
+html #pet-root {
+  background: transparent;
+}

@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './styles/tokens.css'
+import './styles/petWindow.css'
 import PetWindowApp from './components/PetWindowApp'
 
 const el = document.getElementById('pet-root')
