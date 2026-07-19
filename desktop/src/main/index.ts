@@ -76,6 +76,7 @@ if (process.env['WRAITH_E2E_USERDATA']) {
 let mainWindow: BrowserWindow | null = null
 let splashWindow: BrowserWindow | null = null
 let backendConnected = false
+let mainContentReady = false // 主窗渲染层首帧画好(ready-to-show);splash 要等它为 true 才散,避免揭开空灰主窗
 let child: ChildProcessWithoutNullStreams | null = null
 let client: JsonRpcClient | null = null
 
@@ -287,6 +288,12 @@ function createWindow(): void {
 
   // I-5: 重启后红点恢复——首帧加载完即按当前 runs 推一次 badge(pushBadge 内部已 try/catch)
   mainWindow.webContents.on('did-finish-load', () => pushBadge())
+
+  // splash 何时散去要等主窗"内容真的画好了"(ready-to-show 是 Electron 专为"首帧渲染完、
+  // 可无白屏地显示"设计的信号)。否则 splash 一散,揭开的是还没渲染的空毛玻璃主窗(灰屏、
+  // 无 logo,重型 JS bundle 加载那几秒尤其明显)——即用户看到的"加载没 logo"。置 show:false
+  // 让主窗在幕后画好,ready-to-show 后才允许散 splash,logo 就能一路陪到内容就绪再淡出。
+  mainWindow.once('ready-to-show', () => { mainContentReady = true })
 
   mainWindow.on('closed', () => {
     mainWindow = null
@@ -1507,7 +1514,10 @@ app.whenReady().then(() => {
         startPetWindowOnce()
       } else {
         const splashTimer = setInterval(() => {
-          if (shouldDismissSplash(Date.now() - splashStartedAt, backendConnected)) {
+          // "就绪"= 后端已连 且 主窗内容已画好(ready-to-show);任一未满足就继续显示 logo,
+          // 直到两者都齐(或到失败保险天花板)。这样 logo/闪光陪加载全程,散场时揭开的是完整首页。
+          const ready = backendConnected && mainContentReady
+          if (shouldDismissSplash(Date.now() - splashStartedAt, ready)) {
             clearInterval(splashTimer)
             dismissSplash()
           }
