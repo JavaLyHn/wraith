@@ -17,6 +17,9 @@ import {
   projectViews,
   seedProjectsIfEmpty,
   seedProjectsFromJson,
+  readPetConfig,
+  writePetConfig,
+  type PetConfig,
 } from './settings'
 import type { BackendEvent } from '../shared/types'
 import {
@@ -528,6 +531,27 @@ ipcMain.handle('wraith:petsRemove', async (_e, id: string) => {
 ipcMain.handle('wraith:petsPreview', (_e, id: string) =>
   previewDataUrl({ userDataDir: app.getPath('userData'), petdexRoot: petdexRoot(), id })
 )
+
+// 桌宠配置:主窗与全局宠物窗共用同一份 settings.json 'pets' 键。
+// 广播到 BrowserWindow.getAllWindows() 而非单一 mainWindow/petWin 引用,
+// 因为发起变更的可能是主窗设置面板,也可能是宠物窗自己的右键菜单——
+// 两边都要拿到最新配置,且窗口可能已销毁(try/catch 逐个吞掉)。
+function broadcastPetConfig(config: PetConfig): void {
+  for (const w of BrowserWindow.getAllWindows()) {
+    try {
+      w.webContents.send('pet:config', config)
+    } catch {
+      // 窗口已销毁
+    }
+  }
+}
+ipcMain.handle('pet:getConfig', () => readPetConfig(app.getPath('userData')))
+ipcMain.handle('pet:setConfig', (_e, patch: Partial<PetConfig>) => {
+  const next = writePetConfig(app.getPath('userData'), patch)
+  broadcastPetConfig(next)
+  // TODO(Task6): syncPetWindow(next)
+  return next
+})
 
 ipcMain.handle(
   'wraith:respondApproval',

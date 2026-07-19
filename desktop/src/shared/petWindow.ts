@@ -23,6 +23,11 @@ export function defaultPetPosition(workArea: Box, size: { width: number; height:
   return { x: workArea.x + workArea.width - size.width - margin, y: workArea.y + workArea.height - size.height - margin }
 }
 
+/** 全局宠物窗口是否应该显示:总开关打开 且 存在可用宠物(否则无物可画)。 */
+export function shouldShowPet(config: { enabled: boolean }, hasAvailablePet: boolean): boolean {
+  return config.enabled && hasAvailablePet
+}
+
 export interface PetMenuItem { id: string; label: string; type?: 'separator' | 'checkbox' | 'submenu'; checked?: boolean; submenu?: PetMenuItem[] }
 
 export function buildPetMenuTemplate(pets: PetView[], config: { selectedId: string | null; scale: number }): PetMenuItem[] {

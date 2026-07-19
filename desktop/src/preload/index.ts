@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult } from '../shared/pets'
+import type { PetConfig } from '../main/settings'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -155,6 +156,10 @@ export interface WraithApi {
   petsImportPackage(): Promise<PetImportResult>
   petsRemove(id: string): Promise<{ ok: boolean }>
   petsPreview(id: string): Promise<string | null>
+  /** 桌宠配置(全局常驻窗口):读/写 + 跨进程变更订阅(主窗与宠物窗共用同一份配置)。 */
+  petGetConfig(): Promise<PetConfig>
+  petSetConfig(patch: Partial<PetConfig>): Promise<PetConfig>
+  onPetConfig(cb: (c: PetConfig) => void): () => void
 }
 
 const wraith: WraithApi = {
@@ -619,6 +624,18 @@ const wraith: WraithApi = {
   },
   petsPreview(id) {
     return ipcRenderer.invoke('wraith:petsPreview', id) as Promise<string | null>
+  },
+
+  petGetConfig() {
+    return ipcRenderer.invoke('pet:getConfig') as Promise<PetConfig>
+  },
+  petSetConfig(patch) {
+    return ipcRenderer.invoke('pet:setConfig', patch) as Promise<PetConfig>
+  },
+  onPetConfig(cb) {
+    const listener = (_e: Electron.IpcRendererEvent, c: PetConfig) => cb(c)
+    ipcRenderer.on('pet:config', listener)
+    return () => { ipcRenderer.removeListener('pet:config', listener) }
   },
 }
 
