@@ -355,10 +355,26 @@ function dismissSplash(): void {
   if (s && !s.isDestroyed()) {
     showMainWindow()   // 主窗在毛玻璃 splash 之下就位,随 splash 淡出被揭开
     s.webContents.executeJavaScript('window.__dismiss && window.__dismiss()').catch(() => {})
-    fadeOutAndClose(s, SPLASH_EXIT_MS, () => {})
+    fadeOutAndClose(s, SPLASH_EXIT_MS, () => startPetWindowOnce()) // 淡出完成后再建桌宠窗
   } else {
     showMainWindow()
+    startPetWindowOnce()
   }
+}
+
+/**
+ * 启动时建桌宠窗(全程仅一次):必须等 splash 淡出完成、主窗首帧稳定后再建。
+ * 建窗是几十毫秒级的主线程开销(透明置顶 NSPanel + loadURL + ready-to-show→show +
+ * setAlwaysOnTop/setVisibleOnAllWorkspaces 等原生同步调用),若与 splash 的逐帧
+ * setOpacity 淡出(fadeOutAndClose 的 setInterval)撞车,会把淡出卡成"顿一下直接跳首页"、
+ * 连 logo 幽灵散去都来不及播——这正是"开启宠物后加载动画不丝滑"的根因。故一律推迟到
+ * 淡出回调里再建;deps 已在 whenReady 早处 initPetWindow 记好。再加 150ms 缓冲让主窗先稳住。
+ */
+let petStartScheduled = false
+function startPetWindowOnce(): void {
+  if (petStartScheduled) return
+  petStartScheduled = true
+  setTimeout(() => { void syncPetWindow(readPetConfig(app.getPath('userData'))) }, 150)
 }
 
 // ---------------------------------------------------------------------------
@@ -1463,11 +1479,21 @@ app.whenReady().then(() => {
     }
   })
 
+  // 桌宠依赖装配放到 splash/主窗编排之前:initPetWindow 只记依赖(不建窗),
+  // 真正建窗一律经 startPetWindowOnce 推迟到 splash 淡出之后,避免卡住加载动画。
+  initPetWindow({
+    userDataDir: () => app.getPath('userData'),
+    petdexRoot: () => petdexRoot(),
+    preloadPath: path.join(__dirname, '../preload/pet.cjs'),
+    primaryWorkArea: () => screen.getPrimaryDisplay().workArea,
+  })
+
   if (process.env['WRAITH_E2E'] === '1') {
     // E2E 绕过:不建 splash,立即显示主窗,避免 firstWindow() 拿到 splash 或窗口延迟显示干扰用例
     createWindow()
     showMainWindow()
     spawnBackend()
+    startPetWindowOnce() // E2E 无 splash,直接建(Task 10 e2e 断言第二窗出现)
   } else {
     const splashStartedAt = Date.now()
     splashWindow = createSplash()
@@ -1478,6 +1504,7 @@ app.whenReady().then(() => {
       if (!splashWindow) {
         // 无动画:直接显示主窗,不阻塞
         showMainWindow()
+        startPetWindowOnce()
       } else {
         const splashTimer = setInterval(() => {
           if (shouldDismissSplash(Date.now() - splashStartedAt, backendConnected)) {
@@ -1506,16 +1533,6 @@ app.whenReady().then(() => {
       showMainWindow()
     }
   })
-
-  // 桌宠:全局常驻窗口装配 + 首次按当前配置同步(E2E 下也走,以便 Task 10 e2e 断言第二窗出现;
-  // reduced-motion/穿透等手工眼验覆盖)。initPetWindow 只记依赖,syncPetWindow 异步查可用宠物再决定增删。
-  initPetWindow({
-    userDataDir: () => app.getPath('userData'),
-    petdexRoot: () => petdexRoot(),
-    preloadPath: path.join(__dirname, '../preload/pet.cjs'),
-    primaryWorkArea: () => screen.getPrimaryDisplay().workArea,
-  })
-  void syncPetWindow(readPetConfig(app.getPath('userData')))
 })
 
 app.on('window-all-closed', () => {
