@@ -632,6 +632,8 @@ ipcMain.handle('pet:setConfig', (_e, patch: Partial<PetConfig>) => {
   const next = writePetConfig(app.getPath('userData'), patch)
   broadcastPetConfig(next)
   void syncPetWindow(next)
+  // scale 变化(含"关闭缩放开关→normalize 强制回最小")要联动 resize 窗口本身。
+  if (next.scale !== prev.scale) petWindowResizeToScale(next.scale)
   if (next.selectedId !== prev.selectedId) pushCurrentPetPreview(next)
   return next
 })
@@ -663,6 +665,8 @@ function applyConfigChange(patch: Partial<PetConfig>): PetConfig {
   broadcastPetConfig(next)
   pushPetConfig(next)
   void syncPetWindow(next)
+  // scale 变化(菜单选缩放预设,或切"启用缩放"导致 normalize 强制回最小)联动 resize 窗口。
+  if (next.scale !== prev.scale) petWindowResizeToScale(next.scale)
   if (next.selectedId !== prev.selectedId) pushCurrentPetPreview(next)
   return next
 }
@@ -686,8 +690,12 @@ function handlePetMenu(id: string): void {
     return
   }
   if (id.startsWith('pet:scale:')) {
-    const next = applyConfigChange({ scale: Number(id.slice('pet:scale:'.length)) })
-    petWindowResizeToScale(next.scale) // 与滚轮路径一致:改配置之外还要联动 resize
+    applyConfigChange({ scale: Number(id.slice('pet:scale:'.length)) }) // resize 由 applyConfigChange 在 scale 变化时联动
+    return
+  }
+  if (id === 'pet:scale-enabled') {
+    // 切换缩放开关(默认关闭);关闭时 normalize 把 scale 强制回最小,applyConfigChange 据 scale 变化联动 resize。
+    applyConfigChange({ scaleEnabled: !readPetConfig(app.getPath('userData')).scaleEnabled })
     return
   }
   if (id === 'pet:lock') {

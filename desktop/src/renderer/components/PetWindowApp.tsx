@@ -107,6 +107,8 @@ export default function PetWindowApp(): JSX.Element {
   // 锁定(防误触):锁定时禁用拖动/滚轮/捏合缩放,但命中测试与右键菜单不受影响
   // (仍能捕获→右键弹菜单解锁)。高频 pointer/wheel/gesture handler 读 ref 避免过期闭包。
   const lockedRef = useRef(false)
+  // 缩放开关(默认关闭):关闭时禁用滚轮/捏合缩放,宠物恒为最小尺寸;用户在设置或右键菜单显式开启后才可缩放。
+  const scaleEnabledRef = useRef(false)
 
   useEffect(() => {
     window.wraithPet.ready()
@@ -148,6 +150,10 @@ export default function PetWindowApp(): JSX.Element {
   useEffect(() => {
     lockedRef.current = config?.locked ?? false
   }, [config?.locked])
+
+  useEffect(() => {
+    scaleEnabledRef.current = config?.scaleEnabled ?? false
+  }, [config?.scaleEnabled])
 
   useEffect(() => {
     // 命中测试用的行须跟"实际展示的行"一致:点击反应期(clickState 非 null)展示的是
@@ -232,7 +238,7 @@ export default function PetWindowApp(): JSX.Element {
     const onStart = (e: Event): void => { e.preventDefault(); base = scaleRef.current }
     const onChange = (e: Event): void => {
       e.preventDefault()
-      if (draggingRef.current || wheelPendingRef.current || lockedRef.current) return // 锁定时不缩放
+      if (draggingRef.current || wheelPendingRef.current || lockedRef.current || !scaleEnabledRef.current) return // 锁定或未开启缩放时不缩放
       wheelPendingRef.current = true
       requestAnimationFrame(() => { wheelPendingRef.current = false })
       const scale = (e as unknown as { scale?: number }).scale ?? 1
@@ -343,7 +349,7 @@ export default function PetWindowApp(): JSX.Element {
   // (wheelPendingRef 挡住,不排队、不合并 deltaY)。stepScale 的"当前 scale"读
   // scaleRef(命中测试同一份 ref,随 config.scale 保持最新),不额外引入新状态。
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    if (wheelPendingRef.current || lockedRef.current) return // 锁定时不缩放(防误触)
+    if (wheelPendingRef.current || lockedRef.current || !scaleEnabledRef.current) return // 锁定或未开启缩放时不缩放(防误触)
     wheelPendingRef.current = true
     requestAnimationFrame(() => { wheelPendingRef.current = false })
     window.wraithPet.setScale(stepScale(scaleRef.current, e.deltaY))

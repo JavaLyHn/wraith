@@ -12,6 +12,7 @@ const FIXED_CONFIG: PetConfig = {
   scale: 1,
   position: null,
   locked: false,
+  scaleEnabled: true,
 }
 
 const PETS: PetView[] = [
@@ -60,6 +61,17 @@ describe('PetsSettings', () => {
     await waitFor(() => {
       const wraith = (window as unknown as { wraith: { petSetConfig: ReturnType<typeof vi.fn> } }).wraith
       expect(wraith.petSetConfig).toHaveBeenCalledWith({ enabled: false })
+    })
+  })
+
+  it('切「启用缩放」开关调用 petSetConfig({ scaleEnabled })', async () => {
+    render(<PetsSettings />)
+    const toggle = await screen.findByTestId('pet-scale-enabled')
+    fireEvent.click(toggle)
+    await waitFor(() => {
+      const wraith = (window as unknown as { wraith: { petSetConfig: ReturnType<typeof vi.fn> } }).wraith
+      // FIXED_CONFIG.scaleEnabled=true,点一下应关闭
+      expect(wraith.petSetConfig).toHaveBeenCalledWith({ scaleEnabled: false })
     })
   })
 

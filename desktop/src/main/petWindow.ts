@@ -217,11 +217,11 @@ export function toElectronMenu(
 ): Electron.MenuItemConstructorOptions[] {
   return items.map((item): Electron.MenuItemConstructorOptions => {
     if (item.type === 'separator') return { type: 'separator' }
-    if (item.type === 'submenu') return { label: item.label, submenu: toElectronMenu(item.submenu ?? [], onClick) }
+    if (item.type === 'submenu') return { label: item.label, enabled: item.enabled, submenu: toElectronMenu(item.submenu ?? [], onClick) }
     if (item.type === 'checkbox') {
-      return { label: item.label, type: 'checkbox', checked: !!item.checked, click: () => onClick(item.id) }
+      return { label: item.label, type: 'checkbox', checked: !!item.checked, enabled: item.enabled, click: () => onClick(item.id) }
     }
-    return { label: item.label, click: () => onClick(item.id) }
+    return { label: item.label, enabled: item.enabled, click: () => onClick(item.id) }
   })
 }
 

@@ -97,8 +97,8 @@ describe('buildPetMenuTemplate', () => {
     { id: 'a', displayName: 'A', description: '', source: 'built-in', kind: 'static', available: true, removable: false, previewUrl: null, sprite: null },
     { id: 'b', displayName: 'B', description: '', source: 'imported', kind: 'static', available: false, removable: true, previewUrl: null, sprite: null },
   ]
-  it('含打开wraith/选择宠物(仅可用打勾)/缩放/锁定/重置/关闭', () => {
-    const t = buildPetMenuTemplate(pets, { selectedId: 'a', scale: 1, locked: false })
+  it('含打开wraith/选择宠物(仅可用打勾)/启用缩放/缩放/锁定/重置/关闭', () => {
+    const t = buildPetMenuTemplate(pets, { selectedId: 'a', scale: 1, locked: false, scaleEnabled: true })
     const flat = JSON.stringify(t)
     // 「打开 wraith」是唯一"跳回应用"的入口(桌宠窗 nonactivating,点击不激活应用)
     expect(t.find(i => i.id === 'pet:open-main')!.label).toBe('打开 wraith')
@@ -108,14 +108,23 @@ describe('buildPetMenuTemplate', () => {
     expect(select.submenu!.find(s => s.id === 'pet:select:a')!.checked).toBe(true)
     // 不可用的 b 不在子菜单里
     expect(select.submenu!.find(s => s.id === 'pet:select:b')).toBeUndefined()
+    // 启用缩放项存在,勾选态随 config.scaleEnabled;开启时缩放子菜单可用
+    expect(t.find(i => i.id === 'pet:scale-enabled')!.checked).toBe(true)
     const scale = t.find(i => i.id === 'pet:scale')!
+    expect(scale.enabled).toBe(true)
     expect(scale.submenu!.some(s => s.id === 'pet:scale:1')).toBe(true)
     // 锁定项存在,且勾选态随 config.locked
     expect(t.find(i => i.id === 'pet:lock')!.checked).toBe(false)
   })
 
+  it('缩放关闭时:启用缩放未勾选,缩放子菜单置灰(enabled=false)', () => {
+    const t = buildPetMenuTemplate(pets, { selectedId: 'a', scale: 1, locked: false, scaleEnabled: false })
+    expect(t.find(i => i.id === 'pet:scale-enabled')!.checked).toBe(false)
+    expect(t.find(i => i.id === 'pet:scale')!.enabled).toBe(false)
+  })
+
   it('锁定项勾选态随 config.locked=true', () => {
-    const t = buildPetMenuTemplate(pets, { selectedId: 'a', scale: 1, locked: true })
+    const t = buildPetMenuTemplate(pets, { selectedId: 'a', scale: 1, locked: true, scaleEnabled: false })
     expect(t.find(i => i.id === 'pet:lock')!.checked).toBe(true)
   })
 })

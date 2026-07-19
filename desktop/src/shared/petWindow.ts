@@ -85,9 +85,9 @@ export function shouldShowPet(config: { enabled: boolean }, hasAvailablePet: boo
   return config.enabled && hasAvailablePet
 }
 
-export interface PetMenuItem { id: string; label: string; type?: 'separator' | 'checkbox' | 'submenu'; checked?: boolean; submenu?: PetMenuItem[] }
+export interface PetMenuItem { id: string; label: string; type?: 'separator' | 'checkbox' | 'submenu'; checked?: boolean; enabled?: boolean; submenu?: PetMenuItem[] }
 
-export function buildPetMenuTemplate(pets: PetView[], config: { selectedId: string | null; scale: number; locked: boolean }): PetMenuItem[] {
+export function buildPetMenuTemplate(pets: PetView[], config: { selectedId: string | null; scale: number; locked: boolean; scaleEnabled: boolean }): PetMenuItem[] {
   return [
     // 「打开 wraith」:桌宠窗是 nonactivating panel,点击/拖动不再激活应用,想跳回主窗
     // 只能经这里显式触发(pet:open-main → show+focus 主窗 + app.focus)。置顶最顺手。
@@ -96,7 +96,9 @@ export function buildPetMenuTemplate(pets: PetView[], config: { selectedId: stri
     { id: 'pet:select', label: '选择宠物', type: 'submenu', submenu: pets.filter(p => p.available).map(p => ({
       id: `pet:select:${p.id}`, label: p.displayName, type: 'checkbox', checked: config.selectedId === p.id,
     })) },
-    { id: 'pet:scale', label: '缩放', type: 'submenu', submenu: [0.5, 1, 1.5, 2].map(s => ({
+    // 缩放默认关闭(防误触/放大异常):须先勾选「启用缩放」;未开启时"缩放"子菜单置灰不可点。
+    { id: 'pet:scale-enabled', label: '启用缩放', type: 'checkbox', checked: config.scaleEnabled },
+    { id: 'pet:scale', label: '缩放', type: 'submenu', enabled: config.scaleEnabled, submenu: [0.5, 1, 1.5, 2].map(s => ({
       id: `pet:scale:${s}`, label: `${Math.round(s * 100)}%`, type: 'checkbox', checked: Math.abs(config.scale - s) < 0.001,
     })) },
     // 锁定:勾选态反映当前是否锁定;锁定后禁用拖动/缩放防误触,右键菜单仍可用于解锁。

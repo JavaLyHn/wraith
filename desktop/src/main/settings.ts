@@ -26,6 +26,10 @@ export interface Settings {
   pets?: PetConfig
 }
 
+/** 缩放范围。PET_SCALE_MIN 同时是"缩放关闭时"的固定尺寸(见 normalizePetConfig)。 */
+export const PET_SCALE_MIN = 0.5
+export const PET_SCALE_MAX = 2.0
+
 export interface PetConfig {
   enabled: boolean
   selectedId: string | null
@@ -33,25 +37,32 @@ export interface PetConfig {
   scale: number
   position: { x: number; y: number } | null  // 屏幕全局坐标;null=未放置,首次显示落默认位
   locked: boolean  // 锁定:禁用拖动/缩放,防误触(右键菜单仍可用以解锁)
+  scaleEnabled: boolean  // 缩放开关:默认关闭;关闭时 scale 恒为最小(PET_SCALE_MIN),用户显式开启后才能缩放
 }
 
-export const DEFAULT_PET_CONFIG: PetConfig = { enabled: true, selectedId: null, motion: 'calm', scale: 1, position: null, locked: false }
+// 默认:缩放关闭 + 尺寸最小(scaleEnabled=false 会让 normalize 把 scale 强制成 PET_SCALE_MIN)。
+export const DEFAULT_PET_CONFIG: PetConfig = { enabled: true, selectedId: null, motion: 'calm', scale: PET_SCALE_MIN, position: null, locked: false, scaleEnabled: false }
 const MOTION: PetMotionStyle[] = ['calm', 'float', 'lively', 'static']
 
-/** 未知/缺失/非法字段一律回落默认;scale 夹到 [0.5,2.0];position 须为有限坐标或 null。 */
+/** 未知/缺失/非法字段一律回落默认;scale 夹到 [0.5,2.0]且缩放关闭时强制最小;position 须为有限坐标或 null。 */
 export function normalizePetConfig(value: unknown): PetConfig {
   const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
   const pos = v['position']
   const posOk = !!pos && typeof pos === 'object'
     && Number.isFinite((pos as any).x) && Number.isFinite((pos as any).y)
+  const scaleEnabled = typeof v['scaleEnabled'] === 'boolean' ? v['scaleEnabled'] as boolean : DEFAULT_PET_CONFIG.scaleEnabled
+  const rawScale = typeof v['scale'] === 'number' && Number.isFinite(v['scale']) && (v['scale'] as number) >= PET_SCALE_MIN && (v['scale'] as number) <= PET_SCALE_MAX
+    ? v['scale'] as number : DEFAULT_PET_CONFIG.scale
   return {
     enabled: typeof v['enabled'] === 'boolean' ? v['enabled'] as boolean : DEFAULT_PET_CONFIG.enabled,
     selectedId: typeof v['selectedId'] === 'string' ? v['selectedId'] as string : null,
     motion: MOTION.includes(v['motion'] as PetMotionStyle) ? v['motion'] as PetMotionStyle : DEFAULT_PET_CONFIG.motion,
-    scale: typeof v['scale'] === 'number' && Number.isFinite(v['scale']) && (v['scale'] as number) >= 0.5 && (v['scale'] as number) <= 2.0
-      ? v['scale'] as number : DEFAULT_PET_CONFIG.scale,
+    // 缩放关闭时恒为最小尺寸(用户须显式开启缩放才生效);开启时用校验后的 scale。这是"关闭⇒最小"的唯一强制点,
+    // 无论 scale 从哪条路径写入(设置滑块/滚轮/捏合/右键菜单),只要 scaleEnabled=false 就一律落回 PET_SCALE_MIN。
+    scale: scaleEnabled ? rawScale : PET_SCALE_MIN,
     position: posOk ? { x: (pos as any).x as number, y: (pos as any).y as number } : null,
     locked: typeof v['locked'] === 'boolean' ? v['locked'] as boolean : DEFAULT_PET_CONFIG.locked,
+    scaleEnabled,
   }
 }
 

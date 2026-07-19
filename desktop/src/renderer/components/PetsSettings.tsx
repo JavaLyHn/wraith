@@ -225,19 +225,28 @@ export default function PetsSettings(): JSX.Element {
         </div>
       </div>
 
-      <label className="block">
-        <div className={lbl}>缩放 {config.scale.toFixed(2)}×</div>
-        <input
-          data-testid="pet-scale"
-          type="range"
-          min={0.5}
-          max={2}
-          step={0.05}
-          value={config.scale}
-          onChange={(e) => setConfig({ scale: Number(e.target.value) })}
-          className="w-full"
-        />
-      </label>
+      <div className="rounded-lg border border-border px-3 py-2">
+        <label className="flex cursor-pointer select-none items-center justify-between gap-3 text-xs font-semibold text-fg">
+          启用缩放
+          <Switch data-testid="pet-scale-enabled" checked={config.scaleEnabled} onCheckedChange={(checked) => setConfig({ scaleEnabled: checked })} />
+        </label>
+        <div className="mt-1 text-2xs text-fg-subtle">默认关闭、宠物保持最小尺寸;开启后才能用下方滑块或在宠物身上滚轮 / 触控板捏合缩放</div>
+        {/* 未启用时整块置灰不可交互(pointer-events-none),避免误拖滑块。 */}
+        <div className={'mt-3 ' + (config.scaleEnabled ? '' : 'pointer-events-none opacity-50')}>
+          <div className={lbl}>缩放 {config.scale.toFixed(2)}×</div>
+          <input
+            data-testid="pet-scale"
+            type="range"
+            min={0.5}
+            max={2}
+            step={0.05}
+            value={config.scale}
+            disabled={!config.scaleEnabled}
+            onChange={(e) => setConfig({ scale: Number(e.target.value) })}
+            className="w-full"
+          />
+        </div>
+      </div>
     </div>
   )
 }
