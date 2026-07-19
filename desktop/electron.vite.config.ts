@@ -15,7 +15,10 @@ export default defineConfig({
   preload: {
     build: {
       rollupOptions: {
-        input: 'src/preload/index.ts',
+        input: {
+          index: 'src/preload/index.ts',
+          pet: 'src/preload/pet.ts'
+        },
         output: {
           format: 'cjs',
           entryFileNames: '[name].cjs'
@@ -39,7 +42,10 @@ export default defineConfig({
     },
     build: {
       rollupOptions: {
-        input: 'src/renderer/index.html'
+        input: {
+          index: 'src/renderer/index.html',
+          pet: 'src/renderer/pet.html'
+        }
       }
     },
     plugins: [react()]
