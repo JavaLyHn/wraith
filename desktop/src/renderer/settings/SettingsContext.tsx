@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { type PetPrefs, type Prefs, type ProfilePrefs, type UiPrefs, type UpdatePrefs, loadPrefs, normalizePetPrefs, savePrefs } from './prefs'
+import { type Prefs, type ProfilePrefs, type UiPrefs, type UpdatePrefs, loadPrefs, savePrefs } from './prefs'
 import { applyTheme, prefersDark } from './theme'
 
 interface SettingsCtx {
@@ -7,7 +7,6 @@ interface SettingsCtx {
   setProfile: (patch: Partial<ProfilePrefs>) => void
   setUi: (patch: Partial<UiPrefs>) => void
   setUpdate: (patch: Partial<UpdatePrefs>) => void
-  setPets: (patch: Partial<PetPrefs>) => void
 }
 
 const Ctx = createContext<SettingsCtx | null>(null)
@@ -34,16 +33,8 @@ export function SettingsProvider({ children }: { children: ReactNode }): JSX.Ele
   const setProfile = (patch: Partial<ProfilePrefs>): void => persist({ ...prefsRef.current, profile: { ...prefsRef.current.profile, ...patch } })
   const setUi = (patch: Partial<UiPrefs>): void => persist({ ...prefsRef.current, ui: { ...prefsRef.current.ui, ...patch } })
   const setUpdate = (patch: Partial<UpdatePrefs>): void => persist({ ...prefsRef.current, update: { ...prefsRef.current.update, ...patch } })
-  const setPets = (patch: Partial<PetPrefs>): void => persist({
-    ...prefsRef.current,
-    pets: normalizePetPrefs({
-      ...prefsRef.current.pets,
-      ...patch,
-      position: { ...prefsRef.current.pets.position, ...patch.position },
-    }),
-  })
 
-  return <Ctx.Provider value={{ prefs, setProfile, setUi, setUpdate, setPets }}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={{ prefs, setProfile, setUi, setUpdate }}>{children}</Ctx.Provider>
 }
 
 export function useSettings(): SettingsCtx {

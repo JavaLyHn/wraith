@@ -33,9 +33,6 @@ import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { compactionNotice } from './lib/compactView'
-import { petStateFromEvent, nextPetState, TRANSIENT_MS, type PetStateSignal } from '../shared/petState'
-import { selectedPet } from './lib/petMotion'
-import type { PetState, PetView } from '../shared/pets'
 import { Download, PanelLeft, PanelRight, SquareTerminal, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
@@ -63,7 +60,6 @@ import RagPanel from './components/RagPanel'
 import SettingsPanel from './components/SettingsPanel'
 import TerminalDrawer from './components/TerminalDrawer'
 import RightDock, { type RightDockPane } from './components/RightDock'
-import PetAvatar from './components/PetAvatar'
 import { useSettings } from './settings/SettingsContext'
 
 // ---------------------------------------------------------------------------
@@ -168,11 +164,7 @@ export default function App(): JSX.Element {
   const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
   const [modelFallbackNotice, setModelFallbackNotice] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
-  const { prefs: appPrefs, setPets } = useSettings()
-  const [petLibrary, setPetLibrary] = useState<PetView[]>([])
-  const [petPreviewUrl, setPetPreviewUrl] = useState<string | null>(null)
-  const [petSignal, setPetSignal] = useState<{ state: PetState; expiresAt: number | null }>({ state: 'idle', expiresAt: null })
-  const petTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const { prefs: appPrefs } = useSettings()
   const [updateNotice, setUpdateNotice] = useState<{ latest: string; url: string } | null>(null)
   const [pendingMode, setPendingMode] = useState<RunMode>('react')
   const [examplePrompts] = useState(() => pickExamplePrompts(EXAMPLE_PROMPTS, 4))
@@ -215,34 +207,11 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  // 宠物瞬态计时:success/error 到期自动回 idle,非瞬态信号持续到被取代。
-  // 只落 App local state({ state, expiresAt }),不碰 transcript reducer。
-  const applyPetSignal = useCallback((signal: PetStateSignal): void => {
-    if (petTimerRef.current) {
-      clearTimeout(petTimerRef.current)
-      petTimerRef.current = null
-    }
-    if (!signal.transient) {
-      setPetSignal({ state: signal.state, expiresAt: null })
-      return
-    }
-    const ms = signal.state === 'success' ? TRANSIENT_MS.success : TRANSIENT_MS.error
-    const expiresAt = Date.now() + ms
-    setPetSignal({ state: signal.state, expiresAt })
-    petTimerRef.current = setTimeout(() => {
-      setPetSignal(prev => (prev.expiresAt === expiresAt ? { state: 'idle', expiresAt: null } : prev))
-    }, ms)
-  }, [])
-
   // ── subscribe to backend events on mount (status 高频 → 100ms 窗口合并) ────
   useEffect(() => {
     const throttledStatus = createThrottleLatest<BackendEvent>(100, evt => dispatch(evt))
     statusThrottleRef.current = throttledStatus
     const unsubscribe = window.wraith.onEvent((evt: BackendEvent) => {
-      // 宠物状态派生须在 dispatch(evt) 之前完成:petStateFromEvent 是纯函数,
-      // reducer(reduce/reduceAdapter)全程零改动。
-      const petUpdate = petStateFromEvent(evt)
-      if (petUpdate) applyPetSignal(petUpdate)
       if (evt.kind === 'notification' && evt.method === 'mcp.status') {
         const p = evt.params as { name: string; state: McpServerView['state']; error?: string }
         setMcpServers(prev => prev.map(s => (s.name === p.name ? { ...s, state: p.state, enabled: p.state !== 'disabled', error: p.error } : s)))
@@ -261,32 +230,8 @@ export default function App(): JSX.Element {
     return () => {
       throttledStatus.cancel()
       unsubscribe()
-      if (petTimerRef.current) clearTimeout(petTimerRef.current)
     }
-  }, [fetchMcpResources, applyPetSignal])
-
-  // ── 宠物库:切回 chat 视图时刷新一次(mount 时 view 恰为 'chat'),
-  // 覆盖「在设置里改选/导入宠物再切回聊天」场景;IPC 只传 id,这里连 id 都不传(整表拉取)。
-  useEffect(() => {
-    if (view !== 'chat') return
-    void window.wraith.petsList().then(({ pets }) => setPetLibrary(pets)).catch(() => {})
-  }, [view])
-
-  const activePet = selectedPet(petLibrary, appPrefs.pets.selectedId)
-  const activePetId = activePet?.id ?? null
-
-  // 选中宠物预览:仅在 selectedId 派生出的 activePetId 变化时拉,且只传 id——
-  // 绝不把 renderer 侧文件系统路径传给 IPC。宠物关闭时不解码图片(与设置页同一約定)。
-  useEffect(() => {
-    let alive = true
-    setPetPreviewUrl(null)
-    if (!activePetId || !appPrefs.pets.enabled) return
-    void window.wraith.petsPreview(activePetId).then((url) => { if (alive) setPetPreviewUrl(url) }).catch(() => {})
-    return () => { alive = false }
-  }, [activePetId, appPrefs.pets.enabled])
-
-  const petState = nextPetState(petSignal, Date.now())
-  const petView: PetView | null = activePet ? { ...activePet, previewUrl: petPreviewUrl } : null
+  }, [fetchMcpResources])
 
   // ── session list helpers ───────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -1131,17 +1076,6 @@ export default function App(): JSX.Element {
               </>
             )
           })()
-        )}
-        {/* 悬浮宠物:绝对定位的 chat column 兄弟节点,不进入 flex 流,Transcript/Composer 尺寸不受影响。
-            enabled 显式入条件——关闭后整个组件不挂载,精灵宠物的 rAF 帧动效 effect 也不会起来
-            空转;仅靠 PetAvatar 内部 `!prefs.enabled` 的渲染期 early-return 不够,那时 effect 已经跑了。 */}
-        {view === 'chat' && appPrefs.pets.enabled && petView && (
-          <PetAvatar
-            pet={petView}
-            state={petState}
-            prefs={appPrefs.pets}
-            onPositionChange={(position) => setPets({ position })}
-          />
         )}
       </div>
       <RightDock

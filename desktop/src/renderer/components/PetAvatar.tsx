@@ -1,12 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
-import type { PetState, PetView } from '../../shared/pets'
-import type { PetPrefs } from '../settings/prefs'
+import type { PetMotionStyle, PetState, PetView } from '../../shared/pets'
 import { clampPoint, detectFrameCounts, dragBounds, motionFor, spriteRowFor, type DragBounds } from '../lib/petMotion'
+
+// 本组件已无挂载点(App.tsx 的聊天内挂载已在 Task 5 摘除,Task 10 将连同本文件
+// 一并删除);这里不再依赖 renderer settings/prefs.ts 的 pets 偏好类型(已随
+// Task 5 一起移除),就地声明渲染所需的最小 prefs 形状,避免死代码拖住编译。
+export interface PetAvatarPrefs {
+  enabled: boolean
+  motion: PetMotionStyle
+  scale: number
+  position: { x: number; y: number }
+}
 
 export interface PetAvatarProps {
   pet: PetView
   state: PetState
-  prefs: PetPrefs
+  prefs: PetAvatarPrefs
   onPositionChange: (position: { x: number; y: number }) => void
 }
 

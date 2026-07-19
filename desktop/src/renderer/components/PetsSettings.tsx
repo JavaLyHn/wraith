@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Switch } from './ui/switch'
-import { useSettings } from '../settings/SettingsContext'
+import { usePetConfig } from '../lib/usePetConfig'
 import { selectedPet } from '../lib/petMotion'
 import type { PetMotionStyle, PetSource, PetView } from '../../shared/pets'
 
@@ -19,11 +19,12 @@ function sourceLabel(source: PetSource): string {
 
 /**
  * 设置页“宠物”分区。所有宠物偏好(开关/选中/缩放/动态风格)一律经
- * useSettings().setPets 持久化——组件内不留第二份配置 state 影子。
+ * usePetConfig().setConfig 走 IPC 持久化到主进程(settings.json)——组件内
+ * 不留第二份配置 state 影子,且与全局常驻宠物窗口共用同一份配置来源。
  * pets(库列表)与 error(本地导入错误文案)是纯 UI/IPC 派生状态,不是偏好。
  */
 export default function PetsSettings(): JSX.Element {
-  const { prefs, setPets } = useSettings()
+  const { config, setConfig } = usePetConfig()
   const [pets, setLibrary] = useState<PetView[]>([])
   const [error, setError] = useState<string | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -77,7 +78,7 @@ export default function PetsSettings(): JSX.Element {
     finally { setRemovingIds(prev => { const next = new Set(prev); next.delete(id); return next }) }
   }
 
-  const active = selectedPet(pets, prefs.pets.selectedId)
+  const active = config ? selectedPet(pets, config.selectedId) : null
   const activeId = active?.id ?? null
 
   useEffect(() => {
@@ -91,12 +92,23 @@ export default function PetsSettings(): JSX.Element {
   const lbl = 'mb-2 text-3xs uppercase tracking-wider text-fg-subtle'
   const cardBase = 'flex w-full flex-col items-start gap-1 rounded-lg border px-3 py-2 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50'
 
+  // config 挂载后异步拉取,首帧尚未到达时渲染骨架/禁用态,不解引用 null。
+  if (!config) {
+    return (
+      <div className="flex max-w-xl flex-col gap-6" data-testid="pets-settings-loading" aria-busy="true">
+        <div className="h-16 animate-pulse rounded-lg border border-border bg-surface" />
+        <div className="h-20 w-20 animate-pulse rounded-lg border border-border bg-surface" />
+        <div className="h-24 animate-pulse rounded-lg border border-border bg-surface" />
+      </div>
+    )
+  }
+
   return (
     <div className="flex max-w-xl flex-col gap-6">
       <div className="rounded-lg border border-border px-3 py-2">
         <label className="flex cursor-pointer select-none items-center justify-between gap-3 text-xs font-semibold text-fg">
           启用桌面宠物
-          <Switch data-testid="pet-enabled" checked={prefs.pets.enabled} onCheckedChange={(checked) => setPets({ enabled: checked })} />
+          <Switch data-testid="pet-enabled" checked={config.enabled} onCheckedChange={(checked) => setConfig({ enabled: checked })} />
         </label>
         <div className="mt-1 text-2xs text-fg-subtle">关闭后不挂载浮件、不解码宠物图片</div>
       </div>
@@ -123,13 +135,13 @@ export default function PetsSettings(): JSX.Element {
         {error && <div className="mb-2 text-xs text-danger">{error}</div>}
         <div data-testid="pet-library" className="grid grid-cols-2 gap-2">
           {pets.map((pet) => {
-            const isSelected = pet.id === prefs.pets.selectedId
+            const isSelected = pet.id === config.selectedId
             return (
               <div key={pet.id} className="relative">
                 <button
                   data-testid={`pet-card-${pet.id}`}
                   disabled={!pet.available}
-                  onClick={() => setPets({ selectedId: pet.id })}
+                  onClick={() => setConfig({ selectedId: pet.id })}
                   className={cardBase + ' ' + (isSelected ? 'border-accent bg-accent/10' : 'border-border hover:bg-surface')}
                 >
                   <span className="text-xs font-semibold text-fg">{pet.displayName}</span>
@@ -155,24 +167,24 @@ export default function PetsSettings(): JSX.Element {
         <div className={lbl}>动态风格</div>
         <div className="flex gap-2">
           {MOTION_OPTS.map((m) => (
-            <button key={m.key} data-testid={`pet-motion-${m.key}`} aria-pressed={prefs.pets.motion === m.key}
-              onClick={() => setPets({ motion: m.key })}
-              className={'rounded-lg border px-3 py-1.5 text-xs ' + (prefs.pets.motion === m.key ? 'border-accent bg-accent/10 font-semibold text-accent' : 'border-border text-fg-muted hover:bg-surface')}
+            <button key={m.key} data-testid={`pet-motion-${m.key}`} aria-pressed={config.motion === m.key}
+              onClick={() => setConfig({ motion: m.key })}
+              className={'rounded-lg border px-3 py-1.5 text-xs ' + (config.motion === m.key ? 'border-accent bg-accent/10 font-semibold text-accent' : 'border-border text-fg-muted hover:bg-surface')}
             >{m.label}</button>
           ))}
         </div>
       </div>
 
       <label className="block">
-        <div className={lbl}>缩放 {prefs.pets.scale.toFixed(2)}×</div>
+        <div className={lbl}>缩放 {config.scale.toFixed(2)}×</div>
         <input
           data-testid="pet-scale"
           type="range"
-          min="0.75"
-          max="1.5"
-          step="0.05"
-          value={prefs.pets.scale}
-          onChange={(e) => setPets({ scale: Number(e.target.value) })}
+          min={0.5}
+          max={2}
+          step={0.05}
+          value={config.scale}
+          onChange={(e) => setConfig({ scale: Number(e.target.value) })}
           className="w-full"
         />
       </label>
