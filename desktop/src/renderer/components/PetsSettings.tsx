@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Switch } from './ui/switch'
 import { usePetConfig } from '../lib/usePetConfig'
 import { selectedPet } from '../lib/petMotion'
+import { isValidPetName } from '../../shared/petInstall'
 import type { PetMotionStyle, PetSource, PetView } from '../../shared/pets'
 
 const MOTION_OPTS: { key: PetMotionStyle; label: string }[] = [
@@ -31,6 +32,10 @@ export default function PetsSettings(): JSX.Element {
   const [importingImage, setImportingImage] = useState(false)
   const [importingPackage, setImportingPackage] = useState(false)
   const [removingIds, setRemovingIds] = useState<ReadonlySet<string>>(new Set())
+  // 应用内 Petdex 安装:名字输入 + in-flight 守卫 + 流式日志(累积主进程推来的 stdout/stderr)。
+  const [installName, setInstallName] = useState('')
+  const [installing, setInstalling] = useState(false)
+  const [installLog, setInstallLog] = useState('')
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -42,6 +47,9 @@ export default function PetsSettings(): JSX.Element {
   }, [])
 
   useEffect(() => { void refresh() }, [refresh])
+
+  // 订阅 Petdex 安装的流式输出,累积进日志区(挂载即订阅、卸载即退订,一次到位)。
+  useEffect(() => window.wraith.onPetInstallOutput((chunk) => setInstallLog((prev) => prev + chunk)), [])
 
   const importImage = async (): Promise<void> => {
     if (importingImage) return // in-flight 守卫:防快速双击开出两个并发对话框
@@ -65,6 +73,20 @@ export default function PetsSettings(): JSX.Element {
       else await refresh()
     } catch (e) { setError((e as Error).message) }
     finally { setImportingPackage(false) }
+  }
+
+  const trimmedName = installName.trim()
+  const installPet = async (): Promise<void> => {
+    if (installing || !isValidPetName(trimmedName)) return
+    setInstalling(true)
+    setError(null)
+    setInstallLog('')
+    try {
+      const result = await window.wraith.petsInstall(trimmedName)
+      if (result.error) setError(result.error)
+      else { await refresh(); setInstallName('') }
+    } catch (e) { setError((e as Error).message) }
+    finally { setInstalling(false) }
   }
 
   const removePet = async (id: string): Promise<void> => {
@@ -132,6 +154,34 @@ export default function PetsSettings(): JSX.Element {
           <button data-testid="pet-import-package" disabled={importingPackage} onClick={() => void importPackage()}
             className="rounded-lg border border-accent px-3 py-1.5 text-xs text-accent hover:bg-accent/10 disabled:cursor-not-allowed disabled:opacity-50">导入精灵包</button>
         </div>
+
+        {/* 从 Petdex 直接安装:输入宠物名 → 应用内跑 npx,不必手动下载导入精灵包。 */}
+        <div className="mb-3">
+          <div className="flex items-center gap-2">
+            <input
+              data-testid="pet-install-name"
+              value={installName}
+              onChange={(e) => setInstallName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') void installPet() }}
+              disabled={installing}
+              placeholder="宠物名,如 scoop"
+              className="flex-1 rounded-lg border border-border bg-transparent px-3 py-1.5 text-xs text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none disabled:opacity-50"
+            />
+            <button
+              data-testid="pet-install"
+              disabled={installing || !isValidPetName(trimmedName)}
+              onClick={() => void installPet()}
+              className="whitespace-nowrap rounded-lg border border-accent bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >{installing ? '安装中…' : '从 Petdex 安装'}</button>
+          </div>
+          <div className="mt-1 text-2xs text-fg-subtle">
+            将执行:<code className="text-fg-muted">npx petdex@latest install {trimmedName || '<名>'}</code>
+          </div>
+          {(installing || installLog) && (
+            <pre data-testid="pet-install-log" className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-surface p-2 text-2xs text-fg-muted">{installLog || '启动中…'}</pre>
+          )}
+        </div>
+
         {error && <div className="mb-2 text-xs text-danger">{error}</div>}
         <div data-testid="pet-library" className="grid grid-cols-2 gap-2">
           {pets.map((pet) => {

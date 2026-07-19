@@ -4,8 +4,14 @@ import type { PetConfig } from '../../main/settings'
 import type { PetSprite as PetSpriteType, PetState } from '../../shared/pets'
 import type { PetStateSignal } from '../../shared/petState'
 import { nextPetState, TRANSIENT_MS } from '../../shared/petState'
-import { spriteRowFor, RUN_RIGHT_ROW, RUN_LEFT_ROW } from '../lib/petMotion'
+import { spriteRowFor, motionFor, RUN_RIGHT_ROW, RUN_LEFT_ROW } from '../lib/petMotion'
 import { isOpaqueAt, spriteHitPixel, containScale, STATIC_IMAGE_MAX_PX, stepScale, clampScale } from '../../shared/petWindow'
+
+/** 点击(非拖动)时随机播的两种"打招呼"反应。用会话状态名承载,是因为 petMotion 的
+ * STATE_ROW 已把 thinking→Waving(row3)、success→Jumping(row4) 定为规范映射——
+ * 直接复用其行选择 + 动画节拍(motionFor),不必再另写一套 rowOverride。拖动仍走
+ * RUN_RIGHT_ROW/RUN_LEFT_ROW 的奔跑,与此互斥。 */
+const CLICK_REACTIONS: PetState[] = ['thinking', 'success']
 
 interface PreviewState {
   previewUrl: string | null
@@ -87,6 +93,17 @@ export default function PetWindowApp(): JSX.Element {
   const dragDirRef = useRef<number | null>(null)
   const lastDragXRef = useRef(0)
   const DRAG_FLIP_THRESHOLD_PX = 3
+  // 点击 vs 拖动:pointerdown 先不判定,记下按下点(screen 坐标)与"有按住"标志;
+  // pointermove 位移越过 DRAG_START_THRESHOLD_PX 才升级为拖动(播奔跑),否则松手时
+  // 视为一次"点击" → 播随机 Waving/Jumping。阈值给一点余量,吸收按下瞬间的手抖。
+  const pointerActiveRef = useRef(false)
+  const downXRef = useRef(0)
+  const downYRef = useRef(0)
+  const DRAG_START_THRESHOLD_PX = 4
+  // 点击反应态:非 null 时(thinking=Waving / success=Jumping)覆盖会话状态显示,
+  // 定时器到点自动回落。与拖动奔跑互斥(拖动一旦开始立即清掉本反应)。
+  const [clickState, setClickState] = useState<PetState | null>(null)
+  const clickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // 锁定(防误触):锁定时禁用拖动/滚轮/捏合缩放,但命中测试与右键菜单不受影响
   // (仍能捕获→右键弹菜单解锁)。高频 pointer/wheel/gesture handler 读 ref 避免过期闭包。
   const lockedRef = useRef(false)
@@ -133,8 +150,14 @@ export default function PetWindowApp(): JSX.Element {
   }, [config?.locked])
 
   useEffect(() => {
-    rowRef.current = preview?.sprite ? spriteRowFor(state, preview.sprite.rows) : 0
-  }, [state, preview?.sprite])
+    // 命中测试用的行须跟"实际展示的行"一致:点击反应期(clickState 非 null)展示的是
+    // Waving/Jumping 行,拖动期命中测试整体短路(不看此值),其余按真实会话状态。
+    const effective = clickState ?? state
+    rowRef.current = preview?.sprite ? spriteRowFor(effective, preview.sprite.rows) : 0
+  }, [state, clickState, preview?.sprite])
+
+  // 卸载时清掉点击反应定时器,避免在已卸载组件上 setState。
+  useEffect(() => () => { if (clickTimerRef.current !== null) clearTimeout(clickTimerRef.current) }, [])
 
   // PetSprite 报回的当前动画帧列号(精灵表场景);单图场景 PetSprite 不会推进这个值,
   // frameColRef 留在初值 0 也无妨——单图命中测试的 col 恒为 0(见下方解码分支)。
@@ -234,20 +257,31 @@ export default function PetWindowApp(): JSX.Element {
   // draggingRef=true + 命中测试被挂起,而原生 Menu.popup() 抢走输入焦点后,这次
   // pointerdown 对应的 pointerup 可能永远送不到这个 div,draggingRef 卡死在 true。
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || lockedRef.current) return // 锁定时不拖动(防误触)
-    draggingRef.current = true
+    if (e.button !== 0 || lockedRef.current) return // 锁定时不拖动/不响应(防误触)
+    // 只记"按住 + 按下点",先不判定拖动——按下瞬间还分不清用户是想点一下还是拖。
+    // 是否升级为拖动交给 pointermove 越过阈值时定,松手仍未越过就当"点击"(播 Waving/Jumping)。
+    pointerActiveRef.current = true
+    downXRef.current = e.screenX
+    downYRef.current = e.screenY
     grabRef.current = { dx: e.screenX - window.screenX, dy: e.screenY - window.screenY }
-    // 拖动一开始先按原朝向(右)播 run,方向随后由 pointermove 的水平位移确定。
-    dragDirRef.current = 1
-    lastDragXRef.current = e.screenX
-    setDragFacing(1)
     e.currentTarget.setPointerCapture(e.pointerId)
   }, [])
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) return
-    // 水平位移超阈值才判定方向(消抖):向左(dx<0)镜像为 -1,向右为 1;只在方向真正
-    // 翻转时 setState,高频 pointermove 期间不无谓重渲染。
+    if (!pointerActiveRef.current) return
+    if (!draggingRef.current) {
+      // 尚未升级为拖动:位移越过阈值才算真拖动;否则保持"待定"(可能只是点击),不动窗口。
+      if (Math.abs(e.screenX - downXRef.current) < DRAG_START_THRESHOLD_PX &&
+          Math.abs(e.screenY - downYRef.current) < DRAG_START_THRESHOLD_PX) return
+      draggingRef.current = true
+      // 拖动开始:清掉可能残留的点击反应(奔跑优先),按初始水平方向定朝向。
+      if (clickTimerRef.current !== null) { clearTimeout(clickTimerRef.current); clickTimerRef.current = null }
+      setClickState(null)
+      dragDirRef.current = e.screenX - downXRef.current < 0 ? -1 : 1
+      lastDragXRef.current = e.screenX
+      setDragFacing(dragDirRef.current)
+    }
+    // 已在拖动:水平位移超阈值才判定方向(消抖),只在方向真正翻转时 setState。
     const dx = e.screenX - lastDragXRef.current
     if (Math.abs(dx) >= DRAG_FLIP_THRESHOLD_PX) {
       lastDragXRef.current = e.screenX
@@ -260,6 +294,21 @@ export default function PetWindowApp(): JSX.Element {
     window.wraithPet.moveTo(e.screenX - grabRef.current.dx, e.screenY - grabRef.current.dy)
   }, [])
 
+  // 点击(非拖动)反应:随机 Waving/Jumping,播约一轮动画后自动回落到真实会话状态。
+  // holdMs 复用 motionFor 的节拍(thinking=1400 / success=560,与 style 无关,故传 'calm'),
+  // 取 max(600,…) 给"一跳"留足观感;reduced-motion 下无 CSS 动画,仍会短暂切到该行的
+  // 第 0 帧作为一个静态"打招呼"姿势,不特殊处理。
+  const triggerClickReaction = useCallback(() => {
+    const next = CLICK_REACTIONS[Math.floor(Math.random() * CLICK_REACTIONS.length)]!
+    if (clickTimerRef.current !== null) clearTimeout(clickTimerRef.current)
+    setClickState(next)
+    const holdMs = Math.max(600, motionFor(next, 'calm', false).durationMs)
+    clickTimerRef.current = setTimeout(() => {
+      clickTimerRef.current = null
+      setClickState(null)
+    }, holdMs)
+  }, [])
+
   // 拖动被外部打断的兜底:pointerup 不一定总会送达这个 div——原生右键菜单弹出、
   // 系统手势、窗口失焦等都可能让浏览器直接派发 pointercancel,或者(capture 已经
   // 被浏览器自己收回时)只派发 lostpointercapture 而没有 pointerup。没有这道兜底,
@@ -269,6 +318,7 @@ export default function PetWindowApp(): JSX.Element {
   // (capture 已经丢失时 release 本身是无害的空操作,用 try/catch 兜底跨浏览器差异)。
   const resetDrag = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     draggingRef.current = false
+    pointerActiveRef.current = false
     dragDirRef.current = null
     setDragFacing(null) // 拖动结束回到原朝向(右),run 停,恢复按会话状态显示
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* 已丢失/已释放,无害 */ }
@@ -278,10 +328,16 @@ export default function PetWindowApp(): JSX.Element {
   // 该相等,但直接读 window.screenX/Y 更贴近"主进程 setBounds 之后实际落地的位置",
   // 不受 moveTo IPC 异步/节流影响)。
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (!draggingRef.current) return
-    resetDrag(e)
-    void window.wraithPet.setConfig({ position: { x: window.screenX, y: window.screenY } })
-  }, [resetDrag])
+    const wasDragging = draggingRef.current
+    const wasActive = pointerActiveRef.current
+    if (!wasDragging && !wasActive) return
+    resetDrag(e) // 统一收尾:清 draggingRef/pointerActiveRef、复位朝向、释放 capture
+    if (wasDragging) {
+      void window.wraithPet.setConfig({ position: { x: window.screenX, y: window.screenY } })
+    } else {
+      triggerClickReaction() // 未越过拖动阈值 → 视为点击,播随机 Waving/Jumping
+    }
+  }, [resetDrag, triggerClickReaction])
 
   // 滚轮缩放(Task 9):每帧最多发一次 setScale IPC,同帧内的重复 wheel 事件直接丢弃
   // (wheelPendingRef 挡住,不排队、不合并 deltaY)。stepScale 的"当前 scale"读
@@ -321,7 +377,7 @@ export default function PetWindowApp(): JSX.Element {
         // 拖动期间:state='tool' 给一个奔跑节奏的动效时长(帧循环速度),真正的方向行由
         // rowOverride 决定(Run Right/Left 真帧);无左右行的表/单图则 rowOverride=null、
         // 用 spriteFacing 做 scaleX 镜像兜底。拖动结束恢复按真实会话状态显示、朝向复位。
-        state={dragging ? 'tool' : state}
+        state={dragging ? 'tool' : (clickState ?? state)}
         motion={config?.motion ?? 'calm'}
         onFrame={handleFrame}
         scale={config?.scale ?? 1}

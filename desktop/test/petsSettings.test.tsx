@@ -37,6 +37,8 @@ function installWraithMock(config: PetConfig = FIXED_CONFIG): {
     petsImportImage: vi.fn(() => Promise.resolve({})),
     petsImportPackage: vi.fn(() => Promise.resolve({})),
     petsRemove: vi.fn(() => Promise.resolve()),
+    petsInstall: vi.fn(() => Promise.resolve({ ok: true, error: null })),
+    onPetInstallOutput: vi.fn(() => () => {}),
   }
   return { petSetConfig, onConfigCb: state.onConfigCb }
 }
@@ -78,6 +80,24 @@ describe('PetsSettings', () => {
     })
   })
 
+  it('输入宠物名点「从 Petdex 安装」调用 petsInstall(name)', async () => {
+    render(<PetsSettings />)
+    const input = await screen.findByTestId('pet-install-name') as HTMLInputElement
+    fireEvent.change(input, { target: { value: 'scoop' } })
+    fireEvent.click(screen.getByTestId('pet-install'))
+    await waitFor(() => {
+      const wraith = (window as unknown as { wraith: { petsInstall: ReturnType<typeof vi.fn> } }).wraith
+      expect(wraith.petsInstall).toHaveBeenCalledWith('scoop')
+    })
+  })
+
+  it('非法宠物名时「安装」按钮禁用', async () => {
+    render(<PetsSettings />)
+    const input = await screen.findByTestId('pet-install-name')
+    fireEvent.change(input, { target: { value: 'Bad Name!' } })
+    expect((screen.getByTestId('pet-install') as HTMLButtonElement).disabled).toBe(true)
+  })
+
   it('config 为 null(尚未拉取)时不崩溃', () => {
     ;(window as unknown as { wraith: Record<string, unknown> }).wraith = {
       petGetConfig: vi.fn(() => new Promise(() => {})), // 永不 resolve,模拟 initial async
@@ -87,6 +107,8 @@ describe('PetsSettings', () => {
       petsImportImage: vi.fn(() => Promise.resolve({})),
       petsImportPackage: vi.fn(() => Promise.resolve({})),
       petsRemove: vi.fn(() => Promise.resolve()),
+      petsInstall: vi.fn(() => Promise.resolve({ ok: true, error: null })),
+      onPetInstallOutput: vi.fn(() => () => {}),
     }
     expect(() => render(<PetsSettings />)).not.toThrow()
   })

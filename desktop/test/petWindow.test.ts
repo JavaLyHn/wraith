@@ -97,9 +97,11 @@ describe('buildPetMenuTemplate', () => {
     { id: 'a', displayName: 'A', description: '', source: 'built-in', kind: 'static', available: true, removable: false, previewUrl: null, sprite: null },
     { id: 'b', displayName: 'B', description: '', source: 'imported', kind: 'static', available: false, removable: true, previewUrl: null, sprite: null },
   ]
-  it('含选择宠物(仅可用打勾)/缩放/锁定/重置/关闭', () => {
+  it('含打开wraith/选择宠物(仅可用打勾)/缩放/锁定/重置/关闭', () => {
     const t = buildPetMenuTemplate(pets, { selectedId: 'a', scale: 1, locked: false })
     const flat = JSON.stringify(t)
+    // 「打开 wraith」是唯一"跳回应用"的入口(桌宠窗 nonactivating,点击不激活应用)
+    expect(t.find(i => i.id === 'pet:open-main')!.label).toBe('打开 wraith')
     expect(flat).toContain('pet:close')
     expect(flat).toContain('pet:reset-position')
     const select = t.find(i => i.id === 'pet:select')!

@@ -29,3 +29,9 @@ export interface PetImportResult {
   pet: PetView | null
   error: string | null
 }
+
+/** 应用内 `npx petdex@latest install <名>` 的最终结果(流式日志经单独的 output 频道推送)。 */
+export interface PetInstallResult {
+  ok: boolean
+  error: string | null
+}

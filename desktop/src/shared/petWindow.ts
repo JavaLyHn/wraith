@@ -89,6 +89,10 @@ export interface PetMenuItem { id: string; label: string; type?: 'separator' | '
 
 export function buildPetMenuTemplate(pets: PetView[], config: { selectedId: string | null; scale: number; locked: boolean }): PetMenuItem[] {
   return [
+    // 「打开 wraith」:桌宠窗是 nonactivating panel,点击/拖动不再激活应用,想跳回主窗
+    // 只能经这里显式触发(pet:open-main → show+focus 主窗 + app.focus)。置顶最顺手。
+    { id: 'pet:open-main', label: '打开 wraith' },
+    { id: 'sep-open', label: '', type: 'separator' },
     { id: 'pet:select', label: '选择宠物', type: 'submenu', submenu: pets.filter(p => p.available).map(p => ({
       id: `pet:select:${p.id}`, label: p.displayName, type: 'checkbox', checked: config.selectedId === p.id,
     })) },

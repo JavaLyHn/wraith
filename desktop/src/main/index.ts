@@ -47,6 +47,7 @@ import {
   pushPetConfig, pushPetPreview, pushPetSignal, type PetPreviewPayload,
   petWindowMoveTo, petWindowResizeToScale, petWindowResetPosition, toElectronMenu,
 } from './petWindow'
+import { runPetdexInstall } from './petInstall'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -509,16 +510,15 @@ async function importPetImageFromDialog(win: BrowserWindow | null, userDataDir: 
 }
 
 async function importPetPackageFromDialog(win: BrowserWindow | null, userDataDir: string): Promise<PetImportResult> {
-  const zipOptions: Electron.OpenDialogOptions = {
-    properties: ['openFile'],
+  // 单个对话框同时允许选「.zip 文件」或「宠物文件夹」:macOS NSOpenPanel 支持
+  // canChooseFiles + canChooseDirectories 并存——文件按 zip 后缀过滤,文件夹恒可选。
+  // (旧版是"先弹 zip 选择器,取消再回落弹目录选择器";用户取消第一层时会莫名再弹
+  // 一次目录选择器,观感就是"文件夹弹了两次"。合并成一个对话框根治该重复弹窗。)
+  const options: Electron.OpenDialogOptions = {
+    properties: ['openFile', 'openDirectory'],
     filters: [{ name: 'ZIP 宠物包', extensions: ['zip'] }],
   }
-  let result = win ? await dialog.showOpenDialog(win, zipOptions) : await dialog.showOpenDialog(zipOptions)
-  if (result.canceled || result.filePaths.length === 0) {
-    // ZIP 选择器被取消 → 回落到目录选择器(文件夹形态的宠物包无扩展名可过滤)。
-    const dirOptions: Electron.OpenDialogOptions = { properties: ['openDirectory'] }
-    result = win ? await dialog.showOpenDialog(win, dirOptions) : await dialog.showOpenDialog(dirOptions)
-  }
+  const result = win ? await dialog.showOpenDialog(win, options) : await dialog.showOpenDialog(options)
   if (result.canceled || result.filePaths.length === 0) return { pet: null, error: null }
   try {
     const pet = await importPackage({ userDataDir, sourcePath: result.filePaths[0]! })
@@ -559,6 +559,21 @@ ipcMain.handle('wraith:petsRemove', async (_e, id: string) => {
 ipcMain.handle('wraith:petsPreview', (_e, id: string) =>
   previewDataUrl({ userDataDir: app.getPath('userData'), petdexRoot: petdexRoot(), id })
 )
+// 应用内 Petdex 安装:跑 `npx petdex@latest install <名>`(名字白名单+定长参数+shell:false,见 petInstall.ts)。
+// 过程 stdout/stderr 经 wraith:petsInstall-output 流式回推给发起的渲染进程(e.sender);装完(ok)照
+// petsImport* 收尾——petdex 默认装进 ~/.codex/pets,syncPetWindow+pushCurrentPetPreview 让新宠物即时可用。
+ipcMain.handle('wraith:petsInstall', async (e, name: string) => {
+  const result = await runPetdexInstall(name, {
+    cwd: os.homedir(),
+    onOutput: (chunk) => { try { e.sender.send('wraith:petsInstall-output', chunk) } catch { /* 渲染进程已销毁 */ } },
+  })
+  if (result.ok) {
+    const cfg = readPetConfig(app.getPath('userData'))
+    void syncPetWindow(cfg)
+    pushCurrentPetPreview(cfg)
+  }
+  return result
+})
 
 // 桌宠配置:主窗与全局宠物窗共用同一份 settings.json 'pets' 键。
 // 广播到 BrowserWindow.getAllWindows() 而非单一 mainWindow/petWin 引用,
@@ -656,6 +671,16 @@ function applyConfigChange(patch: Partial<PetConfig>): PetConfig {
  * / `pet:reset-position` / `pet:close`,与 buildPetMenuTemplate(shared/petWindow.ts)
  * 产出的 PetMenuItem.id 一一对应。 */
 function handlePetMenu(id: string): void {
+  if (id === 'pet:open-main') {
+    // 桌宠窗是 nonactivating panel,点击它不会激活应用——想"跳回 wraith"必须在这里
+    // 显式把主窗拉到前台:主窗已关(macOS 关窗只置 null 不退出)则重建,再 show+focus,
+    // 并 app.focus({steal}) 把 wraith 从后台真正切到最前(否则应用仍不是 active app)。
+    if (!mainWindow || mainWindow.isDestroyed()) createWindow()
+    mainWindow?.show()
+    mainWindow?.focus()
+    if (process.platform === 'darwin') app.focus({ steal: true })
+    return
+  }
   if (id.startsWith('pet:select:')) {
     applyConfigChange({ selectedId: id.slice('pet:select:'.length) })
     return

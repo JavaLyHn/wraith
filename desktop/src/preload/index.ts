@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
-import type { PetView, PetImportResult } from '../shared/pets'
+import type { PetView, PetImportResult, PetInstallResult } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
 
 /**
@@ -156,6 +156,10 @@ export interface WraithApi {
   petsImportPackage(): Promise<PetImportResult>
   petsRemove(id: string): Promise<{ ok: boolean }>
   petsPreview(id: string): Promise<string | null>
+  /** 应用内 Petdex 安装:执行 `npx petdex@latest install <名>`(名字白名单+定长参数+shell:false)。
+   * 结果经 invoke 返回,过程中的 stdout/stderr 经 onPetInstallOutput 流式推来。 */
+  petsInstall(name: string): Promise<PetInstallResult>
+  onPetInstallOutput(cb: (chunk: string) => void): () => void
   /** 桌宠配置(全局常驻窗口):读/写 + 跨进程变更订阅(主窗与宠物窗共用同一份配置)。 */
   petGetConfig(): Promise<PetConfig>
   petSetConfig(patch: Partial<PetConfig>): Promise<PetConfig>
@@ -624,6 +628,14 @@ const wraith: WraithApi = {
   },
   petsPreview(id) {
     return ipcRenderer.invoke('wraith:petsPreview', id) as Promise<string | null>
+  },
+  petsInstall(name) {
+    return ipcRenderer.invoke('wraith:petsInstall', name) as Promise<PetInstallResult>
+  },
+  onPetInstallOutput(cb) {
+    const l = (_e: Electron.IpcRendererEvent, chunk: string) => cb(chunk)
+    ipcRenderer.on('wraith:petsInstall-output', l)
+    return () => { ipcRenderer.removeListener('wraith:petsInstall-output', l) }
   },
 
   petGetConfig() {

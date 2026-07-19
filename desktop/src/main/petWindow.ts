@@ -76,6 +76,11 @@ function createPetWindow(config: PetConfig): void {
     const b = clampToDisplay({ ...pos, ...size }, wa)
     win = new BrowserWindow({
       x: b.x, y: b.y, width: b.width, height: b.height,
+      // macOS 用 NSPanel(nonactivating):点击/拖动桌宠不再"激活 wraith 应用",
+      // 因而不会把主窗抢到最前、打断用户正在别的 App 里的操作(用户本意通常只是挪一下宠物)。
+      // 想真正"跳回 wraith"改由右键菜单「打开 wraith」(pet:open-main)显式触发。
+      // 仅 darwin 有意义;其余平台不传该 type(避免落到未知窗口类型)。
+      ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
       frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
       // frameless 无边框窗本就没有用户可拖拽的缩放手柄,这里的 resizable 只影响
       // Electron 是否接受程序化 setBounds 改尺寸——resizable:false 会让 setBounds
