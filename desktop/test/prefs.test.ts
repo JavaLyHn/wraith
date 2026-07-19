@@ -35,7 +35,9 @@ describe('loadPrefs', () => {
     })
   })
 
-  it('将非法宠物偏好和越界位置回落为默认值', () => {
+  it('将非法宠物偏好和非有限位置回落为默认值(仅非有限值回落,有限坐标保留)', () => {
+    // 位置上限已放宽为垃圾值过滤(±4096):-161 现在是合法偏移应保留,
+    // 只有 Infinity/NaN 这类非有限值才回落 0。视觉边界另由 PetAvatar 实测夹。
     expect(loadPrefs(() => JSON.stringify({
       pets: {
         enabled: 'yes',
@@ -46,18 +48,18 @@ describe('loadPrefs', () => {
       },
     })).pets).toEqual({
       ...DEFAULT_PREFS.pets,
-      position: { x: 0, y: 0 },
+      position: { x: 0, y: -161 },
     })
   })
 
-  it('保留边界内的宠物位置和缩放值', () => {
+  it('保留任意真实窗口内的宠物位置(含远超旧 ±160 的上拖偏移)和缩放值', () => {
     expect(loadPrefs(() => JSON.stringify({
-      pets: { enabled: false, scale: 1.5, position: { x: -160, y: 160 } },
-    })).pets).toMatchObject({ enabled: false, scale: 1.5, position: { x: -160, y: 160 } })
+      pets: { enabled: false, scale: 1.5, position: { x: -900, y: -720 } },
+    })).pets).toMatchObject({ enabled: false, scale: 1.5, position: { x: -900, y: -720 } })
   })
 
-  it('将过小缩放、越界和非有限位置回落默认', () => {
-    const raw = '{"pets":{"scale":0.74,"position":{"x":161,"y":1e400}}}'
+  it('将过小缩放和非有限位置回落默认,离谱大数(超 ±4096)也回落', () => {
+    const raw = '{"pets":{"scale":0.74,"position":{"x":5000,"y":1e400}}}'
     expect(loadPrefs(() => raw).pets).toMatchObject({
       scale: DEFAULT_PREFS.pets.scale,
       position: { x: 0, y: 0 },
@@ -76,11 +78,11 @@ describe('savePrefs', () => {
 })
 
 describe('normalizePetPrefs', () => {
-  it('规范化运行时合并后的宠物偏好', () => {
+  it('规范化运行时合并后的宠物偏好:非有限坐标回落 0,有限坐标(-200)保留,越界缩放回落', () => {
     expect(normalizePetPrefs({
       ...DEFAULT_PREFS.pets,
       scale: 4,
       position: { x: -200, y: Number.POSITIVE_INFINITY },
-    })).toEqual(DEFAULT_PREFS.pets)
+    })).toEqual({ ...DEFAULT_PREFS.pets, position: { x: -200, y: 0 } })
   })
 })

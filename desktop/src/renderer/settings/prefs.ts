@@ -35,10 +35,16 @@ function oneOf<T>(v: unknown, allowed: T[], dflt: T): T {
   return allowed.includes(v as T) ? (v as T) : dflt
 }
 
+// 拖拽偏移的持久化上限:仅作垃圾值过滤(拒 NaN/Infinity/离谱大数),而非视觉边界。
+// 真正的视觉边界由 PetAvatar 按定位容器实测动态夹(见 dragBounds/clampPoint),
+// 因此这里放宽到与 MAX_DIMENSION 同量级的 ±4096——任何真实窗口内的拖动落点都能持久化,
+// 不会像旧的 ±160 那样把稍大的合法偏移一律重置成 0(那正是"最高只能拖到某处"的根因之一)。
+const MAX_POSITION_OFFSET = 4096
+
 function normalizedPosition(value: unknown): PetPrefs['position'] {
   const position = value && typeof value === 'object' ? value as Record<string, unknown> : {}
   const normalize = (coordinate: unknown, fallback: number): number =>
-    typeof coordinate === 'number' && Number.isFinite(coordinate) && coordinate >= -160 && coordinate <= 160
+    typeof coordinate === 'number' && Number.isFinite(coordinate) && coordinate >= -MAX_POSITION_OFFSET && coordinate <= MAX_POSITION_OFFSET
       ? coordinate
       : fallback
   return {

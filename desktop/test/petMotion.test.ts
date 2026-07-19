@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { motionFor, selectedPet, spriteRowFor } from '../src/renderer/lib/petMotion'
+import { clampPoint, detectFrameCounts, dragBounds, motionFor, selectedPet, spriteRowFor } from '../src/renderer/lib/petMotion'
 import type { PetView } from '../src/shared/pets'
 
 describe('motionFor', () => {
@@ -79,5 +79,57 @@ describe('selectedPet', () => {
   it('无匹配且无可用内置宠物时返回 null', () => {
     expect(selectedPet([], null)).toBeNull()
     expect(selectedPet([{ ...builtIn, available: false }], null)).toBeNull()
+  })
+})
+
+describe('detectFrameCounts', () => {
+  // Petdex 精灵表是固定网格 + 透明列补齐:每行真实帧数 = 最后一个非空列 + 1,
+  // 尾部透明列不能被当成帧循环,否则动画会周期性停在空白格 → 宠物"消失一段时间"。
+  // 数据取自真实 Noir 精灵表逐格 alpha 采样:idle 6 / wave 8 / run 8 / failed 4 / review 5 / jump 8。
+  it('取每行最后一个非空列+1 作为真实帧数,丢弃尾部透明列', () => {
+    const grid = [
+      [true, true, true, true, true, true, false, false], // idle: 6
+      [true, true, true, true, true, true, true, true],    // wave: 8
+      [true, true, true, true, true, true, true, true],    // run: 8
+      [true, true, true, true, false, false, false, false], // failed: 4
+      [true, true, true, true, true, false, false, false], // review: 5
+      [true, true, true, true, true, true, true, true],    // jump: 8
+    ]
+    expect(detectFrameCounts(grid, 8)).toEqual([6, 8, 8, 4, 5, 8])
+  })
+
+  it('行内部空洞不截断,仍以最后一个非空列为准', () => {
+    expect(detectFrameCounts([[true, false, true, false]], 8)).toEqual([3])
+  })
+
+  it('整行全空 → 至少 1 帧,绝不返回 0(避免除零/无帧)', () => {
+    expect(detectFrameCounts([[false, false, false, false]], 8)).toEqual([1])
+  })
+})
+
+describe('dragBounds', () => {
+  // 宠物锚在容器右下角(right=16, bottom=12),向上/向左是负偏移。
+  // 边界应让整只宠物停在容器内并留 margin,而不是旧的固定 ±160。
+  it('高窗口下向上可拖动的范围远超旧的 -160', () => {
+    const b = dragBounds(600, 900, 120, 130, 16, 12, 8)
+    expect(b.minY).toBe(130 + 12 + 8 - 900) // = -750,可上拖 750px
+    expect(b.maxY).toBe(12 - 8)             // = 4
+    expect(b.minX).toBe(120 + 16 + 8 - 600) // = -456
+    expect(b.maxX).toBe(16 - 8)             // = 8
+    expect(b.minY).toBeLessThan(-160)
+  })
+})
+
+describe('clampPoint', () => {
+  it('逐轴夹到边界内', () => {
+    const b = { minX: -400, maxX: 8, minY: -700, maxY: 4 }
+    expect(clampPoint({ x: -900, y: -900 }, b)).toEqual({ x: -400, y: -700 })
+    expect(clampPoint({ x: 50, y: 50 }, b)).toEqual({ x: 8, y: 4 })
+    expect(clampPoint({ x: -100, y: -100 }, b)).toEqual({ x: -100, y: -100 })
+  })
+
+  it('容器比宠物还小(min>max)时收敛到 max,不产生反向区间', () => {
+    const b = { minX: 20, maxX: 8, minY: 20, maxY: 4 }
+    expect(clampPoint({ x: -50, y: -50 }, b)).toEqual({ x: 8, y: 4 })
   })
 })
