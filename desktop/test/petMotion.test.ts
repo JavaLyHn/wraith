@@ -62,9 +62,16 @@ describe('selectedPet', () => {
     available: true, removable: false, previewUrl: null, sprite: null,
   }
 
-  it('不选中未安装的 Noir，即便它是显式选中项，转而回退内置且可用的宠物', () => {
+  it('不选中未安装的 Noir，即便它是显式选中项，转而回退列表中第一个可用宠物', () => {
     expect(selectedPet([noirUnavailable, builtIn], 'noir-webling')).toEqual(builtIn)
     expect(selectedPet([noirUnavailable], 'noir-webling')).toBeNull()
+  })
+
+  it('无 selectedId 时回退到第一个可用宠物,不要求来源为内置——与桌宠窗口 assemblePetPreview 的回退口径对齐', () => {
+    // 这正是本次要修的分歧本身:此前该函数的回退分支硬性要求 source==='built-in',
+    // 而桌宠窗口那边回退的是"任意来源的第一个可用宠物"——两边不一致时,设置页会显示
+    // "未选择",桌面却已经在展示一只自动识别到的 petdex 宠物。
+    expect(selectedPet([noirAvailable], null)).toEqual(noirAvailable)
   })
 
   it('已检测到且可用的 Noir 选择跨刷新（新的宠物数组引用）保留', () => {

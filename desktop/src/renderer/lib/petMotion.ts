@@ -32,12 +32,14 @@ export function spriteRowFor(state: PetState, rows: number): number {
 
 /**
  * 纯函数解析当前应展示的宠物:优先偏好里记的 selectedId(须仍可用),
- * 否则回退到第一个可用的内置宠物;都没有则 null。
+ * 否则回退到列表中第一个可用宠物(不限来源)——与主进程宠物窗口
+ * assemblePetPreview 的回退口径对齐,避免"桌面已经在展示某只宠物,设置页却显示
+ * 未选择"的分歧;都没有可用宠物则 null。
  * 不读取/写入任何偏好状态——选中项的持久化与跨刷新保留完全由调用方(经
  * usePetConfig 拿到的 config.selectedId)负责,这里只做无副作用的查找。
  */
 export function selectedPet(pets: PetView[], selectedId: string | null): PetView | null {
-  return pets.find(p => p.id === selectedId && p.available) ?? pets.find(p => p.source === 'built-in' && p.available) ?? null
+  return pets.find(p => p.id === selectedId && p.available) ?? pets.find(p => p.available) ?? null
 }
 
 /**
