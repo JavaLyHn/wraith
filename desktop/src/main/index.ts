@@ -665,6 +665,11 @@ function handlePetMenu(id: string): void {
     petWindowResizeToScale(next.scale) // 与滚轮路径一致:改配置之外还要联动 resize
     return
   }
+  if (id === 'pet:lock') {
+    // 切换锁定:锁定后 renderer 禁用拖动/缩放(防误触),右键菜单仍可用以解锁。
+    applyConfigChange({ locked: !readPetConfig(app.getPath('userData')).locked })
+    return
+  }
   if (id === 'pet:reset-position') {
     const userDataDir = app.getPath('userData')
     const cfg = readPetConfig(userDataDir)

@@ -87,6 +87,9 @@ export default function PetWindowApp(): JSX.Element {
   const dragDirRef = useRef<number | null>(null)
   const lastDragXRef = useRef(0)
   const DRAG_FLIP_THRESHOLD_PX = 3
+  // 锁定(防误触):锁定时禁用拖动/滚轮/捏合缩放,但命中测试与右键菜单不受影响
+  // (仍能捕获→右键弹菜单解锁)。高频 pointer/wheel/gesture handler 读 ref 避免过期闭包。
+  const lockedRef = useRef(false)
 
   useEffect(() => {
     window.wraithPet.ready()
@@ -124,6 +127,10 @@ export default function PetWindowApp(): JSX.Element {
   useEffect(() => {
     scaleRef.current = config?.scale ?? 1
   }, [config?.scale])
+
+  useEffect(() => {
+    lockedRef.current = config?.locked ?? false
+  }, [config?.locked])
 
   useEffect(() => {
     rowRef.current = preview?.sprite ? spriteRowFor(state, preview.sprite.rows) : 0
@@ -202,7 +209,7 @@ export default function PetWindowApp(): JSX.Element {
     const onStart = (e: Event): void => { e.preventDefault(); base = scaleRef.current }
     const onChange = (e: Event): void => {
       e.preventDefault()
-      if (draggingRef.current || wheelPendingRef.current) return
+      if (draggingRef.current || wheelPendingRef.current || lockedRef.current) return // 锁定时不缩放
       wheelPendingRef.current = true
       requestAnimationFrame(() => { wheelPendingRef.current = false })
       const scale = (e as unknown as { scale?: number }).scale ?? 1
@@ -227,7 +234,7 @@ export default function PetWindowApp(): JSX.Element {
   // draggingRef=true + 命中测试被挂起,而原生 Menu.popup() 抢走输入焦点后,这次
   // pointerdown 对应的 pointerup 可能永远送不到这个 div,draggingRef 卡死在 true。
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return
+    if (e.button !== 0 || lockedRef.current) return // 锁定时不拖动(防误触)
     draggingRef.current = true
     grabRef.current = { dx: e.screenX - window.screenX, dy: e.screenY - window.screenY }
     // 拖动一开始先按原朝向(右)播 run,方向随后由 pointermove 的水平位移确定。
@@ -280,7 +287,7 @@ export default function PetWindowApp(): JSX.Element {
   // (wheelPendingRef 挡住,不排队、不合并 deltaY)。stepScale 的"当前 scale"读
   // scaleRef(命中测试同一份 ref,随 config.scale 保持最新),不额外引入新状态。
   const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
-    if (wheelPendingRef.current) return
+    if (wheelPendingRef.current || lockedRef.current) return // 锁定时不缩放(防误触)
     wheelPendingRef.current = true
     requestAnimationFrame(() => { wheelPendingRef.current = false })
     window.wraithPet.setScale(stepScale(scaleRef.current, e.deltaY))

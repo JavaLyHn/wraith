@@ -19,6 +19,11 @@ describe('normalizePetConfig', () => {
     expect(normalizePetConfig({ position: { x: 1200, y: 40 } }).position).toEqual({ x: 1200, y: 40 })
     expect(normalizePetConfig({ position: { x: Infinity, y: 0 } }).position).toBeNull()
   })
+  it('locked 只接受布尔,缺失/非法回落 false', () => {
+    expect(normalizePetConfig({}).locked).toBe(false)
+    expect(normalizePetConfig({ locked: true }).locked).toBe(true)
+    expect(normalizePetConfig({ locked: 'yes' }).locked).toBe(false)
+  })
 })
 
 describe('readPetConfig / writePetConfig', () => {

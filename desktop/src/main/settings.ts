@@ -32,9 +32,10 @@ export interface PetConfig {
   motion: PetMotionStyle
   scale: number
   position: { x: number; y: number } | null  // 屏幕全局坐标;null=未放置,首次显示落默认位
+  locked: boolean  // 锁定:禁用拖动/缩放,防误触(右键菜单仍可用以解锁)
 }
 
-export const DEFAULT_PET_CONFIG: PetConfig = { enabled: true, selectedId: null, motion: 'calm', scale: 1, position: null }
+export const DEFAULT_PET_CONFIG: PetConfig = { enabled: true, selectedId: null, motion: 'calm', scale: 1, position: null, locked: false }
 const MOTION: PetMotionStyle[] = ['calm', 'float', 'lively', 'static']
 
 /** 未知/缺失/非法字段一律回落默认;scale 夹到 [0.5,2.0];position 须为有限坐标或 null。 */
@@ -50,6 +51,7 @@ export function normalizePetConfig(value: unknown): PetConfig {
     scale: typeof v['scale'] === 'number' && Number.isFinite(v['scale']) && (v['scale'] as number) >= 0.5 && (v['scale'] as number) <= 2.0
       ? v['scale'] as number : DEFAULT_PET_CONFIG.scale,
     position: posOk ? { x: (pos as any).x as number, y: (pos as any).y as number } : null,
+    locked: typeof v['locked'] === 'boolean' ? v['locked'] as boolean : DEFAULT_PET_CONFIG.locked,
   }
 }
 

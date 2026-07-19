@@ -11,6 +11,7 @@ const FIXED_CONFIG: PetConfig = {
   motion: 'calm',
   scale: 1,
   position: null,
+  locked: false,
 }
 
 const PETS: PetView[] = [

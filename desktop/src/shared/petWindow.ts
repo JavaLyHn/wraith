@@ -87,7 +87,7 @@ export function shouldShowPet(config: { enabled: boolean }, hasAvailablePet: boo
 
 export interface PetMenuItem { id: string; label: string; type?: 'separator' | 'checkbox' | 'submenu'; checked?: boolean; submenu?: PetMenuItem[] }
 
-export function buildPetMenuTemplate(pets: PetView[], config: { selectedId: string | null; scale: number }): PetMenuItem[] {
+export function buildPetMenuTemplate(pets: PetView[], config: { selectedId: string | null; scale: number; locked: boolean }): PetMenuItem[] {
   return [
     { id: 'pet:select', label: '选择宠物', type: 'submenu', submenu: pets.filter(p => p.available).map(p => ({
       id: `pet:select:${p.id}`, label: p.displayName, type: 'checkbox', checked: config.selectedId === p.id,
@@ -95,6 +95,8 @@ export function buildPetMenuTemplate(pets: PetView[], config: { selectedId: stri
     { id: 'pet:scale', label: '缩放', type: 'submenu', submenu: [0.5, 1, 1.5, 2].map(s => ({
       id: `pet:scale:${s}`, label: `${Math.round(s * 100)}%`, type: 'checkbox', checked: Math.abs(config.scale - s) < 0.001,
     })) },
+    // 锁定:勾选态反映当前是否锁定;锁定后禁用拖动/缩放防误触,右键菜单仍可用于解锁。
+    { id: 'pet:lock', label: '锁定(防误触)', type: 'checkbox', checked: config.locked },
     { id: 'pet:reset-position', label: '重置位置' },
     { id: 'sep', label: '', type: 'separator' },
     { id: 'pet:close', label: '关闭宠物' },

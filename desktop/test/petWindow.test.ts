@@ -97,8 +97,8 @@ describe('buildPetMenuTemplate', () => {
     { id: 'a', displayName: 'A', description: '', source: 'built-in', kind: 'static', available: true, removable: false, previewUrl: null, sprite: null },
     { id: 'b', displayName: 'B', description: '', source: 'imported', kind: 'static', available: false, removable: true, previewUrl: null, sprite: null },
   ]
-  it('含选择宠物(仅可用打勾)/缩放/重置/关闭', () => {
-    const t = buildPetMenuTemplate(pets, { selectedId: 'a', scale: 1 })
+  it('含选择宠物(仅可用打勾)/缩放/锁定/重置/关闭', () => {
+    const t = buildPetMenuTemplate(pets, { selectedId: 'a', scale: 1, locked: false })
     const flat = JSON.stringify(t)
     expect(flat).toContain('pet:close')
     expect(flat).toContain('pet:reset-position')
@@ -108,5 +108,12 @@ describe('buildPetMenuTemplate', () => {
     expect(select.submenu!.find(s => s.id === 'pet:select:b')).toBeUndefined()
     const scale = t.find(i => i.id === 'pet:scale')!
     expect(scale.submenu!.some(s => s.id === 'pet:scale:1')).toBe(true)
+    // 锁定项存在,且勾选态随 config.locked
+    expect(t.find(i => i.id === 'pet:lock')!.checked).toBe(false)
+  })
+
+  it('锁定项勾选态随 config.locked=true', () => {
+    const t = buildPetMenuTemplate(pets, { selectedId: 'a', scale: 1, locked: true })
+    expect(t.find(i => i.id === 'pet:lock')!.checked).toBe(true)
   })
 })
