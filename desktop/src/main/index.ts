@@ -40,7 +40,8 @@ import { shouldDismissSplash, buildSplashHtml, SPLASH_EXIT_MS } from './splash'
 import { SPLASH_LOGO_DATA_URI } from './splashLogo'
 import { listPets, importStaticImage, importPackage, removeImportedPet, previewDataUrl } from './petStore'
 import type { PetImportResult } from '../shared/pets'
-import { initPetWindow, syncPetWindow, destroyPetWindow, getPetWindow } from './petWindow'
+import { petStateFromEvent } from '../shared/petState'
+import { initPetWindow, syncPetWindow, destroyPetWindow, getPetWindow, pushPetConfig, pushPetPreview, pushPetSignal, type PetPreviewPayload } from './petWindow'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -158,6 +159,8 @@ function e2eDebugLog(method: string): void {
 function sendEvent(evt: BackendEvent): void {
   if (evt.kind === 'notification') e2eDebugLog(evt.method)
   mainWindow?.webContents.send('wraith:event', evt)
+  const sig = petStateFromEvent(evt)
+  if (sig) pushPetSignal(sig)
 }
 
 /**
@@ -546,11 +549,43 @@ function broadcastPetConfig(config: PetConfig): void {
     }
   }
 }
+
+/**
+ * 组装当前应展示的宠物 preview payload:优先 config.selectedId(须仍可用),
+ * 否则回退第一个可用宠物——与 shouldShowPet(config, hasAvailablePet) 的
+ * "只看是否存在任意可用宠物"口径一致,保证宠物窗一旦显示就总能配到一个 preview,
+ * 不会因为 selectedId 恰好指向内置(恒不可用)而落空。无可用宠物时返回 null。
+ */
+async function assemblePetPreview(config: PetConfig): Promise<PetPreviewPayload | null> {
+  const userDataDir = app.getPath('userData')
+  const root = petdexRoot()
+  const pets = await listPets({ userDataDir, petdexRoot: root })
+  const pet = pets.find(p => p.id === config.selectedId && p.available) ?? pets.find(p => p.available) ?? null
+  if (!pet) return null
+  const previewUrl = await previewDataUrl({ userDataDir, petdexRoot: root, id: pet.id })
+  return { id: pet.id, previewUrl, sprite: pet.sprite }
+}
+
+/** best-effort:组装失败(读盘/校验异常)不影响宠物窗其余状态,静默降级为无 preview。 */
+function pushCurrentPetPreview(config: PetConfig): void {
+  assemblePetPreview(config).then(pushPetPreview).catch(() => { /* best-effort */ })
+}
+
+// 宠物窗 ready 握手:渲染层挂载后经 window.wraithPet.ready() 发一次,主进程按当前
+// 配置回推 config + preview,让宠物窗首帧就有得画(不必等下一次配置变更/事件)。
+ipcMain.on('pet:ready', () => {
+  const config = readPetConfig(app.getPath('userData'))
+  pushPetConfig(config)
+  pushCurrentPetPreview(config)
+})
+
 ipcMain.handle('pet:getConfig', () => readPetConfig(app.getPath('userData')))
 ipcMain.handle('pet:setConfig', (_e, patch: Partial<PetConfig>) => {
+  const prev = readPetConfig(app.getPath('userData'))
   const next = writePetConfig(app.getPath('userData'), patch)
   broadcastPetConfig(next)
   void syncPetWindow(next)
+  if (next.selectedId !== prev.selectedId) pushCurrentPetPreview(next)
   return next
 })
 

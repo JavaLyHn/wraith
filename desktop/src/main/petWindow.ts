@@ -16,6 +16,8 @@ import { fileURLToPath } from 'url'
 import { shouldShowPet, defaultPetPosition, clampToDisplay, type Box } from '../shared/petWindow'
 import { listPets } from './petStore'
 import type { PetConfig } from './settings'
+import type { PetSprite } from '../shared/pets'
+import type { PetStateSignal } from '../shared/petState'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -145,4 +147,35 @@ export async function syncPetWindow(config: PetConfig): Promise<void> {
 
 export function getPetWindow(): BrowserWindow | null {
   return petWindow
+}
+
+/** 推给宠物窗渲染层的 preview payload——与 preload/pet.ts 的 onPreview 回调形状一致。 */
+export interface PetPreviewPayload {
+  id: string
+  previewUrl: string | null
+  sprite: PetSprite | null
+}
+
+/** 经 pet:config/preview/signal 三个 IPC 频道向宠物窗渲染层推送状态(Task 7)。
+ * 全部经同一守卫:窗口存在且未销毁才发,任何异常(含窗口正在被销毁的竞态)静默吞掉——
+ * 建模自 pushGateway/pushAutomation(index.ts)的 best-effort 风格,绝不让推送失败影响主进程。 */
+function sendToPetWindow(channel: string, payload: unknown): void {
+  try {
+    const win = getPetWindow()
+    if (win && !win.isDestroyed()) win.webContents.send(channel, payload)
+  } catch {
+    // best-effort:窗口可能在发送途中被销毁
+  }
+}
+
+export function pushPetConfig(config: PetConfig): void {
+  sendToPetWindow('pet:config', config)
+}
+
+export function pushPetPreview(preview: PetPreviewPayload | null): void {
+  sendToPetWindow('pet:preview', preview)
+}
+
+export function pushPetSignal(signal: PetStateSignal): void {
+  sendToPetWindow('pet:signal', signal)
 }
