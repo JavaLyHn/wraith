@@ -242,6 +242,13 @@ html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-6px); }
 }
+/* 活泼:明显更有活力的弹跳(带轻微 squash&stretch + 更快节拍),与克制(pet-idle 仅 -2px 缓慢起伏)
+   一眼可辨。位移/缩放都在 petBreathingMargin 留白内,不越窗裁切。 */
+@keyframes pet-idle-lively {
+  0%, 100% { transform: translateY(0) scale(1); }
+  30% { transform: translateY(-8px) scale(1.03); }
+  55% { transform: translateY(0) scale(0.98); }
+}
 @keyframes pet-thinking {
   0%, 100% { transform: rotate(0deg); }
   50% { transform: rotate(-3deg); }
@@ -271,6 +278,7 @@ html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180
 }
 .pet-idle { animation: pet-idle 2200ms ease-in-out infinite; }
 .pet-idle-float { animation: pet-idle-float 2200ms ease-in-out infinite; }
+.pet-idle-lively { animation: pet-idle-lively 1100ms ease-in-out infinite; }
 .pet-thinking { animation: pet-thinking 1400ms ease-in-out infinite; }
 .pet-thinking-lively { animation: pet-thinking-lively 1400ms ease-in-out infinite; }
 .pet-tool { animation: pet-tool 900ms ease-in-out infinite; }
@@ -278,7 +286,7 @@ html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180
 .pet-success { animation: pet-success 560ms ease-out 1; }
 .pet-error { animation: pet-error 420ms ease-out 1; }
 @media (prefers-reduced-motion: reduce) {
-  .pet-idle, .pet-idle-float, .pet-thinking, .pet-thinking-lively,
+  .pet-idle, .pet-idle-float, .pet-idle-lively, .pet-thinking, .pet-thinking-lively,
   .pet-tool, .pet-approval, .pet-success, .pet-error {
     animation: none;
   }

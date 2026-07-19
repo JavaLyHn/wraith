@@ -5,7 +5,7 @@ import type { PetSprite as PetSpriteType, PetState } from '../../shared/pets'
 import type { PetStateSignal } from '../../shared/petState'
 import { nextPetState, TRANSIENT_MS } from '../../shared/petState'
 import { spriteRowFor, motionFor, RUN_RIGHT_ROW, RUN_LEFT_ROW } from '../lib/petMotion'
-import { isOpaqueAt, spriteHitPixel, containScale, STATIC_IMAGE_MAX_PX, stepScale, clampScale } from '../../shared/petWindow'
+import { isOpaqueAt, spriteHitPixel, containScale, STATIC_IMAGE_MAX_PX, stepScale, clampScale, petBreathingMargin } from '../../shared/petWindow'
 
 /** 点击(非拖动)时随机播的两种"打招呼"反应。用会话状态名承载,是因为 petMotion 的
  * STATE_ROW 已把 thinking→Waving(row3)、success→Jumping(row4) 定为规范映射——
@@ -215,7 +215,10 @@ export default function PetWindowApp(): JSX.Element {
       let opaque = false
       if (hit) {
         const s = scaleRef.current * hit.capRatio
-        const px = spriteHitPixel(e.clientX, e.clientY, s, frameColRef.current, rowRef.current, hit.frameW, hit.frameH)
+        // 精灵被"呼吸边距"(petBreathingMargin)推离窗口左上角居中放,命中反算前先减掉该边距,
+        // 让 spriteHitPixel 收到的是相对精灵左上角的坐标(与窗口尺寸/渲染内边距同一份 margin)。
+        const m = petBreathingMargin(scaleRef.current)
+        const px = spriteHitPixel(e.clientX - m, e.clientY - m, s, frameColRef.current, rowRef.current, hit.frameW, hit.frameH)
         if (px) opaque = isOpaqueAt(hit.data, hit.sheetW, px.px, px.py)
       }
       if (opaque === ignoringRef.current) { // 需要翻转(当前状态与命中结果不一致)
@@ -366,9 +369,13 @@ export default function PetWindowApp(): JSX.Element {
   const hasRunRows = !!preview?.sprite && preview.sprite.rows > RUN_LEFT_ROW
   const dragRowOverride = dragging && hasRunRows ? (dragFacing === -1 ? RUN_LEFT_ROW : RUN_RIGHT_ROW) : null
   const spriteFacing = dragging && dragRowOverride === null ? (dragFacing ?? 1) : 1
+  // 四周留"呼吸边距"把精灵推到窗口中间,让上浮/放大动画不被窗口边缘裁掉(命中测试用同一份 margin
+  // 减偏移;主进程 scaledPetSize 用同一函数把窗口按 margin 放大)。边距透明、点击穿透。
+  const margin = petBreathingMargin(config?.scale ?? 0.5)
 
   return (
     <div
+      style={{ padding: `${margin}px` }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}

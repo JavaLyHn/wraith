@@ -103,6 +103,17 @@ describe('PetsSettings', () => {
     })
   })
 
+  it('粘贴整条命令也能安装:抽出宠物名传给 petsInstall', async () => {
+    render(<PetsSettings />)
+    const input = await screen.findByTestId('pet-install-name')
+    fireEvent.change(input, { target: { value: 'npx petdex@latest install boxcat' } })
+    fireEvent.click(screen.getByTestId('pet-install'))
+    await waitFor(() => {
+      const wraith = (window as unknown as { wraith: { petsInstall: ReturnType<typeof vi.fn> } }).wraith
+      expect(wraith.petsInstall).toHaveBeenCalledWith('boxcat')
+    })
+  })
+
   it('非法宠物名时「安装」按钮禁用', async () => {
     render(<PetsSettings />)
     const input = await screen.findByTestId('pet-install-name')

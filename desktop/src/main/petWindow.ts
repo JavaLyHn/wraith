@@ -13,7 +13,7 @@
 import { BrowserWindow, screen } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { shouldShowPet, defaultPetPosition, clampToDisplay, type Box, type PetMenuItem } from '../shared/petWindow'
+import { shouldShowPet, defaultPetPosition, clampToDisplay, petBreathingMargin, type Box, type PetMenuItem } from '../shared/petWindow'
 import { listPets } from './petStore'
 import type { PetConfig } from './settings'
 import type { PetSprite } from '../shared/pets'
@@ -25,8 +25,6 @@ const __dirname = path.dirname(__filename)
 /** 精灵单帧尺寸(cell),单图宠物也用同一尺寸的窗口框(renderer 内居中/object-contain)。 */
 const PET_FRAME_WIDTH = 192
 const PET_FRAME_HEIGHT = 208
-/** 窗口相对精灵帧的小留白,避免边缘裁切。 */
-const PET_WINDOW_PAD = 8
 
 export interface PetWindowDeps {
   userDataDir(): string
@@ -49,11 +47,14 @@ export function petHtmlTarget(rendererUrlEnv: string | undefined, dirname: strin
     : { file: path.join(dirname, '../renderer/pet.html') }
 }
 
-/** 桌宠窗尺寸 = 精灵 cell(192×208)× scale,向上取整 + 小留白。 */
+/** 桌宠窗尺寸 = 精灵 cell(192×208)× scale + 四周"呼吸边距"(petBreathingMargin),
+ * 让上浮/放大类动画不被窗口边缘裁掉(见 shared/petWindow.ts 说明)。边距对称加在两侧,
+ * renderer 用同一个 margin 做内边距把精灵推到中间、并在命中测试里减掉它。 */
 function scaledPetSize(scale: number): { width: number; height: number } {
+  const m = petBreathingMargin(scale)
   return {
-    width: Math.ceil(PET_FRAME_WIDTH * scale) + PET_WINDOW_PAD,
-    height: Math.ceil(PET_FRAME_HEIGHT * scale) + PET_WINDOW_PAD,
+    width: Math.ceil(PET_FRAME_WIDTH * scale) + 2 * m,
+    height: Math.ceil(PET_FRAME_HEIGHT * scale) + 2 * m,
   }
 }
 

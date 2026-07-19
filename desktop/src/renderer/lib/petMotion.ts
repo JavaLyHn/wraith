@@ -71,5 +71,8 @@ export function motionFor(state: PetState, style: PetMotionStyle, reduced: boole
   if (state === 'tool') return { className: 'pet-tool', durationMs: 900 }
   if (state === 'thinking') return { className: style === 'lively' ? 'pet-thinking-lively' : 'pet-thinking', durationMs: 1400 }
   if (state === 'approval') return { className: 'pet-approval', durationMs: 1800 }
-  return { className: style === 'float' ? 'pet-idle-float' : 'pet-idle', durationMs: 2200 }
+  // idle 三态可辨:float 悬浮上浮(慢)、lively 弹跳(快,1100ms 让精灵帧也更欢快)、calm 克制(慢而微)。
+  if (state === 'idle' && style === 'float') return { className: 'pet-idle-float', durationMs: 2200 }
+  if (state === 'idle' && style === 'lively') return { className: 'pet-idle-lively', durationMs: 1100 }
+  return { className: 'pet-idle', durationMs: 2200 }
 }

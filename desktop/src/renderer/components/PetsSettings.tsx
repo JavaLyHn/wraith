@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Switch } from './ui/switch'
 import { usePetConfig } from '../lib/usePetConfig'
 import { selectedPet } from '../lib/petMotion'
-import { isValidPetName } from '../../shared/petInstall'
+import { isValidPetName, extractPetName, cleanInstallLog } from '../../shared/petInstall'
 import type { PetMotionStyle, PetSource, PetView } from '../../shared/pets'
 
 const MOTION_OPTS: { key: PetMotionStyle; label: string }[] = [
@@ -32,10 +32,11 @@ export default function PetsSettings(): JSX.Element {
   const [importingImage, setImportingImage] = useState(false)
   const [importingPackage, setImportingPackage] = useState(false)
   const [removingIds, setRemovingIds] = useState<ReadonlySet<string>>(new Set())
-  // 应用内 Petdex 安装:名字输入 + in-flight 守卫 + 流式日志(累积主进程推来的 stdout/stderr)。
+  // 应用内 Petdex 安装:名字输入 + in-flight 守卫 + 流式日志(累积主进程推来的 stdout/stderr 原文)。
   const [installName, setInstallName] = useState('')
   const [installing, setInstalling] = useState(false)
   const [installLog, setInstallLog] = useState('')
+  const logRef = useRef<HTMLPreElement | null>(null)
 
   const refresh = useCallback(async (): Promise<void> => {
     try {
@@ -48,8 +49,13 @@ export default function PetsSettings(): JSX.Element {
 
   useEffect(() => { void refresh() }, [refresh])
 
-  // 订阅 Petdex 安装的流式输出,累积进日志区(挂载即订阅、卸载即退订,一次到位)。
-  useEffect(() => window.wraith.onPetInstallOutput((chunk) => setInstallLog((prev) => prev + chunk)), [])
+  // 订阅 Petdex 安装的流式输出,累积原文进日志区(展示时再 cleanInstallLog 清 ANSI/进度重绘噪声)。
+  // 累积上限 100KB(超长输出只保留尾部),防极端情况下无限增长。
+  useEffect(() => window.wraith.onPetInstallOutput((chunk) => setInstallLog((prev) => (prev + chunk).slice(-100_000))), [])
+
+  // 日志更新后自动滚到底,始终看到最新进度。
+  const prettyLog = cleanInstallLog(installLog)
+  useEffect(() => { if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight }, [prettyLog])
 
   const importImage = async (): Promise<void> => {
     if (importingImage) return // in-flight 守卫:防快速双击开出两个并发对话框
@@ -75,14 +81,15 @@ export default function PetsSettings(): JSX.Element {
     finally { setImportingPackage(false) }
   }
 
-  const trimmedName = installName.trim()
+  // 既接受直接输入的名字(boxcat),也接受整条命令(npx petdex@latest install boxcat)——抽出名字。
+  const installTarget = extractPetName(installName)
   const installPet = async (): Promise<void> => {
-    if (installing || !isValidPetName(trimmedName)) return
+    if (installing || !isValidPetName(installTarget)) return
     setInstalling(true)
     setError(null)
     setInstallLog('')
     try {
-      const result = await window.wraith.petsInstall(trimmedName)
+      const result = await window.wraith.petsInstall(installTarget)
       if (result.error) setError(result.error)
       else { await refresh(); setInstallName('') }
     } catch (e) { setError((e as Error).message) }
@@ -169,16 +176,17 @@ export default function PetsSettings(): JSX.Element {
             />
             <button
               data-testid="pet-install"
-              disabled={installing || !isValidPetName(trimmedName)}
+              disabled={installing || !isValidPetName(installTarget)}
               onClick={() => void installPet()}
               className="whitespace-nowrap rounded-lg border border-accent bg-accent/10 px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent/20 disabled:cursor-not-allowed disabled:opacity-50"
             >{installing ? '安装中…' : '从 Petdex 安装'}</button>
           </div>
           <div className="mt-1 text-2xs text-fg-subtle">
-            将执行:<code className="text-fg-muted">npx petdex@latest install {trimmedName || '<名>'}</code>
+            将执行:<code className="text-fg-muted">npx petdex@latest install {installTarget || '<名>'}</code>
+            <span className="ml-1">(可直接粘贴整条命令,会自动取宠物名)</span>
           </div>
-          {(installing || installLog) && (
-            <pre data-testid="pet-install-log" className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-surface p-2 text-2xs text-fg-muted">{installLog || '启动中…'}</pre>
+          {(installing || prettyLog) && (
+            <pre ref={logRef} data-testid="pet-install-log" className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-surface p-2 text-2xs text-fg-muted">{prettyLog || '启动中…'}</pre>
           )}
         </div>
 

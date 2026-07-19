@@ -36,9 +36,11 @@ export function containScale(naturalW: number, naturalH: number, maxPx: number):
  * col/row 定位当前展示的那一帧(单图场景固定 (0,0)、frameW/frameH 用图片原始宽高即可,
  * 此时该函数退化成"整图命中测试",与精灵表复用同一套除法逻辑)。
  *
- * 指针落在精灵盒之外——含窗口右/下侧因 PET_WINDOW_PAD 留出的死区,那部分从来没画过
- * 精灵/图片像素——直接返回 null,调用方应视为"未命中"(透明穿透),绝不能拿越界坐标
- * 去 isOpaqueAt 误采到相邻帧/相邻格的像素。scale<=0 同样返回 null(防除零/负除)。
+ * 入参 clientX/Y 是"已减去 petBreathingMargin 呼吸边距"后的、相对精灵左上角的坐标
+ * (边距是窗口四周为容纳跳/浮/放大动画留的透明留白,调用方在命中反算前先减掉它)。
+ * 指针落在精灵盒之外(含四周边距留白,那部分从来没画过精灵/图片像素)——直接返回 null,
+ * 调用方应视为"未命中"(透明穿透),绝不能拿越界坐标去 isOpaqueAt 误采相邻帧/相邻格的像素。
+ * scale<=0 同样返回 null(防除零/负除)。
  */
 export function spriteHitPixel(
   clientX: number,
@@ -78,6 +80,20 @@ export function clampToDisplay(box: Box, workArea: Box): Box {
 
 export function defaultPetPosition(workArea: Box, size: { width: number; height: number }, margin = 24): { x: number; y: number } {
   return { x: workArea.x + workArea.width - size.width - margin, y: workArea.y + workArea.height - size.height - margin }
+}
+
+/**
+ * 桌宠动画会让精灵在窗内上浮/放大移出窗口边界(pet-idle-float 上浮 6px、pet-success
+ * scale 1.18 从中心放大 → 顶部约外扩 9% 精灵高),精灵若紧贴窗口左上角,这些外扩就被
+ * 窗口边缘裁掉(用户看到"跳起来/浮到顶时头顶被切"). 解法:给窗口四周留一圈"呼吸边距",
+ * 精灵居中放,动画位移都落在这圈边距内不越界。边距透明且点击穿透,不影响观感与命中测试
+ * (命中测试把指针坐标同样减去该边距,再喂给 spriteHitPixel)。
+ *
+ * 取值 = 精灵高(208)×scale×10% + 8:10% 覆盖 success 的 9% 缩放外扩,+8 兜住 float 的
+ * 6px 绝对位移(小 scale 时比例项偏小)。两轴共用(以更大的高度为准,宽度侧略有富余,无害)。
+ */
+export function petBreathingMargin(scale: number): number {
+  return Math.ceil(208 * scale * 0.10) + 8
 }
 
 /** 全局宠物窗口是否应该显示:总开关打开 且 存在可用宠物(否则无物可画)。 */

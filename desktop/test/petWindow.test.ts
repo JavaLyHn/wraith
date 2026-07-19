@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isOpaqueAt, stepScale, clampScale, clampToDisplay, defaultPetPosition, buildPetMenuTemplate, spriteHitPixel, containScale } from '../src/shared/petWindow'
+import { isOpaqueAt, stepScale, clampScale, clampToDisplay, defaultPetPosition, buildPetMenuTemplate, spriteHitPixel, containScale, petBreathingMargin } from '../src/shared/petWindow'
 import type { PetView } from '../src/shared/pets'
 
 describe('isOpaqueAt', () => {
@@ -75,6 +75,17 @@ describe('spriteHitPixel', () => {
     expect(spriteHitPixel(0, -1, 1, 0, 0, 192, 208)).toBeNull()
     expect(spriteHitPixel(0, 0, 0, 0, 0, 192, 208)).toBeNull()
     expect(spriteHitPixel(0, 0, -1, 0, 0, 192, 208)).toBeNull()
+  })
+})
+
+describe('petBreathingMargin', () => {
+  it('随 scale 成比例增长(高度10%)+ 固定 8px 兜底,足以容纳动画外扩', () => {
+    // scale 1:ceil(208*0.10)+8 = 21+8 = 29;须 > success 放大外扩(208*0.09≈18.7)与 float 位移(6)
+    expect(petBreathingMargin(1)).toBe(29)
+    expect(petBreathingMargin(1)).toBeGreaterThan(208 * 0.09)
+    // scale 0.5 / 2 也都够:外扩 = 高*scale*0.09 + 6
+    expect(petBreathingMargin(0.5)).toBeGreaterThan(208 * 0.5 * 0.09 + 6)
+    expect(petBreathingMargin(2)).toBeGreaterThan(208 * 2 * 0.09 + 6)
   })
 })
 

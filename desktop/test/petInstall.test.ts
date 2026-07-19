@@ -1,7 +1,39 @@
 import { describe, it, expect, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
-import { isValidPetName, npxSearchDirs, resolveNpx } from '../src/shared/petInstall'
+import { isValidPetName, npxSearchDirs, resolveNpx, extractPetName, cleanInstallLog } from '../src/shared/petInstall'
 import { runPetdexInstall } from '../src/main/petInstall'
+
+describe('extractPetName', () => {
+  it('直接输入名字原样返回(trim)', () => {
+    expect(extractPetName('boxcat')).toBe('boxcat')
+    expect(extractPetName('  scoop  ')).toBe('scoop')
+  })
+  it('整条命令取 install 后的名字', () => {
+    expect(extractPetName('npx petdex@latest install boxcat')).toBe('boxcat')
+    expect(extractPetName('petdex install my-pet')).toBe('my-pet')
+    expect(extractPetName('npx petdex@latest install boxcat --force')).toBe('boxcat')
+  })
+  it('没有 install 就把整串当名字(交给 isValidPetName 再判)', () => {
+    expect(extractPetName('just some text')).toBe('just some text')
+  })
+})
+
+describe('cleanInstallLog', () => {
+  it('把 \\x1B[1G 光标归位 + 清行转义按回车折叠成当前行', () => {
+    const raw = 'Downloading scoop.\x1B[1G\x1B[JDownloading scoop..\x1B[1G\x1B[JDownloading scoop...'
+    expect(cleanInstallLog(raw)).toBe('Downloading scoop...')
+  })
+  it('剥离颜色 ANSI,保留可读文本', () => {
+    expect(cleanInstallLog('\x1B[32minstalled\x1B[0m boxcat')).toBe('installed boxcat')
+  })
+  it('\\r 原地重绘同一行取最后一段;多行各自处理', () => {
+    expect(cleanInstallLog('a\rbb\rccc')).toBe('ccc')
+    expect(cleanInstallLog('line1\nprog.\rprog..\nline3')).toBe('line1\nprog..\nline3')
+  })
+  it('折叠多余空行 + 去首尾空白', () => {
+    expect(cleanInstallLog('\n\n\nhello\n\n\n\nworld\n\n')).toBe('hello\n\nworld')
+  })
+})
 
 describe('isValidPetName', () => {
   it('接受小写字母/数字/连字符,首字符字母数字,长度 1–64', () => {

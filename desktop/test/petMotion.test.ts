@@ -18,6 +18,8 @@ describe('motionFor', () => {
     expect(motionFor('thinking', 'lively', false)).toEqual({ className: 'pet-thinking-lively', durationMs: 1400 })
     expect(motionFor('thinking', 'float', false)).toEqual({ className: 'pet-thinking', durationMs: 1400 })
     expect(motionFor('idle', 'float', false)).toEqual({ className: 'pet-idle-float', durationMs: 2200 })
+    // 活泼 idle 用更欢快的弹跳(独立类 + 更快节拍),明显区别于克制的 pet-idle
+    expect(motionFor('idle', 'lively', false)).toEqual({ className: 'pet-idle-lively', durationMs: 1100 })
   })
 
   it('为等待确认和普通待机提供各自的稳定动作', () => {
