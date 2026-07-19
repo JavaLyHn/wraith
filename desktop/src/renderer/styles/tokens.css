@@ -220,10 +220,13 @@ html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180
 .welcome-logo { position: relative; display: inline-block; filter: drop-shadow(0 0 18px rgba(150,195,255,.28)); transition: filter .3s ease, transform .3s ease; }
 .welcome-logo:hover { filter: drop-shadow(0 0 34px rgba(150,195,255,.6)); transform: scale(1.05); }
 .welcome-logo::after {
-  content: ''; position: absolute; inset: -8%; pointer-events: none; border-radius: 22%;
-  background: linear-gradient(115deg, transparent 44%, rgba(255,255,255,.5) 49%, rgba(180,220,255,.55) 51%, transparent 57%);
-  background-size: 240% 100%; opacity: 0;
-  /* 6s 一轮:约前 1.1s 扫一道光,其余 ~4.9s 透明停顿,如此循环 → "过一段时间闪一下"。 */
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 42%, rgba(255,255,255,.9) 49%, rgba(180,220,255,.95) 51%, transparent 58%);
+  background-size: 250% 100%; opacity: 0;
+  /* 用 WR logo(--wr-logo-mask,组件内按资产 URL 注入)作 mask:闪光只在 WR 字样形状内
+     斜扫,而非整块方形——同启动页 splash 的做法。6s 一轮(约前 1.1s 扫光,其余透明停顿)。 */
+  -webkit-mask: var(--wr-logo-mask) center / contain no-repeat;
+  mask: var(--wr-logo-mask) center / contain no-repeat;
   animation: welcomeShineLoop 6000ms ease-out 400ms infinite;
 }
 /* 悬停仍用完整单次扫光(welcomeShine 整程扫过,更明显),覆盖循环版。 */
