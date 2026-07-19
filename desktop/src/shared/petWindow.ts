@@ -27,8 +27,8 @@ export interface PetMenuItem { id: string; label: string; type?: 'separator' | '
 
 export function buildPetMenuTemplate(pets: PetView[], config: { selectedId: string | null; scale: number }): PetMenuItem[] {
   return [
-    { id: 'pet:select', label: '选择宠物', type: 'submenu', submenu: pets.map(p => ({
-      id: `pet:select:${p.id}`, label: p.displayName, type: 'checkbox', checked: p.available && config.selectedId === p.id,
+    { id: 'pet:select', label: '选择宠物', type: 'submenu', submenu: pets.filter(p => p.available).map(p => ({
+      id: `pet:select:${p.id}`, label: p.displayName, type: 'checkbox', checked: config.selectedId === p.id,
     })) },
     { id: 'pet:scale', label: '缩放', type: 'submenu', submenu: [0.5, 1, 1.5, 2].map(s => ({
       id: `pet:scale:${s}`, label: `${Math.round(s * 100)}%`, type: 'checkbox', checked: Math.abs(config.scale - s) < 0.001,

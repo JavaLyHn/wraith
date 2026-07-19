@@ -56,8 +56,8 @@ describe('buildPetMenuTemplate', () => {
     expect(flat).toContain('pet:reset-position')
     const select = t.find(i => i.id === 'pet:select')!
     expect(select.submenu!.find(s => s.id === 'pet:select:a')!.checked).toBe(true)
-    // 不可用的 b 不打勾
-    expect(select.submenu!.find(s => s.id === 'pet:select:b')!.checked).toBe(false)
+    // 不可用的 b 不在子菜单里
+    expect(select.submenu!.find(s => s.id === 'pet:select:b')).toBeUndefined()
     const scale = t.find(i => i.id === 'pet:scale')!
     expect(scale.submenu!.some(s => s.id === 'pet:scale:1')).toBe(true)
   })
