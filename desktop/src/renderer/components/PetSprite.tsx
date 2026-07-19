@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { PetMotionStyle, PetSprite as PetSpriteType, PetState } from '../../shared/pets'
 import { detectFrameCounts, motionFor, spriteRowFor } from '../lib/petMotion'
+import { STATIC_IMAGE_MAX_PX, containScale } from '../../shared/petWindow'
 
 export interface PetSpriteProps {
   previewUrl: string | null
@@ -8,11 +9,11 @@ export interface PetSpriteProps {
   state: PetState
   motion: PetMotionStyle
   scale: number
+  /** 当前动画帧列号(精灵表场景下的 frame index,单图场景不触发)变化时回调——
+   * 供 PetWindowApp(Task 8 点击穿透)独立反算指针命中的 sheet 像素时定位当前帧,
+   * 不必读取本组件任何内部 ref/state(canvas ImageData 等仍完全私有)。 */
+  onFrame?: (frame: number) => void
 }
-
-// 单张静态图片的紧凑固定尺寸上限(与精灵表 192×208 量级一致);精灵路径已有
-// 自己的固定 frameWidth/frameHeight,不走这个上限。抽自 PetAvatar.tsx。
-const STATIC_IMAGE_MAX_PX = 112
 
 // 精灵表逐格 alpha 采样步长与阈值:一次性检测每行真实帧数用,越大越快、越小越准;
 // 4px 步长足以判「该格是否有非透明像素」。抽自 PetAvatar.tsx。
@@ -23,10 +24,15 @@ const ALPHA_THRESHOLD = 16
  * PetSprite — 纯展示的宠物精灵/单图渲染,从 PetAvatar.tsx 抽出(spec Task 7)。
  * 不含任何拖拽/定位/testid-chat-pet 逻辑——那些属于旧聊天内浮件,全局常驻宠物窗
  * 由主进程(petWindow.ts)负责位置与窗口尺寸;本组件只管"给定状态该画成什么样"。
- * 整只铺满窗口(窗口尺寸即缩放后的精灵尺寸),缩放经 root 上的 CSS transform 实现,
- * 不改变内部的精灵帧/单图布局尺寸。
+ * 整只铺满窗口(窗口尺寸即缩放后的精灵尺寸),从窗口左上角原点起画——精灵/图片盒子
+ * 精确是 `frameW*scale × frameH*scale`(CSS 宽高/背景尺寸直接乘 scale),不再用
+ * `transform: scale`(那样 transform-origin 默认居中,scale≠1 时窗口坐标与实际像素
+ * 的对应关系会随 scale 漂移,既说不清居中裁切该往哪边留白,也没法给点击穿透的命中
+ * 测试一个唯一反算公式——这是 Task 7 留下的遗留问题,在这里连带修掉;点击穿透的
+ * 反算公式见 shared/petWindow.ts 的 spriteHitPixel,必须和这里的渲染盒子保持同一套
+ * 换算,否则命中会跟视觉画面对不上)。
  */
-export default function PetSprite({ previewUrl, sprite, state, motion: motionStyle, scale }: PetSpriteProps): JSX.Element {
+export default function PetSprite({ previewUrl, sprite, state, motion: motionStyle, scale, onFrame }: PetSpriteProps): JSX.Element {
   const reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
   const anim = motionFor(state, motionStyle, reduced)
 
@@ -99,25 +105,47 @@ export default function PetSprite({ previewUrl, sprite, state, motion: motionSty
     return () => cancelAnimationFrame(raf)
   }, [sprite, reduced, anim.durationMs, state, frameCount])
 
+  // 把当前帧列号回报给调用方(PetWindowApp,Task 8 点击穿透命中测试用来定位当前展示
+  // 帧的 sheet 偏移)。只报数字帧号,不暴露 canvas/ImageData 等内部解码状态。
+  useEffect(() => {
+    onFrame?.(frame)
+  }, [frame, onFrame])
+
+  // 单图路径的原始像素尺寸,onLoad 时取 naturalWidth/Height 显式算出「等比收缩到
+  // STATIC_IMAGE_MAX_PX、再乘 scale」后的渲染尺寸(见 containScale)——不能再用 CSS
+  // max-width/max-height 隐式收缩,因为 PetWindowApp 的命中测试反算需要一份跟渲染
+  // 结果严格一致、可预先算出的缩放比,浏览器的 auto 布局算法给不出这个数。previewUrl
+  // 切换(换宠物/换单图)时清空,避免短暂拿旧图尺寸套在新图上。
+  const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null)
+  useEffect(() => {
+    setImgSize(null)
+  }, [previewUrl])
+  const capRatio = imgSize ? containScale(imgSize.w, imgSize.h, STATIC_IMAGE_MAX_PX) : null
+
   return (
-    <div data-testid="pet-sprite" style={{ transform: `scale(${scale})` }}>
+    <div data-testid="pet-sprite">
       {!previewUrl ? null : sprite ? (
         <div
           aria-hidden="true"
           className={anim.className}
           style={{
-            width: sprite.frameWidth,
-            height: sprite.frameHeight,
+            width: sprite.frameWidth * scale,
+            height: sprite.frameHeight * scale,
             backgroundImage: `url(${previewUrl})`,
-            backgroundSize: `${sprite.columns * sprite.frameWidth}px ${sprite.rows * sprite.frameHeight}px`,
-            backgroundPosition: `-${Math.min(frame, frameCount - 1) * sprite.frameWidth}px -${row * sprite.frameHeight}px`,
+            backgroundSize: `${sprite.columns * sprite.frameWidth * scale}px ${sprite.rows * sprite.frameHeight * scale}px`,
+            backgroundPosition: `-${Math.min(frame, frameCount - 1) * sprite.frameWidth * scale}px -${row * sprite.frameHeight * scale}px`,
           }}
         />
       ) : (
         <img
           alt=""
           className={anim.className}
-          style={{ maxWidth: STATIC_IMAGE_MAX_PX, maxHeight: STATIC_IMAGE_MAX_PX }}
+          style={
+            imgSize && capRatio !== null
+              ? { width: imgSize.w * capRatio * scale, height: imgSize.h * capRatio * scale }
+              : { maxWidth: STATIC_IMAGE_MAX_PX * scale, maxHeight: STATIC_IMAGE_MAX_PX * scale }
+          }
+          onLoad={(e) => setImgSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
           src={previewUrl}
         />
       )}

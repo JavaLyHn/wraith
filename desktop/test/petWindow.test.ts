@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isOpaqueAt, stepScale, clampToDisplay, defaultPetPosition, buildPetMenuTemplate } from '../src/shared/petWindow'
+import { isOpaqueAt, stepScale, clampToDisplay, defaultPetPosition, buildPetMenuTemplate, spriteHitPixel, containScale } from '../src/shared/petWindow'
 import type { PetView } from '../src/shared/pets'
 
 describe('isOpaqueAt', () => {
@@ -41,6 +41,44 @@ describe('defaultPetPosition', () => {
   it('落工作区右下角内(留 margin)', () => {
     expect(defaultPetPosition({ x: 0, y: 0, width: 1000, height: 800 }, { width: 200, height: 220 }, 24))
       .toEqual({ x: 1000 - 200 - 24, y: 800 - 220 - 24 })
+  })
+})
+
+describe('spriteHitPixel', () => {
+  it('scale=1 时,窗口像素 = 当前帧内偏移,直接反算 sheet 像素(col/row 换算成整格偏移)', () => {
+    expect(spriteHitPixel(50, 60, 1, 2, 3, 192, 208)).toEqual({ px: 2 * 192 + 50, py: 3 * 208 + 60 })
+  })
+  it('scale≠1 时按 scale 缩放反算(除法),并向下取整', () => {
+    // frameW=frameH=10,scale=3,col=row=0:clientX=7 → 7/3=2.333→floor=2
+    expect(spriteHitPixel(7, 7, 3, 0, 0, 10, 10)).toEqual({ px: 2, py: 2 })
+    // col=2 时整格偏移仍是整数像素,不受 scale 影响
+    expect(spriteHitPixel(9, 0, 2, 2, 0, 10, 10)).toEqual({ px: 2 * 10 + 4, py: 0 })
+  })
+  it('落在精灵盒(frameW*scale × frameH*scale)之外(含右/下 PAD 死区)→ null,而非误采邻格像素', () => {
+    // scale=1,frameW=192 → 盒宽 192,clientX=192 已经出盒(边界排它性 [0,boxW))
+    expect(spriteHitPixel(192, 0, 1, 0, 0, 192, 208)).toBeNull()
+    expect(spriteHitPixel(0, 208, 1, 0, 0, 192, 208)).toBeNull()
+    expect(spriteHitPixel(191, 207, 1, 0, 0, 192, 208)).not.toBeNull() // 盒内边界像素仍算命中
+  })
+  it('负坐标 / scale<=0 → null(安全兜底,视为透明穿透)', () => {
+    expect(spriteHitPixel(-1, 0, 1, 0, 0, 192, 208)).toBeNull()
+    expect(spriteHitPixel(0, -1, 1, 0, 0, 192, 208)).toBeNull()
+    expect(spriteHitPixel(0, 0, 0, 0, 0, 192, 208)).toBeNull()
+    expect(spriteHitPixel(0, 0, -1, 0, 0, 192, 208)).toBeNull()
+  })
+})
+
+describe('containScale', () => {
+  it('超出 maxPx 的一侧按等比收缩(取更小的那个比例)', () => {
+    expect(containScale(300, 200, 112)).toBeCloseTo(112 / 300)
+  })
+  it('两侧都不超 maxPx → 不放大,原样 1', () => {
+    expect(containScale(50, 40, 112)).toBe(1)
+  })
+  it('非正宽高/maxPx → 兜底 1(防除零)', () => {
+    expect(containScale(0, 40, 112)).toBe(1)
+    expect(containScale(50, 0, 112)).toBe(1)
+    expect(containScale(50, 40, 0)).toBe(1)
   })
 })
 

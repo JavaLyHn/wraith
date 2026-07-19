@@ -579,6 +579,14 @@ ipcMain.on('pet:ready', () => {
   pushCurrentPetPreview(config)
 })
 
+// 点击穿透(Task 8):renderer 侧逐像素 alpha 命中测试后,只在"穿透⇄捕获"翻转的
+// 那一刻发这条 IPC——转手调 setIgnoreMouseEvents(ignore,{forward:true}),forward
+// 保持为 true 才能在 ignore=true 时仍把 mousemove 转发给 renderer(否则下一次翻转
+// 判定就没了输入)。getPetWindow() 可能是 null(窗口已关闭/尚未建好),?. 静默跳过。
+ipcMain.on('pet:setIgnoreMouse', (_e, ignore: boolean) => {
+  getPetWindow()?.setIgnoreMouseEvents(!!ignore, { forward: true })
+})
+
 ipcMain.handle('pet:getConfig', () => readPetConfig(app.getPath('userData')))
 ipcMain.handle('pet:setConfig', (_e, patch: Partial<PetConfig>) => {
   const prev = readPetConfig(app.getPath('userData'))
