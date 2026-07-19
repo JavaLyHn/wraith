@@ -9,6 +9,7 @@
 import fs from 'fs'
 import path from 'path'
 import type { ProjectView } from '../shared/types'
+import type { PetMotionStyle } from '../shared/pets'
 
 export interface ProjectEntry {
   path: string        // 绝对路径,唯一键(去重依据)
@@ -21,6 +22,47 @@ export interface Settings {
   workspace?: string
   /** 打开过的项目列表(Phase D)。 */
   projects?: ProjectEntry[]
+  /** 桌面宠物配置(全局常驻窗口)。 */
+  pets?: PetConfig
+}
+
+export interface PetConfig {
+  enabled: boolean
+  selectedId: string | null
+  motion: PetMotionStyle
+  scale: number
+  position: { x: number; y: number } | null  // 屏幕全局坐标;null=未放置,首次显示落默认位
+}
+
+export const DEFAULT_PET_CONFIG: PetConfig = { enabled: true, selectedId: null, motion: 'calm', scale: 1, position: null }
+const MOTION: PetMotionStyle[] = ['calm', 'float', 'lively', 'static']
+
+/** 未知/缺失/非法字段一律回落默认;scale 夹到 [0.5,2.0];position 须为有限坐标或 null。 */
+export function normalizePetConfig(value: unknown): PetConfig {
+  const v = (value && typeof value === 'object' ? value : {}) as Record<string, unknown>
+  const pos = v['position']
+  const posOk = !!pos && typeof pos === 'object'
+    && Number.isFinite((pos as any).x) && Number.isFinite((pos as any).y)
+  return {
+    enabled: typeof v['enabled'] === 'boolean' ? v['enabled'] as boolean : DEFAULT_PET_CONFIG.enabled,
+    selectedId: typeof v['selectedId'] === 'string' ? v['selectedId'] as string : null,
+    motion: MOTION.includes(v['motion'] as PetMotionStyle) ? v['motion'] as PetMotionStyle : DEFAULT_PET_CONFIG.motion,
+    scale: typeof v['scale'] === 'number' && Number.isFinite(v['scale']) && (v['scale'] as number) >= 0.5 && (v['scale'] as number) <= 2.0
+      ? v['scale'] as number : DEFAULT_PET_CONFIG.scale,
+    position: posOk ? { x: (pos as any).x as number, y: (pos as any).y as number } : null,
+  }
+}
+
+/** 读取 settings.json 的 pets 键并 normalize;缺失/坏数据回落默认。 */
+export function readPetConfig(userDataDir: string): PetConfig {
+  return normalizePetConfig((readSettings(userDataDir) as { pets?: unknown }).pets)
+}
+
+/** patch 与既有配置合并 + normalize + 持久化,返回合并后的结果。 */
+export function writePetConfig(userDataDir: string, patch: Partial<PetConfig>): PetConfig {
+  const next = normalizePetConfig({ ...readPetConfig(userDataDir), ...patch })
+  writeSettings(userDataDir, { ...readSettings(userDataDir), pets: next } as Settings)
+  return next
 }
 
 export function settingsPath(userDataDir: string): string {

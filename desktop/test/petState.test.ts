@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nextPetState, petStateFromEvent, TRANSIENT_MS } from '../src/renderer/lib/petState'
+import { nextPetState, petStateFromEvent, TRANSIENT_MS } from '../src/shared/petState'
 import type { BackendEvent } from '../src/shared/types'
 
 function notification(method: string, params: unknown = {}): BackendEvent {

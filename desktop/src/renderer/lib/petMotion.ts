@@ -1,5 +1,5 @@
 import type { PetMotionStyle, PetState, PetView } from '../../shared/pets'
-import { TRANSIENT_MS } from './petState'
+import { TRANSIENT_MS } from '../../shared/petState'
 
 export interface PetMotion {
   className: string

@@ -1,5 +1,5 @@
-import type { PetState } from '../../shared/pets'
-import type { BackendEvent } from '../../shared/types'
+import type { PetState } from './pets'
+import type { BackendEvent } from './types'
 
 export interface PetStateSignal {
   state: PetState
