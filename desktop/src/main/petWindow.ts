@@ -10,7 +10,7 @@
  * 尺寸随 scale 的实际 resize 复用点留给 Task 9。
  */
 
-import { BrowserWindow, screen } from 'electron'
+import { BrowserWindow, screen, app } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { shouldShowPet, defaultPetPosition, clampToDisplay, petBreathingMargin, type Box, type PetMenuItem } from '../shared/petWindow'
@@ -93,8 +93,16 @@ function createPetWindow(config: PetConfig): void {
     })
     petWindow = win
     win.setAlwaysOnTop(true, 'floating')
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    // skipTransformProcessType:true 是关键:setVisibleOnAllWorkspaces 默认会把进程类型在
+    // UIElementApplication/ForegroundApplication 之间切换(为了能浮于别的 App 全屏之上),
+    // 副作用是把 App 变成"附件型"——**从 Dock / 应用切换器里消失**(用户报的"开启宠物后
+    // 图标没了、只在屏幕上、Dock 完全找不到 App")。skip 掉这个切换即可保住 Dock 图标;
+    // 代价仅是不再浮于"其它 App 的全屏"之上,本 App 自身的全屏仍可(FullScreenAuxiliary)。
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
     win.setIgnoreMouseEvents(true, { forward: true })
+    // 双保险:显式钉住 regular 激活策略,确保开启桌宠后 App 始终在 Dock 里可见。与"点击宠物
+    // 不激活 App"的 nonactivating panel(type:'panel')行为正交——一个管 Dock 存在、一个管点击是否抢焦。
+    if (process.platform === 'darwin') { try { app.setActivationPolicy('regular') } catch { /* best-effort */ } }
 
     const target = petHtmlTarget(process.env['ELECTRON_RENDERER_URL'], __dirname)
     if (target.url) {

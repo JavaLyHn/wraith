@@ -9,12 +9,14 @@ describe('shouldDismissSplash', () => {
     expect(shouldDismissSplash(SPLASH_FLOOR_MS, true)).toBe(true)
     expect(shouldDismissSplash(SPLASH_FLOOR_MS + 300, true)).toBe(true)
   })
-  it('未就绪、未到天花板 → 不散', () => {
+  it('未就绪 → 一直等(logo 持续陪加载),不到失败保险天花板不散', () => {
     expect(shouldDismissSplash(3000, false)).toBe(false)
+    expect(shouldDismissSplash(5000, false)).toBe(false)          // 旧行为会在此散,新行为继续等
+    expect(shouldDismissSplash(SPLASH_CAP_MS - 1, false)).toBe(false)
   })
-  it('到天花板 → 强制散(即便未就绪)', () => {
+  it('到失败保险天花板 → 强制散(后端始终连不上时防卡死)', () => {
     expect(shouldDismissSplash(SPLASH_CAP_MS, false)).toBe(true)
-    expect(shouldDismissSplash(5000, false)).toBe(true)
+    expect(shouldDismissSplash(SPLASH_CAP_MS + 5000, false)).toBe(true)
   })
   it('自定义 floor/cap 生效', () => {
     expect(shouldDismissSplash(500, true, 400, 2000)).toBe(true)
@@ -45,5 +47,8 @@ describe('buildSplashHtml', () => {
   it('含渐变光泽扫过(shine)动画 + logo mask', () => {
     expect(html).toContain('@keyframes shine')
     expect(html).toContain('mask:url(data:image/png;base64,AAAA)')
+  })
+  it('shine 循环播放(加载期间持续闪烁,而非只闪一次)', () => {
+    expect(html).toMatch(/animation:shine[^;]*infinite/)
   })
 })
