@@ -10,10 +10,10 @@
  * 尺寸随 scale 的实际 resize 复用点留给 Task 9。
  */
 
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, screen } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { shouldShowPet, defaultPetPosition, clampToDisplay, type Box } from '../shared/petWindow'
+import { shouldShowPet, defaultPetPosition, clampToDisplay, type Box, type PetMenuItem } from '../shared/petWindow'
 import { listPets } from './petStore'
 import type { PetConfig } from './settings'
 import type { PetSprite } from '../shared/pets'
@@ -147,6 +147,66 @@ export async function syncPetWindow(config: PetConfig): Promise<void> {
 
 export function getPetWindow(): BrowserWindow | null {
   return petWindow
+}
+
+/**
+ * 全身拖动(Task 9)落点:renderer 侧按 `screenX/screenY - grabDX/DY` 算出窗口应处的
+ * 新左上角,主进程只做"夹到目标屏工作区 + setBounds"这一步——目标屏用
+ * `screen.getDisplayMatching(当前 bounds)`,允许拖跨屏时夹到指针实际所在的那块屏,
+ * 而不是永远夹在窗口拖动前所在的屏。窗口不存在(已被关闭/尚未建好)时静默 no-op。
+ */
+export function petWindowMoveTo(x: number, y: number): void {
+  if (!petWindow) return
+  const b = petWindow.getBounds()
+  const wa = screen.getDisplayMatching(b).workArea
+  const c = clampToDisplay({ x, y, width: b.width, height: b.height }, wa)
+  petWindow.setBounds(c)
+}
+
+/** 滚轮缩放(Task 9)落点:按新 scale 重新算窗口尺寸,保持当前左上角不动地 resize。 */
+export function petWindowResizeToScale(scale: number): void {
+  if (!petWindow) return
+  const b = petWindow.getBounds()
+  const size = scaledPetSize(scale)
+  petWindow.setBounds({ x: b.x, y: b.y, ...size })
+}
+
+/**
+ * 右键菜单"重置位置"(Task 9):按当前 scale 复用 scaledPetSize + defaultPetPosition
+ * 算出工作区右下角默认位置(与建窗时首次落位同一套逻辑),夹入工作区后若窗口存在则
+ * 立即挪过去。始终返回夹紧后的坐标(即便窗口当前不存在),让调用方可以无条件把它
+ * 落盘——避免"宠物窗当前不存在,重置位置就什么都不算"的空转,下次建窗直接读到
+ * 这个新默认位置。deps 未装配(理论上不会发生,initPetWindow 总在 app ready 时调用)
+ * 时工作区退化为全 0,与其余本文件降级风格一致,不抛异常。
+ */
+export function petWindowResetPosition(scale: number): { x: number; y: number } {
+  const size = scaledPetSize(scale)
+  const wa = deps ? deps.primaryWorkArea() : { x: 0, y: 0, width: 0, height: 0 }
+  const clamped = clampToDisplay({ ...defaultPetPosition(wa, size), ...size }, wa)
+  if (petWindow) petWindow.setBounds(clamped)
+  return { x: clamped.x, y: clamped.y }
+}
+
+/**
+ * `PetMenuItem[]`(shared 纯描述,Task 2)→ Electron `MenuItemConstructorOptions[]`。
+ * 纯映射函数,不触碰任何 Electron 运行期 API,只用其类型——可在 vitest 下直接单测
+ * (调用返回项的 .click() 断言 onClick 收到的 id)。映射表:
+ * `type:'submenu'` → 递归映射 submenu;`type:'checkbox'` → `type:'checkbox'`+`checked`
+ * (仍是叶子,也要挂 click);`type:'separator'` → `type:'separator'`(无 click/checked);
+ * 其余(无 type)是普通叶子 → 只挂 `click: () => onClick(item.id)`。
+ */
+export function toElectronMenu(
+  items: PetMenuItem[],
+  onClick: (id: string) => void
+): Electron.MenuItemConstructorOptions[] {
+  return items.map((item): Electron.MenuItemConstructorOptions => {
+    if (item.type === 'separator') return { type: 'separator' }
+    if (item.type === 'submenu') return { label: item.label, submenu: toElectronMenu(item.submenu ?? [], onClick) }
+    if (item.type === 'checkbox') {
+      return { label: item.label, type: 'checkbox', checked: !!item.checked, click: () => onClick(item.id) }
+    }
+    return { label: item.label, click: () => onClick(item.id) }
+  })
 }
 
 /** 推给宠物窗渲染层的 preview payload——与 preload/pet.ts 的 onPreview 回调形状一致。 */

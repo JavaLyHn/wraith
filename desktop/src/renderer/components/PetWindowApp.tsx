@@ -5,7 +5,7 @@ import type { PetSprite as PetSpriteType, PetState } from '../../shared/pets'
 import type { PetStateSignal } from '../../shared/petState'
 import { nextPetState, TRANSIENT_MS } from '../../shared/petState'
 import { spriteRowFor } from '../lib/petMotion'
-import { isOpaqueAt, spriteHitPixel, containScale, STATIC_IMAGE_MAX_PX } from '../../shared/petWindow'
+import { isOpaqueAt, spriteHitPixel, containScale, STATIC_IMAGE_MAX_PX, stepScale } from '../../shared/petWindow'
 
 interface PreviewState {
   previewUrl: string | null
@@ -48,6 +48,13 @@ function transientMs(state: PetState): number {
  * mousemove 时用 spriteHitPixel 把指针窗口坐标反算成 sheet 像素、isOpaqueAt 判断是否
  * 命中非透明像素,命中才让窗口临时捕获鼠标——只在"穿透⇄捕获"状态翻转的那一刻才发
  * IPC(ignoringRef 记当前状态),不会每次 mousemove 都发一条。
+ *
+ * 全身拖动/滚轮缩放/右键菜单(Task 9):三者都挂在本组件的根 div 上,因为命中测试
+ * 已经保证"这个 div 收到指针事件"就等价于"窗口正在捕获鼠标",不需要再单独判断。
+ * 拖动期间(draggingRef=true)会让上面的 mousemove 命中测试整体短路——否则窗口
+ * 跟随指针移动到新位置后,下一帧 mousemove 用旧窗口坐标反算出的 sheet 像素很可能
+ * 落回透明区,命中测试会误判"没按在宠物上了"从而 setIgnoreMouse(true),窗口这一刻
+ * 变穿透、后续指针事件穿过去打到桌面,拖拽被硬生生打断。
  */
 export default function PetWindowApp(): JSX.Element {
   const [config, setConfig] = useState<PetConfig | null>(null)
@@ -62,6 +69,16 @@ export default function PetWindowApp(): JSX.Element {
   const frameColRef = useRef(0)
   const hitRef = useRef<HitTestData | null>(null)
   const ignoringRef = useRef(true) // 与主进程建窗时的默认 setIgnoreMouseEvents(true,…) 对齐
+
+  // 全身拖动(Task 9):draggingRef 是"当前是否在拖"的唯一真源,下面的点击穿透
+  // mousemove 命中测试第一件事就读它——见本文件顶部注释里对这条协调关系的解释。
+  // grabRef 记按下那一刻"指针相对窗口左上角"的偏移(screen 坐标系),拖动全程复用,
+  // 不必每次 pointermove 重新计算(窗口左上角在拖动中一直变,不能拿它反推偏移)。
+  const draggingRef = useRef(false)
+  const grabRef = useRef({ dx: 0, dy: 0 })
+  // 滚轮缩放节流:同一 rAF 内的重复 wheel 事件直接丢弃(而不是排队到下一帧才发),
+  // 避免触控板连续触发的高频 wheel 把 IPC 刷爆。
+  const wheelPendingRef = useRef(false)
 
   useEffect(() => {
     window.wraithPet.ready()
@@ -149,6 +166,7 @@ export default function PetWindowApp(): JSX.Element {
 
   useEffect(() => {
     const onMove = (e: MouseEvent): void => {
+      if (draggingRef.current) return // 拖动期间挂起命中测试,见组件顶部注释
       const hit = hitRef.current
       let opaque = false
       if (hit) {
@@ -165,14 +183,62 @@ export default function PetWindowApp(): JSX.Element {
     return () => window.removeEventListener('mousemove', onMove)
   }, [])
 
+  // 全身拖动(Task 9):按下时记 grabDX/DY = 指针 - 窗口左上角(均为 screen 坐标),
+  // setPointerCapture 保证后续 pointermove/pointerup 持续打到这个 div 上,即便窗口
+  // 跟随指针移动导致指针"跑出"当前窗口范围(否则窗口一旦落后于指针,原生 hover-based
+  // 事件路由会直接丢事件,拖拽半途中断)。
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    draggingRef.current = true
+    grabRef.current = { dx: e.screenX - window.screenX, dy: e.screenY - window.screenY }
+    e.currentTarget.setPointerCapture(e.pointerId)
+  }, [])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current) return
+    window.wraithPet.moveTo(e.screenX - grabRef.current.dx, e.screenY - grabRef.current.dy)
+  }, [])
+
+  // 落盘用当前窗口屏幕原点(而非 pointerup 那一刻的指针坐标减 grab 偏移——理论上
+  // 该相等,但直接读 window.screenX/Y 更贴近"主进程 setBounds 之后实际落地的位置",
+  // 不受 moveTo IPC 异步/节流影响)。
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!draggingRef.current) return
+    draggingRef.current = false
+    e.currentTarget.releasePointerCapture(e.pointerId)
+    void window.wraithPet.setConfig({ position: { x: window.screenX, y: window.screenY } })
+  }, [])
+
+  // 滚轮缩放(Task 9):每帧最多发一次 setScale IPC,同帧内的重复 wheel 事件直接丢弃
+  // (wheelPendingRef 挡住,不排队、不合并 deltaY)。stepScale 的"当前 scale"读
+  // scaleRef(命中测试同一份 ref,随 config.scale 保持最新),不额外引入新状态。
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    if (wheelPendingRef.current) return
+    wheelPendingRef.current = true
+    requestAnimationFrame(() => { wheelPendingRef.current = false })
+    window.wraithPet.setScale(stepScale(scaleRef.current, e.deltaY))
+  }, [])
+
+  const handleContextMenu = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    window.wraithPet.contextMenu()
+  }, [])
+
   return (
-    <PetSprite
-      previewUrl={preview?.previewUrl ?? null}
-      sprite={preview?.sprite ?? null}
-      state={state}
-      motion={config?.motion ?? 'calm'}
-      onFrame={handleFrame}
-      scale={config?.scale ?? 1}
-    />
+    <div
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onWheel={handleWheel}
+      onContextMenu={handleContextMenu}
+    >
+      <PetSprite
+        previewUrl={preview?.previewUrl ?? null}
+        sprite={preview?.sprite ?? null}
+        state={state}
+        motion={config?.motion ?? 'calm'}
+        onFrame={handleFrame}
+        scale={config?.scale ?? 1}
+      />
+    </div>
   )
 }

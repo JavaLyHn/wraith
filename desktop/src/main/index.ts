@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Notification, shell, session, screen } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Notification, shell, session, screen, Menu } from 'electron'
 import path from 'path'
 import os from 'os'
 import { fileURLToPath } from 'url'
@@ -41,7 +41,12 @@ import { SPLASH_LOGO_DATA_URI } from './splashLogo'
 import { listPets, importStaticImage, importPackage, removeImportedPet, previewDataUrl } from './petStore'
 import type { PetImportResult } from '../shared/pets'
 import { petStateFromEvent } from '../shared/petState'
-import { initPetWindow, syncPetWindow, destroyPetWindow, getPetWindow, pushPetConfig, pushPetPreview, pushPetSignal, type PetPreviewPayload } from './petWindow'
+import { buildPetMenuTemplate } from '../shared/petWindow'
+import {
+  initPetWindow, syncPetWindow, destroyPetWindow, getPetWindow,
+  pushPetConfig, pushPetPreview, pushPetSignal, type PetPreviewPayload,
+  petWindowMoveTo, petWindowResizeToScale, petWindowResetPosition, toElectronMenu,
+} from './petWindow'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -526,10 +531,29 @@ async function importPetPackageFromDialog(win: BrowserWindow | null, userDataDir
 ipcMain.handle('wraith:petsList', async () => ({
   pets: await listPets({ userDataDir: app.getPath('userData'), petdexRoot: petdexRoot() }),
 }))
-ipcMain.handle('wraith:petsImportImage', async () => importPetImageFromDialog(mainWindow, app.getPath('userData')))
-ipcMain.handle('wraith:petsImportPackage', async () => importPetPackageFromDialog(mainWindow, app.getPath('userData')))
+// 导入/删除成功后桌宠窗可能需要现身/消失/换预览——统一在既有校验结果算出之后
+// 追加同步,不改动 petStore 的任何校验逻辑。syncPetWindow/pushCurrentPetPreview
+// 都是 best-effort(内部自吞异常),无条件调用即可,失败/取消(pet:null)时是
+// 一次无害的重复检查。
+ipcMain.handle('wraith:petsImportImage', async () => {
+  const result = await importPetImageFromDialog(mainWindow, app.getPath('userData'))
+  const cfg = readPetConfig(app.getPath('userData'))
+  void syncPetWindow(cfg)
+  pushCurrentPetPreview(cfg)
+  return result
+})
+ipcMain.handle('wraith:petsImportPackage', async () => {
+  const result = await importPetPackageFromDialog(mainWindow, app.getPath('userData'))
+  const cfg = readPetConfig(app.getPath('userData'))
+  void syncPetWindow(cfg)
+  pushCurrentPetPreview(cfg)
+  return result
+})
 ipcMain.handle('wraith:petsRemove', async (_e, id: string) => {
   await removeImportedPet({ userDataDir: app.getPath('userData'), id })
+  const cfg = readPetConfig(app.getPath('userData'))
+  void syncPetWindow(cfg)
+  pushCurrentPetPreview(cfg)
   return { ok: true }
 })
 ipcMain.handle('wraith:petsPreview', (_e, id: string) =>
@@ -595,6 +619,79 @@ ipcMain.handle('pet:setConfig', (_e, patch: Partial<PetConfig>) => {
   void syncPetWindow(next)
   if (next.selectedId !== prev.selectedId) pushCurrentPetPreview(next)
   return next
+})
+
+// 全身拖动(Task 9):renderer 按 grabDX/DY 算好目标屏幕原点后只发 x/y,真正的
+// "夹到目标屏工作区 + setBounds" 全部留给 petWindow.ts 的 petWindowMoveTo——
+// 拖动期间不落盘,落盘由 renderer pointerup 时另发一次 pet:setConfig({ position }) 完成。
+ipcMain.on('pet:moveTo', (_e, x: number, y: number) => petWindowMoveTo(x, y))
+
+// 滚轮缩放(Task 9):与 pet:setConfig 的通用路径分开,因为还要立刻 resize 窗口本身
+// (setConfig 只管配置落盘 + 通知,不知道"缩放"还需要联动 setBounds)。
+ipcMain.on('pet:setScale', (_e, scale: number) => {
+  const c = writePetConfig(app.getPath('userData'), { scale })
+  petWindowResizeToScale(c.scale)
+  broadcastPetConfig(c)
+  pushPetConfig(c)
+})
+
+/**
+ * 右键菜单(Task 9)统一改配置入口:写盘 + 广播 + 推送 config + 按需增删窗口
+ * + (selectedId 变化时)重推 preview——与 pet:setConfig handler 同一套动作,
+ * 单独抽出来是因为菜单侧的多个 action(select/scale/close)都要复用它,
+ * 而 pet:setConfig 是渲染层通用 invoke 入口,两边各自的调用点不适合硬耦合。
+ */
+function applyConfigChange(patch: Partial<PetConfig>): PetConfig {
+  const userDataDir = app.getPath('userData')
+  const prev = readPetConfig(userDataDir)
+  const next = writePetConfig(userDataDir, patch)
+  broadcastPetConfig(next)
+  pushPetConfig(next)
+  void syncPetWindow(next)
+  if (next.selectedId !== prev.selectedId) pushCurrentPetPreview(next)
+  return next
+}
+
+/** 右键菜单(Task 9)各叶子 action 的落地:id 形如 `pet:select:<id>` / `pet:scale:<s>`
+ * / `pet:reset-position` / `pet:close`,与 buildPetMenuTemplate(shared/petWindow.ts)
+ * 产出的 PetMenuItem.id 一一对应。 */
+function handlePetMenu(id: string): void {
+  if (id.startsWith('pet:select:')) {
+    applyConfigChange({ selectedId: id.slice('pet:select:'.length) })
+    return
+  }
+  if (id.startsWith('pet:scale:')) {
+    const next = applyConfigChange({ scale: Number(id.slice('pet:scale:'.length)) })
+    petWindowResizeToScale(next.scale) // 与滚轮路径一致:改配置之外还要联动 resize
+    return
+  }
+  if (id === 'pet:reset-position') {
+    const userDataDir = app.getPath('userData')
+    writePetConfig(userDataDir, { position: null })
+    const cfg = readPetConfig(userDataDir)
+    const pos = petWindowResetPosition(cfg.scale) // 挪窗 + 算出夹紧后的新默认位置
+    const next = writePetConfig(userDataDir, { position: pos })
+    broadcastPetConfig(next)
+    pushPetConfig(next)
+    return
+  }
+  if (id === 'pet:close') {
+    applyConfigChange({ enabled: false }) // syncPetWindow 据此销毁窗口
+    return
+  }
+}
+
+// 原生右键菜单(Task 9):现查一次可用宠物列表 + 当前配置组模板,交给
+// toElectronMenu 映射成 Electron 菜单项后 popup 到宠物窗上。窗口不存在时
+// popup({ window: undefined }) 仍能弹出(退化为不依附特定窗口)。
+ipcMain.on('pet:contextMenu', () => {
+  void (async () => {
+    const userDataDir = app.getPath('userData')
+    const pets = await listPets({ userDataDir, petdexRoot: petdexRoot() })
+    const cfg = readPetConfig(userDataDir)
+    const template = toElectronMenu(buildPetMenuTemplate(pets, cfg), handlePetMenu)
+    Menu.buildFromTemplate(template).popup({ window: getPetWindow() ?? undefined })
+  })()
 })
 
 ipcMain.handle(
