@@ -55,36 +55,6 @@ export function detectFrameCounts(nonEmpty: boolean[][], columns: number): numbe
   })
 }
 
-export interface DragBounds { minX: number; maxX: number; minY: number; maxY: number }
-
-/**
- * 由定位容器尺寸 + 宠物自身渲染尺寸算出拖拽偏移的逐轴边界,让整只宠物始终留在
- * 容器内并保留 margin。宠物锚在容器右下角(CSS right/bottom),向上/向左是负偏移:
- * 因此 min 侧(可上拖/左拖的极限)= 宠物尺寸 + 锚距 + margin − 容器尺寸(通常为负,
- * 高窗口下远比旧的固定 −160 宽);max 侧 = 锚距 − margin。替代原来不随窗口变化的
- * 固定 ±160 死夹(那会把宠物锁在离右下角很近的一小块里)。
- */
-export function dragBounds(parentW: number, parentH: number, petW: number, petH: number, right: number, bottom: number, margin: number): DragBounds {
-  return {
-    minX: petW + right + margin - parentW,
-    maxX: right - margin,
-    minY: petH + bottom + margin - parentH,
-    maxY: bottom - margin,
-  }
-}
-
-/**
- * 把偏移逐轴夹进边界。容器比宠物还小时(min>max,区间反向)收敛到 max,不产生
- * 反向区间——用 min(max, max(min, v)) 保证:min>max 时 max(min,v)≥min>max,外层
- * min(max,…) 兜回 max。
- */
-export function clampPoint(p: { x: number; y: number }, b: DragBounds): { x: number; y: number } {
-  return {
-    x: Math.min(b.maxX, Math.max(b.minX, p.x)),
-    y: Math.min(b.maxY, Math.max(b.minY, p.y)),
-  }
-}
-
 export function motionFor(state: PetState, style: PetMotionStyle, reduced: boolean): PetMotion {
   if (reduced || style === 'static') return { className: '', durationMs: 0 }
   if (state === 'success') return { className: 'pet-success', durationMs: TRANSIENT_MS.success }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { clampPoint, detectFrameCounts, dragBounds, motionFor, selectedPet, spriteRowFor } from '../src/renderer/lib/petMotion'
+import { detectFrameCounts, motionFor, selectedPet, spriteRowFor } from '../src/renderer/lib/petMotion'
 import type { PetView } from '../src/shared/pets'
 
 describe('motionFor', () => {
@@ -104,32 +104,5 @@ describe('detectFrameCounts', () => {
 
   it('整行全空 → 至少 1 帧,绝不返回 0(避免除零/无帧)', () => {
     expect(detectFrameCounts([[false, false, false, false]], 8)).toEqual([1])
-  })
-})
-
-describe('dragBounds', () => {
-  // 宠物锚在容器右下角(right=16, bottom=12),向上/向左是负偏移。
-  // 边界应让整只宠物停在容器内并留 margin,而不是旧的固定 ±160。
-  it('高窗口下向上可拖动的范围远超旧的 -160', () => {
-    const b = dragBounds(600, 900, 120, 130, 16, 12, 8)
-    expect(b.minY).toBe(130 + 12 + 8 - 900) // = -750,可上拖 750px
-    expect(b.maxY).toBe(12 - 8)             // = 4
-    expect(b.minX).toBe(120 + 16 + 8 - 600) // = -456
-    expect(b.maxX).toBe(16 - 8)             // = 8
-    expect(b.minY).toBeLessThan(-160)
-  })
-})
-
-describe('clampPoint', () => {
-  it('逐轴夹到边界内', () => {
-    const b = { minX: -400, maxX: 8, minY: -700, maxY: 4 }
-    expect(clampPoint({ x: -900, y: -900 }, b)).toEqual({ x: -400, y: -700 })
-    expect(clampPoint({ x: 50, y: 50 }, b)).toEqual({ x: 8, y: 4 })
-    expect(clampPoint({ x: -100, y: -100 }, b)).toEqual({ x: -100, y: -100 })
-  })
-
-  it('容器比宠物还小(min>max)时收敛到 max,不产生反向区间', () => {
-    const b = { minX: 20, maxX: 8, minY: 20, maxY: 4 }
-    expect(clampPoint({ x: -50, y: -50 }, b)).toEqual({ x: 8, y: 4 })
   })
 })

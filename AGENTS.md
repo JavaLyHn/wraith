@@ -159,9 +159,10 @@ src/main/java/com/lyhn/wraith/
 
 ### 桌面宠物（Pets）
 
-- 文件：`desktop/src/shared/pets.ts`（类型）、`desktop/src/renderer/lib/petState.ts` + `petMotion.ts`（状态到动效映射）、`desktop/src/main/petStore.ts`（fs / 校验 / 落盘）、`desktop/src/renderer/components/PetAvatar.tsx` + `PetsSettings.tsx`（聊天浮件与设置页）
-- IPC 边界只开 5 个窄方法：`petsList` / `petsImportImage` / `petsImportPackage` / `petsRemove` / `petsPreview`；文件系统访问只在 main 的 `petStore.ts`，preload 只做类型约束桥，renderer 不直接碰 fs
-- **no-auto-download / no-third-party-code**：Wraith 不自动下载 Petdex 资源、不运行 `npx`、不执行任意第三方代码；`Noir Webling` 等 Petdex 目录条目只做本地检测（`~/.codex/pets/`）或读取用户已导入的包，缺资源时提示未安装，不联网获取
+- 展示表面（2026-07-19 起）：独立于主窗口的全局桌宠 `BrowserWindow`（无边框/透明/置顶/跨 Space），不再是聊天内 overlay（旧 `PetAvatar.tsx` 已删，渲染逻辑迁到 `PetSprite.tsx`）。
+- 文件：`desktop/src/shared/pets.ts`（类型）、`desktop/src/shared/petState.ts` + `desktop/src/renderer/lib/petMotion.ts`（状态到动效映射）、`desktop/src/shared/petWindow.ts`（命中测试 / 缩放 / 夹屏 / 菜单模板等纯函数）、`desktop/src/main/petStore.ts`（fs / 校验 / 落盘）、`desktop/src/main/petWindow.ts`（桌宠窗生命周期：建窗 / 销毁 / 拖动落点 / 缩放 resize / 菜单落地 / 三路 IPC 推送）、`desktop/src/main/settings.ts` 的 `PetConfig`（enabled/selectedId/motion/scale/position，主进程单一配置源）、`desktop/src/preload/pet.ts`（`window.wraithPet` 桥）、`desktop/src/renderer/pet.html` + `pet.tsx` + `components/PetWindowApp.tsx`（独立轻量 renderer 入口 / 根组件）、`components/PetSprite.tsx`（纯展示精灵渲染）、`components/PetsSettings.tsx`（设置页，经 `usePetConfig` 走 IPC）
+- IPC 边界：主窗侧只开 5 个窄方法：`petsList` / `petsImportImage` / `petsImportPackage` / `petsRemove` / `petsPreview`；文件系统访问只在 main 的 `petStore.ts`。桌宠窗另有一条独立的 `pet:*` 频道（`pet:ready` / `pet:getConfig` / `pet:setConfig` / `pet:config` / `pet:preview` / `pet:signal` / `pet:setIgnoreMouse` / `pet:moveTo` / `pet:setScale` / `pet:contextMenu`），经专属 preload（`preload/pet.ts`）暴露为 `window.wraithPet`，与主窗 `window.wraith` 互不越界；两个 preload 都只做类型约束桥，renderer 不直接碰 fs
+- **no-auto-download / no-third-party-code**：Wraith 不自动下载 Petdex 资源、不运行 `npx`、不执行任意第三方代码；`Noir Webling` 等 Petdex 目录条目只做本地检测（`~/.codex/pets/`）或读取用户已导入的包，缺资源时提示未安装，不联网获取；此红线随本次展示表面迁移逐字节不变（`petStore.ts` 与导入校验未改动）
 - 导入需先过 MIME/签名、大小、像素尺寸与解压包边界（文件数/总大小）校验，并做 Zip Slip / 符号链接防护，通过后才把副本写入应用数据目录；删除只清理该副本，不改动用户原始目录
 
 ## 修改时的硬规则
@@ -229,7 +230,7 @@ src/main/java/com/lyhn/wraith/
 | Multi-Agent | AgentOrchestrator.java + SubAgent.java |
 | MCP | McpServerManager.java + McpClient.java |
 | TUI/渲染 | render/Renderer.java + RendererFactory.java |
-| 桌面宠物（Pets） | desktop/src/shared/pets.ts + desktop/src/main/petStore.ts + desktop/src/renderer/lib/petState.ts + petMotion.ts + desktop/src/renderer/components/PetAvatar.tsx + PetsSettings.tsx |
+| 桌面宠物（Pets） | desktop/src/shared/pets.ts + petState.ts + petWindow.ts + desktop/src/main/petStore.ts + petWindow.ts + settings.ts(PetConfig) + desktop/src/preload/pet.ts + desktop/src/renderer/lib/petMotion.ts + desktop/src/renderer/pet.html/pet.tsx + components/PetWindowApp.tsx + PetSprite.tsx + PetsSettings.tsx |
 
 ## 当前已知边界
 
