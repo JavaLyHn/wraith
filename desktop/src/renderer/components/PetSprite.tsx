@@ -105,11 +105,19 @@ export default function PetSprite({ previewUrl, sprite, state, motion: motionSty
     return () => cancelAnimationFrame(raf)
   }, [sprite, reduced, anim.durationMs, state, frameCount])
 
+  // 渲染实际用的列必须 clamp 到 [0, frameCount-1](frameCounts 是异步检测出来的,
+  // 行内真实帧数可能比 frame 的当前值小一拍;不 clamp 会在过渡的那一 tick 里让
+  // backgroundPosition 指向该行尾部的透明补齐列)。onFrame 汇报的也必须是这个
+  // clamp 后的值,而不是原始 frame——否则 PetWindowApp 的命中测试会在同一拍里对着
+  // 跟画面不一致的列算,命中会短暂错位(尽管方向上是"多穿透"而非"误捕获",不算危险,
+  // 但仍是真实的、该修的不一致)。
+  const shownCol = Math.min(frame, frameCount - 1)
+
   // 把当前帧列号回报给调用方(PetWindowApp,Task 8 点击穿透命中测试用来定位当前展示
   // 帧的 sheet 偏移)。只报数字帧号,不暴露 canvas/ImageData 等内部解码状态。
   useEffect(() => {
-    onFrame?.(frame)
-  }, [frame, onFrame])
+    onFrame?.(shownCol)
+  }, [shownCol, onFrame])
 
   // 单图路径的原始像素尺寸,onLoad 时取 naturalWidth/Height 显式算出「等比收缩到
   // STATIC_IMAGE_MAX_PX、再乘 scale」后的渲染尺寸(见 containScale)——不能再用 CSS
@@ -133,7 +141,7 @@ export default function PetSprite({ previewUrl, sprite, state, motion: motionSty
             height: sprite.frameHeight * scale,
             backgroundImage: `url(${previewUrl})`,
             backgroundSize: `${sprite.columns * sprite.frameWidth * scale}px ${sprite.rows * sprite.frameHeight * scale}px`,
-            backgroundPosition: `-${Math.min(frame, frameCount - 1) * sprite.frameWidth * scale}px -${row * sprite.frameHeight * scale}px`,
+            backgroundPosition: `-${shownCol * sprite.frameWidth * scale}px -${row * sprite.frameHeight * scale}px`,
           }}
         />
       ) : (
