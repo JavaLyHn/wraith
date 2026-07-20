@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, ShieldCheck, RefreshCw } from 'lucide-react'
 import type { PolicyStatusView, AuditEntryView, SandboxState } from '../../shared/types'
-import { outcomeLabel, approverLabel, formatAuditTime, auditArgFields } from '../lib/policyView'
+import { outcomeLabel, approverLabel, formatAuditTime, auditArgFields, auditArgFieldsFull } from '../lib/policyView'
 
 const FIXED_POLICY = [
   '路径围栏:read_file / write_file / list_dir / create_project 强制限定在项目根内',
@@ -15,19 +15,44 @@ function outcomeClass(outcome: string): string {
   return 'bg-accent/12 text-accent' // allow
 }
 
-/** 审计参数结构化预览:逐字段 key: 首行预览 +「共 N 行 · M 字符」,取代原始转义 JSON 糊墙。 */
+/**
+ * 审计参数:折叠时逐字段「key: 首行预览 +（共 N 行 · M 字符）」(反转义,取代转义 JSON 糊墙);
+ * 点开看完整参数(存下的最多 1000 字符,带真实换行、可滚动)。
+ */
 function AuditArgs({ args }: { args: string }): JSX.Element | null {
-  const fields = auditArgFields(args)
-  if (fields.length === 0) return null
+  const [open, setOpen] = useState(false)
+  const preview = auditArgFields(args)
+  if (preview.length === 0) return null
+  const full = open ? auditArgFieldsFull(args) : []
   return (
-    <div data-testid="audit-args" className="mt-1.5 flex flex-col gap-0.5 rounded border border-border/60 bg-bg/40 px-2 py-1 font-mono text-3xs leading-relaxed">
-      {fields.map((f, j) => (
-        <div key={j} className="break-all">
-          {f.key && <><span className="text-accent">{f.key}</span><span className="text-fg-subtle">: </span></>}
-          <span className="text-fg-muted">{f.value || (f.meta ? '…' : '""')}</span>
-          {f.meta && <span className="ml-1 rounded bg-fg/10 px-1 text-fg-subtle">{f.meta}</span>}
+    <div data-testid="audit-args" className="mt-1.5 rounded border border-border/60 bg-bg/40 font-mono text-3xs">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        title={open ? '收起' : '展开完整参数'}
+        className="flex w-full items-start gap-1 px-2 py-1 text-left hover:bg-fg/5"
+      >
+        <span className="mt-px shrink-0 text-fg-subtle">{open ? '▾' : '▸'}</span>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-relaxed">
+          {preview.map((f, j) => (
+            <span key={j} className="break-all">
+              {f.key && <><span className="text-accent">{f.key}</span><span className="text-fg-subtle">: </span></>}
+              <span className="text-fg-muted">{f.value || (f.meta ? '…' : '""')}</span>
+              {f.meta && <span className="ml-1 rounded bg-fg/10 px-1 text-fg-subtle">{f.meta}</span>}
+            </span>
+          ))}
+        </span>
+      </button>
+      {open && (
+        <div className="max-h-72 overflow-y-auto border-t border-border/60 px-2 py-1.5">
+          {full.map((f, j) => (
+            <div key={j} className="mb-1.5 last:mb-0">
+              {f.key && <div className="mb-0.5 text-accent">{f.key}</div>}
+              <pre className="m-0 whitespace-pre-wrap break-all text-fg-muted">{f.value}</pre>
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   )
 }

@@ -26,6 +26,9 @@ Thumbs.db
 /reports
 temp_articles.json
 
+# node 依赖与缓存(根目录也可能有:某些工具会在仓库根生成 node_modules/.vite 等缓存)
+/node_modules/
+
 # desktop shell
 desktop/node_modules/
 desktop/out/
