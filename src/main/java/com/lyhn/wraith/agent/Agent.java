@@ -664,11 +664,19 @@ public class Agent {
         if (assistantResult != null && !assistantResult.isBlank()) {
             conversationHistory.add(LlmClient.Message.assistant(assistantResult));
         }
-        // Plan/Team 不走 react 的 onUsage 埋点,水位会卡住不动(卡在上次 react 读数);
-        // history 已变,按估算重发一次 context.watermark 让桌面/TUI 水位跟上。
-        if (curatorEnabled()) {
-            curator.refreshEstimatedWatermark(conversationHistory);
-        }
+    }
+
+    /** Plan/Team turn 开始:复位外部用量峰值(水位从头累计到本轮最满点)。 */
+    public void beginExternalUsageTracking() {
+        if (curatorEnabled()) curator.beginExternalTurn();
+    }
+
+    /**
+     * Plan/Team 子调用(含计划生成)的真实用量上报 → 计入成本/metrics + 按峰值发水位。
+     * 由包在 LlmClient 外的 UsageObservingLlmClient 每次 chat 后回调。
+     */
+    public void recordExternalUsage(long input, long output, long cached) {
+        if (curatorEnabled()) curator.recordExternalUsage(input, output, cached);
     }
 
     /**

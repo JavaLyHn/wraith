@@ -1894,10 +1894,16 @@ public class Main {
                             // out=discard：桌面 stdout 是 JSON-RPC 管道，绝不写
                             java.io.PrintStream discard = new java.io.PrintStream(java.io.OutputStream.nullOutputStream());
 
+                            // 用量观测:包住 client,子 agent(含计划生成)每次真实用量 → 主 curator(峰值发水位+计入成本)
+                            agent.beginExternalUsageTracking();
+                            com.lyhn.wraith.llm.LlmClient teamClient = new com.lyhn.wraith.llm.UsageObservingLlmClient(
+                                    currentClient[0],
+                                    resp -> agent.recordExternalUsage(resp.inputTokens(), resp.outputTokens(), resp.cachedInputTokens()));
+
                             // 装配 AgentOrchestrator（与 CLI createTeamAgent + CLI team 路径完全对齐）
                             com.lyhn.wraith.agent.AgentOrchestrator orchestrator =
                                     new com.lyhn.wraith.agent.AgentOrchestrator(
-                                            currentClient[0],
+                                            teamClient,
                                             agent.getToolRegistry(),
                                             agent.getMemoryManager(),
                                             discard);
@@ -1981,10 +1987,16 @@ public class Main {
                         // out=discard：桌面 stdout 是 JSON-RPC 管道，绝不写
                         java.io.PrintStream discard = new java.io.PrintStream(java.io.OutputStream.nullOutputStream());
 
+                        // 用量观测:包住 client,计划生成 + 执行每次真实用量 → 主 curator(峰值发水位+计入成本)
+                        agent.beginExternalUsageTracking();
+                        com.lyhn.wraith.llm.LlmClient planClient = new com.lyhn.wraith.llm.UsageObservingLlmClient(
+                                currentClient[0],
+                                resp -> agent.recordExternalUsage(resp.inputTokens(), resp.outputTokens(), resp.cachedInputTokens()));
+
                         // 装配 PlanExecuteAgent（7 参公开构造，planner=null 则内部 new Planner(llmClient)）
                         com.lyhn.wraith.agent.PlanExecuteAgent planAgent =
                                 new com.lyhn.wraith.agent.PlanExecuteAgent(
-                                        currentClient[0],
+                                        planClient,
                                         agent.getToolRegistry(),
                                         null,  // planner=null → 内部 new Planner(llmClient)
                                         agent.getMemoryManager(),

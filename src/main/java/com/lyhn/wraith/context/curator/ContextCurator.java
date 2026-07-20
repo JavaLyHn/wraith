@@ -113,26 +113,43 @@ public final class ContextCurator {
         }
     }
 
+    /** 本轮外部执行(Plan/Team)真实用量的峰值 inputTokens,用于按"最满的那个子上下文"发水位。 */
+    private long externalPeakInput = 0;
+
+    /** Plan/Team turn 开始:复位峰值,让本轮水位从头累计到"最满点"(而非沿用上一轮)。 */
+    public synchronized void beginExternalTurn() {
+        externalPeakInput = 0;
+    }
+
     /**
-     * 外部执行(Plan/Team 模式)收尾后刷新水位:这些模式不走 react 的 onUsage 埋点,
-     * 主 history 已被 recordExternalTurn 追加却无真实 usage 可锚——按当前 history 估算重发
-     * context.watermark(estimated=true),否则桌面/TUI 水位会卡在上次 react 的读数不动。
-     * 不写 metrics(无真实 usage,宁缺勿虚),不锚 gauge(仅按上次真实锚点+估算差分读数)。
+     * 记录一次外部(Plan/Team 子 agent / 计划生成)的真实 LLM 用量:
+     *   ① 计入 stats/成本/metrics(与 react 同一累计口径,累计成本/tokens 反映全部消耗);
+     *   ② 按峰值 inputTokens 发**真实** context.watermark(ratio=peak/window)——子上下文用完即弃、
+     *      不进主对话窗口,但用户要看到本轮"最满的那个上下文"离窗口多近。仅在刷新峰值时发,
+     *      故水位涨到最满点后定格;下次 react 的 onUsage 再按主对话重锚。
+     * 不动 gauge 主锚点(子上下文≠主对话,锚了会让下一次 react 真实读数突降)。
      */
-    public void refreshEstimatedWatermark(List<Message> history) {
+    public synchronized void recordExternalUsage(long input, long output, long cached) {
         try {
             String model = modelSupplier.get();
-            long estNow = counter.estimate(model, history);
-            WatermarkGauge.Reading r = gauge.read(model, estNow);
-            Map<String, Object> p = new LinkedHashMap<>();
-            p.put("usedTokens", r.usedTokens());
-            p.put("window", r.window());
-            p.put("ratio", r.ratio());
-            p.put("tier", r.tier());
-            p.put("estimated", true);
-            eventOut.accept("context.watermark", p);
+            long window = Math.max(1, windowSupplier.getAsLong());
+            long used = Math.max(0, input);
+            double ratio = (double) used / window;
+            WatermarkGauge.Reading r = new WatermarkGauge.Reading(used, window, ratio, WatermarkGauge.tierOf(ratio));
+            Double cost = pricingTable.cost(model, input, output, cached).orElse(null);
+            String currency = pricingTable.resolve(model).map(PricingTable.Price::currency).orElse(null);
+            stats.recordUsage(input, output, cached, r, cost, currency);
+            if (used > externalPeakInput) {
+                externalPeakInput = used;
+                Map<String, Object> p = new LinkedHashMap<>();
+                p.put("usedTokens", used);
+                p.put("window", window);
+                p.put("ratio", ratio);
+                p.put("tier", r.tier());
+                eventOut.accept("context.watermark", p);
+            }
         } catch (Exception e) {
-            log.warn("watermark refresh failed: {}", e.getClass().getSimpleName());
+            log.warn("external usage record failed: {}", e.getClass().getSimpleName());
         }
     }
 

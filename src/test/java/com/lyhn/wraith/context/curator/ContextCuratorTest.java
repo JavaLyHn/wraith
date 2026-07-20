@@ -205,27 +205,41 @@ class ContextCuratorTest {
     }
 
     @Test
-    void refreshEstimatedWatermarkEmitsEstimatedEvent() {
-        // Plan/Team 收尾:无真实 usage,按 history 估算重发 context.watermark,标 estimated=true
-        ContextCurator c = curator(30_000);
-        c.refreshEstimatedWatermark(bigHistory());
+    void recordExternalUsageAccumulatesStatsAndEmitsRealWatermark() {
+        // Plan/Team 子调用真实用量:计入累计(成本/tokens)+ 发真实水位(ratio=input/window,不带 estimated)
+        ContextCurator c = curator(100_000);
+        c.beginExternalTurn();
+        c.recordExternalUsage(40_000, 500, 0);
         Map<String, Object> evt = lastEvent("context.watermark");
-        assertEquals(true, evt.get("estimated"), "估算重发须标 estimated");
-        assertTrue(((Number) evt.get("usedTokens")).longValue() > 0, "usedTokens 反映当前 history");
-        assertTrue(((Number) evt.get("ratio")).doubleValue() > 0);
+        assertEquals(40_000L, ((Number) evt.get("usedTokens")).longValue());
+        assertEquals(0.4, ((Number) evt.get("ratio")).doubleValue(), 1e-9);
+        assertNull(evt.get("estimated"), "外部峰值水位是真实读数,不带 estimated");
+        assertEquals(40_000L, c.stats().totalInput(), "真实用量计入累计");
+        assertEquals(500L, c.stats().totalOutput());
     }
 
     @Test
-    void refreshEstimatedWatermarkTracksHistoryGrowth() {
-        // 核心:water­mark 不再冻结——history 增长后重发的 usedTokens 必须变大
-        ContextCurator c = curator(200_000);
-        List<Message> h = bigHistory();
-        c.refreshEstimatedWatermark(h);
-        long before = ((Number) lastEvent("context.watermark").get("usedTokens")).longValue();
-        for (int i = 0; i < 3; i++) h.add(Message.assistant(("x ").repeat(3000)));
-        c.refreshEstimatedWatermark(h);
-        long after = ((Number) lastEvent("context.watermark").get("usedTokens")).longValue();
-        assertTrue(after > before, "history 增长后水位读数必须上升(不再卡住)");
+    void externalWatermarkTracksPeakNotLatest() {
+        // 核心:水位定格在本轮"最满的那个上下文",不被后续更低的子调用拉低
+        ContextCurator c = curator(100_000);
+        c.beginExternalTurn();
+        c.recordExternalUsage(30_000, 0, 0);   // 峰值 30k → 发
+        c.recordExternalUsage(70_000, 0, 0);   // 新峰值 70k → 发
+        c.recordExternalUsage(10_000, 0, 0);   // 更低 → 不发
+        assertEquals(70_000L, ((Number) lastEvent("context.watermark").get("usedTokens")).longValue(),
+                "水位定格峰值,不被更低调用拉低");
+        assertEquals(110_000L, c.stats().totalInput(), "但累计用量含全部子调用");
+    }
+
+    @Test
+    void beginExternalTurnResetsPeak() {
+        ContextCurator c = curator(100_000);
+        c.beginExternalTurn();
+        c.recordExternalUsage(70_000, 0, 0);
+        c.beginExternalTurn();                 // 新一轮:峰值复位
+        c.recordExternalUsage(20_000, 0, 0);   // 20k 即本轮最满 → 发
+        assertEquals(20_000L, ((Number) lastEvent("context.watermark").get("usedTokens")).longValue(),
+                "新 turn 峰值复位");
     }
 
     @Test

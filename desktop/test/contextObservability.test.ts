@@ -20,12 +20,6 @@ describe('context observability slice', () => {
     expect(s.context.watermark).toEqual({ usedTokens: 60000, window: 100000, ratio: 0.6, tier: 1, estimated: false })
   })
 
-  it('watermark event with estimated:true marks estimated (Plan/Team 收尾重发)', () => {
-    const s = reducer(initialState, notif('context.watermark', { usedTokens: 56000, window: 128000, ratio: 0.44, tier: 0, estimated: true }))
-    expect(s.context.watermark?.estimated).toBe(true)
-    expect(s.context.watermark?.ratio).toBe(0.44)
-  })
-
   it('compaction events append with cap 200', () => {
     let s = initialState
     for (let i = 0; i < 205; i++) {

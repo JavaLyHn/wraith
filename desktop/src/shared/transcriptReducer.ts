@@ -429,13 +429,12 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
     // ── context 治理可观测(Phase C;payload 平铺,见 EventStreamRenderer.contextEvent)──
     case 'context.watermark': {
       const num = (k: string): number => (typeof p[k] === 'number' ? (p[k] as number) : 0)
-      // react 真实 usage 事件不带 estimated → false(权威锚点);Plan/Team 收尾的估算重发带
-      // estimated:true → 标「估算」。缺省 false 保持既有 react 语义不变。
+      // watermark 事件均为真实读数(react 主对话锚点 / Plan-Team 峰值真实用量)→ estimated 恒 false。
       return {
         ...state,
         context: {
           ...state.context,
-          watermark: { usedTokens: num('usedTokens'), window: num('window'), ratio: num('ratio'), tier: num('tier'), estimated: p['estimated'] === true },
+          watermark: { usedTokens: num('usedTokens'), window: num('window'), ratio: num('ratio'), tier: num('tier'), estimated: false },
         },
       }
     }
