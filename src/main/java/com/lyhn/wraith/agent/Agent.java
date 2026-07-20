@@ -664,6 +664,11 @@ public class Agent {
         if (assistantResult != null && !assistantResult.isBlank()) {
             conversationHistory.add(LlmClient.Message.assistant(assistantResult));
         }
+        // Plan/Team 不走 react 的 onUsage 埋点,水位会卡住不动(卡在上次 react 读数);
+        // history 已变,按估算重发一次 context.watermark 让桌面/TUI 水位跟上。
+        if (curatorEnabled()) {
+            curator.refreshEstimatedWatermark(conversationHistory);
+        }
     }
 
     /**

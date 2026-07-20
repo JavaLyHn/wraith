@@ -205,6 +205,30 @@ class ContextCuratorTest {
     }
 
     @Test
+    void refreshEstimatedWatermarkEmitsEstimatedEvent() {
+        // Plan/Team 收尾:无真实 usage,按 history 估算重发 context.watermark,标 estimated=true
+        ContextCurator c = curator(30_000);
+        c.refreshEstimatedWatermark(bigHistory());
+        Map<String, Object> evt = lastEvent("context.watermark");
+        assertEquals(true, evt.get("estimated"), "估算重发须标 estimated");
+        assertTrue(((Number) evt.get("usedTokens")).longValue() > 0, "usedTokens 反映当前 history");
+        assertTrue(((Number) evt.get("ratio")).doubleValue() > 0);
+    }
+
+    @Test
+    void refreshEstimatedWatermarkTracksHistoryGrowth() {
+        // 核心:water­mark 不再冻结——history 增长后重发的 usedTokens 必须变大
+        ContextCurator c = curator(200_000);
+        List<Message> h = bigHistory();
+        c.refreshEstimatedWatermark(h);
+        long before = ((Number) lastEvent("context.watermark").get("usedTokens")).longValue();
+        for (int i = 0; i < 3; i++) h.add(Message.assistant(("x ").repeat(3000)));
+        c.refreshEstimatedWatermark(h);
+        long after = ((Number) lastEvent("context.watermark").get("usedTokens")).longValue();
+        assertTrue(after > before, "history 增长后水位读数必须上升(不再卡住)");
+    }
+
+    @Test
     void manualCompactReturnValueTokensMatchEmittedEvent() {
         // bug#2:横幅(取 ManualCompaction.before/after)与压缩历史(取 context.compaction 事件)
         // 必须同源一致——此前 Agent 另用 estimateCurrentContextTokens() 造成两套数字打架。

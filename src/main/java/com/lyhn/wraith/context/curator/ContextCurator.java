@@ -113,6 +113,29 @@ public final class ContextCurator {
         }
     }
 
+    /**
+     * 外部执行(Plan/Team 模式)收尾后刷新水位:这些模式不走 react 的 onUsage 埋点,
+     * 主 history 已被 recordExternalTurn 追加却无真实 usage 可锚——按当前 history 估算重发
+     * context.watermark(estimated=true),否则桌面/TUI 水位会卡在上次 react 的读数不动。
+     * 不写 metrics(无真实 usage,宁缺勿虚),不锚 gauge(仅按上次真实锚点+估算差分读数)。
+     */
+    public void refreshEstimatedWatermark(List<Message> history) {
+        try {
+            String model = modelSupplier.get();
+            long estNow = counter.estimate(model, history);
+            WatermarkGauge.Reading r = gauge.read(model, estNow);
+            Map<String, Object> p = new LinkedHashMap<>();
+            p.put("usedTokens", r.usedTokens());
+            p.put("window", r.window());
+            p.put("ratio", r.ratio());
+            p.put("tier", r.tier());
+            p.put("estimated", true);
+            eventOut.accept("context.watermark", p);
+        } catch (Exception e) {
+            log.warn("watermark refresh failed: {}", e.getClass().getSimpleName());
+        }
+    }
+
     /** 调 LLM 前治理。返回是否发生任何动作。 */
     public boolean curate(List<Message> history) {
         try {
