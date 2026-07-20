@@ -75,6 +75,15 @@ describe('ContextPanel render', () => {
     expect(screen.getByText(/前情提要 XYZ/)).toBeTruthy()
   })
 
+  it('活摘要:markdown 渲染(列表/内联代码成 HTML,不再是原文)', () => {
+    render(<ContextPanel context={baseCtx({ liveSummary: '- 模块 `LlmClient`\n- 模块 `ToolRegistry`' })}
+      status={null} onCompact={() => {}} compactDisabled={false} />)
+    const box = screen.getByTestId('live-summary')
+    expect(box.querySelector('ul')).not.toBeNull()                       // 列表成 <ul>
+    expect(box.querySelectorAll('code').length).toBeGreaterThanOrEqual(2) // 内联代码成 <code>
+    expect(box.textContent).toContain('LlmClient')
+  })
+
   it('手动压缩按钮:disabled 守卫 + 点击回调', () => {
     const onCompact = vi.fn()
     const { rerender } = render(

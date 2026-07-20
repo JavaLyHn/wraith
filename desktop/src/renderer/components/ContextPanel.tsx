@@ -1,4 +1,7 @@
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { MARKDOWN_COMPONENTS } from './AgentMessage'
 import type { ContextObservability } from '../../shared/transcriptReducer'
 import type { StatusData } from '../../shared/types'
 import { tierOf, TIER_HEX, TIER_LABEL } from '../../shared/contextTier'
@@ -87,12 +90,21 @@ export default function ContextPanel({ context, status, onCompact, compactDisabl
           </div>
         ))}
       </div>
-      {/* 活摘要预览 */}
+      {/* 活摘要预览:Tier3 增量摘要保留的上下文提要,markdown 渲染(与对话气泡同一套口径) */}
       <div>
-        <div className="mb-1 font-medium">活摘要</div>
+        <div className="mb-1 flex items-baseline gap-2">
+          <span className="font-medium">活摘要</span>
+          <span className="text-2xs text-fg-subtle">压缩后保留的上下文提要,后续对话据此续接</span>
+        </div>
         {context.liveSummary
-          ? <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded border border-border p-2 font-mono text-2xs">{context.liveSummary}</pre>
-          : <div className="text-fg-muted">尚未生成活摘要</div>}
+          ? <div data-testid="live-summary" className="agent-markdown max-h-64 overflow-y-auto rounded-lg border border-border bg-surface/40 px-3 py-2 text-xs leading-relaxed">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={MARKDOWN_COMPONENTS}>
+                {context.liveSummary}
+              </ReactMarkdown>
+            </div>
+          : <div className="rounded-lg border border-dashed border-border px-3 py-2 text-fg-muted">
+              尚未生成活摘要 · 上下文达 95%(Tier3)触发增量摘要后显示
+            </div>}
       </div>
       {/* 手动压缩 */}
       <button data-testid="context-panel-compact" onClick={onCompact} disabled={compactDisabled}

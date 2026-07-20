@@ -4,8 +4,9 @@ import remarkGfm from 'remark-gfm'
 import Logo from './Logo'
 import { stripDsml } from '../lib/toolContent'
 
-/** Agent 消息 markdown 正文的自定义渲染:表格外包横向滚动容器、链接走系统浏览器。 */
-const MARKDOWN_COMPONENTS: Components = {
+/** Agent 消息 markdown 正文的自定义渲染:表格外包横向滚动容器、链接走系统浏览器。
+ *  导出供其它面板(如上下文「活摘要」预览)复用同一套 markdown 渲染口径。 */
+export const MARKDOWN_COMPONENTS: Components = {
   table: ({ node, children, ...props }) => (
     <div className="agent-md-table-wrap">
       <table {...props}>{children}</table>
