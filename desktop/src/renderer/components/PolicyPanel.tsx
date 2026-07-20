@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, ShieldCheck, RefreshCw } from 'lucide-react'
 import type { PolicyStatusView, AuditEntryView, SandboxState } from '../../shared/types'
-import { outcomeLabel, approverLabel, formatAuditTime } from '../lib/policyView'
+import { outcomeLabel, approverLabel, formatAuditTime, auditArgFields } from '../lib/policyView'
 
 const FIXED_POLICY = [
   '路径围栏:read_file / write_file / list_dir / create_project 强制限定在项目根内',
@@ -13,6 +13,23 @@ function outcomeClass(outcome: string): string {
   if (outcome === 'deny') return 'bg-danger/12 text-danger'
   if (outcome === 'error') return 'bg-surface text-fg-muted'
   return 'bg-accent/12 text-accent' // allow
+}
+
+/** 审计参数结构化预览:逐字段 key: 首行预览 +「共 N 行 · M 字符」,取代原始转义 JSON 糊墙。 */
+function AuditArgs({ args }: { args: string }): JSX.Element | null {
+  const fields = auditArgFields(args)
+  if (fields.length === 0) return null
+  return (
+    <div data-testid="audit-args" className="mt-1.5 flex flex-col gap-0.5 rounded border border-border/60 bg-bg/40 px-2 py-1 font-mono text-3xs leading-relaxed">
+      {fields.map((f, j) => (
+        <div key={j} className="break-all">
+          {f.key && <><span className="text-accent">{f.key}</span><span className="text-fg-subtle">: </span></>}
+          <span className="text-fg-muted">{f.value || (f.meta ? '…' : '""')}</span>
+          {f.meta && <span className="ml-1 rounded bg-fg/10 px-1 text-fg-subtle">{f.meta}</span>}
+        </div>
+      ))}
+    </div>
+  )
 }
 
 export default function PolicyPanel({ onBack }: { onBack: () => void }): JSX.Element {
@@ -119,7 +136,7 @@ export default function PolicyPanel({ onBack }: { onBack: () => void }): JSX.Ele
                   <span className="text-fg-subtle">{e.durationMs}ms</span>
                   {e.approver && approverLabel(e.approver) && <span className="text-fg-subtle">· {approverLabel(e.approver)}</span>}
                 </div>
-                {e.args && <div className="mt-1 break-words font-mono text-3xs text-fg-muted">{e.args}</div>}
+                {e.args && <AuditArgs args={e.args} />}
                 {e.reason && <div className="mt-1 text-3xs text-fg-subtle">原因:{e.reason}</div>}
                 {e.browserMode && <div className="mt-1 text-3xs text-fg-subtle">浏览器:mode={e.browserMode}{e.sensitive ? ' · 敏感页' : ''}{e.targetUrl ? ` · ${e.targetUrl}` : ''}</div>}
               </div>
