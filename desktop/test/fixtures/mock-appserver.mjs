@@ -71,6 +71,15 @@ const mockMcp = (() => {
 let mcpServers = mockMcp && Array.isArray(mockMcp.servers) ? JSON.parse(JSON.stringify(mockMcp.servers)) : []
 
 // ---------------------------------------------------------------------------
+// Automations(定时任务)状态 — E2E mock 之前完全未实现,automations.* 一律回
+// "Method not found",导致面板能开但无数据、T33–T37/A4 确定性失败。这里补一套有状态
+// 模拟:任务列表 + 运行历史。runNow 依 env 造出 success / waiting_approval / running。
+// ---------------------------------------------------------------------------
+let automations = []
+let autoRuns = []
+let autoSeq = 0
+
+// ---------------------------------------------------------------------------
 // I/O helpers
 // ---------------------------------------------------------------------------
 
@@ -432,6 +441,77 @@ async function handleRequest(req) {
       reply(id, { ok: true })
       break
     }
+
+    // -----------------------------------------------------------------------
+    // Automations(定时任务)
+    // -----------------------------------------------------------------------
+    case 'automations.list': {
+      reply(id, { tasks: automations })
+      break
+    }
+    case 'automations.upsert': {
+      const t = { ...(params || {}) }
+      if (!t.id) t.id = `auto_${++autoSeq}`
+      if (t.createdAt == null) t.createdAt = Date.now()
+      if (t.enabled == null) t.enabled = true
+      if (t.lastFiredAt === undefined) t.lastFiredAt = null
+      const i = automations.findIndex(x => x.id === t.id)
+      if (i >= 0) automations[i] = { ...automations[i], ...t }
+      else automations.push(t)
+      reply(id, { ok: true, task: automations.find(x => x.id === t.id) })
+      break
+    }
+    case 'automations.remove': {
+      const rid = params && params.id
+      automations = automations.filter(x => x.id !== rid)
+      autoRuns = autoRuns.filter(r => r.taskId !== rid)
+      reply(id, { ok: true })
+      break
+    }
+    case 'automations.runNow': {
+      const taskId = (params && params.id) || (automations[0] && automations[0].id) || 'auto_0'
+      const now = Date.now()
+      const run = { runId: `run_${++autoSeq}`, taskId, startedAt: now, status: 'running', sessionId: `sess_auto_${autoSeq}` }
+      if (process.env['MOCK_SLOW_TURN'] === '1') {
+        // 保持 running,等 automations.stop(面板已移除中断按钮,T35 为旧特性遗留,会另行说明)
+      } else if (process.env['MOCK_APPROVAL_TOOL']) {
+        run.status = 'waiting_approval'
+        run.approvalId = `${taskId}#1`
+        run.approvalTool = process.env['MOCK_APPROVAL_TOOL']
+      } else {
+        run.status = 'success'
+        run.endedAt = now + 1
+        run.summary = 'Hello **world**'
+      }
+      autoRuns.push(run)
+      reply(id, { ok: true, runId: run.runId })
+      break
+    }
+    case 'automations.runs': {
+      const tid = params && params.taskId
+      reply(id, { runs: tid ? autoRuns.filter(r => r.taskId === tid) : autoRuns.slice() })
+      break
+    }
+    case 'automations.stop': {
+      const r = autoRuns.find(x => x.runId === (params && params.runId))
+      if (r && r.endedAt == null) { r.status = 'interrupted'; r.endedAt = Date.now() }
+      reply(id, { ok: true })
+      break
+    }
+    case 'automations.respondApproval': {
+      const decision = (params && params.decision) || 'APPROVED'
+      const r = autoRuns.find(x => x.approvalId === (params && params.approvalId))
+        || autoRuns.find(x => x.status === 'waiting_approval')
+      if (r) {
+        if (decision === 'REJECTED') { r.status = 'failed' } else { r.status = 'success'; r.summary = 'Hello **world**' }
+        r.endedAt = Date.now()
+        delete r.approvalId; delete r.approvalTool
+      }
+      reply(id, { ok: true })
+      break
+    }
+    case 'automations.qqPending': { reply(id, { items: [], count: 0 }); break }
+    case 'automations.qqPendingClear': { reply(id, { ok: true }); break }
 
     case 'shutdown': {
       reply(id, { ok: true })
