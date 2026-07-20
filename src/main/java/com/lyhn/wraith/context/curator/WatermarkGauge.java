@@ -46,8 +46,13 @@ public final class WatermarkGauge {
                 ? historyEstimateNow
                 : Math.max(0, lastRealInput + (historyEstimateNow - estimateAtReal));
         double ratio = (double) used / window;
-        int tier = ratio >= TIER3 ? 3 : ratio >= TIER2 ? 2 : ratio >= TIER1 ? 1 : 0;
-        return new Reading(used, window, ratio, tier);
+        return new Reading(used, window, ratio, tierOf(ratio));
+    }
+
+    /** tier 判定单一来源(阈值 TIER1/2/3 的唯一消费点):ratio → 档位 0..3。
+     *  桌面/TUI/RPC 侧一律经此(或经等价 ratio 比较)判档,杜绝阈值字面量散落多处。 */
+    public static int tierOf(double ratio) {
+        return ratio >= TIER3 ? 3 : ratio >= TIER2 ? 2 : ratio >= TIER1 ? 1 : 0;
     }
 
     /** 压回 TARGET 线所需释放的估算 token 量(≤0 表示无需释放)。 */

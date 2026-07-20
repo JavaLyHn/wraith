@@ -50,7 +50,7 @@ public final class ContextStateAggregator {
             double ratio = (double) used / Math.max(1L, currentWindow);
             core.put("usedTokens", used);
             core.put("ratio", ratio);
-            core.put("tier", ratio >= 0.95 ? 3 : ratio >= 0.80 ? 2 : ratio >= 0.60 ? 1 : 0);
+            core.put("tier", com.lyhn.wraith.context.curator.WatermarkGauge.tierOf(ratio));
             core.put("estimated", false);
             if (currencies.size() == 1 && costSum > 0) {
                 String symbol = "USD".equalsIgnoreCase(currencies.iterator().next()) ? "$" : "¥";

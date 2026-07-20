@@ -482,12 +482,10 @@ public final class BottomStatusBar implements AutoCloseable {
         return builder.toAttributedString();
     }
 
-    /** tier 徽标(spec Phase C §6):tier0 不加噪音;阈值与 WatermarkGauge 一致(60/80/95)。 */
+    /** tier 徽标(spec Phase C §6):tier0 不加噪音。阈值单一来源 = WatermarkGauge.tierOf,
+     *  不再在此散落 60/80/95 字面量(percent→ratio 后统一判档)。 */
     static int tierOfPercent(int percent) {
-        if (percent >= 95) return 3;
-        if (percent >= 80) return 2;
-        if (percent >= 60) return 1;
-        return 0;
+        return com.lyhn.wraith.context.curator.WatermarkGauge.tierOf(percent / 100.0);
     }
 
     static String tierBadge(int percent) {

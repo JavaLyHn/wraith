@@ -62,4 +62,20 @@ class WatermarkGaugeTest {
         WatermarkGauge.Reading back = g.read("deepseek-chat", 50_000);
         assertEquals(90_000, back.usedTokens());
     }
+
+    @Test
+    void tierOfBoundaries() {
+        // tier 判定单一来源(BottomStatusBar/ContextStateAggregator 均经此):边界精确
+        assertEquals(0, WatermarkGauge.tierOf(0.599));
+        assertEquals(1, WatermarkGauge.tierOf(0.60));   // TIER1
+        assertEquals(1, WatermarkGauge.tierOf(0.799));
+        assertEquals(2, WatermarkGauge.tierOf(0.80));   // TIER2
+        assertEquals(2, WatermarkGauge.tierOf(0.949));
+        assertEquals(3, WatermarkGauge.tierOf(0.95));   // TIER3
+        assertEquals(3, WatermarkGauge.tierOf(1.5));
+        // 与常量口径一致(阈值改动时此测随常量走,不写死字面量)
+        assertEquals(1, WatermarkGauge.tierOf(WatermarkGauge.TIER1));
+        assertEquals(2, WatermarkGauge.tierOf(WatermarkGauge.TIER2));
+        assertEquals(3, WatermarkGauge.tierOf(WatermarkGauge.TIER3));
+    }
 }
