@@ -485,6 +485,14 @@ async function handleRequest(req) {
       }
       autoRuns.push(run)
       reply(id, { ok: true, runId: run.runId })
+      // 自动化审批:run 落 waiting_approval 后,daemon 侧 push approval.requested;主进程据此
+      // pushBadge 点红点(§1.1-6 有挂起审批即亮)。先落状态再 notify,保证 main 回拉 runs 已见 waiting。
+      if (run.status === 'waiting_approval') {
+        notify('approval.requested', {
+          sessionId: run.sessionId, turnId: `${run.runId}-t1`, approvalId: run.approvalId,
+          toolName: run.approvalTool, argsJson: '{}', dangerLevel: 'medium',
+        })
+      }
       break
     }
     case 'automations.runs': {

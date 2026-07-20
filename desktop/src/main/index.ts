@@ -209,6 +209,12 @@ function spawnBackend(): void {
   // 启用前须先在 turn.completed / resumeSession 处同步 currentSessionId 为持久化 id。
   // TODO(resume-sync): wraith:resumeSession 也需要在启用前将 currentSessionId 同步为持久化 id。
   rpcClient.onNotification((method, params) => {
+    // 自动化审批红点:daemon 化(407e44f 移除本地 scheduler)后,挂起审批的红点推送随本地
+    // 调度器一并丢失,只剩 30s pollAndNotify(仅终态 run)。这里在收到 daemon 的 approval.requested
+    // 时补一次 pushBadge——badge 由 badgeVisible(runs) 从 automations.runs 现拉重算,仅当确有
+    // waiting_approval 的自动化 run 才点亮,交互式审批(无对应自动化 run)不受影响。会话过滤仅决定
+    // 是否转发给 renderer,红点属全局自动化态,故置于过滤门之前。
+    if (method === 'approval.requested') pushBadge()
     if (!shouldForwardNotification(currentSessionId, params, MULTI_SESSION_FILTER_ENABLED)) return
     sendEvent({ kind: 'notification', method, params })
   })

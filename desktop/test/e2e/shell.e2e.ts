@@ -1375,28 +1375,26 @@ test('T33 建任务+立即运行 → 运行历史出现 success 与摘要', asyn
   await app.close(); cleanup()
 })
 
-test('T34 挂起审批链:红点 → 切 runs → 处理审批 → ApprovalModal → 批准 → 完成', async () => {
+test('T34 挂起审批链:红点 → 切 runs → 内联批准 → 完成', async () => {
   const { app, win, cleanup } = await launchAutoApp({ MOCK_NO_APPROVAL: '', MOCK_APPROVAL_TOOL: 'execute_command' })
   await createAndRunTask(win, '要审批的任务')
-  // I-4: 审批 push 不再强弹 Modal;唯一入口 = 运行历史「处理审批」钮。
-  // 先断言红点(badge 由 approval.requested 推送驱动)
+  // 红点:run 落 waiting_approval 后 daemon push approval.requested,主进程据此 pushBadge
+  // (badgeVisible 见 waiting_approval 即亮,spec §1.1-6)。
   await expect(win.locator('[data-testid="nav-automations-badge"]')).toBeVisible({ timeout: 15000 })
   // 切到运行历史 tab,等 waiting 项出现(createAndRunTask 已切 runs;此处显式保证)
   await win.locator('[data-testid="automation-tab-runs"]').click()
   await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('等待审批', { timeout: 15000 })
-  // 点「处理审批」→ ApprovalModal 出现(handleReopenApproval 先验证 run 仍 waiting 再重弹)
+  // 当前 UI:运行历史里「批准/拒绝」内联直接回应 respondApproval(v1 已去掉重弹 ApprovalModal 的旧交互——
+  // App 的自动化 ApprovalModal 槽 + onApprove/handleReopenApproval 现为死代码,按钮不再弹模态)。
   await win.locator('[data-testid="automation-run-approve"]').first().click()
-  await expect(win.locator('[data-testid="approval-modal"]')).toBeVisible({ timeout: 10000 })
-  // 注:ApprovalModal.tsx 中批准按钮 testid 为 "approve"(非 "approval-approve")
-  await win.locator('[data-testid="approve"]').click()
   await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('成功', { timeout: 15000 })
   await app.close(); cleanup()
 })
 
-test('T35 终止 running → interrupted', async () => {
-  // MOCK_NO_APPROVAL(launchAutoApp 默认)与 MOCK_SLOW_TURN 并存语义:
-  // MOCK_SLOW_TURN 延迟 3s,为 stop 操作留出 running 窗口;
-  // MOCK_NO_APPROVAL 确保 3s 内不弹审批弹窗干扰中断流程,stop 先行。
+// T35「终止 running → interrupted」测的是 v1 已有意移除的能力:定时任务为进程内回合、不可中断,
+// STOP 按钮已从 AutomationRuns.tsx 移除(见该文件注释 + main/index.ts 的 automationStop 存根注释),
+// 故 automation-run-stop testid 不复存在。跳过而非删除:保留记录 + 若未来恢复中断能力可直接复用。
+test.skip('T35 终止 running → interrupted(v1 有意移除中断能力,STOP 按钮已下线)', async () => {
   const { app, win, cleanup } = await launchAutoApp({ MOCK_SLOW_TURN: '1' })
   await createAndRunTask(win, '慢任务')
   await expect(win.locator('[data-testid="automation-run-item"]').first()).toContainText('运行中', { timeout: 15000 })
