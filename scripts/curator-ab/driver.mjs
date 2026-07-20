@@ -24,10 +24,12 @@ const home = process.env.WRAITH_AB_HOME
 const curator = process.env.WRAITH_AB_CURATOR ?? 'true'
 const timeoutMs = (Number(process.env.WRAITH_AB_TIMEOUT) || 900) * 1000
 
+const extraOpts = (process.env.WRAITH_AB_JAVAOPTS || '').trim()
 const javaArgs = [
   '-Djava.awt.headless=true',
   ...(home ? [`-Duser.home=${home}`] : []),
   `-Dwraith.context.curator.enabled=${curator}`,
+  ...(extraOpts ? extraOpts.split(/\s+/) : []),
   '-jar', jar, 'app-server',
 ]
 
