@@ -3,7 +3,7 @@ import type { ContextObservability } from '../../shared/transcriptReducer'
 import type { StatusData } from '../../shared/types'
 import { tierOf, TIER_HEX, TIER_LABEL } from '../../shared/contextTier'
 import { formatTokens } from '../lib/compactView'
-import { totalsView, compactionLine, savedTotal, dotColor, relativeTime } from '../lib/contextPanelView'
+import { totalsView, compactionLine, compactionDetail, savedTotal, dotColor, relativeTime } from '../lib/contextPanelView'
 
 /** 上下文治理面板(spec Phase C §3):水位/累计/压缩历史/活摘要预览/手动压缩。 */
 export default function ContextPanel({ context, status, onCompact, compactDisabled }: {
@@ -58,19 +58,31 @@ export default function ContextPanel({ context, status, onCompact, compactDisabl
         <div className="mb-1 font-medium">压缩历史</div>
         {context.compactions.length === 0 && <div className="text-fg-muted">本会话尚无压缩</div>}
         {context.compactions.map((e, i) => (
-          <div key={i}>
-            <button className="w-full text-left hover:bg-surface/60"
-              onClick={() => setExpanded(expanded === i ? null : i)}>
-              <span style={{ color: dotColor(e.tier) }}>●</span>{' '}
-              {compactionLine(e)}
-              <span className="ml-1 text-fg-muted">{relativeTime(e.ts, Date.now())}</span>
+          <div key={i} className="mb-1.5">
+            <button className="w-full rounded text-left hover:bg-surface/60"
+              onClick={() => setExpanded(expanded === i ? null : i)}
+              title={new Date(e.ts).toLocaleString()}>
+              {/* 主行:圆点(档位色)+ 触发/档位/前后 + 相对时间 */}
+              <div className="flex items-baseline gap-1.5">
+                <span className="shrink-0 text-fg-subtle">{expanded === i ? '▾' : '▸'}</span>
+                <span className="shrink-0" style={{ color: dotColor(e.tier) }}>●</span>
+                <span className="truncate font-medium">{compactionLine(e)}</span>
+                <span className="ml-auto shrink-0 text-fg-subtle">{relativeTime(e.ts, Date.now())}</span>
+              </div>
+              {/* 副行:节省量 + 百分比 + 各遍分解 */}
+              <div className="ml-6 text-2xs text-fg-muted">{compactionDetail(e)}</div>
             </button>
-            {expanded === i && e.items && (
-              <ul className="ml-4 text-fg-muted">
-                {e.items.map((it, j) => (
-                  <li key={j}>{it.tool ?? 'user'} −{formatTokens(it.releasedEstTokens)}{it.logPath ? ` · ${it.logPath}` : ''}</li>
-                ))}
-              </ul>
+            {expanded === i && (
+              e.items && e.items.length > 0
+                ? <ul className="ml-6 mt-0.5 space-y-0.5 text-2xs text-fg-muted">
+                    {e.items.map((it, j) => (
+                      <li key={j} className="truncate" title={it.logPath ?? undefined}>
+                        · {it.tool ?? 'user'} <span className="text-fg-subtle">释放 {formatTokens(it.releasedEstTokens)}</span>
+                        {it.logPath ? <span className="text-fg-subtle"> · {it.logPath}</span> : ''}
+                      </li>
+                    ))}
+                  </ul>
+                : <div className="ml-6 mt-0.5 text-2xs text-fg-subtle">历史记录:无逐项明细(仅当次会话保留工具级明细)</div>
             )}
           </div>
         ))}

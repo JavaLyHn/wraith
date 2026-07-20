@@ -19,13 +19,25 @@ export function totalsView(
   return { input, output, cached, cost, hitRate }
 }
 
+/** 主行:触发方式 + 档位 + 前后 token(概览)。 */
 export function compactionLine(e: CompactionEntry): string {
-  const action = e.summarized ? '摘要'
-    : e.fallback === 'emergency' ? '兜底'
-    : e.fallback === 'cooldown' ? '冷却'
-    : `snip×${e.snipped}${e.pruned ? ` prune×${e.pruned}` : ''}`
-  const prefix = e.manual ? '手动 ' : ''
-  return `${prefix}T${e.tier} ${action} ${formatTokens(e.beforeTokens)}→${formatTokens(e.afterTokens)}`
+  const trigger = e.manual ? '手动' : '自动'
+  return `${trigger} · T${e.tier} · ${formatTokens(e.beforeTokens)}→${formatTokens(e.afterTokens)}`
+}
+
+/** 副行(明细):节省量 + 百分比 + 各遍分解;零变更如实说明"无可压缩"。 */
+export function compactionDetail(e: CompactionEntry): string {
+  const saved = Math.max(0, e.savedTokens)
+  const passes: string[] = []
+  if (e.snipped > 0) passes.push(`截断×${e.snipped}`)
+  if (e.pruned > 0) passes.push(`裁剪×${e.pruned}`)
+  if (e.summarized) passes.push('增量摘要')
+  if (e.fallback === 'emergency') passes.push('紧急兜底')
+  if (e.fallback === 'cooldown') passes.push('冷却兜底')
+  if (saved <= 0 && passes.length === 0) return '无可压缩内容(均在保护范围内)'
+  const pct = e.beforeTokens > 0 ? Math.round((saved / e.beforeTokens) * 100) : 0
+  const savedStr = saved > 0 ? `省 ${formatTokens(saved)} (−${pct}%)` : '无净变化'
+  return passes.length ? `${savedStr} · ${passes.join(' · ')}` : savedStr
 }
 
 export function savedTotal(compactions: CompactionEntry[]): number {

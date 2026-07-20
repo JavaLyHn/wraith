@@ -62,8 +62,10 @@ describe('ContextPanel render', () => {
     rerender(
       <ContextPanel context={baseCtx({ compactions: [ENTRY] })} status={null} onCompact={() => {}} compactDisabled={false} />)
     expect(screen.queryByText('本会话尚无压缩')).toBeNull()
-    // 点开压缩条目(compactionLine 输出 "T2 snip×3 prune×1 …",T2 唯一)→ 见落盘 logPath(可回取证据)
-    fireEvent.click(screen.getByText(/T2 snip/).closest('button')!)
+    // 主行「自动 · T2 · …」+ 副行含省量/百分比/各遍分解
+    expect(screen.getByText(/省 6k.*截断×3 · 裁剪×1/)).toBeTruthy()
+    // 点开压缩条目 → 见落盘 logPath(可回取证据)
+    fireEvent.click(screen.getByText(/自动 · T2/).closest('button')!)
     expect(screen.getByText(/1-grep\.log/)).toBeTruthy()
   })
 

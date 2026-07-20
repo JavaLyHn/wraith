@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { totalsView, compactionLine, savedTotal, dotColor, relativeTime } from '../src/renderer/lib/contextPanelView'
+import { totalsView, compactionLine, compactionDetail, savedTotal, dotColor, relativeTime } from '../src/renderer/lib/contextPanelView'
 import { TIER_HEX } from '../src/shared/contextTier'
 
 describe('totalsView', () => {
@@ -28,13 +28,27 @@ describe('totalsView', () => {
   })
 })
 
-describe('compactionLine', () => {
+describe('compactionLine (主行:触发/档位/前后)', () => {
   const base = { ts: 0, tier: 1, beforeTokens: 12300, afterTokens: 9000, snipped: 3, pruned: 0, summarized: false, savedTokens: 3300 }
-  it('renders snip line', () => expect(compactionLine(base as never)).toBe('T1 snip×3 12.3k→9k'))
-  it('renders summary line', () =>
-    expect(compactionLine({ ...base, tier: 3, summarized: true } as never)).toBe('T3 摘要 12.3k→9k'))
-  it('renders manual emergency line', () =>
-    expect(compactionLine({ ...base, tier: 3, fallback: 'emergency', manual: true } as never)).toBe('手动 T3 兜底 12.3k→9k'))
+  it('自动', () => expect(compactionLine(base as never)).toBe('自动 · T1 · 12.3k→9k'))
+  it('手动', () => expect(compactionLine({ ...base, manual: true } as never)).toBe('手动 · T1 · 12.3k→9k'))
+  it('档位随 tier', () =>
+    expect(compactionLine({ ...base, tier: 3 } as never)).toBe('自动 · T3 · 12.3k→9k'))
+})
+
+describe('compactionDetail (副行:节省+百分比+各遍分解)', () => {
+  const base = { ts: 0, tier: 1, beforeTokens: 12300, afterTokens: 9000, snipped: 3, pruned: 0, summarized: false, savedTokens: 3300 }
+  it('截断:省量+百分比', () =>
+    expect(compactionDetail(base as never)).toBe('省 3.3k (−27%) · 截断×3'))
+  it('截断+裁剪+摘要 全列出', () =>
+    expect(compactionDetail({ ...base, pruned: 1, summarized: true } as never))
+      .toBe('省 3.3k (−27%) · 截断×3 · 裁剪×1 · 增量摘要'))
+  it('紧急兜底', () =>
+    expect(compactionDetail({ ...base, fallback: 'emergency' } as never))
+      .toBe('省 3.3k (−27%) · 截断×3 · 紧急兜底'))
+  it('零变更如实说明无可压缩', () =>
+    expect(compactionDetail({ ...base, snipped: 0, pruned: 0, savedTokens: 0, afterTokens: 12300 } as never))
+      .toBe('无可压缩内容(均在保护范围内)'))
 })
 
 describe('savedTotal', () => {
