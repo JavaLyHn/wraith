@@ -12,7 +12,7 @@ export default function WelcomeEmptyState(
   return (
     <div className="flex h-full flex-col items-center justify-center px-6">
       <div className="welcome-logo mb-4" style={{ '--wr-logo-mask': `url(${logoMask})` } as CSSProperties}><Logo className="h-16 w-16 object-contain" /></div>
-      <h1 className="mb-6 text-2xl font-semibold text-fg">今天做点什么?</h1>
+      <h1 className="mb-6 text-2xl font-semibold text-fg">今天做点什么？</h1>
       {examples.length > 0 && (
         <div className="mb-8 flex w-full max-w-2xl flex-wrap justify-center gap-2">
           {examples.map((ex) => (
