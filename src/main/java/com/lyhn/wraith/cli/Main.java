@@ -2138,6 +2138,9 @@ public class Main {
         registry.setProjectPath(root == null || root.isBlank()
                 ? Path.of(".").toAbsolutePath().normalize().toString() : root);
         Agent agent = new Agent(llmClient, registry);
+        // headless 任务无交互渲染器:流式响应默认被 run() 丢成空串(见 Agent:367),
+        // 与 Wecom/Automation/Gateway 等其它 headless 场景一致,须回传最终答案,否则任务 result 空(面板显示"无输出")。
+        agent.setReturnFinalResponseWhenStreamed(true);
         agent.setPricingTable(new com.lyhn.wraith.context.PricingTable(
                 com.lyhn.wraith.config.WraithConfig.load().getPricing()));
         return agent.run(prompt);

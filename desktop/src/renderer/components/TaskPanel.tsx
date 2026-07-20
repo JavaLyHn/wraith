@@ -17,16 +17,24 @@ export default function TaskPanel({ onBack }: { onBack: () => void }): JSX.Eleme
   const [draft, setDraft] = useState('')
   const [expanded, setExpanded] = useState<Record<string, DurableTaskView>>({})
 
-  const load = useCallback(async (): Promise<void> => {
-    setBusy(true)
+  const load = useCallback(async (silent = false): Promise<void> => {
+    if (!silent) setBusy(true)
     try {
       const r = await window.wraith.taskList(30)
       setTasks(r.tasks); setEnabled(r.enabled); setError(r.error ?? null)
     } catch (err) { setError((err as Error).message) }
-    finally { setBusy(false) }
+    finally { if (!silent) setBusy(false) }
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  // 有未完成任务时自动轮询(静默,不闪 busy):任务在后台 worker 里跑,面板不轮询就会一直显示旧的
+  // 「运行中」——即便任务早已完成(实测卡住的根因)。全部终态后停止轮询。
+  useEffect(() => {
+    if (!tasks.some(t => !taskIsTerminal(t.status))) return
+    const timer = setInterval(() => { void load(true) }, 2000)
+    return () => clearInterval(timer)
+  }, [tasks, load])
 
   const submit = useCallback(async (): Promise<void> => {
     const prompt = draft.trim()
