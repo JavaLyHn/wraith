@@ -70,6 +70,22 @@ if (process.env['WRAITH_E2E_USERDATA']) {
 }
 
 // ---------------------------------------------------------------------------
+// 主进程未捕获异常兜底(尽早注册):精确吞掉 Electron 已知的无害竞态,其余照常记录。
+// 现象:visibleOnAllWorkspaces 的桌宠 NSPanel(及 splash 等)在退出/切 Space 期间被销毁后,
+// macOS 仍投递一个可见性通知,Electron 内部 visibilityChanged 监听器去访问已销毁窗口 →
+// 抛 "Object has been destroyed"(栈含 visibilityChanged)。它发生在窗口 teardown、无副作用,
+// 但主进程原本无 handler → 整个进程崩、弹 "Uncaught Exception"(用户实测遇到)。这里只吞这一个
+// 精确签名(消息 + 栈双判),其余异常打印到 stderr 暴露真实问题,不让单个 stray 异常崩掉整个 App。
+// destroyPetWindow 侧已做「摘监听 + 同步 destroy」从源头收敛触发,此兜底覆盖任何残余竞态。
+// ---------------------------------------------------------------------------
+process.on('uncaughtException', (err) => {
+  const msg = err instanceof Error ? err.message : String(err)
+  const stack = err instanceof Error ? (err.stack ?? '') : ''
+  if (msg.includes('Object has been destroyed') && stack.includes('visibilityChanged')) return
+  console.error('[wraith] uncaughtException:', err)
+})
+
+// ---------------------------------------------------------------------------
 // State — kept in module scope (single main process, single window)
 // ---------------------------------------------------------------------------
 

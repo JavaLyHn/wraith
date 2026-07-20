@@ -135,7 +135,15 @@ function createPetWindow(config: PetConfig): void {
 /** 销毁窗口(幂等);失败静默吞掉。 */
 export function destroyPetWindow(): void {
   try {
-    petWindow?.close()
+    if (petWindow && !petWindow.isDestroyed()) {
+      // 先摘掉窗口上所有监听器(含 Electron 内部 show/hide→visibilityChanged 的监听),再立即
+      // destroy(而非异步 close):setVisibleOnAllWorkspaces 的 NSPanel 在销毁时,macOS 仍会投递
+      // 一个可见性通知,若监听器还在,Electron 内部 visibilityChanged 会去访问已销毁窗口而抛
+      // "Object has been destroyed"(退出/关桌宠时的已知无害竞态)。摘监听 + 同步 destroy 关掉
+      // 这个竞态窗口(异步 close 会留出通知投递的时间缝)。
+      petWindow.removeAllListeners()
+      petWindow.destroy()
+    }
   } catch {
     // best-effort
   }
