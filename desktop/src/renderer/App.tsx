@@ -831,17 +831,31 @@ export default function App(): JSX.Element {
   // 手动压缩上下文(压缩当前对话历史,释放上下文窗口;可见 transcript 不变)
   const [compactBusy, setCompactBusy] = useState(false)
   const [compactNotice, setCompactNotice] = useState<string | null>(null)
+  const compactNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 压缩提示是「压缩」这一动作的瞬时确认,不是常驻横幅:设置后 6s 自动消失,且清掉上一枚定时器。
+  const flashCompactNotice = useCallback((msg: string | null): void => {
+    if (compactNoticeTimer.current) { clearTimeout(compactNoticeTimer.current); compactNoticeTimer.current = null }
+    setCompactNotice(msg)
+    if (msg) compactNoticeTimer.current = setTimeout(() => {
+      setCompactNotice(null); compactNoticeTimer.current = null
+    }, 6000)
+  }, [])
+  // 切/建会话即清:否则上一会话的「已压缩…」会泄漏到新会话顶部(sessionId 变化覆盖新建 resetSession 与切换 commitSwitchTo)。
+  useEffect(() => {
+    if (compactNoticeTimer.current) { clearTimeout(compactNoticeTimer.current); compactNoticeTimer.current = null }
+    setCompactNotice(null)
+  }, [state.sessionId])
   const handleCompact = useCallback(async (): Promise<void> => {
     if (state.turn === 'running') return
-    setCompactBusy(true); setCompactNotice(null)
+    setCompactBusy(true); flashCompactNotice(null)
     try {
-      setCompactNotice(compactionNotice(await window.wraith.compactHistory()))
+      flashCompactNotice(compactionNotice(await window.wraith.compactHistory()))
     } catch (err) {
-      setCompactNotice('❌ 压缩失败:' + ((err as Error).message || '未知错误'))
+      flashCompactNotice('❌ 压缩失败:' + ((err as Error).message || '未知错误'))
     } finally {
       setCompactBusy(false)
     }
-  }, [state.turn])
+  }, [state.turn, flashCompactNotice])
   // 压缩按钮共享禁用态:忙碌中/回合运行中/无消息可压——工具栏按钮与 ContextPanel 面板按钮两处复用同一表达式
   const compactDisabled = compactBusy || state.turn === 'running' || !pv.items.length
 
