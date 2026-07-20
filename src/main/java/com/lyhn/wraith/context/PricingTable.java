@@ -21,7 +21,12 @@ public final class PricingTable {
      */
     private record Entry(String modelKey, Price price, boolean exact) {
         boolean matches(String modelName) {
-            return exact ? modelName.equals(modelKey) : modelName.startsWith(modelKey);
+            // 大小写不敏感:模型标识符按惯例大小写无关(如 "DeepSeek-V4-Flash" 与种子 "deepseek-v4-flash"
+            // 是同一模型)。此前用 equals/startsWith 大小写敏感,致混合大小写模型名永不命中种子价 → 成本静默缺席。
+            // 归一不放松「精确=同一标识符」语义(只消除大小写噪声),不违反「宁缺勿虚」。
+            String m = modelName.toLowerCase(java.util.Locale.ROOT);
+            String k = modelKey.toLowerCase(java.util.Locale.ROOT);
+            return exact ? m.equals(k) : m.startsWith(k);
         }
     }
 

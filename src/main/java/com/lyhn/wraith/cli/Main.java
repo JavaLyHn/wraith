@@ -1211,6 +1211,12 @@ public class Main {
                                 java.nio.file.Path.of(System.getProperty("user.home")),
                                 root, currentClient[0].getProviderName(), currentClient[0].getModelName());
                 sessionStore.startNew();
+                // 会话治理落地(修:app-server 工厂此前漏接这两行,交互 CLI 在 setup 处已接)。
+                // 缺 curationSink → CurationStats.appendMetrics 走 NOOP → 会话 -artifacts/context-metrics.jsonl
+                // 永不落盘(内存 curator.stats 累计仍增,故 context.state.get 有数、掩盖了该盲点);
+                // 缺 pricingTable → usage 行/快照无 cost。桌面后端与 CLI 至此对齐。
+                agent.setCurationSink(new com.lyhn.wraith.session.SessionCurationSink(sessionStore));
+                agent.setPricingTable(new com.lyhn.wraith.context.PricingTable(config.getPricing()));
 
                 com.lyhn.wraith.hitl.RendererHitlHandler rendererHitl =
                         new com.lyhn.wraith.hitl.RendererHitlHandler(renderer, hitl.isEnabled());

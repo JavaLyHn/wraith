@@ -90,4 +90,16 @@ class PricingTableTest {
         assertEquals(1.0, t.resolve("glm-5.1").orElseThrow().outputPerM(), 1e-9,
                 "config 前缀覆盖到变体,是用户自己承担的模糊范围");
     }
+
+    @Test
+    void seedMatchIsCaseInsensitive() {
+        // 修:模型标识符大小写无关。实际客户端报 "DeepSeek-V4-Flash",种子键为小写 "deepseek-v4-flash",
+        // 此前大小写敏感(equals/startsWith)致种子价永不命中 → 成本静默缺席。
+        PricingTable t = new PricingTable(List.of());
+        assertEquals(0.28, t.resolve("DeepSeek-V4-Flash").orElseThrow().outputPerM(), 1e-9,
+                "混合大小写模型名应命中小写种子");
+        assertEquals(0.28, t.resolve("deepseek-v4-flash").orElseThrow().outputPerM(), 1e-9);
+        // 归一不放松「精确=同一标识符」:非同一标识符(哪怕是前缀)仍不命中种子
+        assertTrue(t.resolve("DeepSeek-V4").isEmpty(), "前缀而非同一标识符,种子精确语义不放松");
+    }
 }
