@@ -25,4 +25,12 @@ describe('chipView', () => {
   it('negative ratio clamps pct to 0', () => {
     expect(chipView(status, { ratio: -0.5, tier: 0, estimated: false }).pct).toBe(0)
   })
+  it('null status + watermark:仍按 watermark 出数(Plan/Team 无 status)', () => {
+    const v = chipView(null, { ratio: 0.09, tier: 0, estimated: false })
+    expect(v.pct).toBe(9)
+    expect(v.suffix).toBe('')
+  })
+  it('null status + no watermark:回退 0%(不崩)', () => {
+    expect(chipView(null, null).pct).toBe(0)
+  })
 })

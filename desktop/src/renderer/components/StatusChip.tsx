@@ -2,11 +2,12 @@ import { Tooltip, TooltipTrigger, TooltipContent } from './ui/tooltip'
 import type { StatusData } from '../../shared/types'
 import { tierOf, TIER_TW } from '../../shared/contextTier'
 
-export interface WatermarkView { ratio: number; tier: number; estimated: boolean }
+/** watermark 口径:ratio/tier/estimated 必备;usedTokens/window 用于无 status 时的 tooltip 兜底。 */
+export interface WatermarkView { ratio: number; tier: number; estimated: boolean; usedTokens?: number; window?: number }
 
-/** 徽标口径(纯函数,可测):真实水位优先,估算带 ~。 */
+/** 徽标口径(纯函数,可测):真实水位优先,估算带 ~。status 可为 null(Plan/Team 或新会话首轮无 status)。 */
 export function chipView(
-  status: Pick<StatusData, 'totalTokens' | 'contextWindow'>,
+  status: Pick<StatusData, 'totalTokens' | 'contextWindow'> | null,
   watermark: WatermarkView | null,
 ): { pct: number; tw: string; suffix: '' | '~' } {
   if (watermark) {
@@ -18,7 +19,7 @@ export function chipView(
       : tierOf(watermark.ratio)) as 0 | 1 | 2 | 3
     return { pct, tw: TIER_TW[tier], suffix: watermark.estimated ? '~' : '' }
   }
-  const ratio = status.contextWindow > 0 ? status.totalTokens / status.contextWindow : 0
+  const ratio = status && status.contextWindow > 0 ? status.totalTokens / status.contextWindow : 0
   return { pct: Math.min(100, Math.round(ratio * 100)), tw: TIER_TW[tierOf(ratio)], suffix: '~' }
 }
 
@@ -28,8 +29,14 @@ export default function StatusChip({ status, watermark, onOpenPanel }: {
   watermark: WatermarkView | null
   onOpenPanel?: () => void
 }): JSX.Element | null {
-  if (!status || status.contextWindow <= 0) return null
-  const v = chipView(status, watermark)
+  const hasStatus = !!status && status.contextWindow > 0
+  // status 与 watermark 皆无才隐藏。Plan/Team(或新会话首轮)只有 watermark、没有 react 的 status,
+  // 此前 `!status` 一刀切导致 chip 消失、右侧面板却显水位——两处口径必须一致。
+  if (!hasStatus && !watermark) return null
+  const v = chipView(hasStatus ? status! : null, watermark)
+  // tooltip 分子/分母:live status 优先,否则回退 watermark 的 usedTokens/window。
+  const used = hasStatus ? status!.totalTokens : (watermark?.usedTokens ?? 0)
+  const window = hasStatus ? status!.contextWindow : (watermark?.window ?? 0)
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -43,13 +50,15 @@ export default function StatusChip({ status, watermark, onOpenPanel }: {
       </TooltipTrigger>
       <TooltipContent>
         <div className="space-y-0.5 text-xs">
-          <div>上下文: {status.totalTokens.toLocaleString()} / {status.contextWindow.toLocaleString()}</div>
-          <div>
-            输入 {status.inputTokens.toLocaleString()} · 输出 {status.outputTokens.toLocaleString()} · 缓存命中{' '}
-            {status.cachedInputTokens.toLocaleString()}
-          </div>
-          {status.estimatedCost && <div>估算成本: {status.estimatedCost}</div>}
-          {status.phase === 'running' && <div>运行中 {Math.round(status.elapsedMillis / 1000)}s</div>}
+          <div>上下文: {used.toLocaleString()} / {window.toLocaleString()}{!hasStatus && watermark?.estimated ? '(估算)' : ''}</div>
+          {hasStatus && (
+            <div>
+              输入 {status!.inputTokens.toLocaleString()} · 输出 {status!.outputTokens.toLocaleString()} · 缓存命中{' '}
+              {status!.cachedInputTokens.toLocaleString()}
+            </div>
+          )}
+          {hasStatus && status!.estimatedCost && <div>估算成本: {status!.estimatedCost}</div>}
+          {hasStatus && status!.phase === 'running' && <div>运行中 {Math.round(status!.elapsedMillis / 1000)}s</div>}
         </div>
       </TooltipContent>
     </Tooltip>
