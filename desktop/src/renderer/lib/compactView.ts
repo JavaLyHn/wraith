@@ -22,7 +22,7 @@ export function compactionNotice(r: CompactionView): string {
   if (r.error) return `❌ 压缩失败:${r.error}`
   if (!r.compacted) return '上下文未超阈值,无需压缩'
   const range = `${formatTokens(r.beforeTokens)} → ${formatTokens(r.afterTokens)} tokens`
-  if (r.fallback && r.beforeTokens === r.afterTokens) return '上下文暂无可压缩内容(摘要不可用,已尝试零成本手段)'
+  if (r.fallback && r.beforeTokens === r.afterTokens) return '上下文暂无可压缩内容:现有内容均在保护范围内,已尝试零成本手段'
   if (r.fallback) return `⚠️ 摘要暂不可用,已零成本压缩:${range}`
   if (r.summarized) return `✅ 已压缩上下文:${range}(含增量摘要)`
   return `✅ 已压缩上下文:${range}`
