@@ -1,4 +1,4 @@
-import { test, expect, _electron as electron, type Page } from '@playwright/test'
+import { test, expect, _electron as electron, type Page, type ElectronApplication } from '@playwright/test'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
@@ -11,12 +11,43 @@ const __dirname = path.dirname(__filename)
 const mainPath = path.resolve(__dirname, '../../out/main/index.js')
 const mockPath = path.resolve(__dirname, '../fixtures/mock-appserver.mjs')
 
+// 每个用例的 Electron 实例统一经 launchApp() 登记,在 afterEach 里保证被关闭——即使断言中途
+// 失败也关。旧写法把 app.close() 放在用例体末尾,断言一失败就跳过 close → Electron + 其 Java
+// 后端子进程泄漏,累积拖慢后续用例启动/渲染,最终越过 15s 超时形成级联失败(后半程 ~26/48
+// 超时,与任何功能无关、在 merge-base 上也复现)。app 自身 close 时清空跟踪引用,故用例体里
+// 原有的 app.close()/cleanup() 成功路径照常执行、afterEach 不会二次关闭(无 double-close)。
+let currentApp: ElectronApplication | null = null
+async function launchApp(opts: Parameters<typeof electron.launch>[0]): Promise<ElectronApplication> {
+  const app = await electron.launch(opts)
+  currentApp = app
+  app.on('close', () => { if (currentApp === app) currentApp = null })
+  return app
+}
+test.afterEach(async () => {
+  const app = currentApp
+  currentApp = null
+  if (app) { try { await app.close() } catch { /* 已关/关不掉都忽略,不让清理反过来拖垮用例 */ } }
+})
+
+// 展开侧栏默认折叠的「工具」组(Sidebar.tsx:showTools = toolsExpanded || activeNav !== null,
+// 初始都 false → 组内 nav-plugins/nav-automations/nav-providers/… 全隐藏,不先展开直接点会
+// 等到 30s 超时——这是本文件大批 T-系列用例"确定性失败"的根因:侧栏重构成可折叠工具组后
+// 测试没跟着展开)。幂等:仅当组尚未展开(以 nav-plugins 是否可见为准)时点一下 toggle。
+async function expandTools(win: Page): Promise<void> {
+  const toggle = win.locator('[data-testid="nav-tools-toggle"]')
+  await expect(toggle).toBeVisible({ timeout: 15000 })
+  if (!(await win.locator('[data-testid="nav-plugins"]').isVisible())) {
+    await toggle.click()
+    await expect(win.locator('[data-testid="nav-plugins"]')).toBeVisible({ timeout: 5000 })
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Test 1: happy path — full turn with approval
 // ---------------------------------------------------------------------------
 
 test('happy path: submit turn, see markdown+thinking+tool+approval, approve, see output', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -76,7 +107,7 @@ test('happy path: submit turn, see markdown+thinking+tool+approval, approve, see
 // ---------------------------------------------------------------------------
 
 test('disconnect: backend crash after init shows disconnected banner', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -103,7 +134,7 @@ test('disconnect: backend crash after init shows disconnected banner', async () 
 
 test('approval toggle sends session.setApprovalMode with correct auto flag', async () => {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}.jsonl`)
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -148,7 +179,7 @@ test('workspace switch re-picks dir → second session.start + transcript reset'
   const startupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-startup-'))
   const repickDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ws-repick-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -236,7 +267,7 @@ test('workspace switch 负向:submit 后竞态窗口内点击不产生第二次 
   const startupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-race-startup-'))
   const repickDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-race-repick-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-race-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -305,7 +336,7 @@ test('workspace switch 负向:submit 后竞态窗口内点击不产生第二次 
 // ---------------------------------------------------------------------------
 
 test('welcome empty state shows, then transitions to transcript on submit', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
   })
@@ -330,12 +361,13 @@ test('welcome empty state shows, then transitions to transcript on submit', asyn
 // ---------------------------------------------------------------------------
 
 test('static sidebar shell present with enabled plugins nav', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
   })
   const win = await app.firstWindow()
   await expect(win.locator('[data-testid="sidebar"]')).toBeVisible({ timeout: 15000 })
+  await expandTools(win) // 「工具」组默认折叠,先展开 nav-plugins 才可见/可断言
   await expect(win.locator('[data-testid="nav-plugins"]')).toBeEnabled()
   await app.close()
 })
@@ -345,7 +377,7 @@ test('static sidebar shell present with enabled plugins nav', async () => {
 // ---------------------------------------------------------------------------
 
 test('sidebar lists sessions; new clears; selecting resumes history', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
   })
@@ -373,7 +405,7 @@ test('sidebar lists sessions; new clears; selecting resumes history', async () =
 // ---------------------------------------------------------------------------
 
 test('submitting echoes the user message as a bubble', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
   })
@@ -391,7 +423,7 @@ test('submitting echoes the user message as a bubble', async () => {
 // ---------------------------------------------------------------------------
 
 test('sandbox badge shows unavailable when capabilities.sandbox=none', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1', MOCK_SANDBOX: 'none' }
   })
@@ -405,7 +437,7 @@ test('sandbox badge shows unavailable when capabilities.sandbox=none', async () 
 // ---------------------------------------------------------------------------
 
 test('reconnect after restart re-resumes the active session', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
   })
@@ -429,7 +461,7 @@ test('reconnect after restart re-resumes the active session', async () => {
 // ---------------------------------------------------------------------------
 
 test('approval 后 transcript 出现 diff 卡片(文件名可见)', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
   })
@@ -456,7 +488,7 @@ test('approval 后 transcript 出现 diff 卡片(文件名可见)', async () => 
 // ---------------------------------------------------------------------------
 
 test('status 事件驱动 composer 的 token chip', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
   })
@@ -480,7 +512,7 @@ test('status 事件驱动 composer 的 token chip', async () => {
 
 test('审批弹窗改命令 → respond 记录 MODIFIED + 新命令', async () => {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-modified.jsonl`)
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -533,7 +565,7 @@ test('审批弹窗改命令 → respond 记录 MODIFIED + 新命令', async () =
 
 test('勾选本次放行网络 → respond 记录 allowNetwork:true', async () => {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-network.jsonl`)
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -581,7 +613,7 @@ test('勾选本次放行网络 → respond 记录 allowNetwork:true', async () =
 
 test('本会话放行此工具 → respond 记录 APPROVED_ALL', async () => {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-all.jsonl`)
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -625,7 +657,7 @@ test('本会话放行此工具 → respond 记录 APPROVED_ALL', async () => {
 // ---------------------------------------------------------------------------
 
 test('write_file 审批弹窗展示 diff 预览', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -664,7 +696,7 @@ test('write_file 审批弹窗展示 diff 预览', async () => {
 // ---------------------------------------------------------------------------
 
 test('长对话溢出后 tool/thinking/diff 卡片保持完整高度(不被压成 2px 线)', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -708,7 +740,7 @@ test('长对话溢出后 tool/thinking/diff 卡片保持完整高度(不被压�
 
 test('编辑用户消息 → session.rewind + 新文本重发,气泡更新', async () => {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-edit.jsonl`)
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -773,7 +805,7 @@ test('编辑重发负向:竞态窗口内点击 workspace-switch 不产生第二�
   const startupDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-edit-race-startup-'))
   const repickDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-edit-race-repick-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-edit-race-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -845,7 +877,7 @@ test('编辑重发负向:竞态窗口内点击 workspace-switch 不产生第二�
 
 test('删除用户消息 → 二次点击确认 → session.rewind,气泡消失', async () => {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-delete.jsonl`)
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -890,7 +922,7 @@ test('删除用户消息 → 二次点击确认 → session.rewind,气泡消失'
 
 test('running 中按 Esc → 发送 turn.interrupt', async () => {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-esc.jsonl`)
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -927,7 +959,7 @@ test('running 中按 Esc → 发送 turn.interrupt', async () => {
 // ---------------------------------------------------------------------------
 
 test('长对话发送后自动滚到底部;上翻后再次发送强制回底', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -982,7 +1014,7 @@ test('T22 项目切换:session.start 带新目录且自动恢复最近会话', a
   const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-a-'))
   const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-b-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t22-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1034,7 +1066,7 @@ test('T23 切到无历史项目回欢迎态', async () => {
   const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-a-'))
   const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-b-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t23-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1078,7 +1110,7 @@ test('T24 项目重命名与移出', async () => {
   const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-a-'))
   const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-b-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t24-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1123,7 +1155,7 @@ test('T25 运行中项目切换被禁', async () => {
   const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-a-'))
   const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-b-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t25-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1175,7 +1207,7 @@ const MCP_FIXTURE = JSON.stringify({
 async function launchMcpApp(extraEnv: Record<string, string> = {}): Promise<{ app: Awaited<ReturnType<typeof electron.launch>>; win: Awaited<ReturnType<Awaited<ReturnType<typeof electron.launch>>['firstWindow']>>; recordFile: string; cleanup: () => void }> {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-mcp.jsonl`)
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-mcp-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1189,6 +1221,7 @@ async function launchMcpApp(extraEnv: Record<string, string> = {}): Promise<{ ap
   })
   const win = await app.firstWindow()
   await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 15000 })
+  await expandTools(win) // 让 nav-plugins 等工具组导航可点(默认折叠)
   return { app, win, recordFile, cleanup: () => { fs.rmSync(recordFile, { force: true }); fs.rmSync(userData, { recursive: true, force: true }) } }
 }
 
@@ -1303,7 +1336,7 @@ test('T32 运行中工具集变更操作禁用', async () => {
 async function launchAutoApp(extraEnv: Record<string, string> = {}) {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-auto-'))
   const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-auto-proj-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1318,6 +1351,7 @@ async function launchAutoApp(extraEnv: Record<string, string> = {}) {
   })
   const win = await app.firstWindow()
   await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 15000 })
+  await expandTools(win) // 让 nav-automations 等工具组导航可点(默认折叠)
   return { app, win, cleanup: () => { fs.rmSync(userData, { recursive: true, force: true }); fs.rmSync(proj, { recursive: true, force: true }) } }
 }
 
@@ -1448,7 +1482,7 @@ test('T42 附件链:注入文件 → chip 出现 → 提交 → turn.submit para
   const tmpFile = path.join(os.tmpdir(), `wraith-attach-t42-${process.pid}.txt`)
   fs.writeFileSync(tmpFile, 'hello attachment\n')
 
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1510,7 +1544,7 @@ test('T43 两附件移除其一 → 提交 → turn.submit params.attachments �
   fs.writeFileSync(tmpFileA, 'file A\n')
   fs.writeFileSync(tmpFileB, 'file B\n')
 
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1569,7 +1603,7 @@ test('T43 两附件移除其一 → 提交 → turn.submit params.attachments �
 test('T44 模型切换:开下拉→选 deepseek→chip 文本变+record session.setModel;无 key 项 disabled', async () => {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-t44.jsonl`)
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t44-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1626,7 +1660,7 @@ test('T44 模型切换:开下拉→选 deepseek→chip 文本变+record session.
 test('T45 设为默认:点 model-set-default → record config.setDefaultProvider', async () => {
   const recordFile = path.join(os.tmpdir(), `wraith-rec-${process.pid}-${Date.now()}-t45.jsonl`)
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t45-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1678,7 +1712,7 @@ test('T46 侧栏搜索:输入关键字过滤会话+项目两分区,清除钮恢�
   const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t46-proj-a-'))
   const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t46-alpha-b-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t46-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1741,7 +1775,7 @@ test('T46 侧栏搜索:输入关键字过滤会话+项目两分区,清除钮恢�
 test('T47(降级) 会话行 hover 后 star/改名/删除按钮元素可见', async () => {
   const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t47-a-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t47-'))
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: {
       ...process.env,
@@ -1782,7 +1816,7 @@ test('T47(降级) 会话行 hover 后 star/改名/删除按钮元素可见', asy
 // ---------------------------------------------------------------------------
 
 test('T48 ProvidersPanel:nav-providers → 面板可见 + 搜索框 + catalog 行', async () => {
-  const app = await electron.launch({
+  const app = await launchApp({
     args: [mainPath],
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
   })
@@ -1791,6 +1825,8 @@ test('T48 ProvidersPanel:nav-providers → 面板可见 + 搜索框 + catalog �
   // 等待 sidebar 出现
   await expect(win.locator('[data-testid="sidebar"]')).toBeVisible({ timeout: 15000 })
 
+  // 「工具」组默认折叠,先展开才能点到 nav-providers
+  await expandTools(win)
   // 点击 nav-providers
   const navProviders = win.locator('[data-testid="nav-providers"]')
   await expect(navProviders).toBeVisible({ timeout: 10000 })
