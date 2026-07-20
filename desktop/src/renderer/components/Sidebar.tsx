@@ -170,9 +170,15 @@ export default function Sidebar({
   collapsed,
   onToggleCollapsed,
 }: SidebarProps): JSX.Element {
-  const [toolsExpanded, setToolsExpanded] = useState(false)
-  // 进入某工具页时强制展开(高亮可见);否则由用户折叠状态决定
-  const showTools = toolsExpanded || activeNav !== null
+  // 进入某工具页时自动展开一次(让高亮的活动项可见);此后由用户折叠意图决定,可手动收起并保持。
+  // 不能写成 `toolsExpanded || activeNav !== null` 派生——在工具页时那会强制展开、压过用户点
+  // 「工具」头部的收起意图(点了收不回,只有切回对话 activeNav→null 才收得起)。改用 effect 仅在
+  // activeNav 变化(切到新工具页)时展开;activeNav 不变时用户的手动收起不被冲掉。
+  const [toolsExpanded, setToolsExpanded] = useState<boolean>(() => activeNav !== null)
+  useEffect(() => {
+    if (activeNav !== null) setToolsExpanded(true)
+  }, [activeNav])
+  const showTools = toolsExpanded
   // 会话列表分组模式:recent=最新平铺(默认)/ time=按时间分组;记忆在 localStorage
   const [groupMode, setGroupMode] = useState<'recent' | 'time'>(() => {
     try { return localStorage.getItem('wraith.sidebar.sessionGroupMode') === 'time' ? 'time' : 'recent' } catch { return 'recent' }

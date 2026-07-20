@@ -29,10 +29,10 @@ test.afterEach(async () => {
   if (app) { try { await app.close() } catch { /* 已关/关不掉都忽略,不让清理反过来拖垮用例 */ } }
 })
 
-// 展开侧栏默认折叠的「工具」组(Sidebar.tsx:showTools = toolsExpanded || activeNav !== null,
-// 初始都 false → 组内 nav-plugins/nav-automations/nav-providers/… 全隐藏,不先展开直接点会
-// 等到 30s 超时——这是本文件大批 T-系列用例"确定性失败"的根因:侧栏重构成可折叠工具组后
-// 测试没跟着展开)。幂等:仅当组尚未展开(以 nav-plugins 是否可见为准)时点一下 toggle。
+// 展开侧栏默认折叠的「工具」组(Sidebar.tsx:showTools = toolsExpanded,初始 activeNav=null →
+// false → 组内 nav-plugins/nav-automations/nav-providers/… 全隐藏,不先展开直接点会等到 30s
+// 超时——这是本文件大批 T-系列用例"确定性失败"的根因:侧栏重构成可折叠工具组后测试没跟着展开)。
+// 幂等:仅当组尚未展开(以 nav-plugins 是否可见为准)时点一下 toggle。
 async function expandTools(win: Page): Promise<void> {
   const toggle = win.locator('[data-testid="nav-tools-toggle"]')
   await expect(toggle).toBeVisible({ timeout: 15000 })
