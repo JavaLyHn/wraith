@@ -35,15 +35,17 @@ public final class CurationStats {
     }
 
     public synchronized void recordCompaction(int tier, long before, long after,
-                                              int snipped, int pruned, boolean summarized, long durationMs) {
+                                              int snipped, int pruned, boolean summarized, long durationMs,
+                                              boolean manual) {
         compactions++;
         totalSnipped += snipped;
         totalPruned += pruned;
         totalSavedEst += Math.max(0, before - after);
+        // manual 落盘:重开应用后 aggregator 据此重建历史条目的「手动」标记(否则重启后手动压缩显示为自动)。
         sink.appendMetrics(String.format(Locale.ROOT,
                 "{\"ts\":%d,\"compaction\":true,\"tier\":%d,\"beforeTokens\":%d,\"afterTokens\":%d,"
-                        + "\"snipped\":%d,\"pruned\":%d,\"summarized\":%b,\"durationMs\":%d}",
-                System.currentTimeMillis(), tier, before, after, snipped, pruned, summarized, durationMs));
+                        + "\"snipped\":%d,\"pruned\":%d,\"summarized\":%b,\"durationMs\":%d,\"manual\":%b}",
+                System.currentTimeMillis(), tier, before, after, snipped, pruned, summarized, durationMs, manual));
     }
 
     public synchronized long totalSavedEst() { return totalSavedEst; }

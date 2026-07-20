@@ -72,6 +72,30 @@ describe('context observability slice', () => {
     expect(s2.context.watermark).toBeNull()
   })
 
+  it('snapshot restores compaction history from persisted metrics (重开应用后恢复)', () => {
+    const s = reducer(initialState, notif('context.snapshot', {
+      usedTokens: 40000, contextWindow: 128000, ratio: 0.31, tier: 0, estimated: false,
+      compactions: [
+        { ts: 111, tier: 1, beforeTokens: 9000, afterTokens: 6000, snipped: 3, pruned: 0, summarized: false, savedTokens: 3000, manual: false },
+        { ts: 222, tier: 0, beforeTokens: 7000, afterTokens: 5000, snipped: 0, pruned: 2, summarized: true, savedTokens: 2000, manual: true },
+      ],
+    }))
+    expect(s.context.compactions.length).toBe(2)
+    expect(s.context.compactions[0].ts).toBe(111)          // 用持久化的真实时间,不是 Date.now()
+    expect(s.context.compactions[1].manual).toBe(true)
+    expect(s.context.compactions[1].summarized).toBe(true)
+    expect(s.context.compactions[0].savedTokens).toBe(3000)
+  })
+
+  it('snapshot WITHOUT compactions key does not wipe live-accumulated history', () => {
+    let s = reducer(initialState, notif('context.compaction', {
+      tier: 1, beforeTokens: 100, afterTokens: 50, snipped: 1, pruned: 0, summarized: false, savedTokens: 50,
+    }))
+    // 一个不带 compactions 的快照(如 aggregator 没找到 JSONL)不应清掉 live 累积的历史
+    s = reducer(s, notif('context.snapshot', { liveSummary: null, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 }))
+    expect(s.context.compactions.length).toBe(1)
+  })
+
   it('context.reset clears the whole slice (session switch)', () => {
     let s = reducer(initialState, notif('context.compaction', {
       tier: 1, beforeTokens: 100, afterTokens: 50, snipped: 1, pruned: 0, summarized: false, savedTokens: 50,

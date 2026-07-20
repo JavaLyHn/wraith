@@ -61,8 +61,10 @@ public final class ContextCurator {
 
     CalibratedTokenCounter counter() { return counter; }
 
-    /** 手动压缩回报(spec Phase C §4):fallback null=未走兜底。 */
-    public record ManualCompaction(boolean any, boolean summarized, String fallback) {}
+    /** 手动压缩回报(spec Phase C §4):fallback null=未走兜底。
+     *  before/afterTokens 为 counter 估算口径,供上层横幅复用(与事件一致)。 */
+    public record ManualCompaction(boolean any, boolean summarized, String fallback,
+                                   long beforeTokens, long afterTokens) {}
 
     /** 压不动时一次性提示(默认 no-op);Agent 侧接到渲染器输出通道。 */
     public void setNoticeOut(java.util.function.Consumer<String> out) {
@@ -174,7 +176,7 @@ public final class ContextCurator {
             if (snipped == 0 && pruned == 0 && !summarized && fallback == null) return false;
 
             long durationMs = (System.nanoTime() - start) / 1_000_000;
-            stats.recordCompaction(r.tier(), estBefore, estAfter, snipped, pruned, summarized, durationMs);
+            stats.recordCompaction(r.tier(), estBefore, estAfter, snipped, pruned, summarized, durationMs, false);
             Map<String, Object> p = new LinkedHashMap<>();
             p.put("tier", r.tier());
             p.put("beforeTokens", estBefore);
@@ -205,7 +207,9 @@ public final class ContextCurator {
         }
     }
 
-    /** 手动压缩(spec §7):force 跑 1+2+3,保护区不动;返回压缩结果与是否走兜底。 */
+    /** 手动压缩(spec §7):force 跑 1+2+3,保护区不动;返回压缩结果与是否走兜底。
+     *  beforeTokens/afterTokens 用**同一个 counter 估算器**测量,与 context.compaction 事件里
+     *  的数字一致——避免上层横幅另用 Agent.estimateCurrentContextTokens() 造成两套口径打架。 */
     public ManualCompaction compactNow(List<Message> history) {
         try {
             String model = modelSupplier.get();
@@ -235,7 +239,7 @@ public final class ContextCurator {
             if (any) {
                 long durationMs = (System.nanoTime() - start) / 1_000_000;
                 stats.recordCompaction(r.tier(), estBefore, estAfter,
-                        snip.changes().size(), prune.changes().size(), summarized, durationMs);
+                        snip.changes().size(), prune.changes().size(), summarized, durationMs, true);
                 Map<String, Object> p = new LinkedHashMap<>();
                 p.put("tier", r.tier());
                 p.put("manual", true);
@@ -246,10 +250,10 @@ public final class ContextCurator {
                 p.put("savedTokens", Math.max(0, estBefore - estAfter));
                 eventOut.accept("context.compaction", p);
             }
-            return new ManualCompaction(any, summarized, fallback);
+            return new ManualCompaction(any, summarized, fallback, estBefore, estAfter);
         } catch (Exception e) {
             log.warn("manual curation failed: {}", e.getClass().getSimpleName());
-            return new ManualCompaction(false, false, null);
+            return new ManualCompaction(false, false, null, 0, 0);
         }
     }
 }

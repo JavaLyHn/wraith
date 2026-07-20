@@ -426,7 +426,9 @@ public class Agent {
         try {
             if (curatorEnabled()) {
                 ContextCurator.ManualCompaction mc = curator.compactNow(conversationHistory);
-                return new CompactionResult(mc.any(), beforeTokens, estimateCurrentContextTokens(), null,
+                // 横幅 before/after 直取 curator 的估算口径(与 context.compaction 事件/压缩历史同源),
+                // 不再用 Agent.estimateCurrentContextTokens()——两套估算器会让横幅与历史数字打架。
+                return new CompactionResult(mc.any(), mc.beforeTokens(), mc.afterTokens(), null,
                         mc.summarized(), mc.fallback());
             }
             boolean compacted = historyCompactor.compactNow(conversationHistory);

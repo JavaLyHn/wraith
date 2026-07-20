@@ -16,15 +16,18 @@ class CurationStatsTest {
         };
         CurationStats stats = new CurationStats(sink);
         stats.recordUsage(1000, 200, 300, new WatermarkGauge.Reading(1000, 10_000, 0.10, 0), null, null);
-        stats.recordCompaction(1, 9000, 6000, 3, 0, false, 12);
+        stats.recordCompaction(1, 9000, 6000, 3, 0, false, 12, false);
+        stats.recordCompaction(0, 7000, 5000, 0, 2, true, 30, true);
 
-        assertEquals(2, lines.size());
+        assertEquals(3, lines.size());
         assertTrue(lines.get(0).contains("\"inputTokens\":1000"));
         assertTrue(lines.get(0).contains("\"cachedInputTokens\":300"));
         assertTrue(lines.get(1).contains("\"tier\":1"));
-        assertEquals(3000, stats.totalSavedEst());
+        assertTrue(lines.get(1).contains("\"manual\":false"), "自动压缩行 manual=false");
+        assertTrue(lines.get(2).contains("\"manual\":true"), "手动压缩行 manual=true(重开后据此重建「手动」标记)");
+        assertEquals(5000, stats.totalSavedEst());
         assertEquals(3, stats.totalSnipped());
-        assertEquals(1, stats.compactions());
+        assertEquals(2, stats.compactions());
     }
 
     @Test

@@ -27,11 +27,29 @@ public final class ContextStateAggregator {
             Set<String> currencies = new LinkedHashSet<>();
             ObjectMapper om = new ObjectMapper();
             JsonNode last = null;
+            java.util.List<Map<String, Object>> compactions = new java.util.ArrayList<>();
             for (String line : Files.readAllLines(metricsFile)) {
                 if (line.isBlank()) continue;
                 try {
                     JsonNode n = om.readTree(line);
-                    if (n.has("compaction")) continue;   // 压缩行不计入 usage 累计
+                    if (n.has("compaction")) {
+                        // 压缩行不计入 usage 累计,但据此重建「压缩历史」——否则重开应用后历史全空(桌面 reducer 的
+                        // compactions[] 只由 live 事件累积,不跨进程持久)。tool 明细(items)未落盘,重建条目不含展开项。
+                        long before = n.path("beforeTokens").asLong(0);
+                        long after = n.path("afterTokens").asLong(0);
+                        Map<String, Object> c = new java.util.LinkedHashMap<>();
+                        c.put("ts", n.path("ts").asLong(0));
+                        c.put("tier", n.path("tier").asInt(0));
+                        c.put("beforeTokens", before);
+                        c.put("afterTokens", after);
+                        c.put("snipped", n.path("snipped").asInt(0));
+                        c.put("pruned", n.path("pruned").asInt(0));
+                        c.put("summarized", n.path("summarized").asBoolean(false));
+                        c.put("savedTokens", Math.max(0, before - after));
+                        if (n.has("manual")) c.put("manual", n.path("manual").asBoolean(false));
+                        compactions.add(c);
+                        continue;
+                    }
                     in += n.path("inputTokens").asLong(0);
                     out += n.path("outputTokens").asLong(0);
                     cached += n.path("cachedInputTokens").asLong(0);
@@ -42,6 +60,8 @@ public final class ContextStateAggregator {
                     last = n;
                 } catch (Exception ignored) { /* 坏行跳过 */ }
             }
+            // 压缩历史独立于 usage 行:即便本会话只有压缩行(无 usage),也要回灌历史,故置于 last==null 守卫之前。
+            if (!compactions.isEmpty()) core.put("compactions", compactions);
             if (last == null) return;
             core.put("inputTokens", in);
             core.put("outputTokens", out);

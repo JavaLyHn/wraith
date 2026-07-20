@@ -458,6 +458,21 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
       // 补全时才有)——缺键时 num() 默认 0 会捏造 watermark={ratio:0,tier:0}("0% 宽裕"假象),
       // 故仅当快照确实带水位数据时才覆盖,缺键时保留原 watermark(初始 null 时面板自动落回估算)。
       const hasWatermark = typeof p['usedTokens'] === 'number'
+      // 压缩历史回灌(aggregator 从 metrics JSONL 重建):重开应用/切会话后恢复历史条目。
+      // 快照是该会话的完整持久记录,present 即为权威,直接覆盖(缺席则不动 live 累积的 compactions)。
+      const snapComps = Array.isArray(p['compactions'])
+        ? (p['compactions'] as Array<Record<string, unknown>>).map(c => {
+            const cn = (k: string): number => (typeof c[k] === 'number' ? (c[k] as number) : 0)
+            return {
+              ts: cn('ts') || Date.now(),
+              tier: cn('tier'), beforeTokens: cn('beforeTokens'), afterTokens: cn('afterTokens'),
+              snipped: cn('snipped'), pruned: cn('pruned'),
+              summarized: c['summarized'] === true,
+              ...(c['manual'] === true ? { manual: true } : {}),
+              savedTokens: cn('savedTokens'),
+            } as CompactionEntry
+          })
+        : null
       return {
         ...state,
         context: {
@@ -472,6 +487,7 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
                 },
               }
             : {}),
+          ...(snapComps ? { compactions: snapComps } : {}),
           liveSummary: typeof p['liveSummary'] === 'string' ? (p['liveSummary'] as string) : null,
           totalsFromSnapshot: {
             inputTokens: num('inputTokens'), outputTokens: num('outputTokens'),
@@ -482,8 +498,8 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
         },
       }
     }
-    // 切会话整体清切片(commitSwitchTo 合成事件):防 compactions/liveSummary 跨会话残留
-    // ——context.snapshot 只覆盖 watermark/liveSummary/totals,不清 compactions,故需专门一枪清空。
+    // 切会话整体清切片(commitSwitchTo 合成事件):防 compactions/liveSummary 跨会话残留。
+    // 切会话时序:先 context.reset 清空 → 再 context.snapshot 用新会话 JSONL 重建 compactions。
     case 'context.reset': {
       return { ...state, context: CONTEXT_INITIAL }
     }

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import ContextPanel from '../src/renderer/components/ContextPanel'
 import type { ContextObservability, CompactionEntry } from '../src/shared/transcriptReducer'
+import type { StatusData } from '../src/shared/types'
 
 afterEach(cleanup)
 
@@ -27,6 +28,22 @@ describe('ContextPanel render', () => {
     // tierOf(0.6)=1 → 「整理」;估算标注
     expect(screen.getByText(/整理/)).toBeTruthy()
     expect(screen.getByText(/60%/)).toBeTruthy()
+  })
+
+  it('水位缺席但有 status:回退估算显示 %,不再「暂无数据」(与 chip 一致)', () => {
+    const status = {
+      model: 'DeepSeek-V4-Flash', totalTokens: 50895, contextWindow: 128000,
+      inputTokens: 0, outputTokens: 0, cachedInputTokens: 0,
+      estimatedCost: null, elapsedMillis: 0, phase: 'idle',
+    } as StatusData
+    render(<ContextPanel context={baseCtx({ watermark: null })} status={status} onCompact={() => {}} compactDisabled={false} />)
+    expect(screen.queryByText('暂无数据')).toBeNull()
+    expect(screen.getByText(/40%/)).toBeTruthy()          // 50895/128000 ≈ 40%,回退估算生效
+  })
+
+  it('水位与 status 皆缺席:才显示「暂无数据」', () => {
+    render(<ContextPanel context={baseCtx({ watermark: null })} status={null} onCompact={() => {}} compactDisabled={false} />)
+    expect(screen.getByText('暂无数据')).toBeTruthy()
   })
 
   it('未配价:显示价格提示,点「知道了」消失', () => {

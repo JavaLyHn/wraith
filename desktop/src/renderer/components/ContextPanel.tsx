@@ -14,7 +14,12 @@ export default function ContextPanel({ context, status, onCompact, compactDisabl
 }): JSX.Element {
   const [expanded, setExpanded] = useState<number | null>(null)
   const [pricingHintDismissed, setPricingHintDismissed] = useState(false)
-  const w = context.watermark
+  // 水位口径与 StatusChip 对齐:真实/快照 watermark 优先;缺席时回退到 status 估算(totalTokens/contextWindow),
+  // 不再显示空白「暂无数据」——否则会出现底部 chip 显 40%、右侧面板却"暂无数据"的自相矛盾。
+  const s = status && status.contextWindow > 0 ? status : null
+  const w = context.watermark ?? (s
+    ? { usedTokens: s.totalTokens, window: s.contextWindow, ratio: s.totalTokens / s.contextWindow, estimated: true }
+    : null)
   const tier = w ? tierOf(w.ratio) : 0
   const totals = totalsView(status, context.totalsFromSnapshot)
   return (

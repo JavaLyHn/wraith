@@ -205,6 +205,20 @@ class ContextCuratorTest {
     }
 
     @Test
+    void manualCompactReturnValueTokensMatchEmittedEvent() {
+        // bug#2:横幅(取 ManualCompaction.before/after)与压缩历史(取 context.compaction 事件)
+        // 必须同源一致——此前 Agent 另用 estimateCurrentContextTokens() 造成两套数字打架。
+        FakeSummarizer fs = new FakeSummarizer(true);
+        ContextCurator c = curatorWith(fs);
+        ContextCurator.ManualCompaction r = c.compactNow(bigHistory());
+        Map<String, Object> evt = lastEvent("context.compaction");
+        assertEquals(((Number) evt.get("beforeTokens")).longValue(), r.beforeTokens(),
+                "返回值 beforeTokens 必须等于事件里的 beforeTokens");
+        assertEquals(((Number) evt.get("afterTokens")).longValue(), r.afterTokens(),
+                "返回值 afterTokens 必须等于事件里的 afterTokens");
+    }
+
+    @Test
     void manualCompactOnShortHistoryStillReportsAndEmits() {
         // 短会话:全在保护区,snip/prune/EMERGENCY 均零变更,摘要 false →
         // 防静默:仍须 any=true、发事件带 fallback,绝不返回自相矛盾的 (false,·,"emergency")
