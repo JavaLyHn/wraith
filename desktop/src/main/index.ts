@@ -38,8 +38,8 @@ import { PtyManager } from './pty'
 import type { GatewayEvent } from '../shared/gateway'
 import { shouldDismissSplash, buildSplashHtml, SPLASH_EXIT_MS } from './splash'
 import { SPLASH_LOGO_DATA_URI } from './splashLogo'
-import { listPets, importStaticImage, importPackage, removeImportedPet, previewDataUrl } from './petStore'
-import type { PetImportResult } from '../shared/pets'
+import { listPets, importStaticImage, importPackage, removePet, previewDataUrl } from './petStore'
+import type { PetImportResult, PetSource } from '../shared/pets'
 import { petStateFromEvent } from '../shared/petState'
 import { buildPetMenuTemplate } from '../shared/petWindow'
 import {
@@ -594,8 +594,8 @@ ipcMain.handle('wraith:petsImportPackage', async () => {
   pushCurrentPetPreview(cfg)
   return result
 })
-ipcMain.handle('wraith:petsRemove', async (_e, id: string) => {
-  await removeImportedPet({ userDataDir: app.getPath('userData'), id })
+ipcMain.handle('wraith:petsRemove', async (_e, id: string, source: PetSource) => {
+  await removePet({ userDataDir: app.getPath('userData'), petdexRoot: petdexRoot(), id, source })
   const cfg = readPetConfig(app.getPath('userData'))
   void syncPetWindow(cfg)
   pushCurrentPetPreview(cfg)

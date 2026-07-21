@@ -16,7 +16,7 @@ const FIXED_CONFIG: PetConfig = {
 }
 
 const PETS: PetView[] = [
-  { id: 'noir-webling', displayName: '暗影蛛', description: '', source: 'petdex', kind: 'static', available: true, removable: false, previewUrl: null, sprite: null },
+  { id: 'noir-webling', displayName: '暗影蛛', description: '', source: 'petdex', kind: 'static', available: true, removable: true, previewUrl: null, sprite: null },
   { id: 'my-imported', displayName: '自定义', description: '', source: 'imported', kind: 'static', available: true, removable: true, previewUrl: null, sprite: null },
 ]
 
@@ -111,6 +111,26 @@ describe('PetsSettings', () => {
     await waitFor(() => {
       const wraith = (window as unknown as { wraith: { petsInstall: ReturnType<typeof vi.fn> } }).wraith
       expect(wraith.petsInstall).toHaveBeenCalledWith('boxcat')
+    })
+  })
+
+  it('点 Petdex 宠物的删除 × 调用 petsRemove(id, "petdex")', async () => {
+    render(<PetsSettings />)
+    const del = await screen.findByTestId('pet-remove-noir-webling')
+    fireEvent.click(del)
+    await waitFor(() => {
+      const wraith = (window as unknown as { wraith: { petsRemove: ReturnType<typeof vi.fn> } }).wraith
+      expect(wraith.petsRemove).toHaveBeenCalledWith('noir-webling', 'petdex')
+    })
+  })
+
+  it('点导入宠物的删除 × 调用 petsRemove(id, "imported")', async () => {
+    render(<PetsSettings />)
+    const del = await screen.findByTestId('pet-remove-my-imported')
+    fireEvent.click(del)
+    await waitFor(() => {
+      const wraith = (window as unknown as { wraith: { petsRemove: ReturnType<typeof vi.fn> } }).wraith
+      expect(wraith.petsRemove).toHaveBeenCalledWith('my-imported', 'imported')
     })
   })
 

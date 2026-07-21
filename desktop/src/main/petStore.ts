@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import yauzl from 'yauzl'
-import type { PetKind, PetSprite, PetView } from '../shared/pets'
+import type { PetKind, PetSource, PetSprite, PetView } from '../shared/pets'
 
 export const MAX_STATIC_BYTES = 8 * 1024 * 1024
 export const MAX_SPRITE_BYTES = 16 * 1024 * 1024
@@ -199,7 +199,7 @@ function toPetView(resolved: ResolvedPet): PetView {
 
 export async function listPets(args: { userDataDir: string; petdexRoot: string }): Promise<PetView[]> {
   const merged = new Map<string, ResolvedPet>()
-  const petdex = await listDirectory(args.petdexRoot, 'petdex', false)
+  const petdex = await listDirectory(args.petdexRoot, 'petdex', true)
   const imported = await listDirectory(importedRoot(args.userDataDir), 'imported', true)
   for (const pet of [...builtIns(), ...petdex, ...imported]) merged.set(pet.id, pet)
   return [...merged.values()].map(toPetView)
@@ -342,9 +342,44 @@ export async function removeImportedPet(args: { userDataDir: string; id: string 
   await fs.promises.rm(target, { recursive: true, force: true })
 }
 
+/**
+ * 在 root 下按 pet.json 的 id 找到宠物目录:petdex CLI 建的目录名未必等于 manifest.id,
+ * 硬拼 join(root,id) 可能删空(force 静默)或删错;这里一律以解析出的 manifest.id 为准。
+ * 目录名恰等于 id 时先试(imported 恒真、目前 petdex 亦然),否则遍历解析匹配。找不到返回 null。
+ */
+async function petDirById(root: string, id: string): Promise<string | null> {
+  let names: string[]
+  try {
+    const entries = await fs.promises.readdir(root, { withFileTypes: true })
+    names = entries.filter(entry => entry.isDirectory()).map(entry => entry.name)
+  } catch { return null }
+  for (const name of [id, ...names.filter(n => n !== id)]) {
+    const dir = path.join(root, name)
+    if (!isWithin(root, dir)) continue
+    try { if ((await parseManifest(dir)).id === id) return dir } catch { /* 无 pet.json / 无效,跳过 */ }
+  }
+  return null
+}
+
+/**
+ * 删除一个用户可删除的宠物。imported → userData/pets/imported/<id>;
+ * petdex → petdexRoot(~/.codex/pets)下 manifest.id 匹配的目录(该目录为 petdex/codex 共享,
+ * 但本 app 亦经此安装,删装对称)。built-in 缺省项不可删。id 恒过白名单,目标恒经 isWithin
+ * 复核不逃出对应根;petdex 目标已不在库中时幂等返回(不报错)。
+ */
+export async function removePet(args: { userDataDir: string; petdexRoot: string; id: string; source: PetSource }): Promise<void> {
+  assertId(args.id)
+  if (args.source === 'imported') { await removeImportedPet({ userDataDir: args.userDataDir, id: args.id }); return }
+  if (args.source !== 'petdex') throw new Error('该宠物不可删除')
+  const dir = await petDirById(args.petdexRoot, args.id)
+  if (!dir) return
+  if (!isWithin(args.petdexRoot, dir)) throw new Error('非法宠物路径')
+  await fs.promises.rm(dir, { recursive: true, force: true })
+}
+
 async function findResolved(args: { userDataDir: string; petdexRoot: string }, id: string): Promise<ResolvedPet | null> {
   try { assertId(id) } catch { return null }
-  const petdex = await listDirectory(args.petdexRoot, 'petdex', false)
+  const petdex = await listDirectory(args.petdexRoot, 'petdex', true)
   const imported = await listDirectory(importedRoot(args.userDataDir), 'imported', true)
   const found = [...builtIns(), ...petdex, ...imported]
   return found.filter(pet => pet.id === id).at(-1) ?? null

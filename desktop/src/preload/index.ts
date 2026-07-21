@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
-import type { PetView, PetImportResult, PetInstallResult } from '../shared/pets'
+import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
 
 /**
@@ -154,7 +154,7 @@ export interface WraithApi {
   petsList(): Promise<{ pets: PetView[] }>
   petsImportImage(): Promise<PetImportResult>
   petsImportPackage(): Promise<PetImportResult>
-  petsRemove(id: string): Promise<{ ok: boolean }>
+  petsRemove(id: string, source: PetSource): Promise<{ ok: boolean }>
   petsPreview(id: string): Promise<string | null>
   /** 应用内 Petdex 安装:执行 `npx petdex@latest install <名>`(名字白名单+定长参数+shell:false)。
    * 结果经 invoke 返回,过程中的 stdout/stderr 经 onPetInstallOutput 流式推来。 */
@@ -623,8 +623,8 @@ const wraith: WraithApi = {
   petsImportPackage() {
     return ipcRenderer.invoke('wraith:petsImportPackage') as Promise<PetImportResult>
   },
-  petsRemove(id) {
-    return ipcRenderer.invoke('wraith:petsRemove', id) as Promise<{ ok: boolean }>
+  petsRemove(id, source) {
+    return ipcRenderer.invoke('wraith:petsRemove', id, source) as Promise<{ ok: boolean }>
   },
   petsPreview(id) {
     return ipcRenderer.invoke('wraith:petsPreview', id) as Promise<string | null>

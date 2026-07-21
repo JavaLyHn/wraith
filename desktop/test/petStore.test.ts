@@ -8,6 +8,7 @@ import {
   listPets,
   previewDataUrl,
   removeImportedPet,
+  removePet,
   validateImageBuffer,
 } from '../src/main/petStore'
 
@@ -75,7 +76,7 @@ describe('petStore', () => {
   it('lists a valid Petdex Noir Webling without changing its source directory', async () => {
     writePet(petdexRoot, 'noir-webling')
     const pets = await listPets({ userDataDir, petdexRoot })
-    expect(pets.find(pet => pet.id === 'noir-webling')).toMatchObject({ source: 'petdex', available: true, removable: false })
+    expect(pets.find(pet => pet.id === 'noir-webling')).toMatchObject({ source: 'petdex', available: true, removable: true })
     expect(fs.existsSync(path.join(petdexRoot, 'noir-webling', 'spritesheet.png'))).toBe(true)
   })
 
@@ -179,6 +180,41 @@ describe('petStore', () => {
     await removeImportedPet({ userDataDir, id: 'same' })
     expect((await listPets({ userDataDir, petdexRoot })).find(pet => pet.id === 'same')?.source).toBe('petdex')
     expect(fs.existsSync(path.join(petdexRoot, 'same', 'spritesheet.png'))).toBe(true)
+  })
+
+  it('removePet(petdex) deletes the pet directory from the Petdex root', async () => {
+    writePet(petdexRoot, 'boxcat')
+    await removePet({ userDataDir, petdexRoot, id: 'boxcat', source: 'petdex' })
+    expect(fs.existsSync(path.join(petdexRoot, 'boxcat'))).toBe(false)
+    expect((await listPets({ userDataDir, petdexRoot })).some(pet => pet.id === 'boxcat')).toBe(false)
+  })
+
+  it('removePet(petdex) matches by manifest id even when the directory name differs', async () => {
+    // petdex CLI 建的目录名未必等于 pet.json 的 id——按 manifest.id 匹配,不硬拼 join(root,id)。
+    const dir = path.join(petdexRoot, 'v2-scoop-123')
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(path.join(dir, 'pet.json'), manifest('scoop'))
+    fs.writeFileSync(path.join(dir, 'spritesheet.png'), png())
+    expect((await listPets({ userDataDir, petdexRoot })).some(pet => pet.id === 'scoop')).toBe(true)
+    await removePet({ userDataDir, petdexRoot, id: 'scoop', source: 'petdex' })
+    expect(fs.existsSync(dir)).toBe(false)
+  })
+
+  it('removePet(imported) removes the imported copy but leaves a same-id Petdex pet', async () => {
+    writePet(petdexRoot, 'same')
+    const pack = path.join(root, 'imported'); writePet(pack, 'same')
+    await importPackage({ userDataDir, sourcePath: path.join(pack, 'same') })
+    await removePet({ userDataDir, petdexRoot, id: 'same', source: 'imported' })
+    expect((await listPets({ userDataDir, petdexRoot })).find(pet => pet.id === 'same')?.source).toBe('petdex')
+    expect(fs.existsSync(path.join(petdexRoot, 'same', 'spritesheet.png'))).toBe(true)
+  })
+
+  it('removePet refuses a built-in pet and touches nothing', async () => {
+    await expect(removePet({ userDataDir, petdexRoot, id: 'wraith-companion', source: 'built-in' })).rejects.toThrow('不可删除')
+  })
+
+  it('removePet(petdex) is idempotent when the pet is already gone', async () => {
+    await expect(removePet({ userDataDir, petdexRoot, id: 'ghost', source: 'petdex' })).resolves.toBeUndefined()
   })
 
   it('returns no preview for an unknown id', async () => {

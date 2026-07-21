@@ -96,12 +96,12 @@ export default function PetsSettings(): JSX.Element {
     finally { setInstalling(false) }
   }
 
-  const removePet = async (id: string): Promise<void> => {
+  const removePet = async (id: string, source: PetSource): Promise<void> => {
     if (removingIds.has(id)) return
     setRemovingIds(prev => new Set(prev).add(id))
     setError(null)
     try {
-      await window.wraith.petsRemove(id)
+      await window.wraith.petsRemove(id, source)
       await refresh()
     } catch (e) { setError((e as Error).message) }
     finally { setRemovingIds(prev => { const next = new Set(prev); next.delete(id); return next }) }
@@ -210,8 +210,9 @@ export default function PetsSettings(): JSX.Element {
                   <button
                     data-testid={`pet-remove-${pet.id}`}
                     aria-label={`删除${pet.displayName}`}
+                    title={pet.source === 'petdex' ? '从本机 Petdex 库删除' : '删除已导入宠物'}
                     disabled={removingIds.has(pet.id)}
-                    onClick={() => void removePet(pet.id)}
+                    onClick={(e) => { e.stopPropagation(); void removePet(pet.id, pet.source) }}
                     className="absolute right-1 top-1 rounded px-1 text-fg-subtle hover:text-danger disabled:cursor-not-allowed disabled:opacity-50"
                   >×</button>
                 )}
