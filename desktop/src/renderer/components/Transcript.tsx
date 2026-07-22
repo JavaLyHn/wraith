@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { Fragment, useEffect, useMemo, useRef } from 'react'
 import type { Item } from '../../shared/transcriptReducer'
 import type { RunMode } from '../../shared/types'
 import WorkingIndicator from './WorkingIndicator'
@@ -8,6 +8,8 @@ import ToolGroup from './ToolGroup'
 import DiffCard from './DiffCard'
 import UserMessage from './UserMessage'
 import AgentMessage from './AgentMessage'
+import ArtifactChips from './ArtifactChips'
+import { filesUnderMessages } from '../../shared/artifactSummary'
 import { PlanChecklist, PlanReviewCard } from './PlanCard'
 import { TeamCard } from './TeamCard'
 import { groupToolRuns } from '../lib/groupToolRuns'
@@ -33,6 +35,7 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
   const containerRef = useRef<HTMLDivElement>(null)
   // 贴底跟随:初始 true(载入历史直接落底);用户上翻(离底 >80px)即停跟,不打断阅读
   const stickRef = useRef(true)
+  const chipsByMsg = useMemo(() => filesUnderMessages(items), [items])
 
   const handleScroll = (): void => {
     const el = containerRef.current
@@ -87,7 +90,13 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
           )
         }
         if (item.type === 'message') {
-          return <AgentMessage key={`msg-${originalIdx}`} text={item.text} />
+          const chips = chipsByMsg.get(originalIdx)
+          return (
+            <Fragment key={`msg-${originalIdx}`}>
+              <AgentMessage text={item.text} />
+              {chips && onOpenArtifact && <ArtifactChips files={chips} onOpenArtifact={onOpenArtifact} />}
+            </Fragment>
+          )
         }
         if (item.type === 'error') {
           return (
