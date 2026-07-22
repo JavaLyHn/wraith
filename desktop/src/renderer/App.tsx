@@ -173,6 +173,12 @@ export default function App(): JSX.Element {
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [rightDockOpen, setRightDockOpen] = useState(false)
   const [rightDockPane, setRightDockPane] = useState<RightDockPane>('browser')
+  const [previewArtifact, setPreviewArtifact] = useState<{ filePath: string; content: string } | null>(null)
+  const openArtifact = useCallback((filePath: string, content: string): void => {
+    setPreviewArtifact({ filePath, content })
+    setRightDockPane('artifact')
+    setRightDockOpen(true)
+  }, [])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('wraith.sidebar.collapsed') === '1' } catch { return false }
@@ -1048,7 +1054,7 @@ export default function App(): JSX.Element {
                     {compactNotice && (
                       <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
                     )}
-                    <SummaryPopover items={state.items} workspace={state.workspace ?? null} />
+                    <SummaryPopover items={state.items} workspace={state.workspace ?? null} onOpenArtifact={openArtifact} />
                     <button
                       data-testid="chat-compact"
                       onClick={() => void handleCompact()}
@@ -1104,6 +1110,7 @@ export default function App(): JSX.Element {
         status={state.status}
         onCompact={() => void handleCompact()}
         compactDisabled={compactDisabled}
+        artifact={previewArtifact}
       />
       </div>
       </div>

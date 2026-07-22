@@ -5,12 +5,6 @@ import { deriveArtifacts } from '../../shared/artifactSummary'
 import type { ArtifactSummary, ArtifactSource } from '../../shared/artifactSummary'
 import type { Item } from '../../shared/transcriptReducer'
 
-/** 相对路径按 workspace 拼绝对(供 openPath);绝对路径(/… 或 Windows 盘符)原样。 */
-export function resolveArtifactPath(path: string, workspace: string | null): string {
-  if (path.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(path)) return path
-  return workspace ? workspace.replace(/\/+$/, '') + '/' + path : path
-}
-
 const ROW = 'flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs text-fg-muted hover:bg-surface/60'
 const LABEL = 'mb-1 mt-2 text-3xs uppercase tracking-wider text-fg-subtle first:mt-0'
 const SOURCES_FOLD = 5
@@ -46,11 +40,12 @@ function SourcesSection({ sources, workspace, onOpenPath }: {
 }
 
 /** 悬浮卡正文(纯展示,无 Radix,便于单测)。四段:输出(文件+服务)/子智能体/浏览器/来源。 */
-export function SummaryContent({ summary, workspace, onOpenPath, onOpenExternal }: {
+export function SummaryContent({ summary, workspace, onOpenPath, onOpenExternal, onOpenArtifact }: {
   summary: ArtifactSummary
   workspace: string | null
   onOpenPath: (p: string) => void
   onOpenExternal: (u: string) => void
+  onOpenArtifact: (filePath: string, content: string) => void
 }): JSX.Element {
   if (summary.isEmpty) {
     return <div data-testid="summary-empty" className="px-2 py-3 text-xs text-fg-subtle">本会话暂无产物</div>
@@ -60,7 +55,7 @@ export function SummaryContent({ summary, workspace, onOpenPath, onOpenExternal 
       {(summary.files.length > 0 || summary.servers.length > 0) && <div className={LABEL}>输出</div>}
       {summary.files.map(f => (
         <button key={'f-' + f.path} data-testid="summary-file"
-          onClick={() => onOpenPath(resolveArtifactPath(f.path, workspace))} className={ROW}>
+          onClick={() => onOpenArtifact(f.path, f.content)} className={ROW}>
           <FileText className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />
           <span className="min-w-0 flex-1 truncate">{f.path}</span>
           <span className="shrink-0 text-3xs text-fg-subtle">{f.kind === 'created' ? '新建' : '改动'}</span>
@@ -103,7 +98,7 @@ export function SummaryContent({ summary, workspace, onOpenPath, onOpenExternal 
 }
 
 /** 顶栏「产物摘要」按钮 + 悬浮卡薄壳:派生摘要 + Radix popover + 接 window.wraith。 */
-export default function SummaryPopover({ items, workspace }: { items: readonly Item[]; workspace: string | null }): JSX.Element {
+export default function SummaryPopover({ items, workspace, onOpenArtifact }: { items: readonly Item[]; workspace: string | null; onOpenArtifact: (filePath: string, content: string) => void }): JSX.Element {
   const [open, setOpen] = useState(false)
   // popover 关闭时不派生:SummaryPopover 常驻顶栏,流式期间 items 每个 delta 都变,
   // 关着还全量扫 execute_command 输出跑正则纯属浪费;关闭态内容也不渲染,给空摘要即可。
@@ -119,7 +114,7 @@ export default function SummaryPopover({ items, workspace }: { items: readonly I
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="max-h-[70vh] w-72 overflow-y-auto">
-        <SummaryContent summary={summary} workspace={workspace} onOpenPath={onOpenPath} onOpenExternal={onOpenExternal} />
+        <SummaryContent summary={summary} workspace={workspace} onOpenPath={onOpenPath} onOpenExternal={onOpenExternal} onOpenArtifact={onOpenArtifact} />
       </PopoverContent>
     </Popover>
   )
