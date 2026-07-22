@@ -54,7 +54,7 @@ export default function RightDock({ open, cwd, pane, onPaneChange, onClose, cont
     <div data-testid="right-dock"
       className={'flex shrink-0 flex-row overflow-hidden bg-surface '
         + (open ? 'border-l border-border ' : '')
-        + (dragging ? '' : 'transition-[width] duration-300 ease-out')}
+        + (dragging ? '' : 'transition-[width] duration-[220ms] [transition-timing-function:var(--ease-smooth)]')}
       style={{ width: open ? width : 0 }}>
       {/* 左边缘拖拽手柄 */}
       <div onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerCancel={onDragEnd}

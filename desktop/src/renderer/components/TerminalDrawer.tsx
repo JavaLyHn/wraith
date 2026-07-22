@@ -33,18 +33,20 @@ export default function TerminalDrawer({ open, cwd, onClose }: { open: boolean; 
     <div data-testid="terminal-drawer"
       className={'flex flex-col overflow-hidden bg-surface '
         + (open ? 'border-t border-border ' : '')
-        + (dragging ? '' : 'transition-[height] duration-300 ease-out')}
+        + (dragging ? '' : 'transition-[height] duration-[220ms] [transition-timing-function:var(--ease-smooth)]')}
       style={{ height: open ? height : 0 }}>
       <div onPointerDown={onDragStart} onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerCancel={onDragEnd}
         className="h-1.5 shrink-0 cursor-ns-resize hover:bg-accent/30" />
-      <TerminalPane
-        active={open}
-        cwd={cwd}
-        onAllClosed={onClose}
-        rightSlot={
-          <button data-testid="terminal-drawer-close" onClick={onClose} className="rounded p-1 text-fg-muted hover:bg-surface/60" title="收起"><X className="h-3.5 w-3.5" strokeWidth={1.5} /></button>
-        }
-      />
+      <div className={'flex min-h-0 flex-1 flex-col' + (open ? ' animate-panel-in' : '')}>
+        <TerminalPane
+          active={open}
+          cwd={cwd}
+          onAllClosed={onClose}
+          rightSlot={
+            <button data-testid="terminal-drawer-close" onClick={onClose} className="rounded p-1 text-fg-muted hover:bg-surface/60" title="收起"><X className="h-3.5 w-3.5" strokeWidth={1.5} /></button>
+          }
+        />
+      </div>
     </div>
   )
 }

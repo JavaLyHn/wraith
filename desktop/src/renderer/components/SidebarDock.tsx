@@ -14,7 +14,7 @@ export default function SidebarDock(
           以便折叠态内层浮层(absolute)能溢出显示。 */}
       <div
         data-testid="sidebar-dock"
-        className="relative h-full shrink-0 transition-[width] duration-200 ease-out"
+        className="relative h-full shrink-0 transition-[width] duration-[220ms] [transition-timing-function:var(--ease-smooth)]"
         style={{ width: dockPlaceholderWidth(collapsed) }}
       >
         <div
