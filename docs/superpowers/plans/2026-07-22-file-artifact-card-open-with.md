@@ -319,16 +319,19 @@ git commit -m "feat(desktop): 新增 revealInFinder/openWithApp/downloadCopy/lis
 
 **Interfaces:**
 - Consumes: `fileTypeLabel`(Task 1)、`resolveWorkspacePath`(Task 1)、`baseName`、`ArtifactFile`、`EditorApp`、`window.wraith.{openPath,revealInFinder,openWithApp,downloadCopy}`(Task 3)、`ui/popover`。
-- Produces: `export default function FileArtifactCard(props: { file: ArtifactFile; workspace: string | null; editors: EditorApp[]; onOpenPreview: (filePath: string, content: string) => void }): JSX.Element`。
+- Produces:
+  - `export function OpenWithMenu(props: { file: ArtifactFile; workspace: string | null; editors: EditorApp[]; onAction?: () => void }): JSX.Element` —— 菜单按钮列表(**不含 Radix**,可直接渲染单测);各项走绝对路径调 `window.wraith.*`,点后调 `onAction?.()`(供关 popover)。
+  - `export default function FileArtifactCard(props: { file: ArtifactFile; workspace: string | null; editors: EditorApp[]; onOpenPreview: (filePath: string, content: string) => void }): JSX.Element` —— 卡体 + Radix `ui/popover` 包 `OpenWithMenu`。
+- **测试策略**:本仓库 jsdom 无 Radix popover 打开先例/无 pointer polyfill,故**不测 Radix 开合**——直接渲染 `OpenWithMenu` 测菜单项与回调,直接渲染 `FileArtifactCard` 测卡体与预览点击(popover 开合走 Task 5 手动眼验)。
 
 - [ ] **Step 1: 写失败测试**
 
-Create `desktop/test/fileArtifactCard.test.tsx`:
+Create `desktop/test/fileArtifactCard.test.tsx`(**不测 Radix 开合**:直接渲染 `OpenWithMenu` 测菜单,直接渲染 `FileArtifactCard` 测卡体):
 ```tsx
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react'
-import FileArtifactCard from '../src/renderer/components/FileArtifactCard'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import FileArtifactCard, { OpenWithMenu } from '../src/renderer/components/FileArtifactCard'
 import type { ArtifactFile } from '../src/shared/artifactSummary'
 import type { EditorApp } from '../src/shared/editors'
 
@@ -362,22 +365,35 @@ describe('FileArtifactCard', () => {
     fireEvent.click(screen.getByTestId('file-artifact-open-preview'))
     expect(onOpenPreview).toHaveBeenCalledWith('sub/README.md', '你好')
   })
+})
 
-  it('打开方式:默认程序 / 编辑器 / Finder / 下载 用绝对路径调对应 IPC', async () => {
+describe('OpenWithMenu', () => {
+  it('默认/编辑器/Finder/下载 用绝对路径调对应 IPC', () => {
     const w = mockWraith()
-    render(<FileArtifactCard file={file} workspace="/proj" editors={editors} onOpenPreview={vi.fn()} />)
-    fireEvent.click(screen.getByTestId('file-artifact-openwith'))
-    fireEvent.click(await screen.findByTestId('openwith-default'))
+    render(<OpenWithMenu file={file} workspace="/proj" editors={editors} />)
+    fireEvent.click(screen.getByTestId('openwith-default'))
     expect(w.openPath).toHaveBeenCalledWith('/proj/sub/README.md')
-    fireEvent.click(screen.getByTestId('file-artifact-openwith'))
-    fireEvent.click(await screen.findByTestId('openwith-editor'))
+    fireEvent.click(screen.getByTestId('openwith-editor'))
     expect(w.openWithApp).toHaveBeenCalledWith('/proj/sub/README.md', '/Applications/Visual Studio Code.app')
-    fireEvent.click(screen.getByTestId('file-artifact-openwith'))
-    fireEvent.click(await screen.findByTestId('openwith-reveal'))
+    fireEvent.click(screen.getByTestId('openwith-reveal'))
     expect(w.revealInFinder).toHaveBeenCalledWith('/proj/sub/README.md')
-    fireEvent.click(screen.getByTestId('file-artifact-openwith'))
-    fireEvent.click(await screen.findByTestId('openwith-download'))
+    fireEvent.click(screen.getByTestId('openwith-download'))
     expect(w.downloadCopy).toHaveBeenCalledWith('/proj/sub/README.md')
+  })
+
+  it('editors 为空时只有固定项(默认/Finder/下载)', () => {
+    render(<OpenWithMenu file={file} workspace="/proj" editors={[]} />)
+    expect(screen.queryByTestId('openwith-editor')).toBeNull()
+    expect(screen.getByTestId('openwith-default')).toBeTruthy()
+    expect(screen.getByTestId('openwith-reveal')).toBeTruthy()
+    expect(screen.getByTestId('openwith-download')).toBeTruthy()
+  })
+
+  it('onAction 在点击后被调(供关闭 popover)', () => {
+    const onAction = vi.fn()
+    render(<OpenWithMenu file={file} workspace="/proj" editors={editors} onAction={onAction} />)
+    fireEvent.click(screen.getByTestId('openwith-default'))
+    expect(onAction).toHaveBeenCalled()
   })
 })
 ```
@@ -398,10 +414,41 @@ import { fileTypeLabel } from '../lib/fileType'
 import type { ArtifactFile } from '../../shared/artifactSummary'
 import type { EditorApp } from '../../shared/editors'
 
+const ITEM = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60'
+
 /**
- * 回复下方的文件产物卡:文件名 + 类型标签 + 「打开方式」下拉。
+ * 「打开方式」菜单项列表(不含 Radix,可直接渲染单测)。各项走绝对路径调 window.wraith 的 IPC;
+ * 点击后调 onAction?.()(供外层关 popover)。editors 为空时只剩固定项。
+ */
+export function OpenWithMenu({ file, workspace, editors, onAction }: {
+  file: ArtifactFile
+  workspace: string | null
+  editors: EditorApp[]
+  onAction?: () => void
+}): JSX.Element {
+  const abs = resolveWorkspacePath(file.path, workspace)
+  const run = (fn: () => Promise<unknown>): void => { onAction?.(); void fn().catch(() => {}) }
+  return (
+    <>
+      <button data-testid="openwith-default" className={ITEM} onClick={() => run(() => window.wraith.openPath(abs))}>默认程序</button>
+      {editors.map(ed => (
+        <button key={ed.appPath} data-testid="openwith-editor" className={ITEM}
+          onClick={() => run(() => window.wraith.openWithApp(abs, ed.appPath))}>{ed.name}</button>
+      ))}
+      <div className="my-1 border-t border-border/60" />
+      <button data-testid="openwith-reveal" className={ITEM} onClick={() => run(() => window.wraith.revealInFinder(abs))}>
+        <FolderOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />在 Finder 中显示
+      </button>
+      <button data-testid="openwith-download" className={ITEM} onClick={() => run(() => window.wraith.downloadCopy(abs))}>
+        <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />下载副本
+      </button>
+    </>
+  )
+}
+
+/**
+ * 回复下方的文件产物卡:文件名 + 类型标签 + 「打开方式」下拉(Radix popover 包 OpenWithMenu)。
  * 点卡体 → 右侧内容预览(onOpenPreview,in-app,用原 path+content)。
- * 「打开方式」各项走绝对路径(resolveWorkspacePath)调 window.wraith 的 IPC。
  */
 export default function FileArtifactCard({ file, workspace, editors, onOpenPreview }: {
   file: ArtifactFile
@@ -410,9 +457,6 @@ export default function FileArtifactCard({ file, workspace, editors, onOpenPrevi
   onOpenPreview: (filePath: string, content: string) => void
 }): JSX.Element {
   const [open, setOpen] = useState(false)
-  const abs = resolveWorkspacePath(file.path, workspace)
-  const run = (fn: () => Promise<unknown>): void => { setOpen(false); void fn().catch(() => {}) }
-  const item = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60'
   return (
     <div data-testid="file-artifact-card" className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2">
       <FileText className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.5} />
@@ -432,18 +476,7 @@ export default function FileArtifactCard({ file, workspace, editors, onOpenPrevi
           >打开方式 <ChevronDown className="h-3 w-3" strokeWidth={1.5} /></button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-52">
-          <button data-testid="openwith-default" className={item} onClick={() => run(() => window.wraith.openPath(abs))}>默认程序</button>
-          {editors.map(ed => (
-            <button key={ed.appPath} data-testid="openwith-editor" className={item}
-              onClick={() => run(() => window.wraith.openWithApp(abs, ed.appPath))}>{ed.name}</button>
-          ))}
-          <div className="my-1 border-t border-border/60" />
-          <button data-testid="openwith-reveal" className={item} onClick={() => run(() => window.wraith.revealInFinder(abs))}>
-            <FolderOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />在 Finder 中显示
-          </button>
-          <button data-testid="openwith-download" className={item} onClick={() => run(() => window.wraith.downloadCopy(abs))}>
-            <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />下载副本
-          </button>
+          <OpenWithMenu file={file} workspace={workspace} editors={editors} onAction={() => setOpen(false)} />
         </PopoverContent>
       </Popover>
     </div>
@@ -453,7 +486,7 @@ export default function FileArtifactCard({ file, workspace, editors, onOpenPrevi
 
 - [ ] **Step 4: 跑测试 + tsc**
 
-Run: `cd desktop && npx vitest run test/fileArtifactCard.test.tsx` → PASS(3 用例)。
+Run: `cd desktop && npx vitest run test/fileArtifactCard.test.tsx` → PASS(FileArtifactCard 2 + OpenWithMenu 3 = 5 用例)。
 Run: `cd desktop && npx tsc --noEmit` → 无输出。
 
 - [ ] **Step 5: 提交**
