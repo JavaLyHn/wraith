@@ -36,7 +36,7 @@ import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { compactionNotice } from './lib/compactView'
-import { Download, PanelLeft, PanelRight, SquareTerminal, Wand2 } from 'lucide-react'
+import { Download, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -46,12 +46,12 @@ import SubmitErrorBanner from './components/SubmitErrorBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import Sidebar from './components/Sidebar'
 import SidebarDock from './components/SidebarDock'
+import TopBar from './components/TopBar'
 import PreviewBanner from './components/PreviewBanner'
 import { selectAction, resolveOnIdle, deriveView, type Preview } from '../shared/sessionPreview'
 import PluginsPanel from './components/PluginsPanel'
 import AutomationsPanel from './components/AutomationsPanel'
 import ImGatewayPanel from './components/ImGatewayPanel'
-import { topBarLeftPad } from './lib/topBar'
 import ProvidersPanel from './components/ProvidersPanel'
 import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
@@ -901,7 +901,17 @@ export default function App(): JSX.Element {
   }, [pv.items, state.model, state.workspace])
 
   return (
-    <div className="flex h-screen overflow-hidden text-fg">
+    <div className="flex h-screen flex-col overflow-hidden text-fg">
+      <TopBar
+        platform={window.wraith.platform}
+        sidebarCollapsed={sidebarCollapsed}
+        onToggleSidebar={() => setSidebarCollapsed(v => !v)}
+        showChat={view === 'chat'}
+        terminalOpen={terminalOpen}
+        onToggleTerminal={() => setTerminalOpen(v => !v)}
+        rightDockOpen={rightDockOpen}
+        onToggleRightDock={() => setRightDockOpen(v => !v)}
+      />
       <div className="flex min-h-0 flex-1 overflow-hidden">
       <SidebarDock collapsed={sidebarCollapsed} peek={sidebarPeek} onPeekChange={setSidebarPeek}>
         <Sidebar
@@ -944,34 +954,6 @@ export default function App(): JSX.Element {
 
       <div className="flex min-w-0 flex-1 flex-row">
       <div className={'relative flex min-w-0 flex-1 flex-col ' + (view === 'chat' ? 'bg-surface' : 'bg-bg')}>
-        {/* 内容列顶行:拖拽区,继承列实底(白/灰)。折叠时承展开键(交通灯右);chat 视图右簇终端/右侧面板键 */}
-        <div className={'flex h-[38px] shrink-0 items-center [-webkit-app-region:drag] ' + (sidebarCollapsed ? topBarLeftPad(window.wraith.platform) : 'pl-2')}>
-          {sidebarCollapsed && (
-            <button
-              type="button"
-              data-testid="sidebar-expand"
-              onClick={() => setSidebarCollapsed(false)}
-              title="展开侧栏"
-              className="rounded-lg p-1.5 text-fg-muted transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-fg/5 hover:text-fg [-webkit-app-region:no-drag]"
-            >
-              <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
-            </button>
-          )}
-          {view === 'chat' && (
-            <div className="ml-auto flex items-center gap-1 pr-2 [-webkit-app-region:no-drag]">
-              <button data-testid="terminal-toggle" onClick={() => setTerminalOpen(v => !v)}
-                className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-fg/5 hover:text-fg ' + (terminalOpen ? 'text-accent' : 'text-fg-muted')}
-                title="终端">
-                <SquareTerminal className="h-4 w-4" strokeWidth={1.5} />
-              </button>
-              <button data-testid="rightdock-toggle" onClick={() => setRightDockOpen(v => !v)}
-                className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-fg/5 hover:text-fg ' + (rightDockOpen ? 'text-accent' : 'text-fg-muted')}
-                title="右侧面板(浏览器/终端)">
-                <PanelRight className="h-4 w-4" strokeWidth={1.5} />
-              </button>
-            </div>
-          )}
-        </div>
         {state.connection === 'disconnected' && (
           <DisconnectedBanner onRestart={handleRestart} />
         )}
