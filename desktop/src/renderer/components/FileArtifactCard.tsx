@@ -20,13 +20,18 @@ export default function FileArtifactCard({ file, workspace, editors, onOpenPrevi
 }): JSX.Element {
   const [open, setOpen] = useState(false)
   const [undone, setUndone] = useState(false)
+  const [pending, setPending] = useState(false)
+  const [failed, setFailed] = useState(false)
   const created = file.kind === 'created'
   const hasDiff = file.before !== null && !undone
   const doUndo = async (): Promise<void> => {
-    if (!onUndo || file.before === null) return
+    if (!onUndo || file.before === null || pending) return
     const name = baseName(file.path)
     if (!window.confirm(created ? `删除新建的 ${name}?` : `把 ${name} 恢复到编辑前?`)) return
-    if (await onUndo(file)) setUndone(true)
+    setPending(true); setFailed(false)
+    const ok = await onUndo(file)
+    setPending(false)
+    if (ok) setUndone(true); else setFailed(true)
   }
   return (
     <div data-testid="file-artifact-card" className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2">
@@ -43,6 +48,7 @@ export default function FileArtifactCard({ file, workspace, editors, onOpenPrevi
             className="text-2xs text-fg-subtle hover:text-accent">查看更改 ↗</button>
         )}
         {undone && <span data-testid="file-artifact-undone" className="text-2xs text-fg-subtle">已撤销</span>}
+        {failed && <span data-testid="file-artifact-undo-failed" className="text-2xs text-danger">撤销失败</span>}
       </div>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
@@ -60,8 +66,8 @@ export default function FileArtifactCard({ file, workspace, editors, onOpenPrevi
           className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent">审核</button>
       )}
       {hasDiff && onUndo && (
-        <button data-testid="file-artifact-undo" onClick={() => void doUndo()}
-          className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-danger hover:text-danger">
+        <button data-testid="file-artifact-undo" onClick={() => void doUndo()} disabled={pending}
+          className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-danger hover:text-danger disabled:opacity-40">
           <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />撤销
         </button>
       )}

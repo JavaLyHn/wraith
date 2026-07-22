@@ -69,6 +69,14 @@ describe('撤销', () => {
     fireEvent.click(screen.getByTestId('file-artifact-undo'))
     expect(onUndo).not.toHaveBeenCalled()
   })
+  it('onUndo 失败(resolve false)→ 撤销失败提示,且不显示已撤销', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const onUndo = vi.fn(() => Promise.resolve(false))
+    render(<FileArtifactCard file={modified} workspace="/proj" editors={editors} onUndo={onUndo} />)
+    fireEvent.click(screen.getByTestId('file-artifact-undo'))
+    await screen.findByText('撤销失败')
+    expect(screen.queryByText('已撤销')).toBeNull()
+  })
 })
 
 describe('OpenWithMenu(抽出后)', () => {
@@ -88,5 +96,11 @@ describe('OpenWithMenu(抽出后)', () => {
     render(<OpenWithMenu file={created} workspace="/proj" editors={[]} />)
     expect(screen.queryByTestId('openwith-editor-0')).toBeNull()
     expect(screen.getByTestId('openwith-default')).toBeTruthy()
+  })
+  it('OpenWithMenu onAction 在点击后被调(供关闭 popover)', () => {
+    const onAction = vi.fn()
+    render(<OpenWithMenu file={created} workspace="/proj" editors={editors} onAction={onAction} />)
+    fireEvent.click(screen.getByTestId('openwith-default'))
+    expect(onAction).toHaveBeenCalled()
   })
 })
