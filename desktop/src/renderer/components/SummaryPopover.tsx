@@ -1,6 +1,9 @@
-import { useState } from 'react'
-import { FileText, Folder, Globe, Image as ImageIcon, Users } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { FileText, Folder, Globe, Image as ImageIcon, ListChecks, Users } from 'lucide-react'
+import { Popover, PopoverTrigger, PopoverContent } from './ui/popover'
+import { deriveArtifacts } from '../../shared/artifactSummary'
 import type { ArtifactSummary, ArtifactSource } from '../../shared/artifactSummary'
+import type { Item } from '../../shared/transcriptReducer'
 
 /** 相对路径按 workspace 拼绝对(供 openPath);绝对路径(/… 或 Windows 盘符)原样。 */
 export function resolveArtifactPath(path: string, workspace: string | null): string {
@@ -96,5 +99,26 @@ export function SummaryContent({ summary, workspace, onOpenPath, onOpenExternal 
 
       <SourcesSection sources={summary.sources} workspace={workspace} onOpenPath={onOpenPath} />
     </div>
+  )
+}
+
+/** 顶栏「产物摘要」按钮 + 悬浮卡薄壳:派生摘要 + Radix popover + 接 window.wraith。 */
+export default function SummaryPopover({ items, workspace }: { items: readonly Item[]; workspace: string | null }): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const summary = useMemo(() => deriveArtifacts(items, workspace), [items, workspace])
+  const onOpenPath = (p: string): void => { void window.wraith.openPath(p).catch(() => {}) }
+  const onOpenExternal = (u: string): void => { void window.wraith.openExternal(u).catch(() => {}) }
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button data-testid="summary-toggle" title="产物摘要"
+          className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg">
+          <ListChecks className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />产物
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="max-h-[70vh] w-72 overflow-y-auto">
+        <SummaryContent summary={summary} workspace={workspace} onOpenPath={onOpenPath} onOpenExternal={onOpenExternal} />
+      </PopoverContent>
+    </Popover>
   )
 }

@@ -60,6 +60,7 @@ import RagPanel from './components/RagPanel'
 import SettingsPanel from './components/SettingsPanel'
 import TerminalDrawer from './components/TerminalDrawer'
 import RightDock, { type RightDockPane } from './components/RightDock'
+import SummaryPopover from './components/SummaryPopover'
 import { useSettings } from './settings/SettingsContext'
 
 // ---------------------------------------------------------------------------
@@ -1047,6 +1048,7 @@ export default function App(): JSX.Element {
                     {compactNotice && (
                       <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
                     )}
+                    <SummaryPopover items={state.items} workspace={state.workspace ?? null} />
                     <button
                       data-testid="chat-compact"
                       onClick={() => void handleCompact()}
