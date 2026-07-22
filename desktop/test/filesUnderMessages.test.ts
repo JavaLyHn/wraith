@@ -39,4 +39,16 @@ describe('filesUnderMessages', () => {
     const items: Item[] = [user('hi'), msg('你好')]
     expect(filesUnderMessages(items).size).toBe(0)
   })
+
+  it('同回合多 message:文件只挂最后一条 message(last wins)', () => {
+    const items: Item[] = [user('t'), msg('m1'), wf('a.ts', 'A'), msg('m2')]
+    const m = filesUnderMessages(items)
+    expect(m.has(1)).toBe(false)
+    expect(m.get(3)).toEqual([{ path: 'a.ts', kind: 'modified', content: 'A' }])
+  })
+
+  it('无前导 user:文件仍挂到隐式回合 0 的最后一条 message', () => {
+    const items: Item[] = [wf('a.ts', 'A'), msg('m')]
+    expect(filesUnderMessages(items).get(1)).toEqual([{ path: 'a.ts', kind: 'modified', content: 'A' }])
+  })
 })

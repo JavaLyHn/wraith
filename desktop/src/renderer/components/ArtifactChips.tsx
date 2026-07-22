@@ -18,6 +18,7 @@ export default function ArtifactChips({ files, onOpenArtifact }: {
           <button
             key={f.path}
             data-testid="artifact-chip"
+            type="button"
             title={f.path}
             onClick={() => onOpenArtifact(f.path, f.content)}
             className="flex items-center gap-1 rounded-md border border-border bg-surface px-2 py-1 text-2xs text-fg-muted transition-colors hover:border-accent hover:text-accent"
