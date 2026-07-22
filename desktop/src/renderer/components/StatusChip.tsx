@@ -11,6 +11,10 @@ export function chipView(
   watermark: WatermarkView | null,
 ): { pct: number; tw: string; suffix: '' | '~' } {
   if (watermark) {
+    // 首轮前:仅有估算基线(系统提示词+工具 schema)、尚无真实回合读数 → 显 0%,避免"新会话就 3%"的反直觉。
+    if (status === null && watermark.estimated) {
+      return { pct: 0, tw: TIER_TW[0], suffix: '' }
+    }
     const pct = Math.max(0, Math.min(100, Math.round(watermark.ratio * 100)))
     // 档位优先信后端算好的 watermark.tier(权威口径,可能有本地不掌握的防抖/滞回判定);
     // 但越界(后端异常给出 0~3 外的值)时不能钳到边界糊弄过去,回退用同一 payload 里的 ratio 重推——更诚实。

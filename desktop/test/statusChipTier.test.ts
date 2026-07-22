@@ -33,4 +33,9 @@ describe('chipView', () => {
   it('null status + no watermark:回退 0%(不崩)', () => {
     expect(chipView(null, null).pct).toBe(0)
   })
+  it('首轮前:无 status + 估算基线 → 0%(新会话不显基线占用)', () => {
+    const v = chipView(null, { ratio: 0.03, tier: 0, estimated: true })
+    expect(v.pct).toBe(0)
+    expect(v.suffix).toBe('')
+  })
 })
