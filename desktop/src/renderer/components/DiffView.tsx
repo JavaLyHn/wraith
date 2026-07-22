@@ -75,8 +75,10 @@ export default function DiffView({ filePath, before, after, onStats, fill, sideB
           if (c.originalEndLineNumber > 0) removed += c.originalEndLineNumber - c.originalStartLineNumber + 1
         }
         onStatsRef.current?.(added, removed)
-        const contentH = editor.getModifiedEditor().getContentHeight()
-        setHeight(Math.min(Math.max(contentH, 80), 400))
+        if (!fill) {
+          const contentH = editor.getModifiedEditor().getContentHeight()
+          setHeight(Math.min(Math.max(contentH, 80), 400))
+        }
       })
     })()
 
@@ -92,7 +94,7 @@ export default function DiffView({ filePath, before, after, onStats, fill, sideB
 
   if (failed) {
     return (
-      <div data-testid="diff-fallback" className="grid grid-cols-2 gap-2 p-2 font-mono text-xs">
+      <div data-testid="diff-fallback" className="grid h-full grid-cols-2 gap-2 overflow-auto p-2 font-mono text-xs">
         <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-danger/5 p-2">{before}</pre>
         <pre className="overflow-x-auto whitespace-pre-wrap rounded-lg bg-ok/5 p-2">{after}</pre>
       </div>

@@ -947,8 +947,6 @@ export default function App(): JSX.Element {
           onOpenSettings={() => setView('settings')}
           automationBadge={automationBadge}
           onOpenSearch={() => setPaletteOpen(true)}
-          collapsed={sidebarCollapsed}
-          onToggleCollapsed={() => setSidebarCollapsed(v => !v)}
         />
       </SidebarDock>
 

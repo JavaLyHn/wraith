@@ -129,8 +129,6 @@ interface SidebarProps {
   automationBadge: boolean
   /** 打开命令面板(搜索)。 */
   onOpenSearch: () => void
-  collapsed: boolean
-  onToggleCollapsed: () => void
 }
 
 export default function Sidebar({
@@ -166,8 +164,6 @@ export default function Sidebar({
   onOpenSettings,
   automationBadge,
   onOpenSearch,
-  collapsed,
-  onToggleCollapsed,
 }: SidebarProps): JSX.Element {
   // 进入某工具页时自动展开一次(让高亮的活动项可见);此后由用户折叠意图决定,可手动收起并保持。
   // 不能写成 `toolsExpanded || activeNav !== null` 派生——在工具页时那会强制展开、压过用户点
