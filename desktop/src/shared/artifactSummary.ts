@@ -18,7 +18,7 @@ export interface ArtifactSummary {
 }
 
 // 回环地址(本地 dev server / 预览):可选 http(s):// 前缀 + localhost|127.0.0.1 + 必须带端口。
-const LOOPBACK_RE = /(?:https?:\/\/)?(?:localhost|127\.0\.0\.1):\d{2,5}(?:\/[^\s'"`]*)?/gi
+const LOOPBACK_RE = /(?<![\w.-])(?:https?:\/\/)?(?:localhost|127\.0\.0\.1):\d{2,5}(?:\/[^\s'"`]*)?/gi
 // 任意 http(s) URL(浏览器活动从 output 兜底抽)。
 const HTTP_RE = /https?:\/\/[^\s'"`]+/i
 

@@ -35,6 +35,13 @@ describe('deriveArtifacts', () => {
     expect(s.servers).toEqual([])
   })
 
+  it('servers: 不把更大 token 的子串(如 backend-localhost:8080)当作回环服务', () => {
+    const items: Item[] = [
+      tool('execute_command', '{}', 'proxying to backend-localhost:8080 and svc-127.0.0.1:9000'),
+    ]
+    expect(deriveArtifacts(items, null).servers).toEqual([])
+  })
+
   it('browser: 取浏览器工具最后一次 argsJson.url', () => {
     const items: Item[] = [
       tool('browser_navigate', '{"url":"https://a.com"}', ''),
