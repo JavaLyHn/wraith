@@ -13,8 +13,8 @@ export default function PreviewPane({ preview }: { preview: RightPreview | null 
         <span className="truncate font-mono font-semibold" title={preview.filePath}>{baseName(preview.filePath)}</span>
         <span className="shrink-0 text-2xs font-normal text-fg-subtle">· 更改</span>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <DiffView filePath={preview.filePath} before={preview.before} after={preview.after} />
+      <div className="min-h-0 flex-1">
+        <DiffView fill filePath={preview.filePath} before={preview.before} after={preview.after} />
       </div>
     </div>
   )
