@@ -24,6 +24,7 @@ describe('DiffCard 右侧入口', () => {
   it('点切换按钮仍能折叠/展开', () => {
     render(<DiffCard filePath="a.md" before="" after="x" onOpenArtifact={vi.fn()} />)
     const toggle = screen.getByTestId('diff-card-toggle')
+    expect(screen.getByTestId('diff-card-toggle-label').getAttribute('aria-expanded')).toBe('true')
     fireEvent.click(toggle)
     expect(toggle.getAttribute('aria-expanded')).toBe('false')
   })

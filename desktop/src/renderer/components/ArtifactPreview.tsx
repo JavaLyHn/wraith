@@ -2,6 +2,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { MARKDOWN_COMPONENTS } from './AgentMessage'
 import { baseName } from '../lib/paths'
+import type { PreviewArtifact } from '../../shared/artifactSummary'
 
 function isMarkdown(path: string): boolean {
   return /\.(md|markdown)$/i.test(path)
@@ -12,11 +13,12 @@ function isMarkdown(path: string): boolean {
  * .md/.markdown → react-markdown 富文本(复用 AgentMessage 的 MARKDOWN_COMPONENTS + .agent-markdown);
  * 其它扩展名 → 等宽 <pre>(v1 无语法高亮);空内容 → 占位。内容为 agent 最后写入的原文,不 stripDsml。
  */
-export default function ArtifactPreview({ filePath, content }: { filePath: string; content: string }): JSX.Element {
+export default function ArtifactPreview({ filePath, content }: PreviewArtifact): JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-xs font-semibold text-fg">
-        <span className="truncate font-mono" title={filePath}>{baseName(filePath)}</span>
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-xs text-fg">
+        <span className="truncate font-mono font-semibold" title={filePath}>{baseName(filePath)}</span>
+        <span className="shrink-0 text-2xs font-normal text-fg-subtle" title="agent 写入时的内容,非实时磁盘">· 快照</span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
         {content === ''

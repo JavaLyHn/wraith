@@ -31,5 +31,6 @@ describe('ArtifactPreview', () => {
   it('顶部显示文件名 baseName', () => {
     render(<ArtifactPreview filePath="/a/b/README.md" content="x" />)
     expect(screen.getByText('README.md')).toBeTruthy()
+    expect(screen.getByText('· 快照')).toBeTruthy()
   })
 })

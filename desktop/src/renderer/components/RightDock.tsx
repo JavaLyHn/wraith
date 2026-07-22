@@ -7,6 +7,7 @@ import ArtifactPreview from './ArtifactPreview'
 import { clampColumnWidth } from '../lib/rightDock'
 import type { ContextObservability } from '../../shared/transcriptReducer'
 import type { StatusData } from '../../shared/types'
+import type { PreviewArtifact } from '../../shared/artifactSummary'
 
 export type RightDockPane = 'browser' | 'terminal' | 'context' | 'artifact'
 
@@ -21,7 +22,7 @@ export default function RightDock({ open, cwd, pane, onPaneChange, onClose, cont
   status: StatusData | null
   onCompact: () => void
   compactDisabled: boolean
-  artifact: { filePath: string; content: string } | null
+  artifact: PreviewArtifact | null
 }): JSX.Element {
   const [width, setWidth] = useState(() => clampColumnWidth(Math.round(window.innerWidth * 0.4), window.innerWidth))
   const [dragging, setDragging] = useState(false)

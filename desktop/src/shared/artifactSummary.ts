@@ -17,6 +17,9 @@ export interface ArtifactSummary {
   isEmpty: boolean
 }
 
+/** 右侧「预览」pane 展示的产物快照(文件路径 + agent 写入时的完整内容)。 */
+export interface PreviewArtifact { filePath: string; content: string }
+
 // 回环地址(本地 dev server / 预览):可选 http(s):// 前缀 + localhost|127.0.0.1 + 必须带端口。
 const LOOPBACK_RE = /(?<![\w.-])(?:https?:\/\/)?(?:localhost|127\.0\.0\.1):\d{2,5}(?:\/[^\s'"`]*)?/gi
 // 任意 http(s) URL(浏览器活动从 output 兜底抽)。

@@ -41,6 +41,7 @@ export default function DiffCard({ filePath, before, after, onOpenArtifact }: Di
         )}
         <button
           data-testid="diff-card-toggle-label"
+          aria-expanded={!collapsed}
           onClick={() => setCollapsed(c => !c)}
           className="shrink-0 text-fg-subtle hover:text-fg"
         >{collapsed ? '展开' : '收起'}</button>

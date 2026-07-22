@@ -1,6 +1,7 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
 import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode } from '../shared/types'
+import type { PreviewArtifact } from '../shared/artifactSummary'
 import type { McpFormValue } from './components/McpServerForm'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
 import { createThrottleLatest, type ThrottledPush } from '../shared/throttleLatest'
@@ -173,7 +174,7 @@ export default function App(): JSX.Element {
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [rightDockOpen, setRightDockOpen] = useState(false)
   const [rightDockPane, setRightDockPane] = useState<RightDockPane>('browser')
-  const [previewArtifact, setPreviewArtifact] = useState<{ filePath: string; content: string } | null>(null)
+  const [previewArtifact, setPreviewArtifact] = useState<PreviewArtifact | null>(null)
   const openArtifact = useCallback((filePath: string, content: string): void => {
     setPreviewArtifact({ filePath, content })
     setRightDockPane('artifact')
@@ -851,6 +852,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     if (compactNoticeTimer.current) { clearTimeout(compactNoticeTimer.current); compactNoticeTimer.current = null }
     setCompactNotice(null)
+    setPreviewArtifact(null)
   }, [state.sessionId])
   const handleCompact = useCallback(async (): Promise<void> => {
     if (state.turn === 'running') return
