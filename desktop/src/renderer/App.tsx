@@ -1,7 +1,7 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
 import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode } from '../shared/types'
-import type { RightPreview } from '../shared/artifactSummary'
+import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
 import type { EditorApp } from '../shared/editors'
 import type { McpFormValue } from './components/McpServerForm'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
@@ -30,6 +30,7 @@ import { messagesToItems } from '../shared/messagesToItems'
 import { spliceCards } from '../shared/spliceCards'
 import { EXAMPLE_PROMPTS, pickExamplePrompts } from './lib/welcomePrompts'
 import { lastUserMessage } from './lib/resend'
+import { resolveWorkspacePath } from './lib/paths'
 import { sessionDisplayName } from './lib/sessionView'
 import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
@@ -186,6 +187,15 @@ export default function App(): JSX.Element {
     setRightDockPane('artifact')
     setRightDockOpen(true)
   }, [])
+  const handleUndo = useCallback(async (file: ArtifactFile): Promise<boolean> => {
+    const abs = resolveWorkspacePath(file.path, state.workspace ?? null)
+    try {
+      const r = await window.wraith.undoFileEdit({ path: abs, before: file.before ?? '', kind: file.kind })
+      return r.ok
+    } catch {
+      return false
+    }
+  }, [state.workspace])
   const [editors, setEditors] = useState<EditorApp[]>([])
   useEffect(() => { void window.wraith.listEditors().then(setEditors).catch(() => {}) }, [])
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -1096,6 +1106,8 @@ export default function App(): JSX.Element {
                       onPlanReview={handlePlanReview}
                       mode={pendingMode}
                       onOpenArtifact={openArtifact}
+                      onOpenDiff={openDiff}
+                      onUndo={handleUndo}
                       editors={editors}
                       workspace={state.workspace ?? null}
                     />
