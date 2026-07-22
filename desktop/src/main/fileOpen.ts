@@ -34,3 +34,10 @@ export function uniqueDownloadName(existing: ReadonlySet<string>, base: string):
     if (!existing.has(cand)) return cand
   }
 }
+
+/** target 是否等于或位于 workspace 之下(归一化后 path.relative 不以 .. 开头且非绝对)。workspace 空 → false。 */
+export function isPathWithinWorkspace(target: string, workspace: string): boolean {
+  if (!workspace) return false
+  const rel = path.relative(path.resolve(workspace), path.resolve(target))
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+}

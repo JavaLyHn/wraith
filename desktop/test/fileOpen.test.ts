@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { detectEditors, uniqueDownloadName } from '../src/main/fileOpen'
+import { detectEditors, uniqueDownloadName, isPathWithinWorkspace } from '../src/main/fileOpen'
 
 describe('detectEditors', () => {
   it('只返回已知已装项,按表序,appPath 正确', () => {
@@ -27,4 +27,22 @@ describe('uniqueDownloadName', () => {
   it('冲突 → (2)', () => expect(uniqueDownloadName(new Set(['a.md']), 'a.md')).toBe('a (2).md'))
   it('多次冲突递增', () => expect(uniqueDownloadName(new Set(['a.md', 'a (2).md']), 'a.md')).toBe('a (3).md'))
   it('无扩展名也正确', () => expect(uniqueDownloadName(new Set(['README']), 'README')).toBe('README (2)'))
+})
+
+describe('isPathWithinWorkspace', () => {
+  it('工作区内文件 → true', () => {
+    expect(isPathWithinWorkspace('/proj/src/a.ts', '/proj')).toBe(true)
+  })
+  it('工作区自身 → true', () => {
+    expect(isPathWithinWorkspace('/proj', '/proj')).toBe(true)
+  })
+  it('../ 逃逸 → false', () => {
+    expect(isPathWithinWorkspace('/proj/../etc/passwd', '/proj')).toBe(false)
+  })
+  it('完全在外 → false', () => {
+    expect(isPathWithinWorkspace('/other/x', '/proj')).toBe(false)
+  })
+  it('workspace 为空 → false', () => {
+    expect(isPathWithinWorkspace('/proj/a', '')).toBe(false)
+  })
 })
