@@ -43,7 +43,7 @@ describe('OpenWithMenu', () => {
     render(<OpenWithMenu file={file} workspace="/proj" editors={editors} />)
     fireEvent.click(screen.getByTestId('openwith-default'))
     expect(w.openPath).toHaveBeenCalledWith('/proj/sub/README.md')
-    fireEvent.click(screen.getByTestId('openwith-editor'))
+    fireEvent.click(screen.getByTestId('openwith-editor-0'))
     expect(w.openWithApp).toHaveBeenCalledWith('/proj/sub/README.md', '/Applications/Visual Studio Code.app')
     fireEvent.click(screen.getByTestId('openwith-reveal'))
     expect(w.revealInFinder).toHaveBeenCalledWith('/proj/sub/README.md')
@@ -53,7 +53,7 @@ describe('OpenWithMenu', () => {
 
   it('editors 为空时只有固定项(默认/Finder/下载)', () => {
     render(<OpenWithMenu file={file} workspace="/proj" editors={[]} />)
-    expect(screen.queryByTestId('openwith-editor')).toBeNull()
+    expect(screen.queryByTestId('openwith-editor-0')).toBeNull()
     expect(screen.getByTestId('openwith-default')).toBeTruthy()
     expect(screen.getByTestId('openwith-reveal')).toBeTruthy()
     expect(screen.getByTestId('openwith-download')).toBeTruthy()

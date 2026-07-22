@@ -1353,11 +1353,6 @@ ipcMain.handle('wraith:openExternal', (_e, url: string) => { void shell.openExte
 ipcMain.handle('wraith:openPath', (_e, p: string) => shell.openPath(p))
 
 ipcMain.handle('wraith:revealInFinder', (_e, p: string) => { shell.showItemInFolder(p) })
-ipcMain.handle('wraith:openWithApp', (_e, p: string, appPath: string) => {
-  // appPath 必须是真实 .app(来自 listEditors);不接受任意路径,防任意程序执行
-  if (!appPath.endsWith('.app') || !fs.existsSync(appPath)) throw new Error('无效的应用')
-  spawn('open', ['-a', appPath, p], { stdio: 'ignore', detached: true }).unref()
-})
 ipcMain.handle('wraith:downloadCopy', async (_e, p: string): Promise<string> => {
   const downloads = path.join(os.homedir(), 'Downloads')
   await fs.promises.mkdir(downloads, { recursive: true })
@@ -1367,8 +1362,10 @@ ipcMain.handle('wraith:downloadCopy', async (_e, p: string): Promise<string> => 
   shell.showItemInFolder(dest)
   return dest
 })
+
 let editorsCache: EditorApp[] | null = null
-ipcMain.handle('wraith:listEditors', (): EditorApp[] => {
+
+function computeEditors(): EditorApp[] {
   if (editorsCache) return editorsCache
   const dirs = ['/Applications', path.join(os.homedir(), 'Applications')]
   const appPaths: string[] = []
@@ -1378,7 +1375,14 @@ ipcMain.handle('wraith:listEditors', (): EditorApp[] => {
   }
   editorsCache = detectEditors(appPaths)
   return editorsCache
+}
+
+ipcMain.handle('wraith:openWithApp', (_e, p: string, appPath: string) => {
+  if (!computeEditors().some(ed => ed.appPath === appPath)) throw new Error('无效的应用')
+  spawn('open', ['-a', appPath, p], { stdio: 'ignore', detached: true }).unref()
 })
+
+ipcMain.handle('wraith:listEditors', (): EditorApp[] => computeEditors())
 
 ipcMain.handle('wraith:ptyCreate', (_e, opts?: { cwd?: string; cols?: number; rows?: number; theme?: 'light' | 'dark' }) => ptyManager?.create(opts ?? {}) ?? { id: '' })
 ipcMain.handle('wraith:ptyInput', (_e, id: string, data: string) => { ptyManager?.write(id, data) })

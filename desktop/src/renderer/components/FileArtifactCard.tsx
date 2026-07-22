@@ -23,8 +23,8 @@ export function OpenWithMenu({ file, workspace, editors, onAction }: {
   return (
     <>
       <button data-testid="openwith-default" className={ITEM} onClick={() => run(() => window.wraith.openPath(abs))}>默认程序</button>
-      {editors.map(ed => (
-        <button key={ed.appPath} data-testid="openwith-editor" className={ITEM}
+      {editors.map((ed, i) => (
+        <button key={ed.appPath} data-testid={`openwith-editor-${i}`} className={ITEM}
           onClick={() => run(() => window.wraith.openWithApp(abs, ed.appPath))}>{ed.name}</button>
       ))}
       <div className="my-1 border-t border-border/60" />
