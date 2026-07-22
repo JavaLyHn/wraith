@@ -1,76 +1,70 @@
 import { useState } from 'react'
-import { ChevronDown, Download, FileText, FolderOpen } from 'lucide-react'
+import { ChevronDown, FileDiff, FilePlus, RotateCcw } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover'
-import { baseName, resolveWorkspacePath } from '../lib/paths'
-import { fileTypeLabel } from '../lib/fileType'
+import { baseName } from '../lib/paths'
+import { OpenWithMenu } from './OpenWithMenu'
 import type { ArtifactFile } from '../../shared/artifactSummary'
 import type { EditorApp } from '../../shared/editors'
 
-const ITEM = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg-muted hover:bg-surface/60'
-
 /**
- * 「打开方式」菜单项列表(不含 Radix,可直接渲染单测)。各项走绝对路径调 window.wraith 的 IPC;
- * 点击后调 onAction?.()(供外层关 popover)。editors 为空时只剩固定项。
+ * 回复下方统一文件卡:新建/已编辑 + 查看更改/审核(→右侧 diff)+ 打开方式 + 撤销(文件级写回)。
+ * before===null(仅 no-op 无 diff)→ 查看更改/审核/撤销 不渲染。撤销带 confirm,成功进「已撤销」态。
  */
-export function OpenWithMenu({ file, workspace, editors, onAction }: {
+export default function FileArtifactCard({ file, workspace, editors, onOpenPreview, onOpenDiff, onUndo }: {
   file: ArtifactFile
   workspace: string | null
   editors: EditorApp[]
-  onAction?: () => void
-}): JSX.Element {
-  const abs = resolveWorkspacePath(file.path, workspace)
-  const run = (fn: () => Promise<unknown>): void => { onAction?.(); void fn().catch(() => {}) }
-  return (
-    <>
-      <button data-testid="openwith-default" className={ITEM} onClick={() => run(() => window.wraith.openPath(abs))}>默认程序</button>
-      {editors.map((ed, i) => (
-        <button key={ed.appPath} data-testid={`openwith-editor-${i}`} className={ITEM}
-          onClick={() => run(() => window.wraith.openWithApp(abs, ed.appPath))}>{ed.name}</button>
-      ))}
-      <div className="my-1 border-t border-border/60" />
-      <button data-testid="openwith-reveal" className={ITEM} onClick={() => run(() => window.wraith.revealInFinder(abs))}>
-        <FolderOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />在 Finder 中显示
-      </button>
-      <button data-testid="openwith-download" className={ITEM} onClick={() => run(() => window.wraith.downloadCopy(abs))}>
-        <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />下载副本
-      </button>
-    </>
-  )
-}
-
-/**
- * 回复下方的文件产物卡:文件名 + 类型标签 + 「打开方式」下拉(Radix popover 包 OpenWithMenu)。
- * 点卡体 → 右侧内容预览(onOpenPreview,in-app,用原 path+content)。
- */
-export default function FileArtifactCard({ file, workspace, editors, onOpenPreview }: {
-  file: ArtifactFile
-  workspace: string | null
-  editors: EditorApp[]
-  onOpenPreview: (filePath: string, content: string) => void
+  onOpenPreview?: (filePath: string, content: string) => void
+  onOpenDiff?: (filePath: string, before: string, after: string) => void
+  onUndo?: (file: ArtifactFile) => Promise<boolean>
 }): JSX.Element {
   const [open, setOpen] = useState(false)
+  const [undone, setUndone] = useState(false)
+  const created = file.kind === 'created'
+  const hasDiff = file.before !== null && !undone
+  const doUndo = async (): Promise<void> => {
+    if (!onUndo || file.before === null) return
+    const name = baseName(file.path)
+    if (!window.confirm(created ? `删除新建的 ${name}?` : `把 ${name} 恢复到编辑前?`)) return
+    if (await onUndo(file)) setUndone(true)
+  }
   return (
     <div data-testid="file-artifact-card" className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2">
-      <FileText className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.5} />
-      <button
-        data-testid="file-artifact-open-preview"
-        onClick={() => onOpenPreview(file.path, file.content)}
-        className="flex min-w-0 flex-1 flex-col items-start text-left"
-      >
-        <span className="max-w-full truncate text-sm font-medium text-fg" title={file.path}>{baseName(file.path)}</span>
-        <span className="text-2xs text-fg-subtle">{fileTypeLabel(file.path)}</span>
-      </button>
+      {created
+        ? <FilePlus className="h-4 w-4 shrink-0 text-ok" strokeWidth={1.5} />
+        : <FileDiff className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.5} />}
+      <div className="flex min-w-0 flex-1 flex-col items-start">
+        <button data-testid="file-artifact-open-preview" onClick={() => onOpenPreview?.(file.path, file.content)}
+          className="max-w-full truncate text-left text-sm font-medium text-fg" title={file.path}>
+          {created ? '新建 ' : '已编辑 '}{baseName(file.path)}
+        </button>
+        {hasDiff && onOpenDiff && (
+          <button data-testid="file-artifact-viewdiff" onClick={() => onOpenDiff(file.path, file.before ?? '', file.content)}
+            className="text-2xs text-fg-subtle hover:text-accent">查看更改 ↗</button>
+        )}
+        {undone && <span data-testid="file-artifact-undone" className="text-2xs text-fg-subtle">已撤销</span>}
+      </div>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <button
-            data-testid="file-artifact-openwith"
-            className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent"
-          >打开方式 <ChevronDown className="h-3 w-3" strokeWidth={1.5} /></button>
+          <button data-testid="file-artifact-openwith"
+            className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent">
+            打开方式 <ChevronDown className="h-3 w-3" strokeWidth={1.5} />
+          </button>
         </PopoverTrigger>
         <PopoverContent align="end" className="w-52">
           <OpenWithMenu file={file} workspace={workspace} editors={editors} onAction={() => setOpen(false)} />
         </PopoverContent>
       </Popover>
+      {hasDiff && onOpenDiff && (
+        <button data-testid="file-artifact-review" onClick={() => onOpenDiff(file.path, file.before ?? '', file.content)}
+          className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent">审核</button>
+      )}
+      {hasDiff && onUndo && (
+        <button data-testid="file-artifact-undo" onClick={() => void doUndo()}
+          className="flex shrink-0 items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-danger hover:text-danger">
+          <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />撤销
+        </button>
+      )}
     </div>
   )
 }
