@@ -1,4 +1,5 @@
 import path from 'path'
+import fs from 'fs'
 import type { EditorApp } from '../shared/editors'
 
 /** 已知编辑器:.app bundle 名 → 展示名。detectEditors 按此顺序输出已装的。 */
@@ -40,4 +41,20 @@ export function isPathWithinWorkspace(target: string, workspace: string): boolea
   if (!workspace) return false
   const rel = path.relative(path.resolve(workspace), path.resolve(target))
   return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel))
+}
+
+/** 文件级撤销:modified 写回 before;created 删除。路径必须在工作区内、before ≤ 5MB。破坏性写,绝不信任调用方路径。 */
+export async function performUndo(
+  req: { workspace: string | null; path: string; before: string; kind: 'created' | 'modified' },
+): Promise<{ ok: boolean; message?: string }> {
+  if (!req.workspace) return { ok: false, message: '无工作区' }
+  if (!isPathWithinWorkspace(req.path, req.workspace)) return { ok: false, message: '路径超出工作区' }
+  if (Buffer.byteLength(req.before, 'utf8') > 5 * 1024 * 1024) return { ok: false, message: '内容超过 5MB' }
+  try {
+    if (req.kind === 'created') await fs.promises.rm(req.path, { force: true })
+    else await fs.promises.writeFile(req.path, req.before, 'utf8')
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, message: (e as Error).message }
+  }
 }

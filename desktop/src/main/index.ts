@@ -48,7 +48,7 @@ import {
   petWindowMoveTo, petWindowResizeToScale, petWindowResetPosition, toElectronMenu,
 } from './petWindow'
 import { runPetdexInstall } from './petInstall'
-import { detectEditors, uniqueDownloadName } from './fileOpen'
+import { detectEditors, uniqueDownloadName, performUndo } from './fileOpen'
 import type { EditorApp } from '../shared/editors'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
@@ -1383,6 +1383,11 @@ ipcMain.handle('wraith:openWithApp', (_e, p: string, appPath: string) => {
 })
 
 ipcMain.handle('wraith:listEditors', (): EditorApp[] => computeEditors())
+
+ipcMain.handle('wraith:undoFileEdit', async (_e, payload: { path: string; before: string; kind: 'created' | 'modified' }): Promise<{ ok: boolean; message?: string }> => {
+  const ws = resolvePersistedWorkspace(app.getPath('userData'))
+  return performUndo({ workspace: ws, path: payload.path, before: payload.before, kind: payload.kind })
+})
 
 ipcMain.handle('wraith:ptyCreate', (_e, opts?: { cwd?: string; cols?: number; rows?: number; theme?: 'light' | 'dark' }) => ptyManager?.create(opts ?? {}) ?? { id: '' })
 ipcMain.handle('wraith:ptyInput', (_e, id: string, data: string) => { ptyManager?.write(id, data) })

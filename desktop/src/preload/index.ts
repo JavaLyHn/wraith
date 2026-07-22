@@ -138,6 +138,7 @@ export interface WraithApi {
   openWithApp(path: string, appPath: string): Promise<void>
   downloadCopy(path: string): Promise<string>
   listEditors(): Promise<EditorApp[]>
+  undoFileEdit(payload: { path: string; before: string; kind: 'created' | 'modified' }): Promise<{ ok: boolean; message?: string }>
   saveTextFile(defaultName: string, content: string): Promise<{ ok: boolean; path?: string }>
   transcribe(audioBase64: string, mime: string): Promise<{ text: string }>
   /** 手动压缩当前对话历史,释放上下文窗口。 */
@@ -584,6 +585,7 @@ const wraith: WraithApi = {
   openWithApp(p, appPath) { return ipcRenderer.invoke('wraith:openWithApp', p, appPath) as Promise<void> },
   downloadCopy(p) { return ipcRenderer.invoke('wraith:downloadCopy', p) as Promise<string> },
   listEditors() { return ipcRenderer.invoke('wraith:listEditors') as Promise<EditorApp[]> },
+  undoFileEdit(payload) { return ipcRenderer.invoke('wraith:undoFileEdit', payload) as Promise<{ ok: boolean; message?: string }> },
   saveTextFile(defaultName, content) {
     return ipcRenderer.invoke('wraith:saveTextFile', defaultName, content) as Promise<{ ok: boolean; path?: string }>
   },
