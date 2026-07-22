@@ -104,6 +104,9 @@ class HitlToolRegistryTest {
         assertFalse(output.ok(), "HITL 拒绝必须 ok=false，否则前端会显示绿色成功徽标");
         assertTrue(output.text().startsWith("[HITL]"));
         assertTrue(output.text().contains("deny-reason"));
+        // 结果须显式声明"未执行、无任何效果"——直接与模型幻觉"已写入"矛盾（见 bug：拒绝后仍答"已写入"）。
+        assertTrue(output.text().contains("未执行"), "拒绝结果须说明操作未执行: " + output.text());
+        assertTrue(output.text().contains("没有产生任何效果"), "拒绝结果须说明无任何效果: " + output.text());
     }
 
     @Test
@@ -118,6 +121,7 @@ class HitlToolRegistryTest {
         assertFalse(output.ok(), "HITL 跳过必须 ok=false，否则前端会显示绿色成功徽标");
         assertTrue(output.text().startsWith("[HITL]"));
         assertTrue(output.text().contains("跳过"));
+        assertTrue(output.text().contains("未执行"), "跳过结果须说明操作未执行: " + output.text());
     }
 
     @Test
