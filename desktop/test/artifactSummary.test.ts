@@ -7,15 +7,15 @@ function tool(name: string, argsJson: string, output: string): Item {
 }
 
 describe('deriveArtifacts', () => {
-  it('files: 按 path 去重,首个 diff 决定 新建/改动', () => {
+  it('files: 按 path 去重,首个 diff 定 kind、content 取最后一次 after', () => {
     const items: Item[] = [
       { type: 'diff', filePath: 'README.md', before: '', after: '你好' },
       { type: 'diff', filePath: 'README.md', before: '你好', after: '你好2' },
       { type: 'diff', filePath: 'src/a.ts', before: 'old', after: 'new' },
     ]
     expect(deriveArtifacts(items, '/proj').files).toEqual([
-      { path: 'README.md', kind: 'created' },
-      { path: 'src/a.ts', kind: 'modified' },
+      { path: 'README.md', kind: 'created', content: '你好2' },
+      { path: 'src/a.ts', kind: 'modified', content: 'new' },
     ])
   })
 

@@ -4,7 +4,7 @@
  */
 import type { Item, ToolCard } from './transcriptReducer'
 
-export interface ArtifactFile { path: string; kind: 'created' | 'modified' }
+export interface ArtifactFile { path: string; kind: 'created' | 'modified'; content: string }
 export interface ArtifactServer { url: string }
 export interface ArtifactSource { path: string; name: string; kind: string }
 export interface ArtifactSummary {
@@ -56,8 +56,12 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
   for (const item of items) {
     switch (item.type) {
       case 'diff': {
-        if (item.filePath && !files.has(item.filePath)) {
-          files.set(item.filePath, { path: item.filePath, kind: item.before === '' ? 'created' : 'modified' })
+        if (item.filePath) {
+          const existing = files.get(item.filePath)
+          // kind 取首个 diff;content 取最后一次 after(展示最新产物)。Map.set 已存在的 key 不改插入顺序。
+          files.set(item.filePath, existing
+            ? { ...existing, content: item.after }
+            : { path: item.filePath, kind: item.before === '' ? 'created' : 'modified', content: item.after })
         }
         break
       }

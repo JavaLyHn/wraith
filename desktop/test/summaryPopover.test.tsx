@@ -10,7 +10,7 @@ const EMPTY: ArtifactSummary = { files: [], servers: [], subagents: null, browse
 
 function full(): ArtifactSummary {
   return {
-    files: [{ path: 'README.md', kind: 'created' }, { path: 'src/a.ts', kind: 'modified' }],
+    files: [{ path: 'README.md', kind: 'created', content: '你好' }, { path: 'src/a.ts', kind: 'modified', content: 'x=1' }],
     servers: [{ url: 'http://localhost:5173' }],
     subagents: { total: 3, done: 2, roles: ['coder'] },
     browserUrl: 'https://b.com',
