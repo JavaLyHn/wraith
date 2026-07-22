@@ -145,3 +145,28 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
 
   return { files: fileList, servers: serverList, subagents, browserUrl, sources: sourceList, workspace, isEmpty }
 }
+
+/**
+ * 把「本回合产出的文件」挂到该回合最后一条 message 项的绝对下标。
+ * 回合以 `user` 项为界;回合无 message 或无文件 → 不产生条目。
+ * key 与 groupToolRuns 的 originalIdx(= items 绝对下标)一致,供 Transcript 命中渲染 chip。
+ */
+export function filesUnderMessages(items: readonly Item[]): Map<number, ArtifactFile[]> {
+  const out = new Map<number, ArtifactFile[]>()
+  let turnStart = 0
+  let lastMsgIdx = -1
+  const flush = (endExclusive: number): void => {
+    if (lastMsgIdx >= 0) {
+      const files = deriveFiles(items.slice(turnStart, endExclusive))
+      if (files.length > 0) out.set(lastMsgIdx, files)
+    }
+  }
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i]
+    if (!it) continue
+    if (it.type === 'user') { flush(i); turnStart = i; lastMsgIdx = -1 }
+    else if (it.type === 'message') { lastMsgIdx = i }
+  }
+  flush(items.length)
+  return out
+}

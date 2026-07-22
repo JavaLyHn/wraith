@@ -1,0 +1,42 @@
+import { describe, it, expect } from 'vitest'
+import { filesUnderMessages } from '../src/shared/artifactSummary'
+import type { Item } from '../src/shared/transcriptReducer'
+
+const wf = (path: string, content: string): Item =>
+  ({ type: 'tool', card: { callId: 'c-' + path, name: 'write_file', argsJson: JSON.stringify({ path, content }), output: '', done: true } })
+const user = (text: string): Item => ({ type: 'user', text })
+const msg = (text: string): Item => ({ type: 'message', text })
+
+describe('filesUnderMessages', () => {
+  it('单回合:文件挂到该回合的 message 下标', () => {
+    const items: Item[] = [user('写readme'), wf('README.md', '你好'), msg('已生成')]
+    const m = filesUnderMessages(items)
+    expect([...m.keys()]).toEqual([2])
+    expect(m.get(2)).toEqual([{ path: 'README.md', kind: 'modified', content: '你好' }])
+  })
+
+  it('一回合多文件:全挂同一 message', () => {
+    const items: Item[] = [user('写两个'), wf('a.ts', 'A'), wf('b.ts', 'B'), msg('done')]
+    expect(filesUnderMessages(items).get(3)).toEqual([
+      { path: 'a.ts', kind: 'modified', content: 'A' },
+      { path: 'b.ts', kind: 'modified', content: 'B' },
+    ])
+  })
+
+  it('两回合:各自文件挂各自 message,不串', () => {
+    const items: Item[] = [user('t1'), wf('a.ts', 'A'), msg('m1'), user('t2'), wf('b.ts', 'B'), msg('m2')]
+    const m = filesUnderMessages(items)
+    expect(m.get(2)).toEqual([{ path: 'a.ts', kind: 'modified', content: 'A' }])
+    expect(m.get(5)).toEqual([{ path: 'b.ts', kind: 'modified', content: 'B' }])
+  })
+
+  it('回合有文件但无 message:不产生条目', () => {
+    const items: Item[] = [user('t'), wf('a.ts', 'A')]
+    expect(filesUnderMessages(items).size).toBe(0)
+  })
+
+  it('回合有 message 但无文件:不产生条目', () => {
+    const items: Item[] = [user('hi'), msg('你好')]
+    expect(filesUnderMessages(items).size).toBe(0)
+  })
+})
