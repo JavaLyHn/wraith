@@ -40,6 +40,7 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
   let userOrdinal = 0 // 渲染期为 user 气泡计数(1-based),rewind 用
   const totalUsers = items.filter(i => i.type === 'user').length
   const containerRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
   // 贴底跟随:初始 true(载入历史直接落底);用户上翻(离底 >80px)即停跟,不打断阅读
   const stickRef = useRef(true)
   const chipsByMsg = useMemo(() => filesUnderMessages(items), [items])
@@ -60,10 +61,18 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
     )
   }
 
+  // 最近一次用户滚动手势(wheel/touch)的时刻。scroll 事件是异步的:内容增长后滞后触发的
+  // scroll 会读到"已变大的 gap",若据此解除跟随会把自动贴底误关(满载下尤甚,且带守卫的钉底
+  // 全被跳过 → 停在底部之上)。故解除跟随只认用户近期手势,内容增长的瞬时偏离一律保持跟随。
+  const lastGestureRef = useRef(0)
+  const markGesture = (): void => { lastGestureRef.current = performance.now() }
+
   const handleScroll = (): void => {
     const el = containerRef.current
     if (!el) return
-    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+    if (atBottom) stickRef.current = true
+    else if (performance.now() - lastGestureRef.current < 200) stickRef.current = false
   }
 
   useEffect(() => {
@@ -74,15 +83,31 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
     if (stickRef.current) el.scrollTop = el.scrollHeight
   }, [items])
 
+  // 内容高度的变化可能发生在 items-effect 之后而不触发它:文件卡挂在 message 下(mock/真实里
+  // message 常先于 tool/diff 到达),末段 tool 输出结算、字体回流等与 items 解耦的增长都会让上面
+  // 那次同步 scrollTop 失准且不再跟随。用 ResizeObserver 观察内容实际尺寸,仍贴底时重新钉底 ——
+  // 因果无关、确定性(配合 [overflow-anchor:none] 阻止浏览器反向补偿)。
+  useEffect(() => {
+    const el = containerRef.current
+    const content = contentRef.current
+    if (!el || !content || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => { if (stickRef.current) el.scrollTop = el.scrollHeight })
+    ro.observe(content)
+    return () => ro.disconnect()
+  }, [])
+
   // [&>*]:shrink-0 必不可少:卡片类子项(tool/thinking/diff)带 overflow-hidden,
   // 其 flex 自动最小高度为 0——内容一旦溢出容器,flex 会把它们压成 2px 边框线
   return (
     <div
       ref={containerRef}
       onScroll={handleScroll}
+      onWheel={markGesture}
+      onTouchMove={markGesture}
       data-testid="transcript"
-      className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-4 [&>*]:shrink-0"
+      className="flex-1 overflow-y-auto px-4 py-4 [overflow-anchor:none]"
     >
+    <div ref={contentRef} className="flex flex-col gap-1 [&>*]:shrink-0">
       {groupToolRuns(items).map((node, nodeIdx) => {
         // 工具组：单张卡片直接渲染（避免双层展开），≥2 张才用可折叠 ToolGroup
         if (node.kind === 'toolGroup') {
@@ -148,6 +173,7 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
       {/* 处理中占位:轮次运行中且尚无任何输出(最后一项仍是刚发的 user 气泡)时显示,
           任何真实内容(plan/team 卡片、thinking、message、tool)到达后 last 不再是 user,自动消失。 */}
       {busy && items[items.length - 1]?.type === 'user' && <WorkingIndicator mode={mode} />}
+    </div>
     </div>
   )
 }
