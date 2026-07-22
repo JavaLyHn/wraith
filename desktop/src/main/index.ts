@@ -48,6 +48,8 @@ import {
   petWindowMoveTo, petWindowResizeToScale, petWindowResetPosition, toElectronMenu,
 } from './petWindow'
 import { runPetdexInstall } from './petInstall'
+import { detectEditors, uniqueDownloadName } from './fileOpen'
+import type { EditorApp } from '../shared/editors'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -1349,6 +1351,34 @@ ipcMain.handle('wraith:checkUpdate', async (_e, beta: boolean) => {
 
 ipcMain.handle('wraith:openExternal', (_e, url: string) => { void shell.openExternal(url) })
 ipcMain.handle('wraith:openPath', (_e, p: string) => shell.openPath(p))
+
+ipcMain.handle('wraith:revealInFinder', (_e, p: string) => { shell.showItemInFolder(p) })
+ipcMain.handle('wraith:openWithApp', (_e, p: string, appPath: string) => {
+  // appPath 必须是真实 .app(来自 listEditors);不接受任意路径,防任意程序执行
+  if (!appPath.endsWith('.app') || !fs.existsSync(appPath)) throw new Error('无效的应用')
+  spawn('open', ['-a', appPath, p], { stdio: 'ignore', detached: true }).unref()
+})
+ipcMain.handle('wraith:downloadCopy', async (_e, p: string): Promise<string> => {
+  const downloads = path.join(os.homedir(), 'Downloads')
+  await fs.promises.mkdir(downloads, { recursive: true })
+  const existing = new Set(await fs.promises.readdir(downloads).catch(() => [] as string[]))
+  const dest = path.join(downloads, uniqueDownloadName(existing, path.basename(p)))
+  await fs.promises.copyFile(p, dest)
+  shell.showItemInFolder(dest)
+  return dest
+})
+let editorsCache: EditorApp[] | null = null
+ipcMain.handle('wraith:listEditors', (): EditorApp[] => {
+  if (editorsCache) return editorsCache
+  const dirs = ['/Applications', path.join(os.homedir(), 'Applications')]
+  const appPaths: string[] = []
+  for (const d of dirs) {
+    try { for (const n of fs.readdirSync(d)) if (n.endsWith('.app')) appPaths.push(path.join(d, n)) }
+    catch { /* 目录不存在,跳过 */ }
+  }
+  editorsCache = detectEditors(appPaths)
+  return editorsCache
+})
 
 ipcMain.handle('wraith:ptyCreate', (_e, opts?: { cwd?: string; cols?: number; rows?: number; theme?: 'light' | 'dark' }) => ptyManager?.create(opts ?? {}) ?? { id: '' })
 ipcMain.handle('wraith:ptyInput', (_e, id: string, data: string) => { ptyManager?.write(id, data) })

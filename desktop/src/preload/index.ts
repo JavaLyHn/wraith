@@ -3,6 +3,7 @@ import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListRes
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
+import type { EditorApp } from '../shared/editors'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -133,6 +134,10 @@ export interface WraithApi {
   checkUpdate(beta: boolean): Promise<UpdateResult>
   openExternal(url: string): Promise<void>
   openPath(path: string): Promise<void>
+  revealInFinder(path: string): Promise<void>
+  openWithApp(path: string, appPath: string): Promise<void>
+  downloadCopy(path: string): Promise<string>
+  listEditors(): Promise<EditorApp[]>
   saveTextFile(defaultName: string, content: string): Promise<{ ok: boolean; path?: string }>
   transcribe(audioBase64: string, mime: string): Promise<{ text: string }>
   /** 手动压缩当前对话历史,释放上下文窗口。 */
@@ -575,6 +580,10 @@ const wraith: WraithApi = {
   openPath(path) {
     return ipcRenderer.invoke('wraith:openPath', path) as Promise<void>
   },
+  revealInFinder(p) { return ipcRenderer.invoke('wraith:revealInFinder', p) as Promise<void> },
+  openWithApp(p, appPath) { return ipcRenderer.invoke('wraith:openWithApp', p, appPath) as Promise<void> },
+  downloadCopy(p) { return ipcRenderer.invoke('wraith:downloadCopy', p) as Promise<string> },
+  listEditors() { return ipcRenderer.invoke('wraith:listEditors') as Promise<EditorApp[]> },
   saveTextFile(defaultName, content) {
     return ipcRenderer.invoke('wraith:saveTextFile', defaultName, content) as Promise<{ ok: boolean; path?: string }>
   },
