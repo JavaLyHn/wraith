@@ -1085,6 +1085,7 @@ export default function App(): JSX.Element {
                       onResendMessage={handleResendMessage}
                       onPlanReview={handlePlanReview}
                       mode={pendingMode}
+                      onOpenArtifact={openArtifact}
                     />
                     <div className="shrink-0 px-4 py-3">{composer}</div>
                   </>

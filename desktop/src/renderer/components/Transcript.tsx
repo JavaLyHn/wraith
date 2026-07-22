@@ -23,9 +23,11 @@ interface TranscriptProps {
   onPlanReview: (reviewId: string, decision: 'execute' | 'supplement' | 'cancel', feedback?: string) => void
   /** 当前轮次模式,用于"处理中"占位文案(正在规划/思考中/组建团队)。 */
   mode: RunMode
+  /** 提供时,DiffCard 显示「在右侧打开」入口。 */
+  onOpenArtifact?: (filePath: string, content: string) => void
 }
 
-export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode }: TranscriptProps): JSX.Element {
+export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode, onOpenArtifact }: TranscriptProps): JSX.Element {
   let userOrdinal = 0 // 渲染期为 user 气泡计数(1-based),rewind 用
   const totalUsers = items.filter(i => i.type === 'user').length
   const containerRef = useRef<HTMLDivElement>(null)
@@ -99,7 +101,7 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
           return <ThinkingBlock key={`think-${originalIdx}`} label={item.label} text={item.text} done={item.done} />
         }
         if (item.type === 'diff') {
-          return <DiffCard key={`diff-${originalIdx}`} filePath={item.filePath} before={item.before} after={item.after} />
+          return <DiffCard key={`diff-${originalIdx}`} filePath={item.filePath} before={item.before} after={item.after} onOpenArtifact={onOpenArtifact} />
         }
         if (item.type === 'plan') {
           return <PlanChecklist key={item.planId} item={item} />
