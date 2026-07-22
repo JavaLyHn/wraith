@@ -63,8 +63,31 @@ function writeFileArgs(card: ToolCard): { path: string; content: string } | null
   return null
 }
 
-export function deriveArtifacts(items: readonly Item[], workspace: string | null): ArtifactSummary {
+/**
+ * 从 items 提取「产物文件」:write_file 工具卡(含 no-op 重写,ok!==false)与 diff 合并;
+ * diff 决定 created/modified(before==='' 为新建且不降级),content 取最新;按 path 去重保序。
+ */
+export function deriveFiles(items: readonly Item[]): ArtifactFile[] {
   const files = new Map<string, ArtifactFile>()
+  for (const item of items) {
+    if (item.type === 'diff') {
+      if (item.filePath) {
+        const existing = files.get(item.filePath)
+        const created = item.before === '' || existing?.kind === 'created'
+        files.set(item.filePath, { path: item.filePath, kind: created ? 'created' : 'modified', content: item.after })
+      }
+    } else if (item.type === 'tool') {
+      const wf = writeFileArgs(item.card)
+      if (wf) {
+        const existing = files.get(wf.path)
+        files.set(wf.path, existing ? { ...existing, content: wf.content } : { path: wf.path, kind: 'modified', content: wf.content })
+      }
+    }
+  }
+  return [...files.values()]
+}
+
+export function deriveArtifacts(items: readonly Item[], workspace: string | null): ArtifactSummary {
   const servers = new Map<string, ArtifactServer>()
   const sources = new Map<string, ArtifactSource>()
   const roles: string[] = []
@@ -75,16 +98,6 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
 
   for (const item of items) {
     switch (item.type) {
-      case 'diff': {
-        if (item.filePath) {
-          const existing = files.get(item.filePath)
-          // content 取最后一次 after(最新产物)。kind:一旦 before==='' 视为新建且不再降级
-          // (兼容 write_file 工具卡先到、把 kind 预设为 modified 的情况)。Map.set 不改插入顺序。
-          const created = item.before === '' || existing?.kind === 'created'
-          files.set(item.filePath, { path: item.filePath, kind: created ? 'created' : 'modified', content: item.after })
-        }
-        break
-      }
       case 'tool': {
         const card = item.card
         if (card.name === 'execute_command' && card.output) {
@@ -101,12 +114,6 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
             const m = card.output.match(HTTP_RE)                 // 无 url 参数才退回抽 output(排除 status/connect)
             if (m) lastOutputUrl = m[0]
           }
-        }
-        const wf = writeFileArgs(card)
-        if (wf) {
-          const existing = files.get(wf.path)
-          // 计入产物(含 no-op 重写);若 diff 已记过则只更新 content、保留 kind(尤其 created)。
-          files.set(wf.path, existing ? { ...existing, content: wf.content } : { path: wf.path, kind: 'modified', content: wf.content })
         }
         break
       }
@@ -129,7 +136,7 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
 
   const browserUrl = lastArgUrl ?? lastOutputUrl
   const subagents = (subTotal > 0 || roles.length > 0) ? { total: subTotal, done: subDone, roles } : null
-  const fileList = [...files.values()]
+  const fileList = deriveFiles(items)
   const serverList = [...servers.values()]
   const sourceList = [...sources.values()]
   const isEmpty =

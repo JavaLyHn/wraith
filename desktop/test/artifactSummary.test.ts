@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveArtifacts } from '../src/shared/artifactSummary'
+import { deriveArtifacts, deriveFiles } from '../src/shared/artifactSummary'
 import type { Item } from '../src/shared/transcriptReducer'
 
 function tool(name: string, argsJson: string, output: string): Item {
@@ -138,5 +138,37 @@ describe('deriveArtifacts', () => {
 
   it('isEmpty: 有任一产物 → false', () => {
     expect(deriveArtifacts([{ type: 'diff', filePath: 'a', before: '', after: 'x' }], null).isEmpty).toBe(false)
+  })
+})
+
+describe('deriveFiles', () => {
+  const tool = (name: string, argsJson: string, output = ''): Item =>
+    ({ type: 'tool', card: { callId: 'c-' + name, name, argsJson, output, done: true } })
+
+  it('write_file 卡计入(含 no-op),按 path 去重、content 取最新', () => {
+    const items: Item[] = [
+      tool('write_file', JSON.stringify({ path: 'a.md', content: 'v1' })),
+      tool('write_file', JSON.stringify({ path: 'a.md', content: 'v2' })),
+    ]
+    expect(deriveFiles(items)).toEqual([{ path: 'a.md', kind: 'modified', content: 'v2' }])
+  })
+
+  it('write_file 卡 + 同路径 diff 合并成一条(diff 定 created)', () => {
+    const items: Item[] = [
+      tool('write_file', JSON.stringify({ path: 'new.md', content: 'x' })),
+      { type: 'diff', filePath: 'new.md', before: '', after: 'x' },
+    ]
+    expect(deriveFiles(items)).toEqual([{ path: 'new.md', kind: 'created', content: 'x' }])
+  })
+
+  it('ok=false 的 write_file 不计', () => {
+    const items: Item[] = [
+      { type: 'tool', card: { callId: 'c1', name: 'write_file', argsJson: JSON.stringify({ path: 'x', content: 'y' }), output: '', done: true, ok: false } },
+    ]
+    expect(deriveFiles(items)).toEqual([])
+  })
+
+  it('无产物 → 空数组', () => {
+    expect(deriveFiles([{ type: 'message', text: 'hi' }])).toEqual([])
   })
 })
