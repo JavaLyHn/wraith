@@ -31,7 +31,7 @@ interface TranscriptProps {
   /** 查看更改/审核 → 右侧 diff。 */
   onOpenDiff?: (filePath: string, before: string, after: string) => void
   /** 撤销:文件级写回 before(created 删除),返回是否成功。 */
-  onUndo?: (file: ArtifactFile) => Promise<boolean>
+  onUndo?: (file: ArtifactFile) => Promise<{ ok: boolean; message?: string }>
   editors?: EditorApp[]
   workspace?: string | null
 }

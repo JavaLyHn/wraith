@@ -46,7 +46,7 @@ describe('查看更改 / 审核 → onOpenDiff(path, before, content)', () => {
     expect(onOpenDiff).toHaveBeenCalledTimes(2)
   })
   it('before===null → 无 查看更改/审核/撤销', () => {
-    render(<FileArtifactCard file={noop} workspace="/proj" editors={editors} onOpenDiff={vi.fn()} onUndo={vi.fn()} />)
+    render(<FileArtifactCard file={noop} workspace="/proj" editors={editors} onOpenDiff={vi.fn()} onUndo={vi.fn(async () => ({ ok: true }))} />)
     expect(screen.queryByTestId('file-artifact-viewdiff')).toBeNull()
     expect(screen.queryByTestId('file-artifact-review')).toBeNull()
     expect(screen.queryByTestId('file-artifact-undo')).toBeNull()
@@ -54,28 +54,37 @@ describe('查看更改 / 审核 → onOpenDiff(path, before, content)', () => {
 })
 
 describe('撤销', () => {
-  it('confirm 后调 onUndo(file),成功显示已撤销', async () => {
+  it('confirm 后调 onUndo(file),成功进已撤销终态并隐藏打开方式', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const onUndo = vi.fn(() => Promise.resolve(true))
+    const onUndo = vi.fn(() => Promise.resolve({ ok: true }))
     render(<FileArtifactCard file={modified} workspace="/proj" editors={editors} onUndo={onUndo} />)
+    expect(screen.getByTestId('file-artifact-openwith')).toBeTruthy()
     fireEvent.click(screen.getByTestId('file-artifact-undo'))
     expect(onUndo).toHaveBeenCalledWith(modified)
-    await waitFor(() => expect(screen.getByText('已撤销')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('file-artifact-undone')).toBeTruthy())
+    // 撤销后:打开方式 / 审核 / 撤销 全部隐藏(终态)
+    expect(screen.queryByTestId('file-artifact-openwith')).toBeNull()
+    expect(screen.queryByTestId('file-artifact-review')).toBeNull()
+    expect(screen.queryByTestId('file-artifact-undo')).toBeNull()
   })
   it('confirm 取消 → 不调 onUndo', () => {
     vi.spyOn(window, 'confirm').mockReturnValue(false)
-    const onUndo = vi.fn(() => Promise.resolve(true))
+    const onUndo = vi.fn(() => Promise.resolve({ ok: true }))
     render(<FileArtifactCard file={modified} workspace="/proj" editors={editors} onUndo={onUndo} />)
     fireEvent.click(screen.getByTestId('file-artifact-undo'))
     expect(onUndo).not.toHaveBeenCalled()
   })
-  it('onUndo 失败(resolve false)→ 撤销失败提示,且不显示已撤销', async () => {
+  it('onUndo 失败 → 弹窗显示真实原因,不进已撤销;关闭可关', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true)
-    const onUndo = vi.fn(() => Promise.resolve(false))
+    const onUndo = vi.fn(() => Promise.resolve({ ok: false, message: '路径超出工作区' }))
     render(<FileArtifactCard file={modified} workspace="/proj" editors={editors} onUndo={onUndo} />)
     fireEvent.click(screen.getByTestId('file-artifact-undo'))
-    await screen.findByText('撤销失败')
-    expect(screen.queryByText('已撤销')).toBeNull()
+    const modal = await screen.findByTestId('file-artifact-undo-failed')
+    expect(modal.textContent).toContain('撤销失败')
+    expect(modal.textContent).toContain('路径超出工作区')
+    expect(screen.queryByTestId('file-artifact-undone')).toBeNull()
+    fireEvent.click(screen.getByTestId('undo-failed-close'))
+    expect(screen.queryByTestId('file-artifact-undo-failed')).toBeNull()
   })
 })
 

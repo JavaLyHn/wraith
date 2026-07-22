@@ -187,13 +187,12 @@ export default function App(): JSX.Element {
     setRightDockPane('artifact')
     setRightDockOpen(true)
   }, [])
-  const handleUndo = useCallback(async (file: ArtifactFile): Promise<boolean> => {
+  const handleUndo = useCallback(async (file: ArtifactFile): Promise<{ ok: boolean; message?: string }> => {
     const abs = resolveWorkspacePath(file.path, state.workspace ?? null)
     try {
-      const r = await window.wraith.undoFileEdit({ path: abs, before: file.before ?? '', kind: file.kind })
-      return r.ok
-    } catch {
-      return false
+      return await window.wraith.undoFileEdit({ path: abs, before: file.before ?? '', kind: file.kind })
+    } catch (e) {
+      return { ok: false, message: (e as Error).message }
     }
   }, [state.workspace])
   const [editors, setEditors] = useState<EditorApp[]>([])
