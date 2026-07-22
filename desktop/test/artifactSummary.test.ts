@@ -14,8 +14,8 @@ describe('deriveArtifacts', () => {
       { type: 'diff', filePath: 'src/a.ts', before: 'old', after: 'new' },
     ]
     expect(deriveArtifacts(items, '/proj').files).toEqual([
-      { path: 'README.md', kind: 'created', content: '你好2' },
-      { path: 'src/a.ts', kind: 'modified', content: 'new' },
+      { path: 'README.md', kind: 'created', content: '你好2', before: '' },
+      { path: 'src/a.ts', kind: 'modified', content: 'new', before: 'old' },
     ])
   })
 
@@ -24,7 +24,7 @@ describe('deriveArtifacts', () => {
       tool('write_file', JSON.stringify({ path: 'README.md', content: '你好' }), '文件已写入: README.md'),
     ]
     expect(deriveArtifacts(items, '/proj').files).toEqual([
-      { path: 'README.md', kind: 'modified', content: '你好' },
+      { path: 'README.md', kind: 'modified', content: '你好', before: null },
     ])
     expect(deriveArtifacts(items, '/proj').isEmpty).toBe(false)
   })
@@ -34,7 +34,7 @@ describe('deriveArtifacts', () => {
       tool('write_file', JSON.stringify({ path: 'a.txt', content: 'v2' }), 'ok'),
       { type: 'diff', filePath: 'a.txt', before: 'v1', after: 'v2' },
     ]
-    expect(deriveArtifacts(items, null).files).toEqual([{ path: 'a.txt', kind: 'modified', content: 'v2' }])
+    expect(deriveArtifacts(items, null).files).toEqual([{ path: 'a.txt', kind: 'modified', content: 'v2', before: 'v1' }])
   })
 
   it('files: 新建文件 kind=created,即便 write_file 工具卡先于 diff 到达', () => {
@@ -42,7 +42,7 @@ describe('deriveArtifacts', () => {
       tool('write_file', JSON.stringify({ path: 'new.md', content: 'x' }), 'ok'),
       { type: 'diff', filePath: 'new.md', before: '', after: 'x' },
     ]
-    expect(deriveArtifacts(items, null).files[0]).toEqual({ path: 'new.md', kind: 'created', content: 'x' })
+    expect(deriveArtifacts(items, null).files[0]).toEqual({ path: 'new.md', kind: 'created', content: 'x', before: '' })
   })
 
   it('files: 被拒绝的 write_file(ok=false)不计入产物', () => {
@@ -150,7 +150,7 @@ describe('deriveFiles', () => {
       tool('write_file', JSON.stringify({ path: 'a.md', content: 'v1' })),
       tool('write_file', JSON.stringify({ path: 'a.md', content: 'v2' })),
     ]
-    expect(deriveFiles(items)).toEqual([{ path: 'a.md', kind: 'modified', content: 'v2' }])
+    expect(deriveFiles(items)).toEqual([{ path: 'a.md', kind: 'modified', content: 'v2', before: null }])
   })
 
   it('write_file 卡 + 同路径 diff 合并成一条(diff 定 created)', () => {
@@ -158,7 +158,7 @@ describe('deriveFiles', () => {
       tool('write_file', JSON.stringify({ path: 'new.md', content: 'x' })),
       { type: 'diff', filePath: 'new.md', before: '', after: 'x' },
     ]
-    expect(deriveFiles(items)).toEqual([{ path: 'new.md', kind: 'created', content: 'x' }])
+    expect(deriveFiles(items)).toEqual([{ path: 'new.md', kind: 'created', content: 'x', before: '' }])
   })
 
   it('ok=false 的 write_file 不计', () => {

@@ -5,7 +5,7 @@ import FileArtifactCard, { OpenWithMenu } from '../src/renderer/components/FileA
 import type { ArtifactFile } from '../src/shared/artifactSummary'
 import type { EditorApp } from '../src/shared/editors'
 
-const file: ArtifactFile = { path: 'sub/README.md', kind: 'created', content: '你好' }
+const file: ArtifactFile = { path: 'sub/README.md', kind: 'created', content: '你好', before: '' }
 const editors: EditorApp[] = [{ name: 'VS Code', appPath: '/Applications/Visual Studio Code.app' }]
 
 function mockWraith() {

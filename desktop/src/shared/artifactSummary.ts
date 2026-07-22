@@ -4,7 +4,7 @@
  */
 import type { Item, ToolCard } from './transcriptReducer'
 
-export interface ArtifactFile { path: string; kind: 'created' | 'modified'; content: string }
+export interface ArtifactFile { path: string; kind: 'created' | 'modified'; content: string; before: string | null }
 export interface ArtifactServer { url: string }
 export interface ArtifactSource { path: string; name: string; kind: string }
 export interface ArtifactSummary {
@@ -74,13 +74,14 @@ export function deriveFiles(items: readonly Item[]): ArtifactFile[] {
       if (item.filePath) {
         const existing = files.get(item.filePath)
         const created = item.before === '' || existing?.kind === 'created'
-        files.set(item.filePath, { path: item.filePath, kind: created ? 'created' : 'modified', content: item.after })
+        const before = existing?.before != null ? existing.before : item.before
+        files.set(item.filePath, { path: item.filePath, kind: created ? 'created' : 'modified', content: item.after, before })
       }
     } else if (item.type === 'tool') {
       const wf = writeFileArgs(item.card)
       if (wf) {
         const existing = files.get(wf.path)
-        files.set(wf.path, existing ? { ...existing, content: wf.content } : { path: wf.path, kind: 'modified', content: wf.content })
+        files.set(wf.path, existing ? { ...existing, content: wf.content } : { path: wf.path, kind: 'modified', content: wf.content, before: null })
       }
     }
   }
