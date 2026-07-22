@@ -19,6 +19,39 @@ describe('deriveArtifacts', () => {
     ])
   })
 
+  it('files: write_file 工具卡计入产物(含内容未变的 no-op 重写,后端不发 diff)', () => {
+    const items: Item[] = [
+      tool('write_file', JSON.stringify({ path: 'README.md', content: '你好' }), '文件已写入: README.md'),
+    ]
+    expect(deriveArtifacts(items, '/proj').files).toEqual([
+      { path: 'README.md', kind: 'modified', content: '你好' },
+    ])
+    expect(deriveArtifacts(items, '/proj').isEmpty).toBe(false)
+  })
+
+  it('files: write_file 工具卡 + 同路径 diff 合并为一条(content 取最新)', () => {
+    const items: Item[] = [
+      tool('write_file', JSON.stringify({ path: 'a.txt', content: 'v2' }), 'ok'),
+      { type: 'diff', filePath: 'a.txt', before: 'v1', after: 'v2' },
+    ]
+    expect(deriveArtifacts(items, null).files).toEqual([{ path: 'a.txt', kind: 'modified', content: 'v2' }])
+  })
+
+  it('files: 新建文件 kind=created,即便 write_file 工具卡先于 diff 到达', () => {
+    const items: Item[] = [
+      tool('write_file', JSON.stringify({ path: 'new.md', content: 'x' }), 'ok'),
+      { type: 'diff', filePath: 'new.md', before: '', after: 'x' },
+    ]
+    expect(deriveArtifacts(items, null).files[0]).toEqual({ path: 'new.md', kind: 'created', content: 'x' })
+  })
+
+  it('files: 被拒绝的 write_file(ok=false)不计入产物', () => {
+    const items: Item[] = [
+      { type: 'tool', card: { callId: 'c1', name: 'write_file', argsJson: JSON.stringify({ path: 'x.md', content: 'y' }), output: '[HITL] 操作已被拒绝', done: true, ok: false } },
+    ]
+    expect(deriveArtifacts(items, null).files).toEqual([])
+  })
+
   it('servers: 从 execute_command 输出抽回环 URL,归一化 + 去重(含尾斜杠合并)', () => {
     const items: Item[] = [
       tool('execute_command', '{"command":"npm run dev"}', 'VITE ready at http://localhost:5173/\nlocalhost:5173'),

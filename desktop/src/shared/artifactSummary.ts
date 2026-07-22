@@ -46,6 +46,23 @@ function isNonNavBrowserTool(name: string): boolean {
   return /(?:status|connect|disconnect)$/.test(name)
 }
 
+/**
+ * write_file 工具卡的 {path, content}:把"本会话写过的文件"计入产物,**包含内容未变、
+ * 后端 no-op 判定而不发 diff 的重写**(否则重复生成同内容文件会显示"暂无产物")。
+ * ok===false(被 HITL 拒绝/策略拦截/失败)或参数非法 → null,不计。
+ */
+function writeFileArgs(card: ToolCard): { path: string; content: string } | null {
+  if (card.name !== 'write_file' || card.ok === false) return null
+  try {
+    const args = JSON.parse(card.argsJson) as Record<string, unknown>
+    const path = args['path']
+    if (typeof path === 'string' && path) {
+      return { path, content: typeof args['content'] === 'string' ? args['content'] : '' }
+    }
+  } catch { /* 非 JSON,忽略 */ }
+  return null
+}
+
 export function deriveArtifacts(items: readonly Item[], workspace: string | null): ArtifactSummary {
   const files = new Map<string, ArtifactFile>()
   const servers = new Map<string, ArtifactServer>()
@@ -61,10 +78,10 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
       case 'diff': {
         if (item.filePath) {
           const existing = files.get(item.filePath)
-          // kind 取首个 diff;content 取最后一次 after(展示最新产物)。Map.set 已存在的 key 不改插入顺序。
-          files.set(item.filePath, existing
-            ? { ...existing, content: item.after }
-            : { path: item.filePath, kind: item.before === '' ? 'created' : 'modified', content: item.after })
+          // content 取最后一次 after(最新产物)。kind:一旦 before==='' 视为新建且不再降级
+          // (兼容 write_file 工具卡先到、把 kind 预设为 modified 的情况)。Map.set 不改插入顺序。
+          const created = item.before === '' || existing?.kind === 'created'
+          files.set(item.filePath, { path: item.filePath, kind: created ? 'created' : 'modified', content: item.after })
         }
         break
       }
@@ -84,6 +101,12 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
             const m = card.output.match(HTTP_RE)                 // 无 url 参数才退回抽 output(排除 status/connect)
             if (m) lastOutputUrl = m[0]
           }
+        }
+        const wf = writeFileArgs(card)
+        if (wf) {
+          const existing = files.get(wf.path)
+          // 计入产物(含 no-op 重写);若 diff 已记过则只更新 content、保留 kind(尤其 created)。
+          files.set(wf.path, existing ? { ...existing, content: wf.content } : { path: wf.path, kind: 'modified', content: wf.content })
         }
         break
       }
