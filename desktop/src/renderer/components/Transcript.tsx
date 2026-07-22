@@ -8,7 +8,8 @@ import ToolGroup from './ToolGroup'
 import DiffCard from './DiffCard'
 import UserMessage from './UserMessage'
 import AgentMessage from './AgentMessage'
-import ArtifactChips from './ArtifactChips'
+import FileArtifactCard from './FileArtifactCard'
+import type { EditorApp } from '../../shared/editors'
 import { filesUnderMessages } from '../../shared/artifactSummary'
 import { PlanChecklist, PlanReviewCard } from './PlanCard'
 import { TeamCard } from './TeamCard'
@@ -27,9 +28,11 @@ interface TranscriptProps {
   mode: RunMode
   /** 提供时,DiffCard 显示「在右侧打开」入口。 */
   onOpenArtifact?: (filePath: string, content: string) => void
+  editors?: EditorApp[]
+  workspace?: string | null
 }
 
-export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode, onOpenArtifact }: TranscriptProps): JSX.Element {
+export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode, onOpenArtifact, editors, workspace }: TranscriptProps): JSX.Element {
   let userOrdinal = 0 // 渲染期为 user 气泡计数(1-based),rewind 用
   const totalUsers = items.filter(i => i.type === 'user').length
   const containerRef = useRef<HTMLDivElement>(null)
@@ -94,7 +97,16 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
           return (
             <Fragment key={`msg-${originalIdx}`}>
               <AgentMessage text={item.text} />
-              {chips && onOpenArtifact && <ArtifactChips files={chips} onOpenArtifact={onOpenArtifact} />}
+              {chips && onOpenArtifact && (
+                <div className="flex gap-2.5">
+                  <div className="w-6 shrink-0" aria-hidden />
+                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+                    {chips.map(f => (
+                      <FileArtifactCard key={f.path} file={f} workspace={workspace ?? null} editors={editors ?? []} onOpenPreview={onOpenArtifact} />
+                    ))}
+                  </div>
+                </div>
+              )}
             </Fragment>
           )
         }

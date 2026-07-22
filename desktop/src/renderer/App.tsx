@@ -2,6 +2,7 @@ import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
 import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode } from '../shared/types'
 import type { PreviewArtifact } from '../shared/artifactSummary'
+import type { EditorApp } from '../shared/editors'
 import type { McpFormValue } from './components/McpServerForm'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
 import { createThrottleLatest, type ThrottledPush } from '../shared/throttleLatest'
@@ -180,6 +181,8 @@ export default function App(): JSX.Element {
     setRightDockPane('artifact')
     setRightDockOpen(true)
   }, [])
+  const [editors, setEditors] = useState<EditorApp[]>([])
+  useEffect(() => { void window.wraith.listEditors().then(setEditors).catch(() => {}) }, [])
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('wraith.sidebar.collapsed') === '1' } catch { return false }
@@ -1088,6 +1091,8 @@ export default function App(): JSX.Element {
                       onPlanReview={handlePlanReview}
                       mode={pendingMode}
                       onOpenArtifact={openArtifact}
+                      editors={editors}
+                      workspace={state.workspace ?? null}
                     />
                     <div className="shrink-0 px-4 py-3">{composer}</div>
                   </>
