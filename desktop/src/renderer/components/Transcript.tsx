@@ -44,6 +44,22 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
   const stickRef = useRef(true)
   const chipsByMsg = useMemo(() => filesUnderMessages(items), [items])
 
+  const renderChips = (idx: number): JSX.Element | null => {
+    const chips = chipsByMsg.get(idx)
+    if (!chips) return null
+    return (
+      <div className="flex gap-2.5">
+        <div className="w-6 shrink-0" aria-hidden />
+        <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+          {chips.map(f => (
+            <FileArtifactCard key={f.path} file={f} workspace={workspace ?? null} editors={editors ?? []}
+              onOpenPreview={onOpenArtifact} onOpenDiff={onOpenDiff} onUndo={onUndo} />
+          ))}
+        </div>
+      </div>
+    )
+  }
+
   const handleScroll = (): void => {
     const el = containerRef.current
     if (!el) return
@@ -83,35 +99,26 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
         if (item.type === 'user') {
           userOrdinal++
           return (
-            <UserMessage
-              key={`user-${userOrdinal}`}
-              text={item.text}
-              attachments={item.attachments}
-              ordinal={userOrdinal}
-              isLastUser={userOrdinal === totalUsers}
-              busy={busy}
-              onEdit={onEditMessage}
-              onDelete={onDeleteMessage}
-              onResend={onResendMessage}
-            />
+            <Fragment key={`user-${userOrdinal}`}>
+              <UserMessage
+                text={item.text}
+                attachments={item.attachments}
+                ordinal={userOrdinal}
+                isLastUser={userOrdinal === totalUsers}
+                busy={busy}
+                onEdit={onEditMessage}
+                onDelete={onDeleteMessage}
+                onResend={onResendMessage}
+              />
+              {renderChips(originalIdx)}
+            </Fragment>
           )
         }
         if (item.type === 'message') {
-          const chips = chipsByMsg.get(originalIdx)
           return (
             <Fragment key={`msg-${originalIdx}`}>
               <AgentMessage text={item.text} />
-              {chips && (
-                <div className="flex gap-2.5">
-                  <div className="w-6 shrink-0" aria-hidden />
-                  <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-                    {chips.map(f => (
-                      <FileArtifactCard key={f.path} file={f} workspace={workspace ?? null} editors={editors ?? []}
-                        onOpenPreview={onOpenArtifact} onOpenDiff={onOpenDiff} onUndo={onUndo} />
-                    ))}
-                  </div>
-                </div>
-              )}
+              {renderChips(originalIdx)}
             </Fragment>
           )
         }

@@ -153,24 +153,29 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
 }
 
 /**
- * 把「本回合产出的文件」挂到该回合最后一条 message 项的绝对下标。
- * 回合以 `user` 项为界;回合无 message 或无文件 → 不产生条目。
+ * 把「本回合产出的文件」挂到该回合最后一条 message 项的绝对下标;若该回合无 message
+ * (react 迭代上限/取消/IOException 等提前结束),回退挂到该回合的 user 项。
+ * 回合以 `user` 项为界;回合无锚点(message 与 user 都没有)或无文件 → 不产生条目。
  * key 与 groupToolRuns 的 originalIdx(= items 绝对下标)一致,供 Transcript 命中渲染 chip。
  */
 export function filesUnderMessages(items: readonly Item[]): Map<number, ArtifactFile[]> {
   const out = new Map<number, ArtifactFile[]>()
   let turnStart = 0
+  let userIdx = -1
   let lastMsgIdx = -1
   const flush = (endExclusive: number): void => {
-    if (lastMsgIdx >= 0) {
+    // 锚点:优先本轮最后一条 assistant message;若该轮无 message(react 迭代上限/取消/
+    // IOException 等提前结束),回退到该轮的 user 项,保证写过的文件仍在界面显示、不随 message 缺失而消失。
+    const anchor = lastMsgIdx >= 0 ? lastMsgIdx : userIdx
+    if (anchor >= 0) {
       const files = deriveFiles(items.slice(turnStart, endExclusive))
-      if (files.length > 0) out.set(lastMsgIdx, files)
+      if (files.length > 0) out.set(anchor, files)
     }
   }
   for (let i = 0; i < items.length; i++) {
     const it = items[i]
     if (!it) continue
-    if (it.type === 'user') { flush(i); turnStart = i; lastMsgIdx = -1 }
+    if (it.type === 'user') { flush(i); turnStart = i; userIdx = i; lastMsgIdx = -1 }
     else if (it.type === 'message') { lastMsgIdx = i }
   }
   flush(items.length)

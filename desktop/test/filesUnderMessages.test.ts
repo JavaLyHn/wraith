@@ -30,8 +30,15 @@ describe('filesUnderMessages', () => {
     expect(m.get(5)).toEqual([{ path: 'b.ts', kind: 'modified', content: 'B', before: null }])
   })
 
-  it('回合有文件但无 message:不产生条目', () => {
+  it('回合有文件但无 message:回退挂到该回合的 user 项(react 提前结束场景)', () => {
     const items: Item[] = [user('t'), wf('a.ts', 'A')]
+    const m = filesUnderMessages(items)
+    expect([...m.keys()]).toEqual([0])
+    expect(m.get(0)).toEqual([{ path: 'a.ts', kind: 'modified', content: 'A', before: null }])
+  })
+
+  it('无前导 user 且无 message:无锚点,不产生条目', () => {
+    const items: Item[] = [wf('a.ts', 'A')]
     expect(filesUnderMessages(items).size).toBe(0)
   })
 
