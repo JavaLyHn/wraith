@@ -11,6 +11,8 @@ interface DiffViewProps {
   onStats?: (added: number, removed: number) => void
   /** true 时 host 高度跟随父容器(style.height:'100%'),跳过 80~400 的内容自适应钳制。 */
   fill?: boolean
+  /** true 时两列并排显示(类 git side-by-side);默认 false 为行内 diff。 */
+  sideBySide?: boolean
 }
 
 let uriSeq = 0 // 同一文件多张卡片时保证 model URI 唯一
@@ -19,7 +21,7 @@ let uriSeq = 0 // 同一文件多张卡片时保证 model URI 唯一
  * 只读 inline DiffEditor:hideUnchangedRegions 原生 per-hunk 折叠;
  * 高度按内容 clamp(80~400px);Monaco 动态加载失败降级为纯文本双块。
  */
-export default function DiffView({ filePath, before, after, onStats, fill }: DiffViewProps): JSX.Element {
+export default function DiffView({ filePath, before, after, onStats, fill, sideBySide }: DiffViewProps): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null)
   const onStatsRef = useRef(onStats)
   onStatsRef.current = onStats
@@ -55,7 +57,7 @@ export default function DiffView({ filePath, before, after, onStats, fill }: Dif
       modified = monaco.editor.createModel(after, undefined, monaco.Uri.parse(`wraith-diff://${uniq}/after/${encodedPath}`))
       editor = monaco.editor.createDiffEditor(hostRef.current, {
         readOnly: true,
-        renderSideBySide: false,
+        renderSideBySide: !!sideBySide,
         hideUnchangedRegions: { enabled: true },
         minimap: { enabled: false },
         scrollBeyondLastLine: false,
@@ -86,7 +88,7 @@ export default function DiffView({ filePath, before, after, onStats, fill }: Dif
       original?.dispose()
       modified?.dispose()
     }
-  }, [filePath, before, after])
+  }, [filePath, before, after, sideBySide])
 
   if (failed) {
     return (

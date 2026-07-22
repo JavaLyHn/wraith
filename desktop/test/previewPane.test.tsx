@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import PreviewPane from '../src/renderer/components/PreviewPane'
 
 afterEach(() => cleanup())
@@ -24,5 +24,12 @@ describe('PreviewPane', () => {
     // 此刻 DiffView 尚未 setFailed(true),host 仍是初始同步渲染出的 diff-view div。
     const host = screen.getByTestId('diff-view') as HTMLElement
     expect(host.style.height).toBe('100%')
+  })
+  it('diff 分支:有分两列切换按钮,点击翻转 aria-pressed', () => {
+    render(<PreviewPane preview={{ kind: 'diff', filePath: 'a.ts', before: 'x', after: 'y' }} />)
+    const btn = screen.getByTestId('diff-split-toggle')
+    expect(btn.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(btn)
+    expect(btn.getAttribute('aria-pressed')).toBe('true')
   })
 })
