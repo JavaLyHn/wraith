@@ -29,14 +29,18 @@ function normalizeLoopback(raw: string): string {
   return u
 }
 
-/** 浏览器工具的目标 URL:先 argsJson.url,再从 output 抽首个 http(s)。 */
-function browserToolUrl(card: ToolCard): string | null {
+/** 浏览器工具 argsJson 里的目标 URL(仅导航类工具会带,如 navigate_page/new_page);无则 null。 */
+function browserArgUrl(card: ToolCard): string | null {
   try {
     const args = JSON.parse(card.argsJson) as Record<string, unknown>
     if (typeof args['url'] === 'string' && args['url'].trim()) return args['url'].trim()
   } catch { /* 非 JSON,忽略 */ }
-  const m = card.output ? card.output.match(HTTP_RE) : null
-  return m ? m[0] : null
+  return null
+}
+
+/** 非导航类浏览器工具(状态/连接查询),其 output 里的 URL 常是 CDP 端点,不能当导航目标。 */
+function isNonNavBrowserTool(name: string): boolean {
+  return /(?:status|connect|disconnect)$/.test(name)
 }
 
 export function deriveArtifacts(items: readonly Item[], workspace: string | null): ArtifactSummary {
@@ -46,7 +50,8 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
   const roles: string[] = []
   let subTotal = 0
   let subDone = 0
-  let browserUrl: string | null = null
+  let lastArgUrl: string | null = null
+  let lastOutputUrl: string | null = null
 
   for (const item of items) {
     switch (item.type) {
@@ -65,8 +70,13 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
           }
         }
         if (card.name.startsWith('browser') || card.name.startsWith('mcp__chrome-devtools__')) {
-          const u = browserToolUrl(card)
-          if (u) browserUrl = u
+          const argUrl = browserArgUrl(card)
+          if (argUrl) {
+            lastArgUrl = argUrl                                  // 导航目标优先
+          } else if (!isNonNavBrowserTool(card.name) && card.output) {
+            const m = card.output.match(HTTP_RE)                 // 无 url 参数才退回抽 output(排除 status/connect)
+            if (m) lastOutputUrl = m[0]
+          }
         }
         break
       }
@@ -87,6 +97,7 @@ export function deriveArtifacts(items: readonly Item[], workspace: string | null
     }
   }
 
+  const browserUrl = lastArgUrl ?? lastOutputUrl
   const subagents = (subTotal > 0 || roles.length > 0) ? { total: subTotal, done: subDone, roles } : null
   const fileList = [...files.values()]
   const serverList = [...servers.values()]

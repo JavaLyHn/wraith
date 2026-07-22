@@ -105,7 +105,9 @@ export function SummaryContent({ summary, workspace, onOpenPath, onOpenExternal 
 /** 顶栏「产物摘要」按钮 + 悬浮卡薄壳:派生摘要 + Radix popover + 接 window.wraith。 */
 export default function SummaryPopover({ items, workspace }: { items: readonly Item[]; workspace: string | null }): JSX.Element {
   const [open, setOpen] = useState(false)
-  const summary = useMemo(() => deriveArtifacts(items, workspace), [items, workspace])
+  // popover 关闭时不派生:SummaryPopover 常驻顶栏,流式期间 items 每个 delta 都变,
+  // 关着还全量扫 execute_command 输出跑正则纯属浪费;关闭态内容也不渲染,给空摘要即可。
+  const summary = useMemo(() => (open ? deriveArtifacts(items, workspace) : deriveArtifacts([], workspace)), [open, items, workspace])
   const onOpenPath = (p: string): void => { void window.wraith.openPath(p).catch(() => {}) }
   const onOpenExternal = (u: string): void => { void window.wraith.openExternal(u).catch(() => {}) }
   return (

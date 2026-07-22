@@ -50,6 +50,28 @@ describe('deriveArtifacts', () => {
     expect(deriveArtifacts(items, null).browserUrl).toBe('https://b.com')
   })
 
+  it('browser: 导航目标(argsJson.url)优先于之后检查类工具 output 刮到的 URL', () => {
+    const items: Item[] = [
+      tool('mcp__chrome-devtools__navigate_page', '{"url":"https://target.com"}', ''),
+      tool('mcp__chrome-devtools__take_snapshot', '{}', 'page: https://scraped-from-snapshot.com'),
+    ]
+    expect(deriveArtifacts(items, null).browserUrl).toBe('https://target.com')
+  })
+
+  it('browser: 无任何 url 参数时退回从导航类工具 output 抽 URL', () => {
+    const items: Item[] = [
+      tool('browser_navigate', '{}', 'navigated to https://fallback.com ok'),
+    ]
+    expect(deriveArtifacts(items, null).browserUrl).toBe('https://fallback.com')
+  })
+
+  it('browser: 忽略 status/connect 类工具 output 里的 CDP 端点', () => {
+    const items: Item[] = [
+      tool('browser_status', '{}', 'connected: http://127.0.0.1:9222/devtools'),
+    ]
+    expect(deriveArtifacts(items, null).browserUrl).toBeNull()
+  })
+
   it('subagents: 聚合 team 步数与角色;无 team → null', () => {
     expect(deriveArtifacts([], null).subagents).toBeNull()
     const team: Item = {
