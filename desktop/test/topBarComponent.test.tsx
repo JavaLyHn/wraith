@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import TopBar from '../src/renderer/components/TopBar'
 
 afterEach(() => cleanup())
@@ -24,5 +24,24 @@ describe('TopBar', () => {
     expect(screen.queryByTestId('terminal-toggle')).toBeNull()
     expect(screen.queryByTestId('rightdock-toggle')).toBeNull()
     expect(screen.getByTestId('sidebar-toggle')).toBeTruthy()
+  })
+
+  it('侧栏 glyph 反映折叠态:展开=open、折叠=关', () => {
+    const { rerender } = render(<TopBar {...base} sidebarCollapsed={false} />)
+    const fill = () => within(screen.getByTestId('sidebar-toggle')).getByTestId('panel-fill')
+    expect(fill().getAttribute('data-open')).toBe('true')
+    expect(fill().getAttribute('data-side')).toBe('left')
+    rerender(<TopBar {...base} sidebarCollapsed={true} />)
+    expect(fill().getAttribute('data-open')).toBe('false')
+  })
+
+  it('终端/右栏 glyph 随各自 open prop 翻转,side 正确', () => {
+    render(<TopBar {...base} terminalOpen rightDockOpen={false} />)
+    const term = within(screen.getByTestId('terminal-toggle')).getByTestId('panel-fill')
+    const dock = within(screen.getByTestId('rightdock-toggle')).getByTestId('panel-fill')
+    expect(term.getAttribute('data-open')).toBe('true')
+    expect(term.getAttribute('data-side')).toBe('bottom')
+    expect(dock.getAttribute('data-open')).toBe('false')
+    expect(dock.getAttribute('data-side')).toBe('right')
   })
 })

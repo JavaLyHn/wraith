@@ -1,7 +1,8 @@
-import { PanelLeft, PanelRight, SquareTerminal } from 'lucide-react'
+import PanelToggleIcon from './PanelToggleIcon'
 import { topBarLeftPad } from '../lib/topBar'
 
-/** 贯通整窗顶栏:左簇=交通灯内衬 + 侧栏切换(恒显);右簇=终端 + 右栏(恒显);中段 drag。 */
+/** 贯通整窗顶栏:左簇=交通灯内衬 + 侧栏切换(恒显);右簇=终端 + 右栏(恒显);中段 drag。
+ *  三键用 Codex 式自绘 glyph(PanelToggleIcon):分隔线滑动+填充、单色墨;hover 显柔底、开态常驻。 */
 export default function TopBar({ platform, sidebarCollapsed, onToggleSidebar, showChat, terminalOpen, onToggleTerminal, rightDockOpen, onToggleRightDock }: {
   platform: string
   sidebarCollapsed: boolean
@@ -12,21 +13,23 @@ export default function TopBar({ platform, sidebarCollapsed, onToggleSidebar, sh
   rightDockOpen: boolean
   onToggleRightDock: () => void
 }): JSX.Element {
-  const btn = (active: boolean): string =>
-    'flex items-center rounded-lg p-1.5 text-xs transition duration-150 active:scale-90 motion-reduce:transform-none hover:bg-fg/5 hover:text-fg [-webkit-app-region:no-drag] ' + (active ? 'text-accent' : 'text-fg-muted')
+  // 单色墨 + squircle 柔底:静息浅墨无底、hover 深墨淡底、开态深墨常驻底(无投影)。
+  const btn = (open: boolean): string =>
+    'flex items-center rounded-[10px] p-1.5 transition-colors duration-150 active:scale-90 motion-reduce:transform-none [-webkit-app-region:no-drag] ' +
+    (open ? 'bg-fg/[0.08] text-fg' : 'text-fg-muted hover:bg-fg/[0.06] hover:text-fg')
   return (
     <div data-testid="topbar" className={'flex h-[38px] shrink-0 items-center [-webkit-app-region:drag] ' + topBarLeftPad(platform)}>
-      <button data-testid="sidebar-toggle" onClick={onToggleSidebar} title={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'} className={btn(false)}>
-        <PanelLeft className="h-4 w-4" strokeWidth={1.5} />
+      <button data-testid="sidebar-toggle" onClick={onToggleSidebar} title={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'} className={btn(!sidebarCollapsed)}>
+        <PanelToggleIcon side="left" open={!sidebarCollapsed} />
       </button>
       <div className="flex-1" />
       {showChat && (
         <div className="flex items-center gap-1 pr-2">
           <button data-testid="terminal-toggle" onClick={onToggleTerminal} title="终端" className={btn(terminalOpen)}>
-            <SquareTerminal className="h-4 w-4" strokeWidth={1.5} />
+            <PanelToggleIcon side="bottom" open={terminalOpen} />
           </button>
           <button data-testid="rightdock-toggle" onClick={onToggleRightDock} title="右侧面板(浏览器/终端)" className={btn(rightDockOpen)}>
-            <PanelRight className="h-4 w-4" strokeWidth={1.5} />
+            <PanelToggleIcon side="right" open={rightDockOpen} />
           </button>
         </div>
       )}
