@@ -5,7 +5,7 @@ export type PanelSide = 'left' | 'right' | 'bottom'
 /**
  * Codex 式面板切换 glyph:静态窗口轮廓 + 会 translate 的分隔线 + 会 scale 的填充块。
  * open 变化时:分隔线从外边框滑到格内侧、对应格同步填实(线丝滑滑动 + 填充)。单色墨(currentColor)。
- * 填充块外缘严格对齐分隔线开态中心,避免视觉错位。
+ * 填充块朝中心一侧的边(内侧边)严格对齐分隔线开态中心,避免视觉错位。
  */
 type Geo = {
   fill: { x: number; y: number; width: number; height: number }

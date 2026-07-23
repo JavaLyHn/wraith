@@ -30,4 +30,9 @@ describe('PanelToggleIcon', () => {
     const { container } = render(<PanelToggleIcon side="right" open className="h-5 w-5" />)
     expect(container.querySelector('svg')?.getAttribute('class')).toContain('h-5 w-5')
   })
+
+  it('未传 className 时 svg 使用默认 h-4 w-4', () => {
+    const { container } = render(<PanelToggleIcon side="left" open={false} />)
+    expect(container.querySelector('svg')?.getAttribute('class')).toContain('h-4 w-4')
+  })
 })

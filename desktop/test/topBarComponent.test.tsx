@@ -31,8 +31,11 @@ describe('TopBar', () => {
     const fill = () => within(screen.getByTestId('sidebar-toggle')).getByTestId('panel-fill')
     expect(fill().getAttribute('data-open')).toBe('true')
     expect(fill().getAttribute('data-side')).toBe('left')
+    expect(screen.getByTestId('sidebar-toggle').getAttribute('aria-pressed')).toBe('true')
     rerender(<TopBar {...base} sidebarCollapsed={true} />)
     expect(fill().getAttribute('data-open')).toBe('false')
+    expect(fill().getAttribute('data-side')).toBe('left')
+    expect(screen.getByTestId('sidebar-toggle').getAttribute('aria-pressed')).toBe('false')
   })
 
   it('终端/右栏 glyph 随各自 open prop 翻转,side 正确', () => {
@@ -43,5 +46,7 @@ describe('TopBar', () => {
     expect(term.getAttribute('data-side')).toBe('bottom')
     expect(dock.getAttribute('data-open')).toBe('false')
     expect(dock.getAttribute('data-side')).toBe('right')
+    expect(screen.getByTestId('terminal-toggle').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByTestId('rightdock-toggle').getAttribute('aria-pressed')).toBe('false')
   })
 })
