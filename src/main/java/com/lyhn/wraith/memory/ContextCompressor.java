@@ -1,6 +1,8 @@
 package com.lyhn.wraith.memory;
 
 import com.lyhn.wraith.llm.LlmClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -17,6 +19,8 @@ import java.util.UUID;
  * 3. 压缩后的摘要回注到 ConversationMemory
  */
 public class ContextCompressor {
+    private static final Logger log = LoggerFactory.getLogger(ContextCompressor.class);
+
     private LlmClient llmClient;
     private final int retainRecentRounds;
 
@@ -143,10 +147,11 @@ public class ContextCompressor {
     }
 
     /**
-     * 从对话中提取关键事实，存入长期记忆
+     * 从对话中提取"跨会话稳定"的候选事实串(只产候选、不落库)。
+     * 复用 EXTRACT_FACTS_PROMPT + isPersistentFactCandidate 规则过滤。
      */
-    public List<String> extractFacts(List<MemoryEntry> entries, LongTermMemory longTermMemory) {
-        if (entries.isEmpty()) return List.of();
+    public List<String> extractFactCandidates(List<MemoryEntry> entries) {
+        if (entries == null || entries.isEmpty()) return List.of();
 
         StringBuilder conversation = new StringBuilder();
         for (MemoryEntry entry : entries) {
@@ -161,7 +166,6 @@ public class ContextCompressor {
                     LlmClient.Message.system("你是一个信息提取助手，只输出关键事实，不输出其他内容。"),
                     LlmClient.Message.user(prompt)
             );
-
             LlmClient.ChatResponse response = llmClient.chat(messages, null);
             String factsText = response.content();
 
@@ -170,21 +174,11 @@ public class ContextCompressor {
                 String fact = normalizeFactLine(line);
                 if (isPersistentFactCandidate(fact)) {
                     facts.add(fact);
-
-                    // 存入长期记忆
-                    MemoryEntry factEntry = new MemoryEntry(
-                            "fact-" + UUID.randomUUID().toString().substring(0, 8),
-                            fact,
-                            MemoryEntry.MemoryType.FACT,
-                            java.util.Map.of("source", "fact_extractor"),
-                            MemoryEntry.estimateTokens(fact)
-                    );
-                    longTermMemory.store(factEntry);
                 }
             }
             return facts;
         } catch (IOException e) {
-            System.err.println("⚠️ 事实提取失败: " + e.getMessage());
+            log.warn("候选事实抽取失败: {}", e.getMessage());
             return List.of();
         }
     }
