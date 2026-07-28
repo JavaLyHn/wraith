@@ -24,12 +24,6 @@ public class MemoryManager {
     private final MemoryRetriever retriever;
     private final PendingMemoryStore pendingStore;
     private final MemoryExtractionService extractionService;
-    private final java.util.concurrent.ExecutorService extractionExecutor =
-            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
-                Thread t = new Thread(r, "memory-extraction");
-                t.setDaemon(true);
-                return t;
-            });
     private TokenBudget tokenBudget;
     private ContextProfile contextProfile;
     private String currentProject;
@@ -277,15 +271,18 @@ public class MemoryManager {
             return;
         }
         List<MemoryEntry> slice = new java.util.ArrayList<>(shortTermMemory.getAll()); // 拷贝,后续可能被清
-        extractionExecutor.submit(() -> {
+        String projectKey = currentProject;
+        Thread t = new Thread(() -> {
             try {
-                extractionService.extractFromSession(slice, sessionId, currentProject,
+                extractionService.extractFromSession(slice, sessionId, projectKey,
                         () -> "cand-" + java.util.UUID.randomUUID().toString().substring(0, 8),
                         java.time.Instant.now().toString());
             } catch (RuntimeException e) {
                 log.warn("异步记忆抽取失败: {}", e.getMessage());
             }
-        });
+        }, "memory-extraction");
+        t.setDaemon(true);
+        t.start();
     }
 
     private static boolean autoExtractEnabled() {
