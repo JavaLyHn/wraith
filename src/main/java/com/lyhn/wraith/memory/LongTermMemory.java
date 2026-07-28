@@ -82,6 +82,7 @@ public class LongTermMemory implements Memory {
 
         return entries.values().stream()
                 .filter(entry -> isVisibleInProject(entry, projectKey))
+                .filter(entry -> !isSuperseded(entry))
                 .filter(entry -> {
                     if (MemoryQueryTokenizer.matches(entry.getContent(), queryTokens)) {
                         return true;
@@ -95,13 +96,36 @@ public class LongTermMemory implements Memory {
 
     @Override
     public List<MemoryEntry> getAll() {
-        return new ArrayList<>(entries.values());
+        return entries.values().stream()
+                .filter(entry -> !isSuperseded(entry))
+                .collect(Collectors.toList());
     }
 
     public List<MemoryEntry> getAll(String projectKey) {
         return entries.values().stream()
                 .filter(entry -> isVisibleInProject(entry, projectKey))
+                .filter(entry -> !isSuperseded(entry))
                 .collect(Collectors.toList());
+    }
+
+    /** 软超请:给条目 metadata 打 superseded=true(重建不可变条目覆盖),不删除。 */
+    public boolean markSuperseded(String id) {
+        MemoryEntry existing = entries.get(id);
+        if (existing == null) {
+            return false;
+        }
+        Map<String, String> meta = new HashMap<>(existing.getMetadata());
+        meta.put("superseded", "true");
+        meta.put("supersededAt", java.time.Instant.now().toString());
+        MemoryEntry rebuilt = new MemoryEntry(existing.getId(), existing.getContent(), existing.getType(),
+                existing.getTimestamp(), meta, existing.getTokenCount());
+        entries.put(id, rebuilt);
+        saveToDisk();
+        return true;
+    }
+
+    private static boolean isSuperseded(MemoryEntry entry) {
+        return "true".equals(entry.getMetadata().get("superseded"));
     }
 
     @Override
