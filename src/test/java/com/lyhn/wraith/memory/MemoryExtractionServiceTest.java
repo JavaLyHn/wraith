@@ -63,6 +63,26 @@ class MemoryExtractionServiceTest {
     }
 
     @Test
+    void skipsCandidatesAlreadyInPendingQueue(@TempDir File dir) {
+        ContextCompressor compressor = mock(ContextCompressor.class);
+        when(compressor.extractFactCandidates(anyList()))
+                .thenReturn(List.of("用户偏好 Java 17", "项目用 Maven 构建"));
+        MemoryRetriever retriever = mock(MemoryRetriever.class);
+        when(retriever.retrieveLongTerm(anyString(), anyInt(), any())).thenReturn(List.of()); // 未入长期
+        PendingMemoryStore store = new PendingMemoryStore(dir);
+        MemoryExtractionService svc = service(dir, compressor, retriever, store);
+
+        // 首次点击「整理记忆」→ 两条入队
+        int first = svc.extractFromSession(List.of(), "sess-1", "/proj", seqIds(), "2026-07-23T00:00:00Z");
+        // 再次点击(对话未清、候选相同、仍未批准进长期)→ 不应重复入队
+        int second = svc.extractFromSession(List.of(), "sess-1", "/proj", seqIds(), "2026-07-23T00:01:00Z");
+
+        assertEquals(2, first);
+        assertEquals(0, second, "同一批候选二次抽取不应重复入队");
+        assertEquals(2, store.list("/proj").size(), "待确认队列不应因重复点击膨胀");
+    }
+
+    @Test
     void dropsSensitiveCandidates(@TempDir File dir) {
         ContextCompressor compressor = mock(ContextCompressor.class);
         when(compressor.extractFactCandidates(anyList()))

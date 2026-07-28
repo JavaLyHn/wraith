@@ -3,7 +3,9 @@ package com.lyhn.wraith.memory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Supplier;
 
 /**
@@ -44,6 +46,14 @@ public class MemoryExtractionService {
             return 0;
         }
 
+        // 已在待确认队列中的事实内容快照(按项目可见性)。候选批准前不进长期记忆,
+        // 仅靠长期去重挡不住重复点击「整理记忆」/多次会话边界抽取把同一候选反复入队 ——
+        // 故与长期去重互补:此处先挡掉已在 pending 里的内容。
+        Set<String> alreadyPending = new HashSet<>();
+        for (PendingFact pf : pendingStore.list(projectKey)) {
+            alreadyPending.add(pf.fact());
+        }
+
         int enqueued = 0;
         for (String fact : candidates) {
             if (fact == null || fact.isBlank()) {
@@ -52,6 +62,9 @@ public class MemoryExtractionService {
             if (MemorySafety.isSensitive(fact)) {
                 log.debug("敏感候选丢弃: {}", fact);
                 continue;
+            }
+            if (alreadyPending.contains(fact)) {
+                continue; // 已在待确认队列(或本批已入队)→ 跳过,防重复点击膨胀
             }
             String nearestId = null;
             List<MemoryEntry> similar = retriever.retrieveLongTerm(fact, 1, projectKey);
@@ -64,6 +77,7 @@ public class MemoryExtractionService {
             }
             pendingStore.add(new PendingFact(
                     idGen.get(), fact, "FACT", "project", nearestId, sessionId, projectKey, nowIso));
+            alreadyPending.add(fact); // 记入本批,挡同批内的重复候选
             enqueued++;
         }
         return enqueued;
