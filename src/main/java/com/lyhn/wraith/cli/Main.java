@@ -1525,6 +1525,39 @@ public class Main {
                         agent.getMemoryManager().clearLongTerm();
                         return java.util.Map.of("ok", true);
                     }
+                    public java.util.Map<String, Object> memoryPendingList() {
+                        java.util.List<java.util.Map<String, Object>> items = new java.util.ArrayList<>();
+                        for (com.lyhn.wraith.memory.PendingFact f : agent.getMemoryManager().listPending()) items.add(pendingFactJson(f));
+                        java.util.Map<String, Object> r = new java.util.LinkedHashMap<>();
+                        r.put("project", agent.getMemoryManager().getCurrentProject());
+                        r.put("pending", items);
+                        return r;
+                    }
+                    public java.util.Map<String, Object> memoryPendingApprove(String id) {
+                        return java.util.Map.of("ok", agent.getMemoryManager().approvePending(id));
+                    }
+                    public java.util.Map<String, Object> memoryPendingApproveReplacing(String id, String oldId) {
+                        return java.util.Map.of("ok", agent.getMemoryManager().approvePendingReplacing(id, oldId));
+                    }
+                    public java.util.Map<String, Object> memoryPendingReject(String id) {
+                        return java.util.Map.of("ok", agent.getMemoryManager().rejectPending(id));
+                    }
+                    public java.util.Map<String, Object> memoryPendingClear() {
+                        agent.getMemoryManager().clearPending();
+                        return java.util.Map.of("ok", true);
+                    }
+                    private java.util.Map<String, Object> pendingFactJson(com.lyhn.wraith.memory.PendingFact f) {
+                        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                        m.put("id", f.id());
+                        m.put("fact", f.fact());
+                        m.put("type", f.type());
+                        m.put("scope", f.scope());
+                        m.put("nearestExistingId", f.nearestExistingId());
+                        m.put("sourceSessionId", f.sourceSessionId());
+                        m.put("project", f.project());
+                        m.put("createdAt", f.createdAt());
+                        return m;
+                    }
                     public java.util.Map<String, Object> snapshotList(int limit) {
                         com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
                         if (svc == null) return java.util.Map.of("enabled", false, "snapshots", java.util.List.of());

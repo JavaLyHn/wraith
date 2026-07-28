@@ -171,6 +171,26 @@ public final class AppServer {
         default java.util.Map<String, Object> memoryInitProject(boolean force) {
             throw new UnsupportedOperationException("memoryInitProject not implemented");
         }
+        /** 待确认候选列表。默认抛出。 */
+        default java.util.Map<String, Object> memoryPendingList() {
+            throw new UnsupportedOperationException("memoryPendingList not implemented");
+        }
+        /** 批准候选(ADD)。默认抛出。 */
+        default java.util.Map<String, Object> memoryPendingApprove(String id) {
+            throw new UnsupportedOperationException("memoryPendingApprove not implemented");
+        }
+        /** 批准候选并替换旧条(SUPERSEDE)。默认抛出。 */
+        default java.util.Map<String, Object> memoryPendingApproveReplacing(String id, String oldId) {
+            throw new UnsupportedOperationException("memoryPendingApproveReplacing not implemented");
+        }
+        /** 驳回候选。默认抛出。 */
+        default java.util.Map<String, Object> memoryPendingReject(String id) {
+            throw new UnsupportedOperationException("memoryPendingReject not implemented");
+        }
+        /** 清空当前项目可见候选。默认抛出。 */
+        default java.util.Map<String, Object> memoryPendingClear() {
+            throw new UnsupportedOperationException("memoryPendingClear not implemented");
+        }
         /** 列出 side-git 快照时间线(新→旧,含全相位;每条附 preTurnOffset)。默认抛出。 */
         default java.util.Map<String, Object> snapshotList(int limit) {
             throw new UnsupportedOperationException("snapshotList not implemented");
@@ -625,6 +645,40 @@ public final class AppServer {
                 try { writer.result(msg.id(), session.memoryInitProject(force)); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.pendingList" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.memoryPendingList()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.pendingApprove" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String id = textParam(msg.params(), "id");
+                if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                try { writer.result(msg.id(), session.memoryPendingApprove(id)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.pendingApproveReplacing" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String id = textParam(p, "id");
+                String oldId = textParam(p, "oldId");
+                if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                if (oldId == null || oldId.isBlank()) { writer.error(msg.id(), -32602, "缺 oldId"); return true; }
+                try { writer.result(msg.id(), session.memoryPendingApproveReplacing(id, oldId)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.pendingReject" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String id = textParam(msg.params(), "id");
+                if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                try { writer.result(msg.id(), session.memoryPendingReject(id)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.pendingClear" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.memoryPendingClear()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "snapshot.list" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
