@@ -38,7 +38,11 @@ public class PendingMemoryStore {
         loadFromDisk();
     }
 
-    public void add(PendingFact fact) {
+    // Task 5 起,本 store 会被会话边界的异步抽取线程(triggerAutoExtractionAsync)与调用方线程
+    // (approve/reject 等)并发写入。三个可变方法都以 saveToDisk() 收尾,synchronized 把
+    // "改内存 + 落盘" 串行化,避免并发写导致落盘内容撕裂/丢失。
+
+    public synchronized void add(PendingFact fact) {
         entries.put(fact.id(), fact);
         saveToDisk();
     }
@@ -53,7 +57,7 @@ public class PendingMemoryStore {
         return Optional.ofNullable(entries.get(id));
     }
 
-    public boolean remove(String id) {
+    public synchronized boolean remove(String id) {
         if (entries.remove(id) != null) {
             saveToDisk();
             return true;
@@ -61,7 +65,7 @@ public class PendingMemoryStore {
         return false;
     }
 
-    public void clear(String projectKey) {
+    public synchronized void clear(String projectKey) {
         List<String> toRemove = entries.values().stream()
                 .filter(f -> isVisible(f, projectKey))
                 .map(PendingFact::id)

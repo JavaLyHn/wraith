@@ -22,6 +22,14 @@ public class MemoryManager {
     private final LongTermMemory longTermMemory;
     private final ContextCompressor compressor;
     private final MemoryRetriever retriever;
+    private final PendingMemoryStore pendingStore;
+    private final MemoryExtractionService extractionService;
+    private final java.util.concurrent.ExecutorService extractionExecutor =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "memory-extraction");
+                t.setDaemon(true);
+                return t;
+            });
     private TokenBudget tokenBudget;
     private ContextProfile contextProfile;
     private String currentProject;
@@ -51,6 +59,8 @@ public class MemoryManager {
         this.retriever = new MemoryRetriever(shortTermMemory, this.longTermMemory);
         this.tokenBudget = new TokenBudget(contextProfile.maxContextWindow());
         this.currentProject = defaultProjectKey();
+        this.pendingStore = new PendingMemoryStore();
+        this.extractionService = new MemoryExtractionService(this.compressor, this.retriever, this.pendingStore);
     }
 
     public void setLlmClient(LlmClient llmClient) {
@@ -218,6 +228,70 @@ public class MemoryManager {
         longTermMemory.clear();
     }
 
+    // ---- 候选待批记忆(自动抽取) ----
+
+    public List<PendingFact> listPending() {
+        return pendingStore.list(currentProject);
+    }
+
+    public boolean approvePending(String id) {
+        return pendingStore.get(id).map(pf -> {
+            storeFact(pf.fact(), pf.scope());
+            pendingStore.remove(id);
+            return true;
+        }).orElse(false);
+    }
+
+    public boolean approvePendingReplacing(String id, String oldId) {
+        return pendingStore.get(id).map(pf -> {
+            storeFact(pf.fact(), pf.scope());
+            longTermMemory.markSuperseded(oldId);
+            pendingStore.remove(id);
+            return true;
+        }).orElse(false);
+    }
+
+    public boolean rejectPending(String id) {
+        return pendingStore.remove(id);
+    }
+
+    public void clearPending() {
+        pendingStore.clear(currentProject);
+    }
+
+    /** 同步抽取当前短期记忆切片入候选队列(受 autoExtract 开关门控)。返回入队数。 */
+    public int runAutoExtraction(String sessionId) {
+        if (!autoExtractEnabled()) {
+            return 0;
+        }
+        List<MemoryEntry> slice = shortTermMemory.getAll();
+        return extractionService.extractFromSession(
+                slice, sessionId, currentProject,
+                () -> "cand-" + java.util.UUID.randomUUID().toString().substring(0, 8),
+                java.time.Instant.now().toString());
+    }
+
+    /** 会话边界异步触发(不阻塞)。调用方需在清空短期记忆前调用,以便拷贝到稳定切片。 */
+    public void triggerAutoExtractionAsync(String sessionId) {
+        if (!autoExtractEnabled()) {
+            return;
+        }
+        List<MemoryEntry> slice = new java.util.ArrayList<>(shortTermMemory.getAll()); // 拷贝,后续可能被清
+        extractionExecutor.submit(() -> {
+            try {
+                extractionService.extractFromSession(slice, sessionId, currentProject,
+                        () -> "cand-" + java.util.UUID.randomUUID().toString().substring(0, 8),
+                        java.time.Instant.now().toString());
+            } catch (RuntimeException e) {
+                log.warn("异步记忆抽取失败: {}", e.getMessage());
+            }
+        });
+    }
+
+    private static boolean autoExtractEnabled() {
+        return !"false".equalsIgnoreCase(System.getProperty("wraith.memory.autoExtract", "true"));
+    }
+
     /**
      * 获取记忆系统的整体状态
      */
@@ -231,6 +305,7 @@ public class MemoryManager {
     // Getter
     public ConversationMemory getShortTermMemory() { return shortTermMemory; }
     public LongTermMemory getLongTermMemory() { return longTermMemory; }
+    public PendingMemoryStore getPendingStore() { return pendingStore; }
     public TokenBudget getTokenBudget() { return tokenBudget; }
     public ContextProfile getContextProfile() { return contextProfile; }
 

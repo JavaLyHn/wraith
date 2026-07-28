@@ -384,7 +384,9 @@ public class Agent {
         conversationHistory.clear();
         conversationHistory.add(LlmClient.Message.system(buildSystemPrompt("")));
 
-        // 清空短期记忆
+        // 会话边界:先异步触发自动记忆抽取(拷贝当前短期记忆切片),再清空短期记忆。
+        // Agent 当前无现成会话 id 字段,用时间戳兜底——sessionId 仅用于候选溯源,非关键路径。
+        memoryManager.triggerAutoExtractionAsync("clear-" + System.currentTimeMillis());
         memoryManager.clearShortTerm();
         if (skillContextBuffer != null) {
             skillContextBuffer.clear();
