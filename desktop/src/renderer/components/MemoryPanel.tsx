@@ -59,6 +59,7 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
   }, [loadPending])
 
   const doApprove = useCallback(async (f: PendingFactView): Promise<void> => {
+    setInitNotice(null)
     try {
       const r = await window.wraith.memoryPendingApprove(f.id)
       if (!r.ok) { setInitNotice('⚠️ 批准未生效(可能已处理或非当前项目可见)'); return }
@@ -68,6 +69,7 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
 
   const doReplace = useCallback(async (f: PendingFactView): Promise<void> => {
     if (!f.nearestExistingId) return
+    setInitNotice(null)
     try {
       const r = await window.wraith.memoryPendingApproveReplacing(f.id, f.nearestExistingId)
       if (!r.ok) { setInitNotice('⚠️ 替换未生效(旧条不存在/不可见,或候选已处理)'); return }
@@ -76,6 +78,7 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
   }, [loadPending, load, query])
 
   const doReject = useCallback(async (f: PendingFactView): Promise<void> => {
+    setInitNotice(null)
     try {
       const r = await window.wraith.memoryPendingReject(f.id)
       if (!r.ok) { setInitNotice('⚠️ 驳回未生效(可能已处理或非当前项目可见)'); return }

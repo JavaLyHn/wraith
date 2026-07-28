@@ -686,8 +686,8 @@ public final class AppServer {
             }
             case "memory.extractNow" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
-                try { writer.result(msg.id(), session.memoryExtractNow()); }
-                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                final SessionRunner s = session;
+                dispatchAsync(msg.id(), s::memoryExtractNow);   // 含 LLM 抽取调用(数秒级),后台跑防阻塞
             }
             case "snapshot.list" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
