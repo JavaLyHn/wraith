@@ -77,4 +77,41 @@ class MemoryExtractionServiceTest {
         assertEquals(1, n);                                            // sk- 候选被丢
         assertEquals("用户偏好深色主题", store.list("/proj").get(0).fact());
     }
+
+    @Test
+    void dropsChineseAndSpacedCredentials(@TempDir File dir) {
+        List<String> mustDrop = List.of(
+                "API key 是 sk-abc123def",
+                "数据库密码是 abc123",
+                "密钥: xyz789",
+                "用户的 api key 是 xyz123",
+                "password = hunter2",
+                "访问令牌为 ghp_aaa111");
+        List<String> mustKeep = List.of(
+                "用户偏好深色主题",
+                "项目用 Maven 构建",
+                "用户偏好使用密码管理器 1Password");
+
+        ContextCompressor compressor = mock(ContextCompressor.class);
+        List<String> mixed = new java.util.ArrayList<>();
+        mixed.addAll(mustDrop);
+        mixed.addAll(mustKeep);
+        when(compressor.extractFactCandidates(anyList())).thenReturn(mixed);
+        MemoryRetriever retriever = mock(MemoryRetriever.class);
+        when(retriever.retrieveLongTerm(anyString(), anyInt(), any())).thenReturn(List.of());
+        PendingMemoryStore store = new PendingMemoryStore(dir);
+
+        int n = service(dir, compressor, retriever, store)
+                .extractFromSession(List.of(), "sess-1", "/proj", seqIds(), "2026-07-23T00:00:00Z");
+
+        assertEquals(mustKeep.size(), n);
+        List<String> surviving = store.list("/proj").stream().map(PendingFact::fact).toList();
+        assertEquals(mustKeep.size(), surviving.size());
+        for (String keep : mustKeep) {
+            assertTrue(surviving.contains(keep), "应保留: " + keep);
+        }
+        for (String drop : mustDrop) {
+            assertFalse(surviving.contains(drop), "应过滤: " + drop);
+        }
+    }
 }

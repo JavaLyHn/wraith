@@ -15,8 +15,11 @@ public class MemoryExtractionService {
     private static final Logger log = LoggerFactory.getLogger(MemoryExtractionService.class);
 
     // 凭证类敏感模式(命中即丢,不入队)
+    // 中文分支要求"密码/密钥/口令/令牌"后紧跟赋值连接词(是/为/:/：/=)才命中,
+    // 从而放过"密码管理器"这类仅提及词汇、并非凭证值的良性偏好陈述。
     private static final Pattern SENSITIVE = Pattern.compile(
-            "(?i)(sk-[a-z0-9]{6,}|password\\s*=|passwd\\s*=|api[_-]?key|secret|token\\s*[:=]|-----BEGIN)");
+            "(?i)(sk-[a-z0-9]{6,}|password\\s*=|passwd\\s*=|api[\\s_-]?key|secret|token\\s*[:=]|-----BEGIN"
+                    + "|(密码|密钥|口令|令牌)\\s*(是|为|[:：=]))");
 
     private final ContextCompressor compressor;
     private final MemoryRetriever retriever;
