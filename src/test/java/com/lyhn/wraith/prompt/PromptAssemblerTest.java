@@ -40,6 +40,14 @@ class PromptAssemblerTest {
     }
 
     @Test
+    void memoryPolicyGroundsClaimsInInjectedBlock() {
+        // 防回归:记忆声明必须以「相关长期记忆」区块为准,不得凭对话历史臆断(修"删了还说记着"的 grounding 缺口)
+        String prompt = PromptAssembler.createDefault().assemble(PromptMode.AGENT, PromptContext.empty());
+        assertTrue(prompt.contains("相关长期记忆"), "Memory Policy 应引用『相关长期记忆』区块作为唯一判据");
+        assertTrue(prompt.contains("不要仅凭对话历史"), "Memory Policy 应禁止仅凭对话历史断言已存入记忆");
+    }
+
+    @Test
     void projectOverrideReplacesBuiltinModePrompt() throws Exception {
         Path projectPrompts = tempDir.resolve("project");
         Files.createDirectories(projectPrompts.resolve("modes"));
