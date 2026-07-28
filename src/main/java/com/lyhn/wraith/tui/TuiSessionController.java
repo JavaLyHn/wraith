@@ -168,8 +168,10 @@ public final class TuiSessionController implements AutoCloseable {
             if (fact.isEmpty()) {
                 appendSystem("请提供要保存的内容，例如 /save 这个项目使用 Java 17");
             } else {
-                reactAgent.getMemoryManager().storeFact(fact, scope);
-                appendSystem("已保存到长期记忆(" + scope + "): " + fact);
+                boolean ok = reactAgent.getMemoryManager().storeFact(fact, scope);
+                appendSystem(ok
+                        ? "已保存到长期记忆(" + scope + "): " + fact
+                        : "🚫 拒绝保存:疑似凭证(密码/密钥/令牌等),未写入长期记忆");
             }
             return true;
         }
