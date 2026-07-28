@@ -108,4 +108,15 @@ class MemoryManagerPendingTest {
         assertTrue(m.getLongTermMemory().getAll().isEmpty());    // 未 ADD
         assertTrue(m.getPendingStore().get("c1").isPresent());   // 候选仍在(未领取)
     }
+
+    @Test
+    void approveReplacingRejectedForExistingButInvisibleOldId(@TempDir File dir) {
+        MemoryManager m = managerWithTempMemory(dir); // currentProject = "/proj"
+        // 直接塞一条属于别项目(/other)的长期条,使其对 /proj 不可见
+        m.getLongTermMemory().store(new MemoryEntry("old-other", "别项目旧事实",
+                MemoryEntry.MemoryType.FACT, java.util.Map.of("scope", "project", "project", "/other"), 5));
+        m.getPendingStore().add(new PendingFact("c1", "新事实", "FACT", "global", "old-other", "s1", null, "2026-07-23T00:00:00Z"));
+        assertFalse(m.approvePendingReplacing("c1", "old-other")); // 旧条存在但不可见 → 拒
+        assertTrue(m.getPendingStore().get("c1").isPresent());      // 未领取
+    }
 }

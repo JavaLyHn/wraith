@@ -59,19 +59,28 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
   }, [loadPending])
 
   const doApprove = useCallback(async (f: PendingFactView): Promise<void> => {
-    try { await window.wraith.memoryPendingApprove(f.id); await loadPending(); void load() }
-    catch (err) { setError((err as Error).message) }
-  }, [loadPending, load])
+    try {
+      const r = await window.wraith.memoryPendingApprove(f.id)
+      if (!r.ok) { setInitNotice('⚠️ 批准未生效(可能已处理或非当前项目可见)'); return }
+      await loadPending(); void load(query)
+    } catch (err) { setError((err as Error).message) }
+  }, [loadPending, load, query])
 
   const doReplace = useCallback(async (f: PendingFactView): Promise<void> => {
     if (!f.nearestExistingId) return
-    try { await window.wraith.memoryPendingApproveReplacing(f.id, f.nearestExistingId); await loadPending(); void load() }
-    catch (err) { setError((err as Error).message) }
-  }, [loadPending, load])
+    try {
+      const r = await window.wraith.memoryPendingApproveReplacing(f.id, f.nearestExistingId)
+      if (!r.ok) { setInitNotice('⚠️ 替换未生效(旧条不存在/不可见,或候选已处理)'); return }
+      await loadPending(); void load(query)
+    } catch (err) { setError((err as Error).message) }
+  }, [loadPending, load, query])
 
   const doReject = useCallback(async (f: PendingFactView): Promise<void> => {
-    try { await window.wraith.memoryPendingReject(f.id); await loadPending() }
-    catch (err) { setError((err as Error).message) }
+    try {
+      const r = await window.wraith.memoryPendingReject(f.id)
+      if (!r.ok) { setInitNotice('⚠️ 驳回未生效(可能已处理或非当前项目可见)'); return }
+      await loadPending()
+    } catch (err) { setError((err as Error).message) }
   }, [loadPending])
 
   const doClearPending = useCallback(async (): Promise<void> => {
@@ -155,7 +164,7 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
         {pending.length > 0 && (
           <div data-testid="memory-pending-section" className="mb-3 rounded-lg border border-warn/40 bg-warn/5 p-2">
             <div className="mb-1.5 flex items-center gap-2">
-              <span className="text-xs font-semibold text-warn">🕵 待确认候选 ({pending.length})</span>
+              <span className="text-xs font-semibold text-warn">📥 待确认候选 ({pending.length})</span>
               <button data-testid="memory-pending-clear" onClick={() => void doClearPending()}
                 className="ml-auto text-3xs text-fg-subtle hover:text-danger">清空</button>
             </div>

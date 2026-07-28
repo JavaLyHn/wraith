@@ -71,4 +71,22 @@ describe('MemoryPanel 待确认区', () => {
     // 触发后会再次拉候选(memoryPendingList 至少被调 2 次:挂载 + 整理后)
     await waitFor(() => expect((w.memoryPendingList as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBeGreaterThanOrEqual(2))
   })
+
+  it('清空键 → confirm 后调 memoryPendingClear', async () => {
+    const w = mockWraith()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    render(<MemoryPanel onBack={() => {}} />)
+    await waitFor(() => expect(screen.getByTestId('memory-pending-clear')).toBeTruthy())
+    fireEvent.click(screen.getByTestId('memory-pending-clear'))
+    await waitFor(() => expect(w.memoryPendingClear).toHaveBeenCalled())
+    vi.restoreAllMocks()
+  })
+
+  it('批准返回 ok:false → 显示失败提示,不静默', async () => {
+    const w = mockWraith({ memoryPendingApprove: vi.fn(async () => ({ ok: false })) })
+    render(<MemoryPanel onBack={() => {}} />)
+    await waitFor(() => expect(screen.getByTestId('pending-approve-cand-1')).toBeTruthy())
+    fireEvent.click(screen.getByTestId('pending-approve-cand-1'))
+    await waitFor(() => expect(screen.getByText(/未生效|失败|不可/)).toBeTruthy())
+  })
 })
