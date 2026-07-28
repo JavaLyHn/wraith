@@ -119,4 +119,13 @@ class MemoryManagerPendingTest {
         assertFalse(m.approvePendingReplacing("c1", "old-other")); // 旧条存在但不可见 → 拒
         assertTrue(m.getPendingStore().get("c1").isPresent());      // 未领取
     }
+
+    @Test
+    void storeFactRejectsCredentialOnAllPaths(@TempDir File dir) {
+        MemoryManager m = managerWithTempMemory(dir);
+        assertFalse(m.storeFact("数据库密码是 abc123", "project")); // 硬拦
+        assertTrue(m.getLongTermMemory().getAll().isEmpty());         // 未入库
+        assertTrue(m.storeFact("用户偏好 Java 17", "project"));       // 正常放行
+        assertEquals(1, m.getLongTermMemory().getAll().size());
+    }
 }

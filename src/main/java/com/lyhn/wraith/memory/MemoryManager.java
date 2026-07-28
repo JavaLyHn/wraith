@@ -130,11 +130,15 @@ public class MemoryManager {
     /**
      * 存储关键事实到长期记忆
      */
-    public void storeFact(String fact) {
-        storeFact(fact, "project");
+    public boolean storeFact(String fact) {
+        return storeFact(fact, "project");
     }
 
-    public void storeFact(String fact, String scope) {
+    public boolean storeFact(String fact, String scope) {
+        if (MemorySafety.isSensitive(fact)) {
+            log.warn("拒绝保存疑似凭证到长期记忆(已拦截,不记录内容)");
+            return false;
+        }
         String normalizedScope = normalizeScope(scope);
         Map<String, String> metadata = "global".equals(normalizedScope)
                 ? Map.of("source", "fact", "scope", "global")
@@ -147,6 +151,7 @@ public class MemoryManager {
                 MemoryEntry.estimateTokens(fact)
         );
         longTermMemory.store(entry);
+        return true;
     }
 
     /**

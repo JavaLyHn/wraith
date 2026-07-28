@@ -107,7 +107,11 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
   const doSave = useCallback(async (): Promise<void> => {
     const fact = draft.trim()
     if (!fact) return
-    try { await window.wraith.memorySave(fact, draftScope); setDraft(''); void load() }
+    try {
+      const r = await window.wraith.memorySave(fact, draftScope)
+      if (!r.ok) { setInitNotice('🚫 拒绝保存:疑似凭证(密码/密钥等),未写入长期记忆'); return }
+      setDraft(''); void load()
+    }
     catch (err) { setError((err as Error).message) }
   }, [draft, draftScope, load])
 

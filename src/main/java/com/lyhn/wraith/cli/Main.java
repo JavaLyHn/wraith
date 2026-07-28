@@ -588,8 +588,10 @@ public class Main {
                         if (saveRequest.fact().isEmpty()) {
                             ui.println("❌ 请提供要保存的内容，例如 /save 这个项目使用Java 17，或 /save --global 默认用中文回答\n");
                         } else {
-                            reactAgent.getMemoryManager().storeFact(saveRequest.fact(), saveRequest.scope());
-                            ui.println("💾 已保存到长期记忆(" + saveRequest.scope() + "): " + saveRequest.fact() + "\n");
+                            boolean saveOk = reactAgent.getMemoryManager().storeFact(saveRequest.fact(), saveRequest.scope());
+                            ui.println(saveOk
+                                    ? "💾 已保存到长期记忆(" + saveRequest.scope() + "): " + saveRequest.fact() + "\n"
+                                    : "🚫 拒绝保存:疑似凭证,未写入长期记忆\n");
                         }
                         continue;
                     }
@@ -1518,8 +1520,8 @@ public class Main {
                         return java.util.Map.of("ok", agent.getMemoryManager().deleteLongTerm(id));
                     }
                     public java.util.Map<String, Object> memorySave(String fact, String scope) {
-                        agent.getMemoryManager().storeFact(fact, scope);
-                        return java.util.Map.of("ok", true);
+                        boolean ok = agent.getMemoryManager().storeFact(fact, scope);
+                        return java.util.Map.of("ok", ok);
                     }
                     public java.util.Map<String, Object> memoryClear() {
                         agent.getMemoryManager().clearLongTerm();

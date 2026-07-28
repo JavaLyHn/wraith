@@ -52,7 +52,7 @@ import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.Locale;
@@ -108,7 +108,7 @@ public class ToolRegistry {
     private ContextProfile contextProfile = ContextProfile.from(null);
     private BrowserGuard browserGuard;
     private BrowserConnector browserConnector;
-    private BiConsumer<String, String> memorySaver;
+    private BiFunction<String, String, Boolean> memorySaver;
     private Consumer<List<TodoItem>> todoSink;
     private SkillRegistry skillRegistry;
     private SkillContextBuffer skillContextBuffer;
@@ -196,10 +196,10 @@ public class ToolRegistry {
     }
 
     public void setMemorySaver(Consumer<String> memorySaver) {
-        this.memorySaver = memorySaver == null ? null : (fact, scope) -> memorySaver.accept(fact);
+        this.memorySaver = memorySaver == null ? null : (fact, scope) -> { memorySaver.accept(fact); return true; };
     }
 
-    public void setScopedMemorySaver(BiConsumer<String, String> memorySaver) {
+    public void setScopedMemorySaver(BiFunction<String, String, Boolean> memorySaver) {
         this.memorySaver = memorySaver;
     }
 
@@ -798,7 +798,7 @@ public class ToolRegistry {
     private void registerMemoryTools() {
         tools.put("save_memory", new Tool(
                 "save_memory",
-                "当且仅当用户明确说“记一下”“记住”“以后记得”或要求保存长期偏好/稳定事实时调用，把精炼事实写入长期记忆；scope 默认 project，跨项目偏好才用 global；不要保存一次性任务请求、临时文件名或模型猜测。",
+                "当且仅当用户明确说“记一下”“记住”“以后记得”或要求保存长期偏好/稳定事实时调用，把精炼事实写入长期记忆；scope 默认 project，跨项目偏好才用 global；不要保存一次性任务请求、临时文件名或模型猜测；遇到密码/密钥/令牌等凭证会被系统拒绝、不写入。",
                 createParameters(
                         new Param("fact", "string", "要长期保存的稳定事实或用户偏好，必须精炼、可跨会话复用", true),
                         new Param("scope", "string", "记忆作用域：project 或 global。默认 project；跨项目长期偏好才用 global", false)
@@ -813,8 +813,9 @@ public class ToolRegistry {
                     }
                     String normalized = fact.trim();
                     String scope = "global".equalsIgnoreCase(args.get("scope")) ? "global" : "project";
-                    memorySaver.accept(normalized, scope);
-                    return "💾 已保存到长期记忆(" + scope + "): " + normalized;
+                    boolean ok = Boolean.TRUE.equals(memorySaver.apply(normalized, scope));
+                    return ok ? "💾 已保存到长期记忆(" + scope + "): " + normalized
+                              : "🚫 拒绝保存:疑似凭证(密码/密钥/令牌等),未写入长期记忆";
                 }
         ));
     }
