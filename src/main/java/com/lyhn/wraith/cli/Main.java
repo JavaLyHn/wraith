@@ -21,6 +21,7 @@ import com.lyhn.wraith.session.SessionStore;
 import com.lyhn.wraith.llm.LlmClientFactory;
 import com.lyhn.wraith.memory.LongTermMemory;
 import com.lyhn.wraith.memory.MemoryEntry;
+import com.lyhn.wraith.memory.PendingFact;
 import com.lyhn.wraith.render.Renderer;
 import com.lyhn.wraith.render.RendererFactory;
 import com.lyhn.wraith.render.StatusInfo;
@@ -544,6 +545,7 @@ public class Main {
                         ui.println("   /memory delete <id> - 删除单条长期记忆");
                         ui.println("   /memory clear - 清空长期记忆");
                         ui.println("   /save <事实> - 保存项目级长期记忆；/save --global <事实> 保存全局记忆");
+                        ui.println("   /memory pending - 查看待确认候选;/memory approve|reject <id> - 批准/驳回");
                         ui.println();
                         continue;
                     }
@@ -589,6 +591,47 @@ public class Main {
                             reactAgent.getMemoryManager().storeFact(saveRequest.fact(), saveRequest.scope());
                             ui.println("💾 已保存到长期记忆(" + saveRequest.scope() + "): " + saveRequest.fact() + "\n");
                         }
+                        continue;
+                    }
+                    case MEMORY_PENDING -> {
+                        ui.println(formatPendingFacts(reactAgent.getMemoryManager().listPending()));
+                        ui.println();
+                        continue;
+                    }
+                    case MEMORY_APPROVE -> {
+                        String payload = command.payload();
+                        if (payload == null || payload.isBlank()) {
+                            ui.println("❌ 请提供候选 id,例如 /memory approve cand-abc123\n");
+                            continue;
+                        }
+                        String[] parts = payload.trim().split("\\s+");
+                        boolean ok;
+                        String verb;
+                        if (parts.length >= 3 && "replace".equalsIgnoreCase(parts[1])) {
+                            ok = reactAgent.getMemoryManager().approvePendingReplacing(parts[0], parts[2]);
+                            verb = "批准并替换 " + parts[2];
+                        } else {
+                            ok = reactAgent.getMemoryManager().approvePending(parts[0]);
+                            verb = "批准";
+                        }
+                        ui.println(ok ? ("✅ 已" + verb + ": " + parts[0] + "\n")
+                                      : ("📭 未找到或不可批准(可能已处理/非当前项目): " + parts[0] + "\n"));
+                        continue;
+                    }
+                    case MEMORY_REJECT -> {
+                        String id = command.payload();
+                        if (id == null || id.isBlank()) {
+                            ui.println("❌ 请提供候选 id,例如 /memory reject cand-abc123\n");
+                        } else {
+                            ui.println(reactAgent.getMemoryManager().rejectPending(id)
+                                    ? ("🗑️ 已驳回候选: " + id + "\n") : ("📭 未找到候选: " + id + "\n"));
+                        }
+                        continue;
+                    }
+                    case MEMORY_PENDING_CLEAR -> {
+                        reactAgent.getMemoryManager().clearPending();
+                        ui.println("🧹 待确认候选已清空\n");
+                        ui.println();
                         continue;
                     }
                     case SWITCH_PLAN -> {
@@ -4361,6 +4404,23 @@ public class Main {
                     .append("  ").append(entry.getContent()).append("\n");
         }
         return sb.toString().trim();
+    }
+
+    private static String formatPendingFacts(java.util.List<PendingFact> pending) {
+        if (pending == null || pending.isEmpty()) {
+            return "📭 暂无待确认候选记忆。会话结束/清空时会自动抽取,批准后才进长期记忆。";
+        }
+        StringBuilder sb = new StringBuilder("🕵 待确认候选记忆 (" + pending.size() + " 条)：\n");
+        for (PendingFact f : pending) {
+            sb.append("  • [").append(f.id()).append("] (").append(f.scope()).append(") ").append(f.fact());
+            if (f.nearestExistingId() != null && !f.nearestExistingId().isBlank()) {
+                sb.append("  ↔ 相似既有: ").append(f.nearestExistingId());
+            }
+            sb.append('\n');
+        }
+        sb.append("  批准: /memory approve <id>   替换旧条: /memory approve <id> replace <oldId>\n");
+        sb.append("  驳回: /memory reject <id>    清空: /memory pending clear");
+        return sb.toString();
     }
 
     private static String shortenPath(String path) {

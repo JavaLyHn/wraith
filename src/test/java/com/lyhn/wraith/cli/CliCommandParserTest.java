@@ -447,4 +447,22 @@ class CliCommandParserTest {
         assertEquals(CliCommandParser.CommandType.SKILL_OFF, off.type());
         assertEquals("verbose-debug", off.payload());
     }
+
+    @Test
+    void parsesMemoryPendingCommands() {
+        assertEquals(CliCommandParser.CommandType.MEMORY_PENDING, CliCommandParser.parse("/memory pending").type());
+        assertEquals(CliCommandParser.CommandType.MEMORY_PENDING_CLEAR, CliCommandParser.parse("/memory pending clear").type());
+
+        CliCommandParser.ParsedCommand approve = CliCommandParser.parse("/memory approve cand-abc123");
+        assertEquals(CliCommandParser.CommandType.MEMORY_APPROVE, approve.type());
+        assertEquals("cand-abc123", approve.payload());
+
+        CliCommandParser.ParsedCommand replace = CliCommandParser.parse("/memory approve cand-abc123 replace fact-old99");
+        assertEquals(CliCommandParser.CommandType.MEMORY_APPROVE, replace.type());
+        assertEquals("cand-abc123 replace fact-old99", replace.payload());
+
+        CliCommandParser.ParsedCommand reject = CliCommandParser.parse("/memory reject cand-abc123");
+        assertEquals(CliCommandParser.CommandType.MEMORY_REJECT, reject.type());
+        assertEquals("cand-abc123", reject.payload());
+    }
 }

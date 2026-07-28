@@ -21,6 +21,10 @@ final class CliCommandParser {
         MEMORY_DELETE,
         MEMORY_SEARCH,
         MEMORY_SAVE,
+        MEMORY_PENDING,
+        MEMORY_APPROVE,
+        MEMORY_REJECT,
+        MEMORY_PENDING_CLEAR,
         INDEX_CODE,
         SEARCH_CODE,
         GRAPH_QUERY,
@@ -161,6 +165,30 @@ final class CliCommandParser {
 
         if (trimmed.regionMatches(true, 0, "/mem search ", 0, 12)) {
             return new ParsedCommand(CommandType.MEMORY_SEARCH, trimmed.substring(12).trim());
+        }
+
+        if (trimmed.equalsIgnoreCase("/memory pending clear") || trimmed.equalsIgnoreCase("/mem pending clear")) {
+            return new ParsedCommand(CommandType.MEMORY_PENDING_CLEAR, null);
+        }
+
+        if (trimmed.equalsIgnoreCase("/memory pending") || trimmed.equalsIgnoreCase("/mem pending")) {
+            return new ParsedCommand(CommandType.MEMORY_PENDING, null);
+        }
+
+        if (trimmed.regionMatches(true, 0, "/memory approve ", 0, 16)) {
+            return new ParsedCommand(CommandType.MEMORY_APPROVE, trimmed.substring(16).trim());
+        }
+
+        if (trimmed.regionMatches(true, 0, "/mem approve ", 0, 13)) {
+            return new ParsedCommand(CommandType.MEMORY_APPROVE, trimmed.substring(13).trim());
+        }
+
+        if (trimmed.regionMatches(true, 0, "/memory reject ", 0, 15)) {
+            return new ParsedCommand(CommandType.MEMORY_REJECT, trimmed.substring(15).trim());
+        }
+
+        if (trimmed.regionMatches(true, 0, "/mem reject ", 0, 12)) {
+            return new ParsedCommand(CommandType.MEMORY_REJECT, trimmed.substring(12).trim());
         }
 
         if (trimmed.equalsIgnoreCase("/save")) {
