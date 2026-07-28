@@ -229,20 +229,36 @@ public class MemoryManager {
     }
 
     public boolean approvePending(String id) {
-        return pendingStore.get(id).map(pf -> {
-            storeFact(pf.fact(), pf.scope());
-            pendingStore.remove(id);
-            return true;
-        }).orElse(false);
+        PendingFact pf = pendingStore.get(id).orElse(null);
+        if (pf == null || !isPendingVisible(pf)) {
+            return false;
+        }
+        if (!pendingStore.remove(id)) {
+            return false; // 领取失败(并发已被别处领走)→ 不重复落库
+        }
+        storeFact(pf.fact(), pf.scope());
+        return true;
     }
 
     public boolean approvePendingReplacing(String id, String oldId) {
-        return pendingStore.get(id).map(pf -> {
-            storeFact(pf.fact(), pf.scope());
-            longTermMemory.markSuperseded(oldId);
-            pendingStore.remove(id);
+        PendingFact pf = pendingStore.get(id).orElse(null);
+        if (pf == null || !isPendingVisible(pf)) {
+            return false;
+        }
+        if (!pendingStore.remove(id)) {
+            return false;
+        }
+        storeFact(pf.fact(), pf.scope());
+        longTermMemory.markSuperseded(oldId);
+        return true;
+    }
+
+    /** 候选是否对当前项目可见:global 恒可见;project 仅当 project==currentProject。 */
+    private boolean isPendingVisible(PendingFact pf) {
+        if ("global".equals(pf.scope())) {
             return true;
-        }).orElse(false);
+        }
+        return currentProject != null && currentProject.equals(pf.project());
     }
 
     public boolean rejectPending(String id) {

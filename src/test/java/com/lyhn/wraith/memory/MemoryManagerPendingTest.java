@@ -71,4 +71,24 @@ class MemoryManagerPendingTest {
         m.getShortTermMemory().store(new MemoryEntry("user-1", "用户偏好 Java 17", MemoryEntry.MemoryType.CONVERSATION, java.util.Map.of(), 5));
         assertEquals(0, m.runAutoExtraction("s1")); // 关闭 → 不抽
     }
+
+    @Test
+    void approveRejectedForCandidateNotVisibleInCurrentProject(@TempDir File dir) {
+        MemoryManager m = managerWithTempMemory(dir); // currentProject = "/proj"
+        // 一条属于别的项目的候选
+        m.getPendingStore().add(new PendingFact("cx", "别项目的事实", "FACT", "project", null, "s1", "/other", "2026-07-23T00:00:00Z"));
+        assertFalse(m.approvePending("cx"));                       // 不可见 → 拒批
+        assertTrue(m.getLongTermMemory().getAll().isEmpty());       // 未落库
+        assertTrue(m.getPendingStore().get("cx").isPresent());      // 仍在队列(未被误领取)
+    }
+
+    @Test
+    void approveIsAtomicClaim_secondApproveOfSameIdFails(@TempDir File dir) {
+        MemoryManager m = managerWithTempMemory(dir);
+        m.getPendingStore().add(new PendingFact("c1", "用户偏好 Java 17", "FACT", "project", null, "s1", m.getCurrentProject(), "2026-07-23T00:00:00Z"));
+        assertTrue(m.approvePending("c1"));                         // 第一次:领取+落库
+        assertFalse(m.approvePending("c1"));                        // 第二次:已被领取 → false
+        long count = m.getLongTermMemory().getAll().stream().filter(e -> e.getContent().equals("用户偏好 Java 17")).count();
+        assertEquals(1, count);                                     // 只入库一次(无重复)
+    }
 }
