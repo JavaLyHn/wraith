@@ -996,6 +996,26 @@ ipcMain.handle('wraith:memoryClear', async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.clear', {})
 })
+ipcMain.handle('wraith:memoryPendingList', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.pendingList', {})
+})
+ipcMain.handle('wraith:memoryPendingApprove', async (_e, id: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.pendingApprove', { id })
+})
+ipcMain.handle('wraith:memoryPendingApproveReplacing', async (_e, id: string, oldId: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.pendingApproveReplacing', { id, oldId })
+})
+ipcMain.handle('wraith:memoryPendingReject', async (_e, id: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.pendingReject', { id })
+})
+ipcMain.handle('wraith:memoryPendingClear', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.pendingClear', {})
+})
 
 // side-git 快照时间线 + 恢复(转发 AppServer snapshot.* RPC)
 ipcMain.handle('wraith:snapshotList', async (_e, limit?: number) => {

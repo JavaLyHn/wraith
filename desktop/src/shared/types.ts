@@ -281,6 +281,23 @@ export interface MemoryListResult {
   wraithMdPath?: string
 }
 
+/** 待确认候选记忆视图(AppServer memory.pendingList 回包 pending[])。 */
+export interface PendingFactView {
+  id: string
+  fact: string
+  type: string
+  scope: string // 'project' | 'global'
+  nearestExistingId: string | null
+  sourceSessionId: string
+  project: string | null
+  createdAt: string
+}
+
+export interface PendingListResult {
+  project: string
+  pending: PendingFactView[]
+}
+
 /** WRAITH.md 生成结果(AppServer memory.initProject 回包)。 */
 export interface ProjectMemoryInitResult {
   written: boolean

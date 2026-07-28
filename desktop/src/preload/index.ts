@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
@@ -92,6 +92,11 @@ export interface WraithApi {
   memorySave(fact: string, scope: string): Promise<{ ok: boolean }>
   memoryClear(): Promise<{ ok: boolean }>
   memoryInitProject(force: boolean): Promise<ProjectMemoryInitResult>
+  memoryPendingList(): Promise<PendingListResult>
+  memoryPendingApprove(id: string): Promise<{ ok: boolean }>
+  memoryPendingApproveReplacing(id: string, oldId: string): Promise<{ ok: boolean }>
+  memoryPendingReject(id: string): Promise<{ ok: boolean }>
+  memoryPendingClear(): Promise<{ ok: boolean }>
   snapshotList(limit?: number): Promise<SnapshotListResult>
   snapshotRestore(offset: number): Promise<SnapshotRestoreResult>
   snapshotRestoreCommit(commitId: string): Promise<SnapshotRestoreResult>
@@ -443,6 +448,21 @@ const wraith: WraithApi = {
   },
   memoryInitProject(force) {
     return ipcRenderer.invoke('wraith:memoryInitProject', force) as Promise<ProjectMemoryInitResult>
+  },
+  memoryPendingList() {
+    return ipcRenderer.invoke('wraith:memoryPendingList') as Promise<PendingListResult>
+  },
+  memoryPendingApprove(id) {
+    return ipcRenderer.invoke('wraith:memoryPendingApprove', id) as Promise<{ ok: boolean }>
+  },
+  memoryPendingApproveReplacing(id, oldId) {
+    return ipcRenderer.invoke('wraith:memoryPendingApproveReplacing', id, oldId) as Promise<{ ok: boolean }>
+  },
+  memoryPendingReject(id) {
+    return ipcRenderer.invoke('wraith:memoryPendingReject', id) as Promise<{ ok: boolean }>
+  },
+  memoryPendingClear() {
+    return ipcRenderer.invoke('wraith:memoryPendingClear') as Promise<{ ok: boolean }>
   },
   snapshotList(limit) {
     return ipcRenderer.invoke('wraith:snapshotList', limit) as Promise<SnapshotListResult>
