@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
@@ -97,6 +97,7 @@ export interface WraithApi {
   memoryPendingApproveReplacing(id: string, oldId: string): Promise<{ ok: boolean }>
   memoryPendingReject(id: string): Promise<{ ok: boolean }>
   memoryPendingClear(): Promise<{ ok: boolean }>
+  memoryExtractNow(): Promise<ExtractNowResult>
   snapshotList(limit?: number): Promise<SnapshotListResult>
   snapshotRestore(offset: number): Promise<SnapshotRestoreResult>
   snapshotRestoreCommit(commitId: string): Promise<SnapshotRestoreResult>
@@ -463,6 +464,9 @@ const wraith: WraithApi = {
   },
   memoryPendingClear() {
     return ipcRenderer.invoke('wraith:memoryPendingClear') as Promise<{ ok: boolean }>
+  },
+  memoryExtractNow() {
+    return ipcRenderer.invoke('wraith:memoryExtractNow') as Promise<ExtractNowResult>
   },
   snapshotList(limit) {
     return ipcRenderer.invoke('wraith:snapshotList', limit) as Promise<SnapshotListResult>

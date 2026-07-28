@@ -1016,6 +1016,10 @@ ipcMain.handle('wraith:memoryPendingClear', async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.pendingClear', {})
 })
+ipcMain.handle('wraith:memoryExtractNow', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('memory.extractNow', {})
+})
 
 // side-git 快照时间线 + 恢复(转发 AppServer snapshot.* RPC)
 ipcMain.handle('wraith:snapshotList', async (_e, limit?: number) => {

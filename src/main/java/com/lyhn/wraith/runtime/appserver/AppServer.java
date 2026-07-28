@@ -191,6 +191,10 @@ public final class AppServer {
         default java.util.Map<String, Object> memoryPendingClear() {
             throw new UnsupportedOperationException("memoryPendingClear not implemented");
         }
+        /** 非破坏地扫当前对话短期记忆产候选(不清对话)。默认抛出。 */
+        default java.util.Map<String, Object> memoryExtractNow() {
+            throw new UnsupportedOperationException("memoryExtractNow not implemented");
+        }
         /** 列出 side-git 快照时间线(新→旧,含全相位;每条附 preTurnOffset)。默认抛出。 */
         default java.util.Map<String, Object> snapshotList(int limit) {
             throw new UnsupportedOperationException("snapshotList not implemented");
@@ -678,6 +682,11 @@ public final class AppServer {
             case "memory.pendingClear" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
                 try { writer.result(msg.id(), session.memoryPendingClear()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "memory.extractNow" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.memoryExtractNow()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "snapshot.list" -> {

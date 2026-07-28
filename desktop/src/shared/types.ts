@@ -298,6 +298,11 @@ export interface PendingListResult {
   pending: PendingFactView[]
 }
 
+/** memory.extractNow 回包:本次扫描入队的候选数。 */
+export interface ExtractNowResult {
+  enqueued: number
+}
+
 /** WRAITH.md 生成结果(AppServer memory.initProject 回包)。 */
 export interface ProjectMemoryInitResult {
   written: boolean

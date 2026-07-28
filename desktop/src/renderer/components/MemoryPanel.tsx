@@ -48,6 +48,16 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
     } catch (err) { setError((err as Error).message) }
   }, [])
 
+  const doExtractNow = useCallback(async (): Promise<void> => {
+    setBusy(true); setInitNotice(null)
+    try {
+      const r = await window.wraith.memoryExtractNow()
+      setInitNotice(r.enqueued > 0 ? `🧠 已从本次对话抽取 ${r.enqueued} 条候选,请在下方待确认区复核` : 'ℹ️ 本次对话没有可沉淀的新事实')
+      await loadPending()
+    } catch (err) { setError((err as Error).message) }
+    finally { setBusy(false) }
+  }, [loadPending])
+
   const doApprove = useCallback(async (f: PendingFactView): Promise<void> => {
     try { await window.wraith.memoryPendingApprove(f.id); await loadPending(); void load() }
     catch (err) { setError((err as Error).message) }
@@ -131,6 +141,8 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
             className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-fg-subtle" />
           {query && <button onClick={clearSearch} className="shrink-0 text-fg-subtle hover:text-fg"><X className="h-3.5 w-3.5" strokeWidth={1.5} /></button>}
         </div>
+        <button data-testid="memory-extract-now" onClick={() => void doExtractNow()} disabled={busy} title="扫描本次对话,把稳定事实提为待确认候选(不清空对话)"
+          className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:opacity-40">整理记忆</button>
         {entries.length > 0 && (
           <button data-testid="memory-clear-all" onClick={() => void doClearAll()} title="清空全部长期记忆"
             className="shrink-0 rounded-lg border border-border px-2 py-1 text-xs text-fg-muted hover:border-danger hover:text-danger">清空</button>

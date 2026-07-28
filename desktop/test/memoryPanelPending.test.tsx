@@ -20,6 +20,7 @@ function mockWraith(over: Record<string, unknown> = {}) {
     memoryPendingApproveReplacing: vi.fn(async () => ({ ok: true })),
     memoryPendingReject: vi.fn(async () => ({ ok: true })),
     memoryPendingClear: vi.fn(async () => ({ ok: true })),
+    memoryExtractNow: vi.fn(async () => ({ enqueued: 2 })),
     ...over,
   }
   ;(window as unknown as { wraith: Record<string, unknown> }).wraith = w
@@ -59,5 +60,15 @@ describe('MemoryPanel 待确认区', () => {
     render(<MemoryPanel onBack={() => {}} />)
     await waitFor(() => expect(screen.getByTestId('memory-back')).toBeTruthy()) // 面板已挂载
     expect(screen.queryByTestId('memory-pending-section')).toBeNull()
+  })
+
+  it('整理记忆键 → 调 memoryExtractNow 并刷新候选', async () => {
+    const w = mockWraith()
+    render(<MemoryPanel onBack={() => {}} />)
+    await waitFor(() => expect(screen.getByTestId('memory-extract-now')).toBeTruthy())
+    fireEvent.click(screen.getByTestId('memory-extract-now'))
+    await waitFor(() => expect(w.memoryExtractNow).toHaveBeenCalled())
+    // 触发后会再次拉候选(memoryPendingList 至少被调 2 次:挂载 + 整理后)
+    await waitFor(() => expect((w.memoryPendingList as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBeGreaterThanOrEqual(2))
   })
 })

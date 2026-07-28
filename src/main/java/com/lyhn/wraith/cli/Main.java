@@ -1546,6 +1546,10 @@ public class Main {
                         agent.getMemoryManager().clearPending();
                         return java.util.Map.of("ok", true);
                     }
+                    public java.util.Map<String, Object> memoryExtractNow() {
+                        int n = agent.getMemoryManager().runAutoExtraction("desktop-" + System.currentTimeMillis());
+                        return java.util.Map.of("enqueued", n);
+                    }
                     private java.util.Map<String, Object> pendingFactJson(com.lyhn.wraith.memory.PendingFact f) {
                         java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
                         m.put("id", f.id());
