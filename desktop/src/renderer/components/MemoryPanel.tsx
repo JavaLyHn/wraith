@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, Brain, Search, Trash2, Plus, X, FileText } from 'lucide-react'
-import type { MemoryEntryView } from '../../shared/types'
+import { ArrowLeft, Brain, Search, Trash2, Plus, X, FileText, Check, RotateCcw } from 'lucide-react'
+import type { MemoryEntryView, PendingFactView } from '../../shared/types'
 import { scopeLabel, relativeTime } from '../lib/memoryView'
 
 export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Element {
@@ -39,7 +39,40 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
     } catch (err) { setError((err as Error).message) }
   }, [wraithMd.exists, load])
 
+  const [pending, setPending] = useState<PendingFactView[]>([])
+
+  const loadPending = useCallback(async (): Promise<void> => {
+    try {
+      const r = await window.wraith.memoryPendingList()
+      setPending(r.pending)
+    } catch (err) { setError((err as Error).message) }
+  }, [])
+
+  const doApprove = useCallback(async (f: PendingFactView): Promise<void> => {
+    try { await window.wraith.memoryPendingApprove(f.id); await loadPending(); void load() }
+    catch (err) { setError((err as Error).message) }
+  }, [loadPending, load])
+
+  const doReplace = useCallback(async (f: PendingFactView): Promise<void> => {
+    if (!f.nearestExistingId) return
+    try { await window.wraith.memoryPendingApproveReplacing(f.id, f.nearestExistingId); await loadPending(); void load() }
+    catch (err) { setError((err as Error).message) }
+  }, [loadPending, load])
+
+  const doReject = useCallback(async (f: PendingFactView): Promise<void> => {
+    try { await window.wraith.memoryPendingReject(f.id); await loadPending() }
+    catch (err) { setError((err as Error).message) }
+  }, [loadPending])
+
+  const doClearPending = useCallback(async (): Promise<void> => {
+    if (!window.confirm('清空全部待确认候选?(不影响已入库的长期记忆)')) return
+    try { await window.wraith.memoryPendingClear(); await loadPending() }
+    catch (err) { setError((err as Error).message) }
+  }, [loadPending])
+
   useEffect(() => { void load() }, [load])
+
+  useEffect(() => { void loadPending() }, [loadPending])
 
   const clearSearch = useCallback((): void => { setQuery(''); void load() }, [load])
 
@@ -107,6 +140,36 @@ export default function MemoryPanel({ onBack }: { onBack: () => void }): JSX.Ele
       {error && <div className="shrink-0 px-4 py-2 text-xs text-danger">出错:{error}</div>}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3 panel-content">
+        {pending.length > 0 && (
+          <div data-testid="memory-pending-section" className="mb-3 rounded-lg border border-warn/40 bg-warn/5 p-2">
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="text-xs font-semibold text-warn">🕵 待确认候选 ({pending.length})</span>
+              <button data-testid="memory-pending-clear" onClick={() => void doClearPending()}
+                className="ml-auto text-3xs text-fg-subtle hover:text-danger">清空</button>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {pending.map((f) => (
+                <div key={f.id} data-testid="memory-pending-item" className="rounded-lg border border-border bg-bg px-2.5 py-1.5">
+                  <div className="whitespace-pre-wrap break-words text-xs text-fg">{f.fact}</div>
+                  <div className="mt-1 flex items-center gap-2 text-3xs text-fg-subtle">
+                    <span className={'rounded px-1.5 py-0.5 ' + (f.scope === 'global' ? 'bg-accent/12 text-accent' : 'bg-surface text-fg-muted')}>{scopeLabel(f.scope)}</span>
+                    {f.nearestExistingId && <span title={f.nearestExistingId}>↔ 相似既有条</span>}
+                    <span className="ml-auto flex items-center gap-1">
+                      <button data-testid={`pending-approve-${f.id}`} onClick={() => void doApprove(f)} title="批准入库"
+                        className="flex items-center gap-0.5 rounded border border-ok/50 px-1.5 py-0.5 text-ok hover:bg-ok/10"><Check className="h-3 w-3" strokeWidth={2} />批准</button>
+                      {f.nearestExistingId && (
+                        <button data-testid={`pending-replace-${f.id}`} onClick={() => void doReplace(f)} title="批准并替换相似旧条"
+                          className="flex items-center gap-0.5 rounded border border-border px-1.5 py-0.5 text-fg-muted hover:border-accent hover:text-accent"><RotateCcw className="h-3 w-3" strokeWidth={1.5} />替换</button>
+                      )}
+                      <button data-testid={`pending-reject-${f.id}`} onClick={() => void doReject(f)} title="驳回"
+                        className="rounded border border-border px-1.5 py-0.5 text-fg-subtle hover:border-danger hover:text-danger">驳回</button>
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {busy && entries.length === 0 ? (
           <div className="text-xs text-fg-subtle">加载中…</div>
         ) : entries.length === 0 ? (
