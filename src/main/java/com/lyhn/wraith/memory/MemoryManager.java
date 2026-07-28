@@ -245,6 +245,11 @@ public class MemoryManager {
         if (pf == null || !isPendingVisible(pf)) {
             return false;
         }
+        // 旧条必须存在且当前项目可见,才允许超请;否则整体拒(不 ADD、不 supersede)
+        MemoryEntry old = longTermMemory.retrieve(oldId).orElse(null);
+        if (old == null || !LongTermMemory.isVisibleInProject(old, currentProject)) {
+            return false;
+        }
         if (!pendingStore.remove(id)) {
             return false;
         }
@@ -262,6 +267,10 @@ public class MemoryManager {
     }
 
     public boolean rejectPending(String id) {
+        PendingFact pf = pendingStore.get(id).orElse(null);
+        if (pf == null || !isPendingVisible(pf)) {
+            return false;
+        }
         return pendingStore.remove(id);
     }
 

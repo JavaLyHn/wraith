@@ -91,4 +91,21 @@ class MemoryManagerPendingTest {
         long count = m.getLongTermMemory().getAll().stream().filter(e -> e.getContent().equals("用户偏好 Java 17")).count();
         assertEquals(1, count);                                     // 只入库一次(无重复)
     }
+
+    @Test
+    void rejectRejectedForCandidateNotVisibleInCurrentProject(@TempDir File dir) {
+        MemoryManager m = managerWithTempMemory(dir); // currentProject = "/proj"
+        m.getPendingStore().add(new PendingFact("cx", "别项目候选", "FACT", "project", null, "s1", "/other", "2026-07-23T00:00:00Z"));
+        assertFalse(m.rejectPending("cx"));                    // 不可见 → 拒
+        assertTrue(m.getPendingStore().get("cx").isPresent());  // 未被误删
+    }
+
+    @Test
+    void approveReplacingRejectedForMissingOrInvisibleOldId(@TempDir File dir) {
+        MemoryManager m = managerWithTempMemory(dir);
+        m.getPendingStore().add(new PendingFact("c1", "用户偏好 Java 17", "FACT", "global", "nope", "s1", null, "2026-07-23T00:00:00Z"));
+        assertFalse(m.approvePendingReplacing("c1", "nope"));   // oldId 不存在 → 拒
+        assertTrue(m.getLongTermMemory().getAll().isEmpty());    // 未 ADD
+        assertTrue(m.getPendingStore().get("c1").isPresent());   // 候选仍在(未领取)
+    }
 }
