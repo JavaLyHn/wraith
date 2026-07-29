@@ -1,4 +1,5 @@
 import sharp from 'sharp'
+import pngToIco from 'png-to-ico'
 import { execFileSync } from 'node:child_process'
 import { mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
@@ -43,5 +44,12 @@ for (const s of sizes) {
 }
 
 execFileSync('iconutil', ['-c', 'icns', ICONSET, '-o', path.join(BUILD, 'icon.icns')])
-console.log('icon.icns + icon-512.png generated')
 if (!existsSync(path.join(BUILD, 'icon.icns'))) { console.error('icon.icns 未生成'); process.exit(1) }
+
+// Windows 多尺寸 .ico(从 master 派生;png-to-ico 纯 JS,mac 可跑)
+const icoSizes = [16, 32, 48, 64, 128, 256]
+const icoPngs = await Promise.all(icoSizes.map(s => sharp(master).resize(s, s).png().toBuffer()))
+writeFileSync(path.join(BUILD, 'icon.ico'), await pngToIco(icoPngs))
+if (!existsSync(path.join(BUILD, 'icon.ico'))) { console.error('icon.ico 未生成'); process.exit(1) }
+
+console.log('icon.icns + icon-512.png + icon.ico generated')
