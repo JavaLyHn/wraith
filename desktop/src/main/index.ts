@@ -49,7 +49,7 @@ import {
   petWindowMoveTo, petWindowResizeToScale, petWindowResetPosition, toElectronMenu,
 } from './petWindow'
 import { runPetdexInstall } from './petInstall'
-import { detectEditors, uniqueDownloadName, performUndo, resolveOpenWithPlan } from './fileOpen'
+import { detectEditors, detectWindowsEditors, uniqueDownloadName, performUndo, resolveOpenWithPlan } from './fileOpen'
 import type { EditorApp } from '../shared/editors'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
@@ -1398,6 +1398,10 @@ let editorsCache: EditorApp[] | null = null
 
 function computeEditors(): EditorApp[] {
   if (editorsCache) return editorsCache
+  if (process.platform === 'win32') {
+    editorsCache = detectWindowsEditors(process.env, fs.existsSync)
+    return editorsCache
+  }
   const dirs = ['/Applications', path.join(os.homedir(), 'Applications')]
   const appPaths: string[] = []
   for (const d of dirs) {
