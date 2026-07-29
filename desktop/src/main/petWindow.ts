@@ -15,6 +15,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { shouldShowPet, defaultPetPosition, clampToDisplay, petBreathingMargin, type Box, type PetMenuItem } from '../shared/petWindow'
 import { listPets } from './petStore'
+import { petWindowOptions } from './petWindowOptions'
 import type { PetConfig } from './settings'
 import type { PetSprite } from '../shared/pets'
 import type { PetStateSignal } from '../shared/petState'
@@ -75,22 +76,16 @@ function createPetWindow(config: PetConfig): void {
     const wa = deps.primaryWorkArea()
     const pos = config.position ?? defaultPetPosition(wa, size)
     const b = clampToDisplay({ ...pos, ...size }, wa)
-    win = new BrowserWindow({
-      x: b.x, y: b.y, width: b.width, height: b.height,
-      // macOS 用 NSPanel(nonactivating):点击/拖动桌宠不再"激活 wraith 应用",
-      // 因而不会把主窗抢到最前、打断用户正在别的 App 里的操作(用户本意通常只是挪一下宠物)。
-      // 想真正"跳回 wraith"改由右键菜单「打开 wraith」(pet:open-main)显式触发。
-      // 仅 darwin 有意义;其余平台不传该 type(避免落到未知窗口类型)。
-      ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
-      frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
-      // frameless 无边框窗本就没有用户可拖拽的缩放手柄,这里的 resizable 只影响
-      // Electron 是否接受程序化 setBounds 改尺寸——resizable:false 会让 setBounds
-      // 的尺寸变更被静默 no-op(Task 9 滚轮缩放的已知坑),必须开 true 才能生效;
-      // movable 维持 false 不受影响(setBounds 移动窗口本就不受 movable 限制)。
-      resizable: true, movable: false, skipTaskbar: true, focusable: false, fullscreenable: false,
-      show: false,
-      webPreferences: { contextIsolation: true, nodeIntegration: false, preload: deps.preloadPath },
-    })
+    // macOS 用 NSPanel(nonactivating):点击/拖动桌宠不再"激活 wraith 应用",
+    // 因而不会把主窗抢到最前、打断用户正在别的 App 里的操作(用户本意通常只是挪一下宠物)。
+    // 想真正"跳回 wraith"改由右键菜单「打开 wraith」(pet:open-main)显式触发。
+    // 仅 darwin 有意义;其余平台不传该 type(避免落到未知窗口类型)。
+    // frameless 无边框窗本就没有用户可拖拽的缩放手柄,这里的 resizable 只影响
+    // Electron 是否接受程序化 setBounds 改尺寸——resizable:false 会让 setBounds
+    // 的尺寸变更被静默 no-op(Task 9 滚轮缩放的已知坑),必须开 true 才能生效;
+    // movable 维持 false 不受影响(setBounds 移动窗口本就不受 movable 限制)。
+    // 选项字面量已抽成纯函数 petWindowOptions(见该文件注释),便于按平台单测。
+    win = new BrowserWindow(petWindowOptions(process.platform, b, deps.preloadPath))
     petWindow = win
     win.setAlwaysOnTop(true, 'floating')
     // skipTransformProcessType:true 是关键:setVisibleOnAllWorkspaces 默认会把进程类型在
@@ -98,7 +93,9 @@ function createPetWindow(config: PetConfig): void {
     // 副作用是把 App 变成"附件型"——**从 Dock / 应用切换器里消失**(用户报的"开启宠物后
     // 图标没了、只在屏幕上、Dock 完全找不到 App")。skip 掉这个切换即可保住 Dock 图标;
     // 代价仅是不再浮于"其它 App 的全屏"之上,本 App 自身的全屏仍可(FullScreenAuxiliary)。
-    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+    if (process.platform === 'darwin') {
+      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
+    }
     win.setIgnoreMouseEvents(true, { forward: true })
     // 双保险:显式钉住 regular 激活策略,确保开启桌宠后 App 始终在 Dock 里可见。与"点击宠物
     // 不激活 App"的 nonactivating panel(type:'panel')行为正交——一个管 Dock 存在、一个管点击是否抢焦。
