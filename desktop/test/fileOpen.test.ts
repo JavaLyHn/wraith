@@ -133,4 +133,10 @@ describe('detectWindowsEditors', () => {
     const subl = 'C:\\Program Files\\Sublime Text\\sublime_text.exe'
     expect(detectWindowsEditors({ LOCALAPPDATA: LA } as NodeJS.ProcessEnv, p => p === subl)).toEqual([])
   })
+  it('同一编辑器两候选都在时只取首个(去重)', () => {
+    expect(detectWindowsEditors(env, p => p === codeUser || p === codeSys)).toEqual([{ name: 'VS Code', appPath: codeUser }])
+  })
+  it('空串 env 变量视为缺失,回退下一候选', () => {
+    expect(detectWindowsEditors({ LOCALAPPDATA: '', ProgramFiles: PF } as NodeJS.ProcessEnv, p => p === codeSys)).toEqual([{ name: 'VS Code', appPath: codeSys }])
+  })
 })
