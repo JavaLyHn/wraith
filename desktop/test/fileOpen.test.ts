@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { detectEditors, uniqueDownloadName, isPathWithinWorkspace, performUndo, resolveOpenWithPlan } from '../src/main/fileOpen'
+import { detectEditors, uniqueDownloadName, isPathWithinWorkspace, performUndo, resolveOpenWithPlan, detectWindowsEditors } from '../src/main/fileOpen'
 
 describe('detectEditors', () => {
   it('只返回已知已装项,按表序,appPath 正确', () => {
@@ -96,12 +96,41 @@ describe('resolveOpenWithPlan', () => {
     expect(resolveOpenWithPlan('darwin', '/Applications/Visual Studio Code.app', '/x/y.txt'))
       .toEqual({ kind: 'spawn', cmd: 'open', args: ['-a', '/Applications/Visual Studio Code.app', '/x/y.txt'] })
   })
-  it('win32 → shellOpen(系统默认程序,不 spawn open)', () => {
-    expect(resolveOpenWithPlan('win32', 'C:/whatever.exe', 'C:/x/y.txt'))
-      .toEqual({ kind: 'shellOpen', target: 'C:/x/y.txt' })
+  it('win32 → spawn 编辑器 exe(直接开文件,不用 -a)', () => {
+    expect(resolveOpenWithPlan('win32', 'C:\\Program Files\\Microsoft VS Code\\Code.exe', 'C:\\x\\y.txt'))
+      .toEqual({ kind: 'spawn', cmd: 'C:\\Program Files\\Microsoft VS Code\\Code.exe', args: ['C:\\x\\y.txt'] })
   })
   it('linux → shellOpen', () => {
     expect(resolveOpenWithPlan('linux', '/usr/bin/code', '/x/y.txt'))
       .toEqual({ kind: 'shellOpen', target: '/x/y.txt' })
+  })
+})
+
+describe('detectWindowsEditors', () => {
+  const LA = 'C:\\Users\\me\\AppData\\Local'
+  const PF = 'C:\\Program Files'
+  const env = { LOCALAPPDATA: LA, ProgramFiles: PF } as NodeJS.ProcessEnv
+  const codeUser = 'C:\\Users\\me\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe'
+  const codeSys = 'C:\\Program Files\\Microsoft VS Code\\Code.exe'
+  const cursor = 'C:\\Users\\me\\AppData\\Local\\Programs\\cursor\\Cursor.exe'
+
+  it('命中 user 安装的 VS Code', () => {
+    expect(detectWindowsEditors(env, p => p === codeUser)).toEqual([{ name: 'VS Code', appPath: codeUser }])
+  })
+  it('user 缺则回退 ProgramFiles 的 VS Code', () => {
+    expect(detectWindowsEditors(env, p => p === codeSys)).toEqual([{ name: 'VS Code', appPath: codeSys }])
+  })
+  it('多编辑器按表序,每个只出一条(首候选命中即止)', () => {
+    expect(detectWindowsEditors(env, p => p === codeUser || p === cursor)).toEqual([
+      { name: 'VS Code', appPath: codeUser },
+      { name: 'Cursor', appPath: cursor },
+    ])
+  })
+  it('全漏装 → 空', () => {
+    expect(detectWindowsEditors(env, () => false)).toEqual([])
+  })
+  it('base 环境变量缺失 → 跳过该候选(仅 ProgramFiles 候选的编辑器拼不出路径)', () => {
+    const subl = 'C:\\Program Files\\Sublime Text\\sublime_text.exe'
+    expect(detectWindowsEditors({ LOCALAPPDATA: LA } as NodeJS.ProcessEnv, p => p === subl)).toEqual([])
   })
 })

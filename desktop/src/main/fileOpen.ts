@@ -59,14 +59,53 @@ export async function performUndo(
   }
 }
 
+/** 已知 Windows 编辑器:展示名 → 候选安装位置(base=环境变量名,rel=相对该目录的 exe)。
+ *  覆盖默认安装路径;自定义目录/注册表安装不在 v1 覆盖内(将来可选增强)。 */
+const KNOWN_WINDOWS_EDITORS: { name: string; candidates: { base: string; rel: string }[] }[] = [
+  { name: 'VS Code', candidates: [
+    { base: 'LOCALAPPDATA', rel: 'Programs\\Microsoft VS Code\\Code.exe' },
+    { base: 'ProgramFiles', rel: 'Microsoft VS Code\\Code.exe' },
+  ] },
+  { name: 'VS Code Insiders', candidates: [
+    { base: 'LOCALAPPDATA', rel: 'Programs\\Microsoft VS Code Insiders\\Code - Insiders.exe' },
+    { base: 'ProgramFiles', rel: 'Microsoft VS Code Insiders\\Code - Insiders.exe' },
+  ] },
+  { name: 'Cursor', candidates: [
+    { base: 'LOCALAPPDATA', rel: 'Programs\\cursor\\Cursor.exe' },
+  ] },
+  { name: 'Sublime Text', candidates: [
+    { base: 'ProgramFiles', rel: 'Sublime Text\\sublime_text.exe' },
+  ] },
+  { name: 'Notepad++', candidates: [
+    { base: 'ProgramFiles', rel: 'Notepad++\\notepad++.exe' },
+    { base: 'ProgramFiles(x86)', rel: 'Notepad++\\notepad++.exe' },
+  ] },
+]
+
+/** 从已知安装路径探测已装的 Windows 编辑器。env、exists 均注入以便纯函数单测。
+ *  每编辑器按候选顺序取首个存在者,最多一条(天然按 name 去重)。用 path.win32.join
+ *  保证跨宿主(含 mac 测试)都产 Windows 风格路径。 */
+export function detectWindowsEditors(env: NodeJS.ProcessEnv, exists: (p: string) => boolean): EditorApp[] {
+  const out: EditorApp[] = []
+  for (const ed of KNOWN_WINDOWS_EDITORS) {
+    for (const c of ed.candidates) {
+      const baseDir = env[c.base]
+      if (!baseDir) continue
+      const full = path.win32.join(baseDir, c.rel)
+      if (exists(full)) { out.push({ name: ed.name, appPath: full }); break }
+    }
+  }
+  return out
+}
+
 export type OpenWithPlan =
   | { kind: 'spawn'; cmd: string; args: string[] }
   | { kind: 'shellOpen'; target: string }
 
 /**
  * 决定"用某编辑器打开文件"在当前平台怎么执行。
- * darwin 用 `open -a <app> <file>`;其余平台没有等价的"指定 .app"语义,
- * 退回系统默认程序打开(shell.openPath)。完整的 Windows 编辑器探测见块 3。
+ * darwin 用 `open -a <app> <file>`;win32 的 appPath 是编辑器 exe(见 detectWindowsEditors),
+ * 直接 spawn 该 exe 开文件;其余平台(linux)没有等价语义,退回系统默认程序打开(shell.openPath)。
  */
 export function resolveOpenWithPlan(
   platform: NodeJS.Platform,
@@ -75,6 +114,10 @@ export function resolveOpenWithPlan(
 ): OpenWithPlan {
   if (platform === 'darwin') {
     return { kind: 'spawn', cmd: 'open', args: ['-a', appPath, filePath] }
+  }
+  if (platform === 'win32') {
+    // Windows:appPath 是编辑器 exe(由 detectWindowsEditors 探得),直接 spawn 开文件(无 -a)
+    return { kind: 'spawn', cmd: appPath, args: [filePath] }
   }
   return { kind: 'shellOpen', target: filePath }
 }
