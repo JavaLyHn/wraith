@@ -4,7 +4,7 @@
 [![Downloads](https://img.shields.io/github/downloads/JavaLyHn/wraith/total?color=6d5df6)](https://github.com/JavaLyHn/wraith/releases)
 [![macOS Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-000?logo=apple)](https://github.com/JavaLyHn/wraith/releases/latest)
 
-一个成熟的 Java Agent 产品：从第一期的 `ReAct` 单代理循环，演进到第十六期的 `TUI 产品化`，再到桌面 App 与常驻 IM 网关（QQ / 飞书 单聊 bot）。核心引擎（ReAct / Plan / Multi-Agent / RAG / MCP / Skill / HITL）在 CLI、桌面、IM 三种形态间复用同一套 Java 内核。
+一个成熟的 Java Agent 产品：从第一期的 `ReAct` 单代理循环，演进到第十六期的 `TUI 产品化`，再到桌面 App（macOS + Windows）与常驻 IM 网关（QQ / 飞书 单聊 bot）。核心引擎（ReAct / Plan / Multi-Agent / RAG / MCP / Skill / HITL）在 CLI、桌面、IM 三种形态间复用同一套 Java 内核；桌面 App 已完成 Windows 功能对等（见「Windows 桌面对等」一节）。
 
 ## 下载
 
@@ -12,7 +12,9 @@
 
 > ⚠️ 本版本未签名/未公证，下载后被 Gatekeeper 隔离会误报「已损坏，无法打开」（右键「打开」对此无效）。解决：把 `Wraith.app` 拖到 `/应用程序`，在「终端」执行 `sudo xattr -cr /Applications/Wraith.app`（会提示输入登录密码；必须加 `sudo`，因内置 JRE 含只读文件），再双击打开。
 
-当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP、第 24 期 `IM 网关`（QQ / 飞书 单聊 bot + 桌面配置面板 + 定时任务投递）。
+**Windows**：暂未在 Releases 上架预编译安装包；在 Windows 机器上从源码构建未签名 NSIS 安装包,步骤见 [`docs/windows-dev.md`](docs/windows-dev.md)（`mvn -q clean package -DskipTests` → `cd desktop && npm install --legacy-peer-deps` → `npm run dist:win`,产物在 `desktop/release/*.exe`）。首次运行 SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」（未签名,同 macOS 的 xattr 姿态）。也可先 `npm run dev` 直接跑开发态验证。
+
+当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP、第 24 期 `IM 网关`（QQ / 飞书 单聊 bot + 桌面配置面板 + 定时任务投递）、第 25 期 `安全策略层`、长期记忆的 `自动记忆提取（候选待批）`，以及桌面 App 的 `Windows 功能对等`（可跑 dev / 无边框自绘窗控 / 编辑器探测 / NSIS 打包 / 桌宠点击不抢焦）。
 
 ## 测试策略
 
@@ -56,6 +58,7 @@ mvn test -DskipTests=false
 - 注入给模型的相关记忆只使用长期稳定事实，不把当前轮短期对话误当成“历史记忆”
 - 对话接近预算时自动做摘要压缩
 - 新增 `/memory` 查看状态、`/memory list/search/delete/clear` 管理长期记忆、`/save` 手动保存事实；Agent 在用户明确说“记一下 / 记住”时可调用 `save_memory`
+- 自动记忆提取（候选待批）：会话边界或桌面「整理记忆」触发，从对话里抽取稳定事实先入**待确认队列**（不自动进长期记忆），人工批准 / 替换 / 驳回才落库；带质量门（敏感 / 凭证在所有写入路径硬拦、与长期记忆及待确认队列双重去重）。记忆声明只以本轮注入的「相关长期记忆」区块为准，不凭对话历史臆断已存。CLI `/memory pending`、`/memory approve <id>`、`/memory reject <id>`；桌面记忆面板「待确认区」+「整理记忆」按钮
 
 ### 第四期：RAG 检索 + 代码库理解
 
@@ -266,9 +269,9 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 - **定时任务投递**（`automation/`）：常驻调度器（interval / daily / weekly）跑无人值守回合，`Deliverer` + `DeliveryAdapter` SPI 把结果投到桌面通知或 IM（`DesktopDeliveryAdapter` / `QqDeliveryAdapter` / `FeishuDeliveryAdapter`）；定时任务的 HITL 审批也能在 IM 端浮出并唤醒挂起回合。cron 独立于 IM——未配置任何 IM 时仅跑定时任务。
 - **密钥红线**：appId / clientSecret / appSecret 只落 `~/.wraith/config.json`（仓库外），绝不进日志或 RPC 回包；IM 环境值不出现在任何回传里。
 
-### 第六期 HITL 增强（路径围栏 / 命令快速拒绝 / 操作审计）
+### 第二十五期：安全策略层（第六期 HITL 的后续增强 —— 路径围栏 / 命令快速拒绝 / 操作审计）
 
-`com.lyhn.wraith.policy` 包，作为 HITL 之外的辅助层（不是沙箱、不提供进程隔离）：
+`com.lyhn.wraith.policy` 包，在第六期 HITL 之上叠一层策略防线（不是沙箱、不提供进程隔离）：
 
 - `PathGuard` 路径围栏：文件类工具强制限定在项目根之内，拦截绝对路径外逃 / `..` 穿越 / 符号链接逃逸
 - `CommandGuard` 命令快速拒绝：HITL 之前的 fast-fail 黑名单（`sudo` / `rm -rf 全盘` / `mkfs` / `dd of=/dev` / fork bomb / `curl|sh` / `find /` / `chmod 777 /` / `shutdown`），减少 HITL 弹窗骚扰
@@ -712,6 +715,9 @@ I
 - `/memory search <关键词>` - 搜索当前项目可见长期记忆
 - `/memory delete <id>` - 删除单条长期记忆
 - `/memory clear` - 清空长期记忆
+- `/memory pending` - 查看待确认的自动抽取候选记忆
+- `/memory approve <id>` - 批准一条候选进入长期记忆（可选替换指定旧条）
+- `/memory reject <id>` - 驳回一条候选
 - `/save <事实>` - 手动保存项目级关键事实到长期记忆；`/save --global <事实>` 保存跨项目通用偏好
 - `save_memory` - Agent 内置工具，仅在用户明确要求保存长期偏好或稳定事实时调用；默认 `scope=project`，跨项目通用偏好才用 `scope=global`
 - `/init` - 生成精简项目级记忆 `WRAITH.md`；已存在时不覆盖，`/init --force` 可重写
@@ -772,6 +778,8 @@ Tips for getting started:
 - Ollama（本地 Embedding）
 - 飞书开放平台 Java SDK（`com.larksuite.oapi:oapi-sdk`，IM 网关飞书长连接 + 卡片回调）
 - Electron + React + TypeScript（桌面 App，独立子工程 `desktop/`）
+- koffi（FFI，Windows 桌宠 `WS_EX_NOACTIVATE` 调 user32；带各平台预编译二进制，免 node-gyp）
+- electron-builder（打包：macOS dmg/zip + Windows NSIS，均未签名）
 
 ## 项目结构
 
@@ -849,6 +857,32 @@ src/main/java/com/lyhn/wraith
 
 ## 桌面宠物（Pets）
 
-桌面设置页新增「宠物」页：总开关、宠物库、选择、工作预览、动态开关与四档单图风格（克制 / 悬浮 / 活泼 / 静态）、导入图片或精灵包、删除。桌宠现为**独立于主窗口的全局桌面挂件**（无边框透明置顶 `BrowserWindow`，跨 Space、切到其他应用/主窗最小化都常驻可见，退出应用才消失）：全身可拖动（不再局限于窄条手柄）、在宠物身上滚轮/触控板捏合缩放（0.5×–2.0×，持久化）、右键弹原生菜单（打开 wraith / 选择宠物 / 缩放预设 / 锁定防误触 / 重置位置 / 关闭）。macOS 下桌宠窗是**非激活面板（NSPanel）**：点击/拖动它不会把 wraith 应用抢到前台打断你在别处的操作，想切回主窗用菜单「打开 wraith」显式触发。**单击**宠物随机挥手 / 跳跃，**按住拖动**则朝拖动方向左右奔跑。透明区域点击穿透到桌面与其他应用，只有指针真正压在宠物不透明像素上才捕获鼠标。宠物继续随 Agent 状态（空闲 / 思考 / 工具执行 / 等待审批 / 成功 / 失败）切换姿态；不发送文案、气泡或 Toast。
+桌面设置页新增「宠物」页：总开关、宠物库、选择、工作预览、动态开关与四档单图风格（克制 / 悬浮 / 活泼 / 静态）、导入图片或精灵包、删除。桌宠现为**独立于主窗口的全局桌面挂件**（无边框透明置顶 `BrowserWindow`，跨 Space、切到其他应用/主窗最小化都常驻可见，退出应用才消失）：全身可拖动（不再局限于窄条手柄）、在宠物身上滚轮/触控板捏合缩放（0.5×–2.0×，持久化）、右键弹原生菜单（打开 wraith / 选择宠物 / 缩放预设 / 锁定防误触 / 重置位置 / 关闭）。macOS 下桌宠窗是**非激活面板（NSPanel）**：点击/拖动它不会把 wraith 应用抢到前台打断你在别处的操作，想切回主窗用菜单「打开 wraith」显式触发。Windows 下用原生 FFI（koffi）给桌宠窗加 `WS_EX_NOACTIVATE` 达到同样的「点击不抢焦」（FFI 失败自动降级 `focusable:false`，不崩；仅 x64 精确）；跨虚拟桌面常驻在 Windows 无官方 API，为已知限制。**单击**宠物随机挥手 / 跳跃，**按住拖动**则朝拖动方向左右奔跑。透明区域点击穿透到桌面与其他应用，只有指针真正压在宠物不透明像素上才捕获鼠标。宠物继续随 Agent 状态（空闲 / 思考 / 工具执行 / 等待审批 / 成功 / 失败）切换姿态；不发送文案、气泡或 Toast。
 
 宠物来源：支持导入用户单张图片（PNG / JPEG / WebP）与本地 Wraith / Petdex 兼容精灵包，并检测本地已安装的 Petdex 条目（如 `Noir Webling`）。除导入外,也支持**用户在设置页显式发起**的 Petdex 安装——输入宠物名后运行 `npx petdex@latest install <名>`（名字过白名单 `^[a-z0-9][a-z0-9-]{0,63}$`、定长参数、`shell:false` 不经 shell、120s 超时，无注入面）把宠物下载进 `~/.codex/pets/`，装完自动刷新宠物库。除这一步用户显式点击触发的安装外，Wraith 不自动下载资源、不后台运行 `npx`、不执行任何第三方代码。**内置 Wraith 默认角色的美术资产为后续交付**（角色美术细节独立于本期落地的选择 / 导入 / 检测 / 挂件展示机制），当前该条目在库中为占位。导入的资源会先做格式与大小校验，再复制副本到应用数据目录；删除只清理该副本，不触碰用户原始目录。
+
+## Windows 桌面对等
+
+桌面 App 原以 macOS 为主；这一阶段把 mac 上的能力逐块搬到 Windows，分五块推进（Java 内核与渲染层本就跨平台，改动集中在少数平台专属处，均在分支 `feat/windows-parity-block1`）：
+
+1. **可跑 dev + 平台守卫**：`npm run dev` 在 Windows 起得来，核心功能（聊天 / 终端 / 记忆 / 面板）全通；平台分支抽成纯函数在 mac 上单测。终端 shell 用 `COMSPEC` / PowerShell；后端 `spawn('java', …)` 走系统 PATH。
+2. **窗口视觉对等**：Windows 主窗无边框（`frame:false`）+ 顶条右上角自绘 最小 / 最大-还原 / 关闭（混合风：Windows 位置行为 + wraith 单色墨字形，关闭悬停红，双击标题栏最大化）；mac 的红绿灯 / vibrancy 不变。
+3. **编辑器探测 + 打开**：「用应用打开」在 Windows 按已知安装路径探测 VS Code / VS Code Insiders / Cursor / Sublime Text / Notepad++，直接 spawn 其 exe 打开文件（自定义目录 / 注册表安装暂不覆盖）。
+4. **打包**：`npm run dist:win` 产未签名 NSIS 安装包（向导式，可选安装目录 + 桌面 / 开始菜单快捷方式）；捆绑 Windows JRE（本机 jlink）+ 原生 node-pty（本机 `npm install`）。
+5. **桌宠点击不抢焦**：koffi FFI 给桌宠窗 HWND 加 `WS_EX_NOACTIVATE`（精确不抢焦，FFI 失败降级 `focusable:false`）；跨虚拟桌面常驻为已知限制（Windows 无官方 API）。
+
+**使用**（在 Windows 机器上，前置 JDK 17 / Maven / Node 均在 PATH）：
+
+```powershell
+# 跑开发态
+powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1   # 构建并放后端 jar 到 %USERPROFILE%\.wraith\wraith.jar
+cd desktop
+npm install --legacy-peer-deps     # 仓库存在 @lobehub peer 冲突，须 --legacy-peer-deps
+npm run dev
+
+# 或出安装包
+mvn -q clean package -DskipTests    # 仓库根：构建 jar
+cd desktop && npm install --legacy-peer-deps && npm run dist:win   # 产物：desktop\release\*.exe
+```
+
+完整前置、逐条验收清单与未签名 / SmartScreen 说明见 [`docs/windows-dev.md`](docs/windows-dev.md)。**已知限制**：桌宠跨虚拟桌面（无官方 API）、`WS_EX_NOACTIVATE` 仅 x64 精确（ia32 自动降级）、编辑器自定义目录 / 注册表安装未覆盖。
