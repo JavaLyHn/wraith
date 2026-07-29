@@ -7,6 +7,7 @@ import readline from 'readline'
 import { JsonRpcClient } from '../shared/jsonRpcClient'
 import { resolveBackendCommand, defaultJarPath } from './backend'
 import { computeUpdate, describeHttpError, type GhRelease } from './updateCheck'
+import { mainWindowChrome } from './mainWindowChrome'
 import fs from 'fs'
 import {
   resolvePersistedWorkspace,
@@ -287,15 +288,7 @@ function createWindow(): void {
     show: false,
     // dev: show WR icon instead of Electron atom; packaged macOS: dock icon comes from .icns
     icon: app.isPackaged ? undefined : path.join(__dirname, '../../build/icon-512.png'),
-    ...(process.platform === 'darwin'
-      ? {
-          titleBarStyle: 'hidden' as const,
-          trafficLightPosition: { x: 12, y: 11 },
-          vibrancy: 'fullscreen-ui' as const,
-          visualEffectState: 'active' as const,
-          backgroundColor: '#00000000',
-        }
-      : {}),
+    ...mainWindowChrome(process.platform),
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
