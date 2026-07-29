@@ -8,7 +8,7 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: 'src/main/index.ts',
-        external: ['node-pty']
+        external: ['node-pty', 'koffi']
       }
     }
   },

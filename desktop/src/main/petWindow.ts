@@ -16,6 +16,7 @@ import { fileURLToPath } from 'url'
 import { shouldShowPet, defaultPetPosition, clampToDisplay, petBreathingMargin, type Box, type PetMenuItem } from '../shared/petWindow'
 import { listPets } from './petStore'
 import { petWindowOptions } from './petWindowOptions'
+import { applyNoActivate } from './winPetStyle'
 import type { PetConfig } from './settings'
 import type { PetSprite } from '../shared/pets'
 import type { PetStateSignal } from '../shared/petState'
@@ -97,6 +98,7 @@ function createPetWindow(config: PetConfig): void {
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true })
     }
     win.setIgnoreMouseEvents(true, { forward: true })
+    applyNoActivate(win) // Windows:精确不抢焦(win32-only,失败自降级)
     // 双保险:显式钉住 regular 激活策略,确保开启桌宠后 App 始终在 Dock 里可见。与"点击宠物
     // 不激活 App"的 nonactivating panel(type:'panel')行为正交——一个管 Dock 存在、一个管点击是否抢焦。
     if (process.platform === 'darwin') { try { app.setActivationPolicy('regular') } catch { /* best-effort */ } }
