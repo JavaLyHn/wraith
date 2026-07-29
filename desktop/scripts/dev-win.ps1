@@ -1,4 +1,4 @@
-# dev-win.ps1 — Windows 备 wraith 后端 jar 到稳定位置,供桌面 dev 用。
+﻿# dev-win.ps1 — Windows 备 wraith 后端 jar 到稳定位置,供桌面 dev 用。
 # 对标 macOS 的 wraith-install。用法(仓库任意位置):
 #   powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1
 $ErrorActionPreference = 'Stop'
@@ -11,6 +11,7 @@ Write-Host "dev-win: 构建中 (mvn -q clean package -DskipTests)…"
 Push-Location $repo
 try {
   mvn -q clean package -DskipTests
+  if ($LASTEXITCODE -ne 0) { Write-Error "dev-win: mvn 构建失败 (exit $LASTEXITCODE)"; exit 1 }
 } finally {
   Pop-Location
 }
