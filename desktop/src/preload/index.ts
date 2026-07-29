@@ -176,6 +176,17 @@ export interface WraithApi {
   petGetConfig(): Promise<PetConfig>
   petSetConfig(patch: Partial<PetConfig>): Promise<PetConfig>
   onPetConfig(cb: (c: PetConfig) => void): () => void
+  /** 窗口控制:Windows 无边框自绘窗控用(最小/最大化切换/关闭 + 最大化状态订阅)。 */
+  windowControls: WindowControlsApi
+}
+
+/** 窗口控制 API:最小化/切换最大化/关闭 + 最大化状态变更订阅。仅 Windows 渲染窗控 UI,其它平台调用无害。 */
+export interface WindowControlsApi {
+  minimize(): void
+  toggleMaximize(): void
+  close(): void
+  isMaximized(): Promise<boolean>
+  onMaximizeChange(cb: (max: boolean) => void): () => void
 }
 
 const wraith: WraithApi = {
@@ -683,6 +694,18 @@ const wraith: WraithApi = {
     const listener = (_e: Electron.IpcRendererEvent, c: PetConfig) => cb(c)
     ipcRenderer.on('pet:config', listener)
     return () => { ipcRenderer.removeListener('pet:config', listener) }
+  },
+
+  windowControls: {
+    minimize() { void ipcRenderer.invoke('wraith:win:minimize') },
+    toggleMaximize() { void ipcRenderer.invoke('wraith:win:toggleMaximize') },
+    close() { void ipcRenderer.invoke('wraith:win:close') },
+    isMaximized() { return ipcRenderer.invoke('wraith:win:isMaximized') as Promise<boolean> },
+    onMaximizeChange(cb) {
+      const listener = (_e: Electron.IpcRendererEvent, max: boolean) => cb(max)
+      ipcRenderer.on('wraith:win:maximizeChanged', listener)
+      return () => { ipcRenderer.removeListener('wraith:win:maximizeChanged', listener) }
+    },
   },
 }
 

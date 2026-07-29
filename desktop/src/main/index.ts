@@ -312,6 +312,10 @@ function createWindow(): void {
   // 让主窗在幕后画好,ready-to-show 后才允许散 splash,logo 就能一路陪到内容就绪再淡出。
   mainWindow.once('ready-to-show', () => { mainContentReady = true })
 
+  // 窗口控制:自绘窗控(Windows 无边框)需要感知最大化状态切换,推给渲染层同步图标
+  mainWindow.on('maximize', () => mainWindow?.webContents.send('wraith:win:maximizeChanged', true))
+  mainWindow.on('unmaximize', () => mainWindow?.webContents.send('wraith:win:maximizeChanged', false))
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -404,6 +408,16 @@ function startPetWindowOnce(): void {
 // ---------------------------------------------------------------------------
 // IPC handlers
 // ---------------------------------------------------------------------------
+
+// 窗口控制(Windows 无边框自绘窗控用;mac/Linux 调用无害)
+ipcMain.handle('wraith:win:minimize', () => { mainWindow?.minimize() })
+ipcMain.handle('wraith:win:toggleMaximize', () => {
+  if (!mainWindow) return
+  if (mainWindow.isMaximized()) mainWindow.unmaximize()
+  else mainWindow.maximize()
+})
+ipcMain.handle('wraith:win:close', () => { mainWindow?.close() })
+ipcMain.handle('wraith:win:isMaximized', () => !!mainWindow?.isMaximized())
 
 ipcMain.handle('wraith:initialize', async (_e, workspaceDir: string | null) => {
   if (!client) throw new Error('Backend not connected')
