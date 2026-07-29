@@ -871,7 +871,18 @@ src/main/java/com/lyhn/wraith
 4. **打包**：`npm run dist:win` 产未签名 NSIS 安装包（向导式，可选安装目录 + 桌面 / 开始菜单快捷方式）；捆绑 Windows JRE（本机 jlink）+ 原生 node-pty（本机 `npm install`）。
 5. **桌宠点击不抢焦**：koffi FFI 给桌宠窗 HWND 加 `WS_EX_NOACTIVATE`（精确不抢焦，FFI 失败降级 `focusable:false`）；跨虚拟桌面常驻为已知限制（Windows 无官方 API）。
 
-**使用**（在 Windows 机器上，前置 JDK 17 / Maven / Node 均在 PATH）：
+**在 Windows 上启动**（前置 JDK 17 / Maven / Node 均在 PATH）—— CLI 与桌面两端分别如下：
+
+**① CLI 端**（纯终端，与 mac 共用同一套 Java 内核）：
+
+```powershell
+mvn clean package -DskipTests               # 仓库根：构建 jar
+java -jar target\wraith-1.0-SNAPSHOT.jar    # 启动交互式 CLI
+```
+
+> Windows 上没有 mac 那种 `wraith` / `wraith -d` 短命令（那是本机 shell 包装脚本、不随仓库分发），直接用 `java -jar` 启动即可。
+
+**② 桌面端**（Electron App）：
 
 ```powershell
 # 跑开发态
@@ -880,9 +891,10 @@ cd desktop
 npm install --legacy-peer-deps     # 仓库存在 @lobehub peer 冲突，须 --legacy-peer-deps
 npm run dev
 
-# 或出安装包
+# 或出安装包后使用
 mvn -q clean package -DskipTests    # 仓库根：构建 jar
 cd desktop && npm install --legacy-peer-deps && npm run dist:win   # 产物：desktop\release\*.exe
+# 双击 *.exe 安装（SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」），装完从开始菜单 / 桌面快捷方式启动
 ```
 
 完整前置、逐条验收清单与未签名 / SmartScreen 说明见 [`docs/windows-dev.md`](docs/windows-dev.md)。**已知限制**：桌宠跨虚拟桌面（无官方 API）、`WS_EX_NOACTIVATE` 仅 x64 精确（ia32 自动降级）、编辑器自定义目录 / 注册表安装未覆盖。
