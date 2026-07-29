@@ -14,11 +14,12 @@ export function withNoActivate(exStyle: number): number {
  * 仅 win32;非 win32 直接 no-op。全程 try/catch:koffi 缺失/加载失败/FFI 出错都静默降级
  * (退回 petWindowOptions 的 focusable:false 兜底),绝不抛、不阻塞桌宠。
  * ⚠ koffi 类型声明/HWND 读法为最佳努力、未在 Windows 实测;实机若不符按 koffi 当前 API 微调。
+ * 仅 x64 精确;32 位 Windows(ia32)上 GetWindowLongPtrW 符号/8 字节 HWND 读法不适用,会被 try/catch 兜住、自动降级 focusable:false(不崩)。
  */
 export function applyNoActivate(win: BrowserWindow): void {
   if (process.platform !== 'win32') return
   try {
-    // lazy:只在 win32 加载,避免 mac 加载 + 缺失时被 catch。electron-vite main 默认 CJS,require 可用。
+    // lazy:只在 win32 加载,避免 mac 加载 + 缺失时被 catch。electron-vite 为 ESM 主进程注入 createRequire(import.meta.url) 垫片,故 require 可用(非 CJS)。
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const koffi = require('koffi')
     const user32 = koffi.load('user32.dll')
