@@ -49,4 +49,24 @@ describe('TopBar', () => {
     expect(screen.getByTestId('terminal-toggle').getAttribute('aria-pressed')).toBe('true')
     expect(screen.getByTestId('rightdock-toggle').getAttribute('aria-pressed')).toBe('false')
   })
+
+  it('platform=win32:渲染窗口控制键', () => {
+    ;(window as unknown as { wraith: unknown }).wraith = {
+      platform: 'win32',
+      windowControls: {
+        minimize: vi.fn(),
+        toggleMaximize: vi.fn(),
+        close: vi.fn(),
+        isMaximized: vi.fn(async () => false),
+        onMaximizeChange: vi.fn(() => () => {}),
+      },
+    }
+    render(<TopBar {...base} platform="win32" />)
+    expect(screen.getByTestId('window-controls')).toBeTruthy()
+  })
+
+  it('platform=darwin:不渲染窗口控制键', () => {
+    render(<TopBar {...base} platform="darwin" />)
+    expect(screen.queryByTestId('window-controls')).toBeNull()
+  })
 })
