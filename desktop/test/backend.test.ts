@@ -53,13 +53,13 @@ describe('resolveBackendCommand', () => {
 describe('defaultJarPath', () => {
   it('returns <homedir>/.wraith/wraith.jar', () => {
     const result = defaultJarPath('/Users/x')
-    expect(result).toContain('/Users/x')
+    expect(result).toContain(path.join('/Users/x'))
     expect(result).toMatch(/\.wraith[/\\]wraith\.jar$/)
   })
 
   it('works with any homedir', () => {
     const result = defaultJarPath('/home/alice')
-    expect(result).toBe('/home/alice/.wraith/wraith.jar')
+    expect(result).toBe(path.join('/home/alice', '.wraith', 'wraith.jar'))
   })
 })
 
@@ -72,8 +72,8 @@ describe('resolveBackendCommand 三态', () => {
   })
 
   it('packaged → 捆绑 java + 捆绑 jar', () => {
-    const r = resolveBackendCommand({}, jar, { resourcesPath: '/R' })
-    expect(r).toEqual({ cmd: '/R/runtime/bin/java', args: ['-jar', '/R/wraith.jar', 'app-server'] })
+    const r = resolveBackendCommand({}, jar, { resourcesPath: '/R' }, 'darwin')
+    expect(r).toEqual({ cmd: path.join('/R', 'runtime', 'bin', 'java'), args: ['-jar', path.join('/R', 'wraith.jar'), 'app-server'] })
   })
 
   it('dev(无 packaged) → 系统 java + 默认 jar,行为不变', () => {
@@ -85,7 +85,7 @@ describe('resolveBackendCommand 三态', () => {
 describe('packagedBackendCommand', () => {
   it('拼 resourcesPath 下的 runtime/bin/java 与 wraith.jar', () => {
     expect(packagedBackendCommand('/R', 'darwin')).toEqual({
-      cmd: '/R/runtime/bin/java', args: ['-jar', '/R/wraith.jar', 'app-server'],
+      cmd: path.join('/R', 'runtime', 'bin', 'java'), args: ['-jar', path.join('/R', 'wraith.jar'), 'app-server'],
     })
   })
 })

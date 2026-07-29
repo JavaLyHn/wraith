@@ -17,6 +17,7 @@ export function resolveGatewayCommand(
   env: NodeJS.ProcessEnv,
   defaultJar: string,
   packaged?: { resourcesPath: string },
+  platform: NodeJS.Platform = process.platform,
 ): { cmd: string; args: string[] } {
   const override = env['WRAITH_GATEWAY_CMD']
   if (override && override.trim().length > 0) {
@@ -25,8 +26,10 @@ export function resolveGatewayCommand(
     return { cmd: cmd!, args }
   }
   if (packaged) {
+    // Windows 捆绑 JRE 的可执行体是 java.exe(与 backend.ts packagedBackendCommand 一致)
+    const javaBin = platform === 'win32' ? 'java.exe' : 'java'
     return {
-      cmd: path.join(packaged.resourcesPath, 'runtime', 'bin', 'java'),
+      cmd: path.join(packaged.resourcesPath, 'runtime', 'bin', javaBin),
       args: ['-jar', path.join(packaged.resourcesPath, 'wraith.jar'), 'gateway'],
     }
   }
@@ -38,8 +41,9 @@ export function resolveBindCommand(
   env: NodeJS.ProcessEnv,
   defaultJar: string,
   packaged?: { resourcesPath: string },
+  platform: NodeJS.Platform = process.platform,
 ): { cmd: string; args: string[] } {
-  const g = resolveGatewayCommand(env, defaultJar, packaged)
+  const g = resolveGatewayCommand(env, defaultJar, packaged, platform)
   return { cmd: g.cmd, args: [...g.args, 'bind'] }
 }
 
@@ -55,8 +59,9 @@ export function resolveBindWeixinCommand(
   defaultJar: string,
   packaged?: { resourcesPath: string },
   workspace?: string,
+  platform: NodeJS.Platform = process.platform,
 ): { cmd: string; args: string[] } {
-  const g = resolveGatewayCommand(env, defaultJar, packaged)
+  const g = resolveGatewayCommand(env, defaultJar, packaged, platform)
   const args = [...g.args, 'bind-weixin']
   if (workspace && workspace.trim()) args.push('--workspace', workspace.trim())
   return { cmd: g.cmd, args }

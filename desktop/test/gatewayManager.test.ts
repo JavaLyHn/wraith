@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import {
   resolveGatewayCommand,
@@ -26,10 +27,14 @@ describe('resolveGatewayCommand', () => {
     })
   })
   it('packaged → 捆绑 java + 捆绑 jar + gateway', () => {
-    expect(resolveGatewayCommand({}, '/j/wraith.jar', { resourcesPath: '/R' })).toEqual({
-      cmd: '/R/runtime/bin/java',
-      args: ['-jar', '/R/wraith.jar', 'gateway'],
+    expect(resolveGatewayCommand({}, '/j/wraith.jar', { resourcesPath: '/R' }, 'darwin')).toEqual({
+      cmd: path.join('/R', 'runtime', 'bin', 'java'),
+      args: ['-jar', path.join('/R', 'wraith.jar'), 'gateway'],
     })
+  })
+  it('packaged + win32 → java.exe', () => {
+    expect(resolveGatewayCommand({}, '/j/wraith.jar', { resourcesPath: '/R' }, 'win32').cmd)
+      .toBe(path.join('/R', 'runtime', 'bin', 'java.exe'))
   })
   it('env 覆写最高优先(即使 packaged 也让位)', () => {
     expect(resolveGatewayCommand({ WRAITH_GATEWAY_CMD: 'bar x' }, '/j.jar', { resourcesPath: '/R' })).toEqual({
@@ -47,9 +52,9 @@ describe('resolveBindCommand', () => {
     })
   })
   it('packaged → 捆绑 java + 捆绑 jar + gateway bind', () => {
-    expect(resolveBindCommand({}, '/j/wraith.jar', { resourcesPath: '/R' })).toEqual({
-      cmd: '/R/runtime/bin/java',
-      args: ['-jar', '/R/wraith.jar', 'gateway', 'bind'],
+    expect(resolveBindCommand({}, '/j/wraith.jar', { resourcesPath: '/R' }, 'darwin')).toEqual({
+      cmd: path.join('/R', 'runtime', 'bin', 'java'),
+      args: ['-jar', path.join('/R', 'wraith.jar'), 'gateway', 'bind'],
     })
   })
 })
