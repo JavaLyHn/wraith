@@ -21,7 +21,7 @@ execFileSync('jlink', [
   '--strip-debug', '--no-header-files', '--no-man-pages',
 ], { stdio: 'inherit' })
 
-const java = path.join(OUT, 'bin', 'java')
+const java = path.join(OUT, 'bin', process.platform === 'win32' ? 'java.exe' : 'java')
 if (!existsSync(java)) { console.error('jlink 未产出 java:', java); process.exit(1) }
 execFileSync(java, ['-version'], { stdio: 'inherit' }) // 冒烟:能起
 console.log('bundled JRE →', OUT)

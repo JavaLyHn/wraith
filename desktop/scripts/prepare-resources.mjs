@@ -12,7 +12,7 @@ const RES = path.join(ROOT, 'resources')
 if (!existsSync(JAR_SRC)) { console.error('缺 jar,请先在仓库根跑 mvn -q clean package -DskipTests:', JAR_SRC); process.exit(1) }
 mkdirSync(RES, { recursive: true })
 copyFileSync(JAR_SRC, path.join(RES, 'wraith.jar'))
-if (!existsSync(path.join(RES, 'runtime', 'bin', 'java'))) {
+if (!existsSync(path.join(RES, 'runtime', 'bin', process.platform === 'win32' ? 'java.exe' : 'java'))) {
   execFileSync('node', [path.join(DIR, 'gen-jre.mjs')], { stdio: 'inherit' })
 }
 console.log('resources 就绪:wraith.jar + runtime')
