@@ -8,10 +8,11 @@ export function defaultJarPath(homedir: string): string {
   return path.join(homedir, '.wraith', 'wraith.jar')
 }
 
-/** 打包态:用捆绑 JRE 的 java + 捆绑 jar 跑 app-server。 */
-export function packagedBackendCommand(resourcesPath: string): { cmd: string; args: string[] } {
+/** 打包态:用捆绑 JRE 的 java + 捆绑 jar 跑 app-server。Windows 可执行体是 java.exe。 */
+export function packagedBackendCommand(resourcesPath: string, platform: NodeJS.Platform): { cmd: string; args: string[] } {
+  const javaBin = platform === 'win32' ? 'java.exe' : 'java'
   return {
-    cmd: path.join(resourcesPath, 'runtime', 'bin', 'java'),
+    cmd: path.join(resourcesPath, 'runtime', 'bin', javaBin),
     args: ['-jar', path.join(resourcesPath, 'wraith.jar'), 'app-server'],
   }
 }
@@ -30,6 +31,7 @@ export function resolveBackendCommand(
   env: NodeJS.ProcessEnv,
   defaultJar: string,
   packaged?: { resourcesPath: string },
+  platform: NodeJS.Platform = process.platform,
 ): { cmd: string; args: string[] } {
   const override = env['WRAITH_APPSERVER_CMD']
   if (override && override.trim().length > 0) {
@@ -37,6 +39,6 @@ export function resolveBackendCommand(
     const [cmd, ...args] = tokens
     return { cmd: cmd!, args }
   }
-  if (packaged) return packagedBackendCommand(packaged.resourcesPath)
+  if (packaged) return packagedBackendCommand(packaged.resourcesPath, platform)
   return { cmd: 'java', args: ['-jar', defaultJar, 'app-server'] }
 }

@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { resolveBackendCommand, packagedBackendCommand, defaultJarPath } from '../src/main/backend'
 
@@ -83,8 +84,27 @@ describe('resolveBackendCommand 三态', () => {
 
 describe('packagedBackendCommand', () => {
   it('拼 resourcesPath 下的 runtime/bin/java 与 wraith.jar', () => {
-    expect(packagedBackendCommand('/R')).toEqual({
+    expect(packagedBackendCommand('/R', 'darwin')).toEqual({
       cmd: '/R/runtime/bin/java', args: ['-jar', '/R/wraith.jar', 'app-server'],
     })
+  })
+})
+
+describe('packagedBackendCommand platform', () => {
+  it('win32 → runtime/bin/java.exe', () => {
+    const r = packagedBackendCommand('/res', 'win32')
+    expect(r.cmd).toBe(path.join('/res', 'runtime', 'bin', 'java.exe'))
+    expect(r.args).toEqual(['-jar', path.join('/res', 'wraith.jar'), 'app-server'])
+  })
+  it('darwin/linux → runtime/bin/java', () => {
+    expect(packagedBackendCommand('/res', 'darwin').cmd).toBe(path.join('/res', 'runtime', 'bin', 'java'))
+    expect(packagedBackendCommand('/res', 'linux').cmd).toBe(path.join('/res', 'runtime', 'bin', 'java'))
+  })
+})
+
+describe('resolveBackendCommand packaged platform', () => {
+  it('packaged + win32 → 捆绑 java.exe', () => {
+    const r = resolveBackendCommand({}, '/home/.wraith/wraith.jar', { resourcesPath: '/res' }, 'win32')
+    expect(r.cmd).toBe(path.join('/res', 'runtime', 'bin', 'java.exe'))
   })
 })
