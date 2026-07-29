@@ -21,6 +21,8 @@ describe('petWindowOptions', () => {
     expect(o.x).toBe(10); expect(o.width).toBe(200)
     expect(o.frame).toBe(false)
     expect(o.transparent).toBe(true)
+    expect(o.backgroundColor).toBe('#00000000')
+    expect(o.hasShadow).toBe(false)
     expect(o.focusable).toBe(false)
     expect(o.skipTaskbar).toBe(true)
     expect(o.show).toBe(false)
