@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { detectEditors, uniqueDownloadName, isPathWithinWorkspace, performUndo } from '../src/main/fileOpen'
+import { detectEditors, uniqueDownloadName, isPathWithinWorkspace, performUndo, resolveOpenWithPlan } from '../src/main/fileOpen'
 
 describe('detectEditors', () => {
   it('只返回已知已装项,按表序,appPath 正确', () => {
@@ -88,5 +88,20 @@ describe('performUndo', () => {
     fs.writeFileSync(f, 'small')
     const r = await performUndo({ workspace: ws, path: f, before: 'a'.repeat(5 * 1024 * 1024 + 1), kind: 'modified' })
     expect(r.ok).toBe(false)
+  })
+})
+
+describe('resolveOpenWithPlan', () => {
+  it("darwin → spawn open -a", () => {
+    expect(resolveOpenWithPlan('darwin', '/Applications/Visual Studio Code.app', '/x/y.txt'))
+      .toEqual({ kind: 'spawn', cmd: 'open', args: ['-a', '/Applications/Visual Studio Code.app', '/x/y.txt'] })
+  })
+  it('win32 → shellOpen(系统默认程序,不 spawn open)', () => {
+    expect(resolveOpenWithPlan('win32', 'C:/whatever.exe', 'C:/x/y.txt'))
+      .toEqual({ kind: 'shellOpen', target: 'C:/x/y.txt' })
+  })
+  it('linux → shellOpen', () => {
+    expect(resolveOpenWithPlan('linux', '/usr/bin/code', '/x/y.txt'))
+      .toEqual({ kind: 'shellOpen', target: '/x/y.txt' })
   })
 })

@@ -48,7 +48,7 @@ import {
   petWindowMoveTo, petWindowResizeToScale, petWindowResetPosition, toElectronMenu,
 } from './petWindow'
 import { runPetdexInstall } from './petInstall'
-import { detectEditors, uniqueDownloadName, performUndo } from './fileOpen'
+import { detectEditors, uniqueDownloadName, performUndo, resolveOpenWithPlan } from './fileOpen'
 import type { EditorApp } from '../shared/editors'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
@@ -1403,7 +1403,12 @@ function computeEditors(): EditorApp[] {
 
 ipcMain.handle('wraith:openWithApp', (_e, p: string, appPath: string) => {
   if (!computeEditors().some(ed => ed.appPath === appPath)) throw new Error('无效的应用')
-  spawn('open', ['-a', appPath, p], { stdio: 'ignore', detached: true }).unref()
+  const plan = resolveOpenWithPlan(process.platform, appPath, p)
+  if (plan.kind === 'spawn') {
+    spawn(plan.cmd, plan.args, { stdio: 'ignore', detached: true }).unref()
+  } else {
+    void shell.openPath(plan.target)
+  }
 })
 
 ipcMain.handle('wraith:listEditors', (): EditorApp[] => computeEditors())

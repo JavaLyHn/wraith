@@ -58,3 +58,23 @@ export async function performUndo(
     return { ok: false, message: (e as Error).message }
   }
 }
+
+export type OpenWithPlan =
+  | { kind: 'spawn'; cmd: string; args: string[] }
+  | { kind: 'shellOpen'; target: string }
+
+/**
+ * 决定"用某编辑器打开文件"在当前平台怎么执行。
+ * darwin 用 `open -a <app> <file>`;其余平台没有等价的"指定 .app"语义,
+ * 退回系统默认程序打开(shell.openPath)。完整的 Windows 编辑器探测见块 3。
+ */
+export function resolveOpenWithPlan(
+  platform: NodeJS.Platform,
+  appPath: string,
+  filePath: string,
+): OpenWithPlan {
+  if (platform === 'darwin') {
+    return { kind: 'spawn', cmd: 'open', args: ['-a', appPath, filePath] }
+  }
+  return { kind: 'shellOpen', target: filePath }
+}
