@@ -1,4 +1,5 @@
 import PanelToggleIcon from './PanelToggleIcon'
+import WindowControls from './WindowControls'
 import { topBarLeftPad } from '../lib/topBar'
 
 /** 贯通整窗顶栏:左簇=交通灯内衬 + 侧栏切换(恒显);右簇=终端 + 右栏(恒显);中段 drag。
@@ -33,6 +34,7 @@ export default function TopBar({ platform, sidebarCollapsed, onToggleSidebar, sh
           </button>
         </div>
       )}
+      {platform === 'win32' && <WindowControls platform={platform} />}
     </div>
   )
 }
