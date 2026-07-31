@@ -59,13 +59,17 @@ public class AgentOrchestrator {
     public void setStepStreamFactory(java.util.function.BiFunction<String,String,LlmClient.StreamListener> f) { this.streamFactory = f; }
     private LlmClient.StreamListener streamFor(String kind, String id) { return streamFactory == null ? null : streamFactory.apply(kind, id); }
 
+    /** 工具调用观察者(与 SubAgent/PlanExecuteAgent 同款默认 no-op);runBatchParallel 现建的 localReviewer 也要装上它。 */
+    private java.util.function.Consumer<java.util.List<LlmClient.ToolCall>> toolCallObserver = calls -> {};
+
     /** 桌面注入:把工具调用观察者扇出给 planner/workers/reviewer(仿 setSkillSystem 的扇出范式)。 */
     public void setToolCallObserver(java.util.function.Consumer<java.util.List<LlmClient.ToolCall>> observer) {
-        planner.setToolCallObserver(observer);
+        this.toolCallObserver = observer == null ? calls -> {} : observer;
+        planner.setToolCallObserver(this.toolCallObserver);
         for (SubAgent worker : workers) {
-            worker.setToolCallObserver(observer);
+            worker.setToolCallObserver(this.toolCallObserver);
         }
-        reviewer.setToolCallObserver(observer);
+        reviewer.setToolCallObserver(this.toolCallObserver);
     }
 
     /** 仅供测试断言扇出结果(planner/reviewer 默认不开工具,真正调工具的是 workers)。 */
@@ -496,6 +500,7 @@ public class AgentOrchestrator {
                 SubAgent worker = null;
                 SubAgent localReviewer = new SubAgent(
                         "reviewer-" + step.id(), AgentRole.REVIEWER, llmClient, toolRegistry);
+                localReviewer.setToolCallObserver(toolCallObserver);
                 try {
                     worker = workerPool.take();
                     runStep(step, steps, retryCount, worker, localReviewer, context, stepOut);

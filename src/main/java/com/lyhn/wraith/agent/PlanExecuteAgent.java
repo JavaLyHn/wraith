@@ -201,8 +201,13 @@ public class PlanExecuteAgent {
         this.toolCallObserver = observer == null ? calls -> {} : observer;
     }
 
-    /** 观察者失败绝不影响工具执行主路径。 */
-    private void notifyToolCallObserver(java.util.List<LlmClient.ToolCall> calls) {
+    /**
+     * 观察者失败绝不影响工具执行主路径。
+     *
+     * <p>包级可见 —— 供单测直接调用以断言 try/catch 真正吞掉观察者异常
+     * (若走 run() 整条链路，外层的兜底 catch 会让断言变成"无论如何都通过"的假阳性)。</p>
+     */
+    void notifyToolCallObserver(java.util.List<LlmClient.ToolCall> calls) {
         try {
             toolCallObserver.accept(calls);
         } catch (Exception ignored) {

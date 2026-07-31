@@ -50,4 +50,13 @@ class UiIntentToolsTest {
     void namesContainsExactlyTheTwoUiIntentTools() {
         assertEquals(java.util.Set.of("open_panel", "im_connect"), UiIntentTools.NAMES);
     }
+
+    @Test
+    void everyUiIntentNameIsActuallyARegisteredTool() {
+        // 防改名静默失配:NAMES 与 ToolRegistry 的注册名是两份字面量,断言它们联动
+        ToolRegistry reg = new ToolRegistry();
+        for (String name : UiIntentTools.NAMES) {
+            assertTrue(reg.hasTool(name), "UiIntentTools.NAMES 里的 " + name + " 应是已注册工具");
+        }
+    }
 }

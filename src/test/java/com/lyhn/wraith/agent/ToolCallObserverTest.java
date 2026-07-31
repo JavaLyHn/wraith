@@ -79,13 +79,16 @@ class ToolCallObserverTest {
         });
     }
 
+    /**
+     * 直接调用包级可见的 notifyToolCallObserver，绕开 execute() 自身的兜底 catch——
+     * 否则任何异常都会被外层吞掉，断言无论 try/catch 是否存在都会通过（假阳性）。
+     */
     @Test
     void observerExceptionDoesNotBreakSubAgent() {
         SubAgent worker = new SubAgent("worker-1", AgentRole.WORKER, new ToolThenTextClient(), new ToolRegistry());
         worker.setToolCallObserver(calls -> { throw new RuntimeException("boom"); });
-        assertDoesNotThrow(() -> {
-            try { worker.execute(AgentMessage.task("test", "打开面板"), discard()); } catch (Exception ignored) { }
-        });
+        assertDoesNotThrow(() -> worker.notifyToolCallObserver(
+                List.of(new LlmClient.ToolCall("c1", new LlmClient.ToolCall.Function("open_panel", "{}")))));
     }
 
     @Test
@@ -108,12 +111,17 @@ class ToolCallObserverTest {
                 new ToolRegistry(),
                 new StubPlanner(llmClient),
                 null,
-                (goal, plan) -> PlanExecuteAgent.PlanReviewDecision.execute());
+                (goal, plan) -> PlanExecuteAgent.PlanReviewDecision.execute(),
+                discard());
         planAgent.setToolCallObserver(calls -> calls.forEach(c -> seen.add(c.function().name())));
         try { planAgent.run("打开 IM 网关面板"); } catch (Exception ignored) { }
         assertTrue(seen.contains("open_panel"), "Plan 执行器应把工具调用交给观察者,实际: " + seen);
     }
 
+    /**
+     * 直接调用包级可见的 notifyToolCallObserver，绕开 run() 自身的兜底 catch——
+     * 否则任何异常都会被外层吞掉，断言无论 try/catch 是否存在都会通过（假阳性）。
+     */
     @Test
     void planExecuteAgentObserverExceptionDoesNotBreakRun() {
         ToolThenTextClient llmClient = new ToolThenTextClient();
@@ -122,10 +130,10 @@ class ToolCallObserverTest {
                 new ToolRegistry(),
                 new StubPlanner(llmClient),
                 null,
-                (goal, plan) -> PlanExecuteAgent.PlanReviewDecision.execute());
+                (goal, plan) -> PlanExecuteAgent.PlanReviewDecision.execute(),
+                discard());
         planAgent.setToolCallObserver(calls -> { throw new RuntimeException("boom"); });
-        assertDoesNotThrow(() -> {
-            try { planAgent.run("打开面板"); } catch (Exception ignored) { }
-        });
+        assertDoesNotThrow(() -> planAgent.notifyToolCallObserver(
+                List.of(new LlmClient.ToolCall("c1", new LlmClient.ToolCall.Function("open_panel", "{}")))));
     }
 }
