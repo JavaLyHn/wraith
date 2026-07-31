@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { TeamItem, TeamStep } from '../../shared/transcriptReducer'
+import { resolveExpanded, nextGlobalMode, globalToggleLabel, type GlobalMode } from '../lib/teamCardCollapse'
 
 // ---------------------------------------------------------------------------
 // Role configuration
@@ -98,10 +99,11 @@ function ReviewTag({ step }: { step: TeamStep }): JSX.Element | null {
 // TeamStepRow
 // ---------------------------------------------------------------------------
 
-function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass: string }): JSX.Element {
-  // done 步骤结果默认展开：team 卡片即完整产出,输出不该藏在一次点击之后(保留折叠钮供收起)。
-  const [expanded, setExpanded] = useState(true)
-  const [reviewExpanded, setReviewExpanded] = useState(true)
+function TeamStepRow({ step, roleColorClass, resultExpanded, reviewExpanded, onToggleResult, onToggleReview }: {
+  step: TeamStep; roleColorClass: string;
+  resultExpanded: boolean; reviewExpanded: boolean;
+  onToggleResult: () => void; onToggleReview: () => void;
+}): JSX.Element {
   const agentName = step.agent ?? ''
 
   // running 时优先展示流式 output（自动展开）；done 时展示 result（默认展开,可手动折叠）
@@ -133,10 +135,10 @@ function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass:
         {hasResult && (
           <button
             className="ml-1 shrink-0 text-fg-subtle hover:text-fg-muted"
-            onClick={() => setExpanded(v => !v)}
-            aria-label={expanded ? '折叠输出' : '展开输出'}
+            onClick={onToggleResult}
+            aria-label={resultExpanded ? '折叠输出' : '展开输出'}
           >
-            {expanded ? '▼ 输出' : '▶ 输出'}
+            {resultExpanded ? '▼ 输出' : '▶ 输出'}
           </button>
         )}
       </div>
@@ -147,7 +149,7 @@ function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass:
         </div>
       )}
       {/* done 步骤：result 可折叠 */}
-      {hasResult && expanded && (
+      {hasResult && resultExpanded && (
         <div className="ml-5 mt-0.5 max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
           <pre className="whitespace-pre-wrap break-words text-xs">{step.result}</pre>
         </div>
@@ -159,7 +161,7 @@ function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass:
             <span className="text-xs">🔎 reviewer</span>
             <button
               className="ml-1 shrink-0 text-fg-subtle hover:text-fg-muted text-xs"
-              onClick={() => setReviewExpanded(v => !v)}
+              onClick={onToggleReview}
               aria-label={reviewExpanded ? '折叠审查输出' : '展开审查输出'}
             >
               {reviewExpanded ? '▼' : '▶'}
@@ -180,8 +182,7 @@ function TeamStepRow({ step, roleColorClass }: { step: TeamStep; roleColorClass:
 // PlannerRow — 常驻 planner 行，结构同 worker 行
 // ---------------------------------------------------------------------------
 
-function PlannerRow({ item }: { item: TeamItem }): JSX.Element {
-  const [expanded, setExpanded] = useState(true)
+function PlannerRow({ item, expanded, onToggle }: { item: TeamItem; expanded: boolean; onToggle: () => void }): JSX.Element {
   const hasPlannerOutput = typeof item.plannerOutput === 'string' && item.plannerOutput.length > 0
   const summary = item.steps.length > 0
     ? `规划 · 拆解为 ${item.steps.length} 步`
@@ -200,7 +201,7 @@ function PlannerRow({ item }: { item: TeamItem }): JSX.Element {
         {hasPlannerOutput && (
           <button
             className="ml-1 shrink-0 text-fg-subtle hover:text-fg-muted"
-            onClick={() => setExpanded(v => !v)}
+            onClick={onToggle}
             aria-label={expanded ? '折叠规划输出' : '展开规划输出'}
           >
             {expanded ? '▼ 输出' : '▶ 输出'}
@@ -284,6 +285,12 @@ export function TeamCard({ item }: { item: TeamItem }): JSX.Element {
   const roleById = new Map(item.agents.map(a => [a.id, a.role]))
   const stepRoleColor = (step: TeamStep): string => roleColor(roleById.get(step.agent ?? '') ?? '')
 
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({})
+  const [globalMode, setGlobalMode] = useState<GlobalMode>('auto')
+  const toggleBlock = (key: string, currentEffective: boolean) =>
+    setOverrides(prev => ({ ...prev, [key]: !currentEffective }))
+  const toggleAll = () => { setGlobalMode(m => nextGlobalMode(m)); setOverrides({}) }
+
   return (
     <div className="my-1.5 rounded-lg border border-border bg-surface p-3 text-xs font-mono">
       {/* Header */}
@@ -305,17 +312,38 @@ export function TeamCard({ item }: { item: TeamItem }): JSX.Element {
             </span>
           ))}
         </div>
+        <button
+          className="ml-auto shrink-0 rounded px-1.5 py-0.5 text-2xs text-fg-subtle hover:text-fg-muted hover:bg-bg"
+          onClick={toggleAll}
+          aria-label={globalMode === 'expanded' ? '折叠全部输出' : '展开全部输出'}
+        >
+          {globalToggleLabel(globalMode)}
+        </button>
       </div>
 
       {/* Planner 常驻行 — 始终显示于步骤时间线最上方，结构同 worker 行 */}
-      <PlannerRow item={item} />
+      <PlannerRow
+        item={item}
+        expanded={resolveExpanded('planner', item.steps.length === 0, overrides, globalMode)}
+        onToggle={() => toggleBlock('planner', resolveExpanded('planner', item.steps.length === 0, overrides, globalMode))}
+      />
 
       {/* Step timeline with B1 parallel grouping */}
       {groups.length > 0 && (
         <ul className="flex flex-col gap-1">
           {groups.map(group => {
             if (group.kind === 'solo') {
-              return <TeamStepRow key={group.step.id} step={group.step} roleColorClass={stepRoleColor(group.step)} />
+              return (
+                <TeamStepRow
+                  key={group.step.id}
+                  step={group.step}
+                  roleColorClass={stepRoleColor(group.step)}
+                  resultExpanded={resolveExpanded(group.step.id, false, overrides, globalMode)}
+                  reviewExpanded={resolveExpanded(`${group.step.id}:review`, group.step.status === 'running', overrides, globalMode)}
+                  onToggleResult={() => toggleBlock(group.step.id, resolveExpanded(group.step.id, false, overrides, globalMode))}
+                  onToggleReview={() => toggleBlock(`${group.step.id}:review`, resolveExpanded(`${group.step.id}:review`, group.step.status === 'running', overrides, globalMode))}
+                />
+              )
             }
             // Parallel group — key 用批内首步 id(稳定),避免 batch 陆续到达时下标错位
             return (
@@ -323,7 +351,15 @@ export function TeamCard({ item }: { item: TeamItem }): JSX.Element {
                 <div className="text-fg-subtle">⚡ 并行执行</div>
                 <ul className="ml-3 flex flex-col gap-1 border-l border-border pl-2">
                   {group.steps.map(step => (
-                    <TeamStepRow key={step.id} step={step} roleColorClass={stepRoleColor(step)} />
+                    <TeamStepRow
+                      key={step.id}
+                      step={step}
+                      roleColorClass={stepRoleColor(step)}
+                      resultExpanded={resolveExpanded(step.id, false, overrides, globalMode)}
+                      reviewExpanded={resolveExpanded(`${step.id}:review`, step.status === 'running', overrides, globalMode)}
+                      onToggleResult={() => toggleBlock(step.id, resolveExpanded(step.id, false, overrides, globalMode))}
+                      onToggleReview={() => toggleBlock(`${step.id}:review`, resolveExpanded(`${step.id}:review`, step.status === 'running', overrides, globalMode))}
+                    />
                   ))}
                 </ul>
               </li>
