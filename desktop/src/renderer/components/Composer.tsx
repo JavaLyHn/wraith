@@ -370,7 +370,7 @@ export default function Composer({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         className={
-          'relative w-full rounded-2xl border bg-surface shadow-md transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25 ' +
+          'relative w-full rounded-2xl border bg-surface shadow-sm transition-shadow focus-within:shadow-lg focus-within:border-fg-subtle/50 ' +
           (dragOver ? 'border-accent ring-2 ring-accent/40 ' : 'border-fg-subtle/40 ') +
           (centered ? 'max-w-2xl mx-auto' : '')
         }
