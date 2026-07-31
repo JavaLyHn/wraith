@@ -101,4 +101,37 @@ class ConversationDigestTest {
         String out = ConversationDigest.prepend("用户: 克隆仓库", base);
         assertEquals(ConversationDigest.INJECT_PREFIX + "用户: 克隆仓库" + "\n\n" + base, out);
     }
+
+    // Finding 2 回归锁定：超长单轮不应触发裸 substring 硬截断，且截断不得劈开代理对（surrogate pair）。
+
+    @Test
+    void singleGiantRound_isBoundedAndTruncated() {
+        String content = "a".repeat(5000);
+        List<Message> h = List.of(Message.user(content));
+        String d = ConversationDigest.of(h);
+        assertTrue(d.length() <= ConversationDigest.DEFAULT_MAX_CHARS, "length=" + d.length());
+        assertTrue(d.contains("…"), d);
+    }
+
+    @Test
+    void longContent_truncation_neverSplitsSurrogatePair() {
+        // 200 + 300 * 2 emoji 字符，天真的 substring(0, 2500) 会精确落在某个 emoji 代理对中间
+        String content = "a".repeat(2499) + "😀".repeat(5);
+        List<Message> h = List.of(Message.user(content));
+        String d = ConversationDigest.of(h);
+        assertNoUnpairedSurrogate(d);
+    }
+
+    private static void assertNoUnpairedSurrogate(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (Character.isHighSurrogate(c)) {
+                assertTrue(i + 1 < s.length() && Character.isLowSurrogate(s.charAt(i + 1)),
+                        "unpaired high surrogate at index " + i + " in: " + s);
+            } else if (Character.isLowSurrogate(c)) {
+                assertTrue(i > 0 && Character.isHighSurrogate(s.charAt(i - 1)),
+                        "unpaired low surrogate at index " + i + " in: " + s);
+            }
+        }
+    }
 }

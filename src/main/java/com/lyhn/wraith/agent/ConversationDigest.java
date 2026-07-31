@@ -76,7 +76,11 @@ public final class ConversationDigest {
         }
         String out = sb.toString();
         if (out.length() > maxChars) {
-            out = out.substring(0, maxChars); // 单轮就超时的硬兜底
+            // 单轮就超时的硬兜底：code-point-safe 截断，为省略号预留 1 个字符位，
+            // 保证不劈开代理对(surrogate pair)且总长仍不超过 maxChars。
+            out = maxChars > 1
+                    ? truncateCodePointSafe(out, maxChars - 1) + "…"
+                    : truncateCodePointSafe(out, maxChars);
         }
         return out.strip();
     }
@@ -101,10 +105,10 @@ public final class ConversationDigest {
         StringBuilder sb = new StringBuilder();
         for (LlmClient.Message m : round) {
             switch (m.role()) {
-                case "user" -> sb.append("用户: ").append(safeTrim(m.content())).append("\n");
+                case "user" -> sb.append("用户: ").append(cappedContent(m.content())).append("\n");
                 case "assistant" -> {
                     if (m.content() != null && !m.content().isBlank()) {
-                        sb.append("助手: ").append(safeTrim(m.content())).append("\n");
+                        sb.append("助手: ").append(cappedContent(m.content())).append("\n");
                     }
                     if (m.toolCalls() != null) {
                         for (LlmClient.ToolCall tc : m.toolCalls()) {
@@ -126,11 +130,34 @@ public final class ConversationDigest {
         return s == null ? "" : s.strip();
     }
 
+    /** 单条 user/assistant 消息内容的封顶预览：防止单轮巨型内容撑爆整个摘录。 */
+    private static String cappedContent(String s) {
+        String t = safeTrim(s);
+        return t.length() <= DEFAULT_MAX_CHARS ? t : truncateCodePointSafe(t, DEFAULT_MAX_CHARS) + "…";
+    }
+
     private static String preview(String s, int max) {
         if (s == null) {
             return "";
         }
         String t = s.strip().replaceAll("\\s+", " ");
-        return t.length() <= max ? t : t.substring(0, max) + "…";
+        return t.length() <= max ? t : truncateCodePointSafe(t, max) + "…";
+    }
+
+    /**
+     * 返回长度至多 max 的前缀子串，但绝不劈开一个 UTF-16 代理对(surrogate pair)。
+     * 若天真截断点恰好落在高代理与低代理之间，则回退 1 个字符。
+     */
+    private static String truncateCodePointSafe(String s, int max) {
+        if (s == null || s.length() <= max) {
+            return s;
+        }
+        int end = max;
+        if (end > 0 && end < s.length()
+                && Character.isHighSurrogate(s.charAt(end - 1))
+                && Character.isLowSurrogate(s.charAt(end))) {
+            end--;
+        }
+        return s.substring(0, end);
     }
 }
