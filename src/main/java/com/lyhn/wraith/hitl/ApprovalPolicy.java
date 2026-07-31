@@ -19,7 +19,8 @@ public class ApprovalPolicy {
             "write_file",
             "execute_command",
             "create_project",
-            "revert_turn"
+            "revert_turn",
+            "task_add"
     );
 
     private ApprovalPolicy() {

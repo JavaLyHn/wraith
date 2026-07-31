@@ -86,7 +86,8 @@ public class ToolRegistry {
     /** 审批前 diff 预览的旧文件上限:超过则不带 beforeContent(防事件爆炸)。 */
     private static final long MAX_APPROVAL_PREVIEW_BYTES = 512 * 1024;
     // 需要审计的内置工具（与 ApprovalPolicy 的 DANGEROUS_TOOLS 保持一致）；MCP 工具按前缀动态纳入审计。
-    private static final Set<String> AUDIT_TOOLS = Set.of("write_file", "execute_command", "create_project", "revert_turn");
+    private static final Set<String> AUDIT_TOOLS = Set.of("write_file", "execute_command", "create_project", "revert_turn",
+            "task_add", "task_cancel");
     private static final Logger log = LoggerFactory.getLogger(ToolRegistry.class);
     // null = 不沙箱(交互式 CLI 默认行为,与历史一致);仅 app-server 注入
     private CommandSandbox commandSandbox;
@@ -124,6 +125,13 @@ public class ToolRegistry {
         this.curationSink = sink == null ? com.lyhn.wraith.context.curator.CurationSink.NOOP : sink;
     }
 
+    private com.lyhn.wraith.runtime.task.DurableTaskManager taskManager;
+
+    /** 注入持久后台任务管理器(app-server 装配时下发);未注入时相关工具诚实失败。 */
+    public void setTaskManager(com.lyhn.wraith.runtime.task.DurableTaskManager taskManager) {
+        this.taskManager = taskManager;
+    }
+
     public ToolRegistry() {
         this(DEFAULT_COMMAND_TIMEOUT_SECONDS, DEFAULT_TOOL_BATCH_TIMEOUT_SECONDS);
     }
@@ -148,6 +156,7 @@ public class ToolRegistry {
         registerTodoTools();
         registerOpenPanelTool();
         registerImConnectTool();
+        registerTaskTools();
     }
 
     /**
@@ -1183,6 +1192,75 @@ public class ToolRegistry {
                         return "im_connect 失败: 未知平台 '" + norm + "',可选:" + String.join("/", platforms);
                     }
                     return "已在桌面对话中为用户开启「接入 " + norm + "」的内联入口(桌面端显示为可点绑定卡)。";
+                }
+        ));
+    }
+
+    /** 后台任务工具:与「后台任务」面板同一个 DurableTaskManager,聊天里直接发后即走。 */
+    private void registerTaskTools() {
+        tools.put("task_add", new Tool(
+                "task_add",
+                "把一个较长的任务丢到后台异步执行(发后即走,不占当前对话)。用户说「后台跑/挂后台/发后即走」时用。"
+                        + "返回任务 id,可用 task_get 查进度。",
+                createParameters(new Param("prompt", "string", "要后台执行的完整任务描述", true)),
+                args -> {
+                    if (taskManager == null) return "task_add 失败: 后台任务管理器未初始化(仅桌面/app-server 可用)";
+                    String prompt = args.get("prompt");
+                    if (prompt == null || prompt.isBlank()) return "task_add 失败: prompt 不能为空";
+                    var t = taskManager.enqueue(prompt.trim());
+                    return "已提交后台任务 " + t.id() + "(状态 " + t.status() + "),可用 task_get 查询进度。";
+                }
+        ));
+
+        tools.put("task_list", new Tool(
+                "task_list",
+                "列出后台任务(最近若干条,含状态)。用户问「后台任务怎么样了/有哪些在跑」时用。",
+                createParameters(new Param("limit", "integer", "最多返回多少条,默认 20", false)),
+                args -> {
+                    if (taskManager == null) return "task_list 失败: 后台任务管理器未初始化(仅桌面/app-server 可用)";
+                    int limit = clamp(parseInt(args.get("limit"), 20), 1, 100);
+                    var list = taskManager.list(limit);
+                    if (list.isEmpty()) return "当前没有后台任务。";
+                    StringBuilder sb = new StringBuilder("后台任务 " + list.size() + " 条:\n");
+                    for (var t : list) {
+                        sb.append("- ").append(t.id()).append(" [").append(t.status()).append("] ")
+                                .append(t.prompt() == null ? "" : t.prompt().strip()).append('\n');
+                    }
+                    return sb.toString().trim();
+                }
+        ));
+
+        tools.put("task_get", new Tool(
+                "task_get",
+                "查一个后台任务的状态与结果(按 id)。",
+                createParameters(new Param("id", "string", "任务 id", true)),
+                args -> {
+                    if (taskManager == null) return "task_get 失败: 后台任务管理器未初始化(仅桌面/app-server 可用)";
+                    String id = args.get("id");
+                    if (id == null || id.isBlank()) return "task_get 失败: id 不能为空";
+                    var found = taskManager.find(id.trim());
+                    if (found.isEmpty()) return "task_get 失败: 没有 id 为 '" + id.trim() + "' 的后台任务";
+                    var t = found.get();
+                    StringBuilder sb = new StringBuilder();
+                    sb.append("任务 ").append(t.id()).append(" [").append(t.status()).append("]\n");
+                    sb.append("请求: ").append(t.prompt() == null ? "" : t.prompt().strip()).append('\n');
+                    if (t.result() != null && !t.result().isBlank()) sb.append("结果: ").append(t.result().strip()).append('\n');
+                    if (t.error() != null && !t.error().isBlank()) sb.append("错误: ").append(t.error().strip()).append('\n');
+                    return sb.toString().trim();
+                }
+        ));
+
+        tools.put("task_cancel", new Tool(
+                "task_cancel",
+                "取消一个尚未完成的后台任务(按 id)。",
+                createParameters(new Param("id", "string", "任务 id", true)),
+                args -> {
+                    if (taskManager == null) return "task_cancel 失败: 后台任务管理器未初始化(仅桌面/app-server 可用)";
+                    String id = args.get("id");
+                    if (id == null || id.isBlank()) return "task_cancel 失败: id 不能为空";
+                    boolean ok = taskManager.cancel(id.trim());
+                    return ok ? "已取消后台任务 " + id.trim()
+                              : "task_cancel 失败: 任务 '" + id.trim() + "' 不存在或已结束";
                 }
         ));
     }

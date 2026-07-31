@@ -1239,6 +1239,7 @@ public class Main {
                         renderer.appendToolResult(callId, ok, exitCode);
                     }
                 });
+                registry.setTaskManager(taskManager); // ← 新增:后台任务工具与面板共用同一 DurableTaskManager
 
                 // 可变 client 持有(会话级 provider 切换用)
                 com.lyhn.wraith.llm.LlmClient[] currentClient = { client };
