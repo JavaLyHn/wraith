@@ -2,6 +2,7 @@ package com.lyhn.wraith.plan;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lyhn.wraith.agent.ConversationDigest;
 import com.lyhn.wraith.llm.LlmClient;
 import com.lyhn.wraith.llm.LlmTraceLogger;
 import com.lyhn.wraith.prompt.PromptAssembler;
@@ -31,6 +32,8 @@ public class Planner {
     private final PromptAssembler promptAssembler = PromptAssembler.createDefault();
     private Supplier<String> projectMemorySupplier = () ->
             ProjectMemoryLoader.createDefault(Path.of(".").toAbsolutePath().normalize()).loadForPrompt();
+    /** 主线对话上下文供应器；默认空串，CLI/字节行为不受影响。桌面/REPL 可注入以在计划生成时理解「继续/它/上面」等指代。 */
+    private Supplier<String> conversationContextSupplier = () -> "";
 
     public Planner(LlmClient llmClient) {
         this(llmClient, System.out);
@@ -43,6 +46,10 @@ public class Planner {
 
     public void setProjectMemorySupplier(Supplier<String> projectMemorySupplier) {
         this.projectMemorySupplier = projectMemorySupplier == null ? () -> "" : projectMemorySupplier;
+    }
+
+    public void setConversationContextSupplier(Supplier<String> conversationContextSupplier) {
+        this.conversationContextSupplier = conversationContextSupplier == null ? () -> "" : conversationContextSupplier;
     }
 
     /**
@@ -61,16 +68,18 @@ public class Planner {
     public ExecutionPlan createPlan(String goal, LlmClient.StreamListener extra) throws IOException {
         out.println("📋 正在规划任务: " + goal + "\n");
 
-        if (isSimpleGoal(goal)) {
+        String convo = buildConversationContext();
+        if (isSimpleGoal(goal) && convo.isBlank()) {
             return createMinimalPlan(goal);
         }
 
         // 构建规划请求
+        String userBody = ConversationDigest.prepend(convo, "请为以下任务制定执行计划：\n" + goal);
         List<LlmClient.Message> messages = Arrays.asList(
                 LlmClient.Message.system(promptAssembler.assemble(PromptMode.PLANNER, PromptContext.builder()
                         .projectMemoryContext(buildProjectMemoryContext())
                         .build())),
-                LlmClient.Message.user("请为以下任务制定执行计划：\n" + goal)
+                LlmClient.Message.user(userBody)
         );
 
         // 调用LLM生成计划（extra != null 时 fan-out 到桌面事件转发器）
@@ -93,6 +102,16 @@ public class Planner {
             return context == null ? "" : context.trim();
         } catch (Exception e) {
             log.warn("Failed to load WRAITH.md project memory for planner", e);
+            return "";
+        }
+    }
+
+    private String buildConversationContext() {
+        try {
+            String v = conversationContextSupplier.get();
+            return v == null ? "" : v;
+        } catch (Exception e) {
+            log.warn("Failed to read conversation context supplier for planner", e);
             return "";
         }
     }

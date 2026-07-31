@@ -112,6 +112,8 @@ public class PlanExecuteAgent {
     /** 每个任务步骤的流式监听器工厂；默认输出到 out（CLI 行为不变），桌面可注入以导向事件流。 */
     private java.util.function.BiFunction<String, StreamState, LlmClient.StreamListener> stepStreamFactory;
     private Supplier<String> externalContextSupplier = () -> "";
+    /** 主线对话上下文（跨 ReAct/Plan/Team 共享）；默认空串，CLI 行为不受影响。转发给内部 planner 供计划生成时注入。 */
+    private String conversationContext = "";
     private SkillRegistry skillRegistry;
     private SkillContextBuffer skillContextBuffer;
     private final PromptAssembler promptAssembler = PromptAssembler.createDefault();
@@ -168,6 +170,7 @@ public class PlanExecuteAgent {
         this.memoryManager.setProjectPath(this.toolRegistry.getProjectPath());
         this.toolRegistry.setScopedMemorySaver(this.memoryManager::storeFact);
         this.planner.setProjectMemorySupplier(this::buildProjectMemoryContext);
+        this.planner.setConversationContextSupplier(() -> this.conversationContext);
         // 默认工厂：复现原 TaskStreamRenderer 行为，CLI 输出字节完全不变。
         this.stepStreamFactory = (taskId, ss) -> new TaskStreamRenderer(taskId, ss, this.out);
     }
@@ -211,6 +214,10 @@ public class PlanExecuteAgent {
 
     public void setExternalContextSupplier(Supplier<String> externalContextSupplier) {
         this.externalContextSupplier = externalContextSupplier == null ? () -> "" : externalContextSupplier;
+    }
+
+    public void setConversationContext(String context) {
+        this.conversationContext = context == null ? "" : context;
     }
 
     public void setSkillRegistry(SkillRegistry skillRegistry) {
