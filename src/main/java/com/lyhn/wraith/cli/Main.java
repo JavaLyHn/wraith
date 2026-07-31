@@ -896,6 +896,10 @@ public class Main {
                     printSubmittedInput(renderer, ui, submittedInput);
                 }
                 final String taskInput = input;
+                // 本轮"干净答案"暂存(与桌面 cleanTeamAnswer/cleanAnswer 同款约定):
+                // plan/team 的 run() 返回值供终端打印(保留 chrome),真正记入 reactAgent 历史/落盘的
+                // 应是 getLastCleanResult() 的干净版,故在 lambda 内旁路存一份,每轮重新声明避免跨轮泄漏。
+                final String[] cleanHolder = {null};
                 Callable<String> runTask;
                 String snapshotMode;
                 if (nextTaskUsePlanMode || command.type() == CliCommandParser.CommandType.SWITCH_PLAN) {
@@ -908,7 +912,9 @@ public class Main {
                         planAgent.setSkillContextBuffer(skillContextBuffer);
                         planAgent.setConversationContext(
                                 com.lyhn.wraith.agent.ConversationDigest.of(reactAgent.getConversationHistory()));
-                        return planAgent.run(taskInput);
+                        String planResult = planAgent.run(taskInput);
+                        cleanHolder[0] = planAgent.getLastCleanResult();
+                        return planResult;
                     };
                 } else if (nextTaskUseTeamMode || command.type() == CliCommandParser.CommandType.SWITCH_TEAM) {
                     snapshotMode = "team";
@@ -919,7 +925,9 @@ public class Main {
                         orchestrator.setSkillSystem(skillRegistry, skillContextBuffer);
                         orchestrator.setConversationContext(
                                 com.lyhn.wraith.agent.ConversationDigest.of(reactAgent.getConversationHistory()));
-                        return orchestrator.run(taskInput);
+                        String teamResult = orchestrator.run(taskInput);
+                        cleanHolder[0] = orchestrator.getLastCleanResult();
+                        return teamResult;
                     };
                 } else {
                     snapshotMode = "react";
@@ -940,9 +948,11 @@ public class Main {
                     ui.println();
                 }
                 // 把 plan/team 本轮补进 reactAgent 会话历史(与桌面 agent.recordExternalTurn 对称),
-                // 使下一轮切回 react 时能看到本轮上下文;react 模式自身已在 run() 内记录,不重复
-                if (!"react".equals(snapshotMode) && response != null && !response.isBlank()) {
-                    reactAgent.recordExternalTurn(taskInput, response);
+                // 使下一轮切回 react 时能看到本轮上下文;react 模式自身已在 run() 内记录,不重复。
+                // 记录用干净版(与桌面 cleanTeamAnswer/cleanAnswer 一致),response 仍保留 chrome 仅供终端打印。
+                String toRecord = (cleanHolder[0] != null && !cleanHolder[0].isBlank()) ? cleanHolder[0] : response;
+                if (!"react".equals(snapshotMode) && toRecord != null && !toRecord.isBlank()) {
+                    reactAgent.recordExternalTurn(taskInput, toRecord);
                 }
                 sessionStore.persist(reactAgent.getConversationHistory()); // 每轮落盘,供续接
             }
