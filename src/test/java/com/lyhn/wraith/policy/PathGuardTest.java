@@ -48,6 +48,8 @@ class PathGuardTest {
         PolicyException ex = assertThrows(PolicyException.class,
                 () -> guard.resolveSafe("/etc/passwd"));
         assertTrue(ex.getMessage().contains("路径越界"));
+        // 拒绝信息须给出补救指引:把外部内容 clone/复制进项目根内的子目录。
+        assertTrue(ex.getMessage().contains("项目根内的子目录"));
     }
 
     @Test

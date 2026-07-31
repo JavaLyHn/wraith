@@ -69,6 +69,7 @@
 ## Safety Policy
 
 - `read_file` / `write_file` / `list_dir` / `create_project` 的路径必须在项目根之内。
+- 需要处理外部仓库或文件时，用 `execute_command` 把它 `git clone` / 复制到**项目根内的子目录**（如 `./repo`），不要放到 `/tmp` 或项目根之外——`read_file` / `list_dir` / `glob_files` 只能访问项目根之内，放到外面后续读不回来。
 - `write_file` 单文件 5MB 上限。
 - `execute_command` 禁止 `sudo`、`rm -rf` 全盘或用户目录、`mkfs`、`dd of=/dev`、fork bomb、`curl|sh`、`find /`、`chmod 777 /`、`shutdown`。
 - 被策略拒绝的工具调用（结果以 `🛡️ 策略拒绝` 开头）不要原样重试，改用项目内相对路径或更安全的命令。

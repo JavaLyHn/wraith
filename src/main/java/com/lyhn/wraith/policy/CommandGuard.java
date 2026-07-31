@@ -32,8 +32,11 @@ public final class CommandGuard {
                     Pattern.compile(":\\(\\)\\s*\\{\\s*:\\s*\\|\\s*:\\s*&\\s*\\}\\s*;\\s*:")),
             new DenyRule("禁止 curl / wget 管道直接执行远端脚本",
                     Pattern.compile("(?i)\\b(curl|wget)\\b[^|\\n]*\\|\\s*(sh|bash|zsh|fish|ksh)\\b")),
+            // 只拦"扫全盘/家目录本身"(路径正好是 / ~ $HOME,后接空白或行尾);
+            // 放行 `find /tmp/具体目录`、`find ~/子目录` 这类有界扫描——否则任何以 / 开头的
+            // 绝对路径都会被前缀误杀(如 `find /tmp/x`),把合法操作也拦下。
             new DenyRule("不允许扫描 /、~ 或整个文件系统",
-                    Pattern.compile("(?i)\\bfind\\s+(/|~|\\$home)")),
+                    Pattern.compile("(?i)\\bfind\\s+(/|~|\\$home)(\\s|$)")),
             new DenyRule("禁止 chmod 777 全盘",
                     Pattern.compile("(?i)\\bchmod\\s+-R\\s+777\\s+(/|~)")),
             new DenyRule("禁止 shutdown / reboot / halt",

@@ -68,6 +68,15 @@ class CommandGuardTest {
         assertNotNull(CommandGuard.check("find / -name pom.xml"));
         assertNotNull(CommandGuard.check("find ~ -type f"));
         assertNotNull(CommandGuard.check("find $HOME -name '*.txt'"));
+        assertNotNull(CommandGuard.check("find /")); // 裸扫全盘,无参
+    }
+
+    @Test
+    void allowsScopedFindUnderSpecificDir() {
+        // 指定目录扫描(非全盘/非家目录本身)应放行——修复 `find /tmp/...` 被过宽的 `find /` 规则误杀。
+        assertNull(CommandGuard.check("find /tmp/agentguide -name '*.md'"));
+        assertNull(CommandGuard.check("find /Users/me/project -type f"));
+        assertNull(CommandGuard.check("find ~/projects -name '*.java'"));
     }
 
     @Test

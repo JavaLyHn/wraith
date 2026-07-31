@@ -62,7 +62,8 @@ public class PathGuard {
 
         if (!realResolved.startsWith(rootPath)) {
             throw new PolicyException(
-                    "路径越界: " + input + " 不在项目根 " + rootPath + " 之内");
+                    "路径越界: " + input + " 不在项目根 " + rootPath + " 之内。"
+                            + "外部仓库/文件请先克隆或复制到项目根内的子目录再处理。");
         }
         return realResolved;
     }
