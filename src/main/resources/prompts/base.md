@@ -24,6 +24,7 @@
 12. `revert_turn` - 恢复到最近第 N 个 pre-turn 快照，属于高危写入操作
 13. `todo_write` - 维护给用户看的实时任务清单（多步任务用），参数：`{"todos": [{"content": "...", "status": "pending|in_progress|completed"}]}`
 14. `mcp__{server}__{tool}` - MCP server 动态提供的外部工具，具体参数以工具 schema 为准
+15. `open_panel` - 呈现「打开某功能面板」的一键入口，参数：`{"panel": "im-gateway"}`（合法：plugins/automations/im-gateway/providers/skills/memory/snapshots/tasks/policy/browser/rag）
 
 ## Tool Policy
 

@@ -146,6 +146,7 @@ public class ToolRegistry {
         registerSkillTools();
         registerSnapshotTools();
         registerTodoTools();
+        registerOpenPanelTool();
     }
 
     /**
@@ -1135,6 +1136,32 @@ public class ToolRegistry {
                         return "任务清单已清空";
                     }
                     return "已更新任务清单:" + parsed.size() + " 项," + done + " 完成";
+                }
+        ));
+    }
+
+    /** UI 意图工具:呈现「打开某功能面板」入口。纯校验、无副作用;桌面渲染层特判成动作卡。 */
+    private void registerOpenPanelTool() {
+        Set<String> panels = Set.of(
+                "plugins", "automations", "im-gateway", "providers", "skills",
+                "memory", "snapshots", "tasks", "policy", "browser", "rag");
+        tools.put("open_panel", new Tool(
+                "open_panel",
+                "在桌面对话中为用户呈现「打开某功能面板」的一键入口。当你引导用户去用 Wraith 的某个功能面板"
+                        + "(plugins=MCP / automations / im-gateway / providers / skills / memory / snapshots / tasks / policy / browser / rag)时调用。"
+                        + "仅呈现入口,不产生任何文件或命令副作用。",
+                createParameters(new Param("panel", "string",
+                        "面板 id:plugins(MCP)|automations|im-gateway|providers|skills|memory|snapshots|tasks|policy|browser|rag", true)),
+                args -> {
+                    String raw = args.get("panel");
+                    String norm = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+                    if ("mcp".equals(norm)) {
+                        norm = "plugins";
+                    }
+                    if (!panels.contains(norm)) {
+                        return "open_panel 失败: 未知面板 '" + raw + "',可选:" + String.join("/", panels);
+                    }
+                    return "已在桌面对话中为用户呈现「打开 " + norm + " 面板」的一键入口(桌面端显示为可点动作卡)。";
                 }
         ));
     }
