@@ -147,6 +147,7 @@ public class ToolRegistry {
         registerSnapshotTools();
         registerTodoTools();
         registerOpenPanelTool();
+        registerImConnectTool();
     }
 
     /**
@@ -1162,6 +1163,26 @@ public class ToolRegistry {
                         return "open_panel 失败: 未知面板 '" + raw + "',可选:" + String.join("/", panels);
                     }
                     return "已在桌面对话中为用户呈现「打开 " + norm + " 面板」的一键入口(桌面端显示为可点动作卡)。";
+                }
+        ));
+    }
+
+    /** UI 意图工具:呈现「接入某 IM 平台」内联入口。纯校验、无副作用;真正的 bind 由桌面渲染层触发既有 IPC。 */
+    private void registerImConnectTool() {
+        Set<String> platforms = Set.of("qq", "weixin", "feishu", "wecom");
+        tools.put("im_connect", new Tool(
+                "im_connect",
+                "在桌面对话中为用户开启「接入某 IM 平台」的内联入口。用户想把 Wraith 接入 QQ / 微信 / 飞书 / 企业微信时调用。"
+                        + "weixin 会在聊天内直出二维码;qq 会一键打开浏览器授权页;feishu / wecom 引导到面板填密钥。"
+                        + "不接触任何密钥,不产生副作用。",
+                createParameters(new Param("platform", "string", "平台:qq|weixin|feishu|wecom", true)),
+                args -> {
+                    String raw = args.get("platform");
+                    String norm = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
+                    if (!platforms.contains(norm)) {
+                        return "im_connect 失败: 未知平台 '" + raw + "',可选:qq/weixin/feishu/wecom";
+                    }
+                    return "已在桌面对话中为用户开启「接入 " + norm + "」的内联入口(桌面端显示为可点绑定卡)。";
                 }
         ));
     }
