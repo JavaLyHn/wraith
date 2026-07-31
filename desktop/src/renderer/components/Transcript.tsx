@@ -13,6 +13,8 @@ import { filesUnderMessages } from '../../shared/artifactSummary'
 import type { ArtifactFile } from '../../shared/artifactSummary'
 import { PlanChecklist, PlanReviewCard } from './PlanCard'
 import { TeamCard } from './TeamCard'
+import ActionCard from './ActionCard'
+import type { PanelId } from '../lib/panelActions'
 import { groupToolRuns } from '../lib/groupToolRuns'
 
 interface TranscriptProps {
@@ -34,9 +36,11 @@ interface TranscriptProps {
   onUndo?: (file: ArtifactFile) => Promise<{ ok: boolean; message?: string }>
   editors?: EditorApp[]
   workspace?: string | null
+  /** 打开功能面板(action / im-bind 动作卡用)。 */
+  onOpenPanel: (id: PanelId) => void
 }
 
-export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode, onOpenArtifact, onOpenDiff, onUndo, editors, workspace }: TranscriptProps): JSX.Element {
+export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode, onOpenArtifact, onOpenDiff, onUndo, editors, workspace, onOpenPanel }: TranscriptProps): JSX.Element {
   let userOrdinal = 0 // 渲染期为 user 气泡计数(1-based),rewind 用
   const totalUsers = items.filter(i => i.type === 'user').length
   const containerRef = useRef<HTMLDivElement>(null)
@@ -159,6 +163,9 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
           return <ThinkingBlock key={`think-${originalIdx}`} label={item.label} text={item.text} done={item.done} />
         }
         if (item.type === 'diff') return null
+        if (item.type === 'action') {
+          return <ActionCard key={`action-${originalIdx}`} panel={item.panel} onOpenPanel={onOpenPanel} />
+        }
         if (item.type === 'plan') {
           return <PlanChecklist key={item.planId} item={item} />
         }

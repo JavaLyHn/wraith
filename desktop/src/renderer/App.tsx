@@ -1089,6 +1089,7 @@ export default function App(): JSX.Element {
                       onUndo={handleUndo}
                       editors={editors}
                       workspace={state.workspace ?? null}
+                      onOpenPanel={(id) => setView(id)}
                     />
                     <div className="shrink-0 px-4 py-3">{composer}</div>
                   </>
