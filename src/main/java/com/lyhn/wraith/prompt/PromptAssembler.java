@@ -32,6 +32,7 @@ public class PromptAssembler {
         if (!ctx.toolsEnabled()) {
             append(prompt, noToolsSection());
         }
+        append(prompt, repository.loadRequired("capabilities.md"));
         append(prompt, repository.loadRequired("personalities/calm.md"));
         append(prompt, applyVariables(repository.loadRequired(mode.resourcePath()), ctx));
         append(prompt, repository.loadRequired("approvals/" + approvalMode(ctx) + ".md"));

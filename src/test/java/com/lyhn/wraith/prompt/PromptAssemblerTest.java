@@ -97,4 +97,13 @@ class PromptAssemblerTest {
         assertThrows(IllegalStateException.class,
                 () -> assembler.assemble(PromptMode.AGENT, PromptContext.empty()));
     }
+
+    @Test
+    void injectsWraithCapabilitiesCatalog() {
+        // Wraith 自我认知:系统提示词须含「产品能力目录」,让 agent 能回答元问题、不去 grep 用户项目。
+        String prompt = PromptAssembler.createDefault().assemble(PromptMode.AGENT, PromptContext.empty());
+        assertTrue(prompt.contains("Wraith 产品能力"), "系统提示词应含 Wraith 产品能力目录标题");
+        assertTrue(prompt.contains("IM 网关"), "能力目录应列出 IM 网关");
+        assertTrue(prompt.contains("代码检索"), "能力目录应列出代码检索(RAG)面板");
+    }
 }
