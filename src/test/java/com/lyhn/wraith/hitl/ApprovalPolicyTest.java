@@ -24,6 +24,13 @@ class ApprovalPolicyTest {
     }
 
     @Test
+    void automationToolsRequireApproval() {
+        assertTrue(ApprovalPolicy.requiresApproval("automation_upsert"));
+        assertTrue(ApprovalPolicy.requiresApproval("automation_remove"));
+        assertTrue(ApprovalPolicy.requiresApproval("automation_run_now"));
+    }
+
+    @Test
     void readFileDoesNotRequireApproval() {
         assertFalse(ApprovalPolicy.requiresApproval("read_file"));
     }
@@ -90,7 +97,10 @@ class ApprovalPolicyTest {
         assertTrue(tools.contains("revert_turn"));
         assertTrue(tools.contains("task_add"));
         assertTrue(tools.contains("memory_delete"));
-        assertEquals(6, tools.size());
+        assertTrue(tools.contains("automation_upsert"));
+        assertTrue(tools.contains("automation_remove"));
+        assertTrue(tools.contains("automation_run_now"));
+        assertEquals(9, tools.size());
     }
 
     @Test
@@ -134,7 +144,7 @@ class ApprovalPolicyTest {
     @Test
     void mcpToolStaysOutsideOfBuiltinDangerousTools() {
         // mcp__ 前缀不应污染 DANGEROUS_TOOLS 集合本身（保证 set 含义清晰）
-        assertEquals(6, ApprovalPolicy.getDangerousTools().size());
+        assertEquals(9, ApprovalPolicy.getDangerousTools().size());
         assertFalse(ApprovalPolicy.getDangerousTools().contains("mcp__demo__tool"));
     }
 }

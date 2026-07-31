@@ -21,7 +21,10 @@ public class ApprovalPolicy {
             "create_project",
             "revert_turn",
             "task_add",
-            "memory_delete"
+            "memory_delete",
+            "automation_upsert",
+            "automation_remove",
+            "automation_run_now"
     );
 
     private ApprovalPolicy() {
