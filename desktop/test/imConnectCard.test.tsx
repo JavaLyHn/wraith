@@ -45,4 +45,11 @@ describe('ImConnectCard', () => {
     fireEvent.click(screen.getByTestId('im-connect-open-panel'))
     expect(onOpenPanel).toHaveBeenCalledWith('im-gateway')
   })
+  it('weixin:未点击「开始」前收到全局 bind 事件应被忽略(不误显二维码/状态/取消)', () => {
+    render(<ImConnectCard platform="weixin" workspace="/w" onOpenPanel={vi.fn()} />)
+    act(() => emit({ kind: 'bind', phase: 'scanning', qr: 'data:image/png;base64,AAA' }))
+    expect(screen.queryByTestId('im-connect-qr')).toBeNull()
+    expect(screen.queryByTestId('im-connect-status')).toBeNull()
+    expect(screen.queryByTestId('im-connect-cancel')).toBeNull()
+  })
 })

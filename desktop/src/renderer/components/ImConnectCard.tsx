@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { bindPhaseLabel } from '../lib/gatewayLabels'
 import { applyBindEvent, type BindState } from '../lib/imBind'
 import type { PanelId } from '../lib/panelActions'
@@ -23,11 +23,15 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel }: ImCo
   const p = (platform || '').trim().toLowerCase()
   const [bind, setBind] = useState<BindState | null>(null)
   const [started, setStarted] = useState(false)
+  // useEffect(..., []) 的闭包只捕获挂载时的初值,普通 state 无法反映"是否已点击开始";
+  // 用 ref 才能让事件回调实时读到最新的启动状态。
+  const startedRef = useRef(false)
 
-  // 挂载只订阅事件(不启动绑定)。
+  // 挂载只订阅事件(不启动绑定);未点击「开始」的卡片必须忽略全局 bind 事件——
+  // 否则第二张卡 / 面板里正在跑的绑定会被这里的 setBind 误接管,甚至误触「取消」。
   useEffect(() => {
     const unsub = window.wraith.onGatewayEvent((evt: GatewayEvent) => {
-      if (evt.kind === 'bind') setBind(prev => applyBindEvent(prev, evt))
+      if (evt.kind === 'bind' && startedRef.current) setBind(prev => applyBindEvent(prev, evt))
     })
     return () => unsub()
   }, [])
@@ -48,6 +52,7 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel }: ImCo
   if (p !== 'qq' && p !== 'weixin') return null
 
   const start = (): void => {
+    startedRef.current = true
     setStarted(true)
     setBind({ phase: 'scanning' })
     if (p === 'weixin') void window.wraith.gatewayBindWeixinStart(workspace?.trim() || undefined)
@@ -84,13 +89,13 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel }: ImCo
         </div>
       )}
 
-      {bind && (
+      {started && bind && (
         <div data-testid="im-connect-status" className={'text-xs ' + (bind.phase === 'bound' ? 'text-ok' : bind.phase === 'failed' || bind.phase === 'secret-invalid' ? 'text-danger' : 'text-fg-muted')}>
           {bindPhaseLabel(bind.phase, bind.message)}
         </div>
       )}
 
-      {bind?.phase === 'scanning' && (
+      {started && bind?.phase === 'scanning' && (
         <button data-testid="im-connect-cancel" onClick={() => void window.wraith.gatewayBindCancel()} className="self-start text-2xs text-fg-subtle hover:text-fg">取消</button>
       )}
     </div>
