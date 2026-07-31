@@ -54,6 +54,9 @@ export default function PanelToggleIcon({ side, open, className = 'h-4 w-4' }: {
   const dividerStyle: CSSProperties = {
     transformBox: 'fill-box',
     transform: open ? g.dividerOpen : 'translate(0)',
+    // 开态:实心填充块的右缘(内侧边)即为分界,隐藏分隔线,避免同色 1.5px 线戳出填充块
+    // 形成"双线重叠"的观感;关态显示单条分隔线表达面板内分隔。
+    opacity: open ? 0 : 1,
   }
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} aria-hidden="true">

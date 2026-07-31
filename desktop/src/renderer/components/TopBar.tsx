@@ -14,10 +14,11 @@ export default function TopBar({ platform, sidebarCollapsed, onToggleSidebar, sh
   rightDockOpen: boolean
   onToggleRightDock: () => void
 }): JSX.Element {
-  // 单色墨 + squircle 柔底:静息浅墨无底、hover 深墨淡底、开态深墨常驻底(无投影)。
+  // 纯平单色墨:状态只用墨色表达——开=深墨(text-fg)、关=浅墨(text-fg-muted)、hover=深墨。
+  // 不再有任何灰底/凸起(去掉开态与 hover 的 bg,避免读作"阴影/凸起")。
   const btn = (open: boolean): string =>
     'flex items-center rounded-[10px] p-1.5 transition duration-150 active:scale-90 motion-reduce:transform-none [-webkit-app-region:no-drag] ' +
-    (open ? 'bg-fg/[0.08] text-fg' : 'text-fg-muted hover:bg-fg/[0.06] hover:text-fg')
+    (open ? 'text-fg' : 'text-fg-muted hover:text-fg')
   return (
     <div data-testid="topbar" className={'flex h-[38px] shrink-0 items-center [-webkit-app-region:drag] ' + topBarLeftPad(platform)}>
       <button data-testid="sidebar-toggle" onClick={onToggleSidebar} title={sidebarCollapsed ? '展开侧栏' : '折叠侧栏'} className={btn(!sidebarCollapsed)} aria-pressed={!sidebarCollapsed}>

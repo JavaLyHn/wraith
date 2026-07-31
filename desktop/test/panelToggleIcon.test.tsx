@@ -35,4 +35,14 @@ describe('PanelToggleIcon', () => {
     const { container } = render(<PanelToggleIcon side="left" open={false} />)
     expect(container.querySelector('svg')?.getAttribute('class')).toContain('h-4 w-4')
   })
+
+  it('open=true → 分隔线隐藏(opacity 0),避免与填充块右缘重叠成双线', () => {
+    render(<PanelToggleIcon side="left" open={true} />)
+    expect(screen.getByTestId('panel-divider').style.opacity).toBe('0')
+  })
+
+  it('open=false → 分隔线显示(opacity 1)', () => {
+    render(<PanelToggleIcon side="left" open={false} />)
+    expect(screen.getByTestId('panel-divider').style.opacity).toBe('1')
+  })
 })

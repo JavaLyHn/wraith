@@ -26,6 +26,13 @@ describe('TopBar', () => {
     expect(screen.getByTestId('sidebar-toggle')).toBeTruthy()
   })
 
+  it('三键纯平:className 不含灰底 bg-fg(去"阴影/凸起")', () => {
+    render(<TopBar {...base} sidebarCollapsed={false} terminalOpen rightDockOpen />)
+    for (const id of ['sidebar-toggle', 'terminal-toggle', 'rightdock-toggle']) {
+      expect(screen.getByTestId(id).className).not.toContain('bg-fg')
+    }
+  })
+
   it('侧栏 glyph 反映折叠态:展开=open、折叠=关', () => {
     const { rerender } = render(<TopBar {...base} sidebarCollapsed={false} />)
     const fill = () => within(screen.getByTestId('sidebar-toggle')).getByTestId('panel-fill')
