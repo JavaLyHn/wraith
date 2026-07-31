@@ -134,6 +134,7 @@ export type Item =
   | { type: 'tool'; card: ToolCard }
   | { type: 'diff'; filePath: string; before: string; after: string }
   | { type: 'action'; panel: string }
+  | { type: 'im-bind'; platform: string }
   | PlanItem
   | PlanReviewItem
   | TeamItem
@@ -369,6 +370,9 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
       // UI 意图工具:特判成动作卡 item,不走 ToolCard(其 tool.result/tool.output.delta 因无匹配 callId 安全忽略)。
       if (name === 'open_panel') {
         return { ...state, items: [...state.items, { type: 'action', panel: toolArgString(argsJson, 'panel') }] }
+      }
+      if (name === 'im_connect') {
+        return { ...state, items: [...state.items, { type: 'im-bind', platform: toolArgString(argsJson, 'platform') }] }
       }
       const card: ToolCard = { callId, name, argsJson, output: '', done: false }
       return { ...state, items: [...state.items, { type: 'tool', card }] }

@@ -27,3 +27,14 @@ describe('transcriptReducer —— open_panel 特判', () => {
     expect((it as { type: 'action'; panel: string }).panel).toBe('')
   })
 })
+
+describe('transcriptReducer —— im_connect 特判', () => {
+  it('im_connect 的 tool.call 归约成 im-bind item', () => {
+    const s = transcriptReducer(initialTranscriptState(), {
+      type: 'tool.call', callId: 'c4', name: 'im_connect', argsJson: '{"platform":"weixin"}',
+    })
+    const it = lastItem(s.items)
+    expect(it.type).toBe('im-bind')
+    expect((it as { type: 'im-bind'; platform: string }).platform).toBe('weixin')
+  })
+})
