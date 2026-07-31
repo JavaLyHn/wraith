@@ -906,6 +906,8 @@ public class Main {
                         planAgent.setExternalContextSupplier(mcpServerManager::resourceIndexForPrompt);
                         planAgent.setSkillRegistry(skillRegistry);
                         planAgent.setSkillContextBuffer(skillContextBuffer);
+                        planAgent.setConversationContext(
+                                com.lyhn.wraith.agent.ConversationDigest.of(reactAgent.getConversationHistory()));
                         return planAgent.run(taskInput);
                     };
                 } else if (nextTaskUseTeamMode || command.type() == CliCommandParser.CommandType.SWITCH_TEAM) {
@@ -915,6 +917,8 @@ public class Main {
                         AgentOrchestrator orchestrator = createTeamAgent(activeClient, reactAgent, ui);
                         orchestrator.setExternalContextSupplier(mcpServerManager::resourceIndexForPrompt);
                         orchestrator.setSkillSystem(skillRegistry, skillContextBuffer);
+                        orchestrator.setConversationContext(
+                                com.lyhn.wraith.agent.ConversationDigest.of(reactAgent.getConversationHistory()));
                         return orchestrator.run(taskInput);
                     };
                 } else {
@@ -934,6 +938,11 @@ public class Main {
                 if (response != null && !response.isBlank()) {
                     ui.println(response);
                     ui.println();
+                }
+                // 把 plan/team 本轮补进 reactAgent 会话历史(与桌面 agent.recordExternalTurn 对称),
+                // 使下一轮切回 react 时能看到本轮上下文;react 模式自身已在 run() 内记录,不重复
+                if (!"react".equals(snapshotMode) && response != null && !response.isBlank()) {
+                    reactAgent.recordExternalTurn(taskInput, response);
                 }
                 sessionStore.persist(reactAgent.getConversationHistory()); // 每轮落盘,供续接
             }
@@ -2011,6 +2020,8 @@ public class Main {
                             com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
                             renderer.startCardRecording();
                             final String result;
+                            orchestrator.setConversationContext(
+                                    com.lyhn.wraith.agent.ConversationDigest.of(agent.getConversationHistory()));
                             try {
                                 result = snap.runTurn("team", goal, () -> orchestrator.run(goal));
                             } catch (Exception e) {
@@ -2107,6 +2118,8 @@ public class Main {
                         com.lyhn.wraith.snapshot.SnapshotService snap = agent.getToolRegistry().getSnapshotService();
                         renderer.startCardRecording();
                         final String result;
+                        planAgent.setConversationContext(
+                                com.lyhn.wraith.agent.ConversationDigest.of(agent.getConversationHistory()));
                         try {
                             result = snap.runTurn("plan", goal, () -> planAgent.run(goal));
                         } catch (Exception e) {
