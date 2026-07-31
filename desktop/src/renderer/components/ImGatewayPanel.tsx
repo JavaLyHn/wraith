@@ -6,6 +6,7 @@ import { IM_PLATFORMS } from '../lib/imPlatforms'
 import { PlatformIcon } from '../lib/imPlatformIcons'
 import { feishuConfigPayload } from '../lib/feishuConfigPayload'
 import { wecomConfigPayload } from '../lib/wecomConfigPayload'
+import { applyBindEvent } from '../lib/imBind'
 
 interface ImGatewayPanelProps {
   onBack: () => void
@@ -113,14 +114,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
     const unsub = window.wraith.onGatewayEvent(evt => {
       if (evt.kind === 'status') setStatus(evt.status)
       else if (evt.kind === 'bind') {
-        // 微信扫码:scanning 阶段会分几条来(「请扫码」行、带 qr 的图片行、带 url 的兜底链接行)。
-        // 逐条到达时保留已拿到的 qr / url,避免后一条把前一条冲掉;非 scanning 阶段清空。
-        setBind(prev => ({
-          phase: evt.phase,
-          message: evt.message,
-          qr: evt.qr ?? (evt.phase === 'scanning' ? prev?.qr : undefined),
-          url: evt.url ?? (evt.phase === 'scanning' ? prev?.url : undefined),
-        }))
+        setBind(prev => applyBindEvent(prev, evt))
         if (evt.phase === 'bound' || evt.phase === 'secret-invalid') void refreshConfig()
       }
     })
