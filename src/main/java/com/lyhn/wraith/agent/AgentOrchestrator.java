@@ -52,6 +52,7 @@ public class AgentOrchestrator {
     private final ToolRegistry toolRegistry;
     private final PrintStream out;
     private Supplier<String> externalContextSupplier = () -> "";
+    private String conversationContext = "";
     private TeamProgressListener progressListener = TeamProgressListener.NOOP;
     public void setProgressListener(TeamProgressListener l) { this.progressListener = (l != null) ? l : TeamProgressListener.NOOP; }
     private java.util.function.BiFunction<String,String,LlmClient.StreamListener> streamFactory;
@@ -129,6 +130,14 @@ public class AgentOrchestrator {
     }
 
     /**
+     * 注入主线(ReAct)会话上下文,仅用于 planner 首任务拼装(供理解「继续/它/上面」等指代)。
+     * worker/reviewer 每步隔离不受影响。
+     */
+    public void setConversationContext(String context) {
+        this.conversationContext = context == null ? "" : context;
+    }
+
+    /**
      * 把 Skill 系统下发给所有 SubAgent。Multi-Agent 三个角色共享同一 SkillRegistry（索引一致），
      * 但共享同一 SkillContextBuffer——简化实现，避免角色级 buffer 隔离的工程开销。
      * 任务书 §3.6 描述的"角色独立 buffer"作为可观察的优化项暂未启用。
@@ -166,8 +175,9 @@ public class AgentOrchestrator {
         out.println(AnsiStyle.heading("📋 第一阶段：规划"));
         out.println("🧑‍💼 规划者正在分析任务...\n");
 
-        AgentMessage planMessage = AgentMessage.task("orchestrator",
+        String planTaskBody = ConversationDigest.prepend(conversationContext,
                 "请为以下任务制定执行计划：\n" + userInput);
+        AgentMessage planMessage = AgentMessage.task("orchestrator", planTaskBody);
         AgentMessage planResult = planner.execute(planMessage, out, streamFor("planner", "planner"));
         planner.clearHistory();
         if (CancellationContext.isCancelled()) {
