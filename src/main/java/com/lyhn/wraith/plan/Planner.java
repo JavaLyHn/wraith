@@ -68,12 +68,13 @@ public class Planner {
     public ExecutionPlan createPlan(String goal, LlmClient.StreamListener extra) throws IOException {
         out.println("📋 正在规划任务: " + goal + "\n");
 
-        if (isSimpleGoal(goal)) {
+        String convo = buildConversationContext();
+        if (isSimpleGoal(goal) && convo.isBlank()) {
             return createMinimalPlan(goal);
         }
 
         // 构建规划请求
-        String userBody = ConversationDigest.prepend(buildConversationContext(), "请为以下任务制定执行计划：\n" + goal);
+        String userBody = ConversationDigest.prepend(convo, "请为以下任务制定执行计划：\n" + goal);
         List<LlmClient.Message> messages = Arrays.asList(
                 LlmClient.Message.system(promptAssembler.assemble(PromptMode.PLANNER, PromptContext.builder()
                         .projectMemoryContext(buildProjectMemoryContext())
