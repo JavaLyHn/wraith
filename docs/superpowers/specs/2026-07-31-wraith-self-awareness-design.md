@@ -47,7 +47,7 @@
 
 ### 5.1 后端工具 `open_panel`
 - 位置:`ToolRegistry`(与既有 14 工具并列)。
-- 参数:`{"panel": "<id>"}`,`id ∈ {mcp, automations, im-gateway, providers, skills, memory, snapshots, tasks, policy, browser, rag}`(与 `Sidebar.tsx:116` 的 `activeNav` 对齐)。
+- 参数:`{"panel": "<id>"}`,`id ∈ {plugins, automations, im-gateway, providers, skills, memory, snapshots, tasks, policy, browser, rag}`(与 `Sidebar.tsx:116` 的 `activeNav` / `App.tsx` 的 `setView` 对齐;MCP 面板内部 id 实为 `plugins`。渲染层再把 LLM 可能用的别名 `mcp` 归一到 `plugins`)。
 - 执行:校验 panel 合法 → 返回确认串(如「已为用户呈现『打开 <中文名> 面板』入口」);非法 panel 返回错误串。**不做任何文件/命令副作用。**
 - prompt 中登记该工具 + 用法(「当引导用户去某功能面板时调用」)。
 
@@ -64,13 +64,16 @@ App.tsx 已持有各 `onOpenXxx`;把它们经 props 下传到 Transcript → Act
 ### 6.1 后端工具 `im_connect`
 - 参数:`{"platform": "<p>"}`,`p ∈ {qq, weixin, feishu, wecom}`。
 - 执行:校验 → 返回确认串(如「已为用户在聊天内开启 <平台> 接入」)。无副作用(真正的 bind 由渲染层触发既有 IPC)。
-- prompt 登记:「用户想接入某 IM 时调用;qq/weixin 会在聊天内直出二维码,feishu/wecom 引导到面板填密钥」。
+- prompt 登记:「用户想接入某 IM 时调用;weixin 在聊天内直出二维码,qq 一键在浏览器打开授权页并在聊天内看状态,feishu/wecom 引导到面板填密钥」。
 
 ### 6.2 渲染层内联绑定卡
 - transcript `Item` 新增 `im-bind` 变体,由「`tool.call` 且 name=im_connect」归约。
-- 组件 `ImConnectCard.tsx`:
-  - `qq` / `weixin`:挂载即调**既有** bind IPC(`window.wraith.gatewayBindStart()` / `gatewayBindWeixinStart(workspace)`,`ImGatewayPanel.tsx:140-143/199-202`)+ 订阅 `onGatewayEvent`;把 QR(`bind.qr` data-URI)+ 状态(`bindPhaseLabel`)**内联渲染**在卡里。QR 渲染/状态解析逻辑从 `ImGatewayPanel` 抽成共享 hook/util(`lib/imBind.ts` + 复用),两处(面板 + 聊天卡)共用,不复制。
+- 组件 `ImConnectCard.tsx`(⚠ **点击触发,非挂载触发**:transcript 历史回放会重建 `im-bind` item → 若挂载即 spawn bind,每次 resume/切会话都会重启绑定进程。故卡内放一个「开始绑定」按钮,点击才调 bind IPC;订阅 `onGatewayEvent` 可在挂载时挂,只监听不启动):
+  - `weixin`:按钮点击调**既有** bind IPC(`window.wraith.gatewayBindWeixinStart(workspace)`,`ImGatewayPanel.tsx:199-202`);把 QR(`bind.qr` data-URI,后端仅微信经 `WRAITH_QR_PNG` 标记发图片事件)+ 状态(`bindPhaseLabel`)+ 兜底链接(`bind.url`)**内联渲染**在卡里。**真·聊天内二维码**。
+  - `qq`:按钮点击调 `window.wraith.gatewayBindStart()`(`ImGatewayPanel.tsx:140-143`)。⚠ QQ 后端(`gatewayManager.bindStart`)解析 connect URL 后 `openExternal` **打开系统浏览器**扫码、**不发 `qr`**,故卡内**无内联二维码**,只显示「已打开浏览器授权页」+ 实时状态(`bindPhaseLabel`)+ 取消。
+  - 共享:bind 事件→state 归并(`ImGatewayPanel.tsx:118-123` 的逐条保留 qr/url 逻辑)抽成 `lib/imBind.ts` 的纯函数 `applyBindEvent`,面板与聊天卡共用,不复制。
   - `feishu` / `wecom`(填密钥、无 QR):卡内一句说明 + 「打开 IM 网关面板」按钮(退化到 Stage B 的 open-panel 到对应表单)。
+  - 绑定中(`phase==='scanning'`)提供「取消」→ 既有 `gatewayBindCancel` IPC。
 - 卡内提供「取消」→ 既有 `gatewayBindCancel` IPC。
 
 ### 6.3 复用与边界
@@ -82,8 +85,8 @@ App.tsx 已持有各 `onOpenXxx`;把它们经 props 下传到 Transcript → Act
 
 | 工具(panel id) | 是什么 | agent 回答/指路要点 | 动作 |
 |---|---|---|---|
-| **IM 网关**(im-gateway) | 让 Wraith 经 QQ/飞书/企业微信/微信 收发消息、跑回合、HITL 审批 | 「支持 QQ/飞书/企业微信/微信。接微信:IM 网关→微信→扫码绑定;飞书/企业微信:填密钥→启动守护。QQ/微信扫码,飞书/企业微信填 key」 | C:`im_connect`;B:`open_panel(im-gateway)` |
-| **MCP**(mcp) | 接外部 MCP server(stdio/HTTP),给 agent 加动态工具 | 「MCP 面板加 server(命令或 URL)→启用/重启;或编辑 `~/.wraith/mcp.json`」 | B |
+| **IM 网关**(im-gateway) | 让 Wraith 经 QQ/飞书/企业微信/微信 收发消息、跑回合、HITL 审批 | 「支持 QQ/飞书/企业微信/微信。微信:扫码绑定(聊天内直出二维码);QQ:一键打开浏览器授权页;飞书/企业微信:填密钥→启动守护」 | C:`im_connect`;B:`open_panel(im-gateway)` |
+| **MCP**(panel id=plugins) | 接外部 MCP server(stdio/HTTP),给 agent 加动态工具 | 「MCP 面板加 server(命令或 URL)→启用/重启;或编辑 `~/.wraith/mcp.json`」 | B(`open_panel(plugins)`,别名 `mcp`) |
 | **自动化**(automations) | 定时/cron agent 任务 + 投递目标(可投 IM)+ HITL 审批 | 「自动化面板新建任务:cron 表达式 + 投递目标 + 审批策略」 | B |
 | **Provider 配置**(providers) | 选/配 LLM 供应商(DeepSeek/GLM/Kimi/Anthropic/StepFun/兼容 OpenAI) | 「Provider 面板填 API key→设默认供应商/模型」 | B |
 | **技能**(skills) | 用户级/项目级 Skill 文件,agent 按需 load | 「技能面板新建/编辑/启用;或放 `~/.wraith/skills`、`<项目>/.wraith/skills`」 | B |
@@ -104,7 +107,7 @@ App.tsx 已持有各 `onOpenXxx`;把它们经 props 下传到 Transcript → Act
 
 - **A**:prompt 资产存在 + 被 `PromptAssembler` 拼入(可加一个 assembler 单测断言系统提示词含「Wraith 产品能力」标题 + 「IM 网关」等关键词);元问题行为真机眼验(诚实边界)。
 - **B**:`panelActions.ts` 纯函数单测(panel id→中文名/校验);`ActionCard` RTL 测(渲染按钮、点击调 `onOpenPanel(id)`);`transcriptReducer` 对 open_panel tool.call 归约成 action 项的单测;`ToolRegistry` open_panel 参数校验单测。
-- **C**:`imBind.ts` 纯逻辑单测(QR marker/状态解析,复用既有 gatewayManager 的 `parseQrPngMarker` 同款);`ImConnectCard` RTL 测(用假 IPC/事件驱动:qq/weixin 渲染 QR 占位+状态、feishu/wecom 渲染开面板按钮);`im_connect` 参数校验单测。真实扫码归用户真机。
+- **C**:`imBind.ts` 纯逻辑单测(bind 事件→state 归并/`bindPhaseLabel` 状态解析,复用既有逻辑);`ImConnectCard` RTL 测(用假 IPC/事件驱动:weixin 渲染 QR `<img>`+状态、qq 渲染「已打开浏览器授权页」+状态、feishu/wecom 渲染开面板按钮);`im_connect` 参数校验单测。真实扫码归用户真机。
 - 全阶段回归:`mvn test` + 桌面 `npm test` + `npm run typecheck` 全绿。
 
 ## 10. YAGNI / 取舍
