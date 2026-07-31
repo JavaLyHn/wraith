@@ -193,6 +193,23 @@ public class PlanExecuteAgent {
         return planStreamFactory == null ? null : planStreamFactory.get();
     }
 
+    /** 工具调用观察者(桌面注入 → 发 tool.call 事件);默认 no-op,CLI 行为不变。 */
+    private java.util.function.Consumer<java.util.List<LlmClient.ToolCall>> toolCallObserver = calls -> {};
+
+    /** 桌面注入:把计划步骤里的工具调用同步交给观察者(Plan 模式的动作卡靠它)。 */
+    public void setToolCallObserver(java.util.function.Consumer<java.util.List<LlmClient.ToolCall>> observer) {
+        this.toolCallObserver = observer == null ? calls -> {} : observer;
+    }
+
+    /** 观察者失败绝不影响工具执行主路径。 */
+    private void notifyToolCallObserver(java.util.List<LlmClient.ToolCall> calls) {
+        try {
+            toolCallObserver.accept(calls);
+        } catch (Exception ignored) {
+            // 事件外发失败不能打断计划执行
+        }
+    }
+
     private static PrintStream deferredSystemOut() {
         return new PrintStream(new OutputStream() {
             @Override
@@ -607,6 +624,7 @@ public class PlanExecuteAgent {
 
             // 有工具调用：执行工具并将结果回灌到消息历史
             printToolCalls(out, response.toolCalls());
+            notifyToolCallObserver(response.toolCalls());
             messages.add(LlmClient.Message.assistant(
                     response.reasoningContent(),
                     response.content(),

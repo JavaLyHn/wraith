@@ -1,6 +1,9 @@
 package com.lyhn.wraith.agent;
 
 import com.lyhn.wraith.llm.LlmClient;
+import com.lyhn.wraith.plan.ExecutionPlan;
+import com.lyhn.wraith.plan.Planner;
+import com.lyhn.wraith.plan.Task;
 import com.lyhn.wraith.tool.ToolRegistry;
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +41,21 @@ class ToolCallObserverTest {
 
     private static PrintStream discard() {
         return new PrintStream(new ByteArrayOutputStream());
+    }
+
+    /** 固定返回一个单任务计划，绕过真实 planner JSON 解析，让执行直接进入工具调用步骤。 */
+    private static final class StubPlanner extends Planner {
+        private StubPlanner(LlmClient llmClient) {
+            super(llmClient);
+        }
+
+        @Override
+        public ExecutionPlan createPlan(String goal, LlmClient.StreamListener extra) {
+            ExecutionPlan plan = new ExecutionPlan("plan-test", goal);
+            plan.addTask(new Task("task_1", "打开 IM 网关面板", Task.TaskType.COMMAND));
+            plan.computeExecutionOrder();
+            return plan;
+        }
     }
 
     @Test
@@ -79,5 +97,35 @@ class ToolCallObserverTest {
         SubAgent worker = orch.workersForTest().get(0);
         try { worker.execute(AgentMessage.task("test", "打开 IM 网关面板"), discard()); } catch (Exception ignored) { }
         assertTrue(seen.contains("open_panel"), "orchestrator 应把观察者扇出给 worker,实际: " + seen);
+    }
+
+    @Test
+    void planExecuteAgentNotifiesObserverOnToolCalls() {
+        List<String> seen = new ArrayList<>();
+        ToolThenTextClient llmClient = new ToolThenTextClient();
+        PlanExecuteAgent planAgent = new PlanExecuteAgent(
+                llmClient,
+                new ToolRegistry(),
+                new StubPlanner(llmClient),
+                null,
+                (goal, plan) -> PlanExecuteAgent.PlanReviewDecision.execute());
+        planAgent.setToolCallObserver(calls -> calls.forEach(c -> seen.add(c.function().name())));
+        try { planAgent.run("打开 IM 网关面板"); } catch (Exception ignored) { }
+        assertTrue(seen.contains("open_panel"), "Plan 执行器应把工具调用交给观察者,实际: " + seen);
+    }
+
+    @Test
+    void planExecuteAgentObserverExceptionDoesNotBreakRun() {
+        ToolThenTextClient llmClient = new ToolThenTextClient();
+        PlanExecuteAgent planAgent = new PlanExecuteAgent(
+                llmClient,
+                new ToolRegistry(),
+                new StubPlanner(llmClient),
+                null,
+                (goal, plan) -> PlanExecuteAgent.PlanReviewDecision.execute());
+        planAgent.setToolCallObserver(calls -> { throw new RuntimeException("boom"); });
+        assertDoesNotThrow(() -> {
+            try { planAgent.run("打开面板"); } catch (Exception ignored) { }
+        });
     }
 }
