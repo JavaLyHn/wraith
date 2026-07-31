@@ -18,6 +18,28 @@ public final class AutomationStore {
         this.runs = dir.resolve("automation-runs.json");
     }
 
+    /**
+     * 默认自动化数据目录:系统属性 wraith.automation.dir 优先,否则 <user.home>/.wraith。
+     * app-server / 网关守护 / agent 工具三方共用同一解析口径 —— 口径漂移会导致
+     * 「一边写、另一边读不到」的整类 bug。
+     */
+    public static Path defaultDir() {
+        String prop = System.getProperty("wraith.automation.dir");
+        return (prop != null && !prop.isBlank())
+                ? Path.of(prop)
+                : Path.of(System.getProperty("user.home"), ".wraith");
+    }
+
+    /** 默认 request inbox 目录(defaultDir() 下的 automation-requests 子目录)。 */
+    public static Path defaultRequestsDir() {
+        return defaultDir().resolve("automation-requests");
+    }
+
+    /** 按默认目录打开。 */
+    public static AutomationStore openDefault() {
+        return new AutomationStore(defaultDir());
+    }
+
     // --- 定义(读写,app-server 单写者) ---
     public List<AutomationTask> loadTasks() {
         Map<String,Object> root = readMap(defs);

@@ -1191,22 +1191,14 @@ public final class AppServer {
      * 2. 否则 ~/.wraith
      */
     private static com.lyhn.wraith.automation.AutomationStore automationStore() {
-        String prop = System.getProperty("wraith.automation.dir");
-        java.nio.file.Path dir = (prop != null && !prop.isBlank())
-                ? java.nio.file.Path.of(prop)
-                : java.nio.file.Path.of(System.getProperty("user.home"), ".wraith");
-        return new com.lyhn.wraith.automation.AutomationStore(dir);
+        return com.lyhn.wraith.automation.AutomationStore.openDefault();
     }
 
     /**
      * 解析 automation-requests 目录（与 automationStore() 同基目录下的 automation-requests 子目录）。
      */
     private static java.nio.file.Path automationRequestsDir() {
-        String prop = System.getProperty("wraith.automation.dir");
-        java.nio.file.Path base = (prop != null && !prop.isBlank())
-                ? java.nio.file.Path.of(prop)
-                : java.nio.file.Path.of(System.getProperty("user.home"), ".wraith");
-        return base.resolve("automation-requests");
+        return com.lyhn.wraith.automation.AutomationStore.defaultRequestsDir();
     }
 
     private void handleMcp(JsonRpc.Incoming msg, java.util.function.Consumer<McpOps> action) {

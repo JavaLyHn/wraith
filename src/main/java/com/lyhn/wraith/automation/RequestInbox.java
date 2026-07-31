@@ -53,6 +53,11 @@ public final class RequestInbox {
         this.requestsDir = requestsDir;
     }
 
+    /** 按默认目录打开(与 AutomationStore.openDefault() 同基目录)。 */
+    public static RequestInbox openDefault() {
+        return new RequestInbox(AutomationStore.defaultRequestsDir());
+    }
+
     /**
      * Reads all {@code *.json} files currently present in the requests directory,
      * parses each into a {@link Request}, deletes the file (consuming the
