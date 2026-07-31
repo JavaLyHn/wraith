@@ -133,6 +133,7 @@ export type Item =
   | { type: 'thinking'; label: string; text: string; done: boolean }
   | { type: 'tool'; card: ToolCard }
   | { type: 'diff'; filePath: string; before: string; after: string }
+  | { type: 'action'; panel: string }
   | PlanItem
   | PlanReviewItem
   | TeamItem
@@ -187,6 +188,20 @@ export const initialState: TranscriptState = {
   status: null,
   context: CONTEXT_INITIAL,
   _messageOpen: false,
+}
+
+// ---------------------------------------------------------------------------
+// Helper — safe extraction of string field from tool argsJson
+// ---------------------------------------------------------------------------
+
+/** 从工具 argsJson 安全取一个字符串字段;非法 JSON / 缺字段 → 空串,绝不抛。 */
+function toolArgString(argsJson: string, key: string): string {
+  try {
+    const o = JSON.parse(argsJson) as Record<string, unknown>
+    return typeof o?.[key] === 'string' ? (o[key] as string) : ''
+  } catch {
+    return ''
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -351,6 +366,10 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
       const callId = typeof p['callId'] === 'string' ? p['callId'] : ''
       const name = typeof p['name'] === 'string' ? p['name'] : ''
       const argsJson = typeof p['argsJson'] === 'string' ? p['argsJson'] : ''
+      // UI 意图工具:特判成动作卡 item,不走 ToolCard(其 tool.result/tool.output.delta 因无匹配 callId 安全忽略)。
+      if (name === 'open_panel') {
+        return { ...state, items: [...state.items, { type: 'action', panel: toolArgString(argsJson, 'panel') }] }
+      }
       const card: ToolCard = { callId, name, argsJson, output: '', done: false }
       return { ...state, items: [...state.items, { type: 'tool', card }] }
     }
