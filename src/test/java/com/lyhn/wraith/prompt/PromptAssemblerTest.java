@@ -106,4 +106,11 @@ class PromptAssemblerTest {
         assertTrue(prompt.contains("IM 网关"), "能力目录应列出 IM 网关");
         assertTrue(prompt.contains("代码检索"), "能力目录应列出代码检索(RAG)面板");
     }
+
+    @Test
+    void toolPolicyRoutesMetaQuestionsToCapabilities() {
+        // 防回归:问 Wraith 自身能力时必须据能力目录作答,不得 grep 用户项目(修「问 IM 集成答没有」的缺口)。
+        String prompt = PromptAssembler.createDefault().assemble(PromptMode.AGENT, PromptContext.empty());
+        assertTrue(prompt.contains("Wraith 自身能力"), "Tool Policy 应含元问题判别策略");
+    }
 }
