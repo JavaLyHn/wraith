@@ -14,6 +14,7 @@ import type { ArtifactFile } from '../../shared/artifactSummary'
 import { PlanChecklist, PlanReviewCard } from './PlanCard'
 import { TeamCard } from './TeamCard'
 import ActionCard from './ActionCard'
+import ImConnectCard from './ImConnectCard'
 import type { PanelId } from '../lib/panelActions'
 import { groupToolRuns } from '../lib/groupToolRuns'
 
@@ -165,6 +166,9 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
         if (item.type === 'diff') return null
         if (item.type === 'action') {
           return <ActionCard key={`action-${originalIdx}`} panel={item.panel} onOpenPanel={onOpenPanel} />
+        }
+        if (item.type === 'im-bind') {
+          return <ImConnectCard key={`imbind-${originalIdx}`} platform={item.platform} workspace={workspace} onOpenPanel={onOpenPanel} />
         }
         if (item.type === 'plan') {
           return <PlanChecklist key={item.planId} item={item} />
