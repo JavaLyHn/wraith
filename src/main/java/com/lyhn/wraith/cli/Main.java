@@ -2017,6 +2017,11 @@ public class Main {
                             orchestrator.setStepStreamFactory((kind, id) ->
                                     new com.lyhn.wraith.runtime.appserver.EventStreamTeamStreamListener(renderer, teamId, kind, id));
 
+                            // UI 意图工具(open_panel/im_connect)贯通到渲染层:Team 模式也能出动作卡。
+                            // 只放行这两个——普通工具在本路径没有 tool.result,放行会让工具卡永久转圈。
+                            orchestrator.setToolCallObserver(calls ->
+                                    renderer.appendToolCalls(com.lyhn.wraith.tool.UiIntentTools.filter(calls)));
+
                             // 外部上下文（MCP 资源索引，与 CLI team 路径一致）
                             orchestrator.setExternalContextSupplier(() -> {
                                 com.lyhn.wraith.mcp.McpServerManager mgr = appServerMcp.manager();
@@ -2113,6 +2118,11 @@ public class Main {
                         // 规划器生成计划阶段的流 → plan.output（plan.created 前的空窗期实时出字）
                         planAgent.setPlanStreamFactory(
                                 () -> new com.lyhn.wraith.runtime.appserver.EventStreamPlanGenListener(renderer, planId));
+
+                        // UI 意图工具(open_panel/im_connect)贯通到渲染层:Plan 模式也能出动作卡。
+                        // 只放行这两个——普通工具在本路径没有 tool.result,放行会让工具卡永久转圈。
+                        planAgent.setToolCallObserver(calls ->
+                                renderer.appendToolCalls(com.lyhn.wraith.tool.UiIntentTools.filter(calls)));
 
                         // 外部上下文（MCP 资源索引）
                         planAgent.setExternalContextSupplier(() -> {
