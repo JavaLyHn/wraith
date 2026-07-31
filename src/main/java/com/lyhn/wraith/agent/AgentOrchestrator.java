@@ -638,7 +638,8 @@ public class AgentOrchestrator {
         progressListener.stepCompleted(step.id(), "completed", acceptedResult, approved, retries);
     }
 
-    private String buildStepContext(List<ExecutionStep> steps, ExecutionStep currentStep) {
+    // 包级可见:供单测直接断言 worker 步骤上下文含主线对话 digest(切模式后执行层也要看得到前文)。
+    String buildStepContext(List<ExecutionStep> steps, ExecutionStep currentStep) {
         StringBuilder context = new StringBuilder();
         context.append("总任务上下文：\n");
 
@@ -656,7 +657,8 @@ public class AgentOrchestrator {
             }
         }
 
-        return context.toString();
+        // 前置主线对话 digest(非空时);worker 才能理解「继续/它/刚才」等跨模式指代。空则原样(零回归)。
+        return ConversationDigest.prepend(conversationContext, context.toString());
     }
 
     private String summarizeSteps(List<ExecutionStep> steps) {

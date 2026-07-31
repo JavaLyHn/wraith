@@ -634,17 +634,20 @@ public class PlanExecuteAgent {
         return TaskRunResult.of(fallbackResult, streamRenderer.hasStreamedOutput());
     }
 
-    private String buildExternalContext() {
-        if (!memoryManager.getContextProfile().mcpResourceIndexEnabled()) {
-            return "";
+    // 包级可见:供单测断言执行层上下文含主线对话 digest。对话上下文不受 MCP 开关 gate——
+    // 切模式后执行 task 的那层(不只 planner)也要能看到前文,解析「我刚问了什么/继续」等指代。
+    String buildExternalContext() {
+        String mcp = "";
+        if (memoryManager.getContextProfile().mcpResourceIndexEnabled()) {
+            try {
+                String context = externalContextSupplier.get();
+                mcp = context == null ? "" : context.trim();
+            } catch (Exception e) {
+                log.warn("Failed to build external context for plan task", e);
+            }
         }
-        try {
-            String context = externalContextSupplier.get();
-            return context == null ? "" : context.trim();
-        } catch (Exception e) {
-            log.warn("Failed to build external context for plan task", e);
-            return "";
-        }
+        // 前置主线对话 digest(非空时);空则返回 mcp 原样(零回归)。
+        return ConversationDigest.prepend(conversationContext, mcp);
     }
 
     private String buildProjectMemoryContext() {

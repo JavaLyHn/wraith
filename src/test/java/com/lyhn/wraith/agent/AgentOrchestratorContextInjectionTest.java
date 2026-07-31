@@ -54,4 +54,28 @@ class AgentOrchestratorContextInjectionTest {
         try { orch.run("继续"); } catch (Exception ignored) { }
         assertEquals("请为以下任务制定执行计划：\n继续", plannerTaskText(c));
     }
+
+    // ── worker 执行层也要拿到主线对话 digest(修复:切模式后 worker 曾看不到前文) ──
+
+    @Test
+    void buildStepContext_whenContextSet_containsConversationDigest() {
+        AgentOrchestrator orch = new AgentOrchestrator(new RecordingClient());
+        orch.setConversationContext("用户: 克隆仓库\n助手: 已完成");
+        String ctx = orch.buildStepContext(
+                List.of(),
+                AgentOrchestrator.ExecutionStep.pending("s1", "跑命令", "command", List.of()));
+        assertTrue(ctx.startsWith(ConversationDigest.INJECT_PREFIX), ctx);
+        assertTrue(ctx.contains("用户: 克隆仓库"), ctx);
+        assertTrue(ctx.contains("总任务上下文"), ctx);
+    }
+
+    @Test
+    void buildStepContext_whenContextEmpty_noDigestPrefix() {
+        AgentOrchestrator orch = new AgentOrchestrator(new RecordingClient());
+        String ctx = orch.buildStepContext(
+                List.of(),
+                AgentOrchestrator.ExecutionStep.pending("s1", "跑命令", "command", List.of()));
+        assertFalse(ctx.contains(ConversationDigest.INJECT_PREFIX), ctx);
+        assertTrue(ctx.startsWith("总任务上下文"), ctx);
+    }
 }

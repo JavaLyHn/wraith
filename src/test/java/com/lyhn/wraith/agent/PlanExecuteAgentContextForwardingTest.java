@@ -41,4 +41,26 @@ class PlanExecuteAgentContextForwardingTest {
         assertNotNull(planner.captured, "构造应把 supplier 转发给 planner");
         assertEquals("CTX-1", planner.captured.get());
     }
+
+    // ── 执行层(buildExternalContext)也要含主线对话 digest,且不受 MCP 开关 gate ──
+
+    @Test
+    void buildExternalContext_whenContextSet_containsConversationDigest() {
+        LlmClient client = new GLMClient("test-key");
+        PlanExecuteAgent agent = new PlanExecuteAgent(client, null, null, null,
+                (goal, plan) -> PlanExecuteAgent.PlanReviewDecision.execute());
+        agent.setConversationContext("用户: 我当前在哪个文件夹\n助手: /x/八股");
+        String ext = agent.buildExternalContext();
+        assertTrue(ext.startsWith(ConversationDigest.INJECT_PREFIX), ext);
+        assertTrue(ext.contains("我当前在哪个文件夹"), ext);
+    }
+
+    @Test
+    void buildExternalContext_whenContextEmpty_noDigestPrefix() {
+        LlmClient client = new GLMClient("test-key");
+        PlanExecuteAgent agent = new PlanExecuteAgent(client, null, null, null,
+                (goal, plan) -> PlanExecuteAgent.PlanReviewDecision.execute());
+        String ext = agent.buildExternalContext();
+        assertFalse(ext.contains(ConversationDigest.INJECT_PREFIX), ext);
+    }
 }
