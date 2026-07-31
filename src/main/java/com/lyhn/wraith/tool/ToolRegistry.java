@@ -1143,7 +1143,7 @@ public class ToolRegistry {
 
     /** UI 意图工具:呈现「打开某功能面板」入口。纯校验、无副作用;桌面渲染层特判成动作卡。 */
     private void registerOpenPanelTool() {
-        Set<String> panels = Set.of(
+        List<String> panels = List.of(
                 "plugins", "automations", "im-gateway", "providers", "skills",
                 "memory", "snapshots", "tasks", "policy", "browser", "rag");
         tools.put("open_panel", new Tool(
@@ -1160,7 +1160,7 @@ public class ToolRegistry {
                         norm = "plugins";
                     }
                     if (!panels.contains(norm)) {
-                        return "open_panel 失败: 未知面板 '" + raw + "',可选:" + String.join("/", panels);
+                        return "open_panel 失败: 未知面板 '" + norm + "',可选:" + String.join("/", panels);
                     }
                     return "已在桌面对话中为用户呈现「打开 " + norm + " 面板」的一键入口(桌面端显示为可点动作卡)。";
                 }
@@ -1169,7 +1169,7 @@ public class ToolRegistry {
 
     /** UI 意图工具:呈现「接入某 IM 平台」内联入口。纯校验、无副作用;真正的 bind 由桌面渲染层触发既有 IPC。 */
     private void registerImConnectTool() {
-        Set<String> platforms = Set.of("qq", "weixin", "feishu", "wecom");
+        List<String> platforms = List.of("qq", "weixin", "feishu", "wecom");
         tools.put("im_connect", new Tool(
                 "im_connect",
                 "在桌面对话中为用户开启「接入某 IM 平台」的内联入口。用户想把 Wraith 接入 QQ / 微信 / 飞书 / 企业微信时调用。"
@@ -1180,7 +1180,7 @@ public class ToolRegistry {
                     String raw = args.get("platform");
                     String norm = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
                     if (!platforms.contains(norm)) {
-                        return "im_connect 失败: 未知平台 '" + raw + "',可选:qq/weixin/feishu/wecom";
+                        return "im_connect 失败: 未知平台 '" + norm + "',可选:" + String.join("/", platforms);
                     }
                     return "已在桌面对话中为用户开启「接入 " + norm + "」的内联入口(桌面端显示为可点绑定卡)。";
                 }
