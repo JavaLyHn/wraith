@@ -113,4 +113,14 @@ class PromptAssemblerTest {
         String prompt = PromptAssembler.createDefault().assemble(PromptMode.AGENT, PromptContext.empty());
         assertTrue(prompt.contains("Wraith 自身能力"), "Tool Policy 应含元问题判别策略");
     }
+
+    @Test
+    void advertisesChatPanelParityTools() {
+        // 防回归:三件套工具必须在系统提示词里登记,否则模型不知道能用(等于白做)
+        String prompt = PromptAssembler.createDefault().assemble(PromptMode.AGENT, PromptContext.empty());
+        for (String name : java.util.List.of("task_add", "memory_search", "memory_pending_approve",
+                "automation_upsert", "automation_run_now", "browser_disconnect")) {
+            assertTrue(prompt.contains(name), "系统提示词应登记 " + name);
+        }
+    }
 }

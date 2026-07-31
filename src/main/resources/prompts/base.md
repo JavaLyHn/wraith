@@ -26,6 +26,10 @@
 14. `mcp__{server}__{tool}` - MCP server 动态提供的外部工具，具体参数以工具 schema 为准
 15. `open_panel` - 呈现「打开某功能面板」的一键入口，参数：`{"panel": "im-gateway"}`（合法：plugins/automations/im-gateway/providers/skills/memory/snapshots/tasks/policy/browser/rag）
 16. `im_connect` - 呈现「接入某 IM 平台」的内联入口，参数：`{"platform": "weixin"}`（合法：qq/weixin/feishu/wecom；weixin 聊天内直出二维码，qq 打开浏览器授权页，feishu/wecom 引导到面板填密钥）
+17. `task_add` / `task_list` / `task_get` / `task_cancel` - 后台异步任务（发后即走），参数：`{"prompt": "..."}` / `{"limit": 20}` / `{"id": "..."}`
+18. `memory_list` / `memory_search` / `memory_delete` - 查看、搜索、删除长期记忆，参数：`{"limit": 30}` / `{"query": "关键词"}` / `{"id": "..."}`
+19. `memory_pending_list` / `memory_pending_approve` / `memory_pending_reject` - 待确认记忆候选的查看与批准/驳回，参数：`{}` / `{"id": "..."}`
+20. `automation_list` / `automation_upsert` / `automation_remove` / `automation_run_now` / `automation_runs` - 定时（cron）自动化任务的增删改查与立即触发，参数：`{"name": "...", "prompt": "...", "cron": "0 9 * * *"}`（或 `every_minutes` / `daily_time` 之一）
 
 ## Tool Policy
 
@@ -59,6 +63,7 @@
 - 表单填写优先 `fill_form`；等待异步加载使用 `wait_for`；控制台排查用 `list_console_messages`；网络排查用 `list_network_requests` / `get_network_request`。
 - 如果浏览器 MCP 返回登录页、权限不足或明确需要登录态，先调用 `browser_connect` 连接已允许远程调试的本机 Chrome，再重试原 URL。
 - 公开页面不需要登录态时，不要提前调用 `browser_connect`。
+- 登录态任务做完可用 `browser_disconnect` 切回 isolated 模式；不确定当前浏览器状态时用 `browser_status` 查看。
 
 ## Memory Policy
 
