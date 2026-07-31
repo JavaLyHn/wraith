@@ -54,6 +54,14 @@ public class SubAgent {
     private final ConversationHistoryCompactor historyCompactor;
     private final PromptAssembler promptAssembler = PromptAssembler.createDefault();
 
+    /** 工具调用观察者(桌面注入 → 发 tool.call 事件);默认 no-op,CLI 行为不变。 */
+    private java.util.function.Consumer<java.util.List<LlmClient.ToolCall>> toolCallObserver = calls -> {};
+
+    /** 桌面注入:把本 SubAgent 的工具调用同步交给观察者(Plan/Team 模式的动作卡靠它)。 */
+    public void setToolCallObserver(java.util.function.Consumer<java.util.List<LlmClient.ToolCall>> observer) {
+        this.toolCallObserver = observer == null ? calls -> {} : observer;
+    }
+
     public SubAgent(String name, AgentRole role, LlmClient llmClient, ToolRegistry toolRegistry) {
         this.name = name;
         this.role = role;
@@ -237,6 +245,7 @@ public class SubAgent {
                 if (response.hasToolCalls()) {
                     budget.recordToolCalls(response.toolCalls());
                     printToolCalls(out, response.toolCalls());
+                    notifyToolCallObserver(response.toolCalls());
                     conversationHistory.add(LlmClient.Message.assistant(
                             response.reasoningContent(),
                             response.content(),
@@ -404,6 +413,15 @@ public class SubAgent {
             parts.add(LlmClient.ContentPart.text("工具 " + result.name() + " 返回了图片内容，请结合上面的工具文本结果分析。"));
             parts.addAll(result.imageParts());
             conversationHistory.add(LlmClient.Message.user(parts));
+        }
+    }
+
+    /** 观察者失败绝不影响工具执行主路径(仿 ToolRegistry.writeFileObserver 范式)。 */
+    private void notifyToolCallObserver(java.util.List<LlmClient.ToolCall> calls) {
+        try {
+            toolCallObserver.accept(calls);
+        } catch (Exception ignored) {
+            // 事件外发失败不能打断子 agent
         }
     }
 

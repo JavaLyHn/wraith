@@ -59,6 +59,20 @@ public class AgentOrchestrator {
     public void setStepStreamFactory(java.util.function.BiFunction<String,String,LlmClient.StreamListener> f) { this.streamFactory = f; }
     private LlmClient.StreamListener streamFor(String kind, String id) { return streamFactory == null ? null : streamFactory.apply(kind, id); }
 
+    /** 桌面注入:把工具调用观察者扇出给 planner/workers/reviewer(仿 setSkillSystem 的扇出范式)。 */
+    public void setToolCallObserver(java.util.function.Consumer<java.util.List<LlmClient.ToolCall>> observer) {
+        planner.setToolCallObserver(observer);
+        for (SubAgent worker : workers) {
+            worker.setToolCallObserver(observer);
+        }
+        reviewer.setToolCallObserver(observer);
+    }
+
+    /** 仅供测试断言扇出结果(planner/reviewer 默认不开工具,真正调工具的是 workers)。 */
+    java.util.List<SubAgent> workersForTest() {
+        return workers;
+    }
+
     /**
      * run() 的返回值保留终端 chrome（"✅ 多 Agent 协作任务完成！" / "[step_id]" / 结果截断）供 CLI 打印；
      * 桌面通过 {@link #getLastCleanResult()} 取干净版（无 chrome、无 [step_id]、不截断）发底部答案消息。
