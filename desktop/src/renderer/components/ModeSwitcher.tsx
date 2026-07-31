@@ -28,7 +28,7 @@ const MODES: ModeDef[] = [
 
 /**
  * 执行模式下拉选择器(替代分段按钮)。
- * 触发器显示当前模式(图标 + 名称);展开后每行 = 图标 + 名称 + 描述,
+ * 触发器显示当前模式(图标 + 名称 + 下拉箭头);展开后每行 = 图标 + 名称 + 描述,
  * 当前项打勾。逐条语义:选择只改父级 pendingMode,发送后父级复位。
  */
 export default function ModeSwitcher({ mode, onModeChange, running = false }: ModeSwitcherProps): JSX.Element {
@@ -51,6 +51,11 @@ export default function ModeSwitcher({ mode, onModeChange, running = false }: Mo
         >
           <current.Icon className="h-3 w-3 shrink-0" strokeWidth={1.5} />
           <span>{current.label}</span>
+          {/* SVG chevron:viewBox 内居中,配父级 items-center 精确垂直对齐;
+              避免 unicode ⌄(U+2304)字形贴行框底导致的"偏下"观感。 */}
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden className="shrink-0 text-fg-subtle">
+            <path d="M3 4.5 6 7.5 9 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64">
