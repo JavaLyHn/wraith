@@ -169,6 +169,7 @@ public class PlanExecuteAgent {
         this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
         this.memoryManager.setProjectPath(this.toolRegistry.getProjectPath());
         this.toolRegistry.setScopedMemorySaver(this.memoryManager::storeFact);
+        this.toolRegistry.setMemoryManager(this.memoryManager);
         this.planner.setProjectMemorySupplier(this::buildProjectMemoryContext);
         this.planner.setConversationContextSupplier(() -> this.conversationContext);
         // 默认工厂：复现原 TaskStreamRenderer 行为，CLI 输出字节完全不变。

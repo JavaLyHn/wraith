@@ -20,7 +20,8 @@ public class ApprovalPolicy {
             "execute_command",
             "create_project",
             "revert_turn",
-            "task_add"
+            "task_add",
+            "memory_delete"
     );
 
     private ApprovalPolicy() {

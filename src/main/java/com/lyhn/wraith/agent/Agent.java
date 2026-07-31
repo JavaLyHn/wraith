@@ -91,6 +91,7 @@ public class Agent {
         this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
         this.memoryManager.setProjectPath(this.toolRegistry.getProjectPath());
         this.toolRegistry.setScopedMemorySaver(memoryManager::storeFact);
+        this.toolRegistry.setMemoryManager(this.memoryManager);
         conversationHistory.add(LlmClient.Message.system(buildSystemPrompt("")));
     }
 

@@ -87,7 +87,7 @@ public class ToolRegistry {
     private static final long MAX_APPROVAL_PREVIEW_BYTES = 512 * 1024;
     // 需要审计的内置工具（与 ApprovalPolicy 的 DANGEROUS_TOOLS 保持一致）；MCP 工具按前缀动态纳入审计。
     private static final Set<String> AUDIT_TOOLS = Set.of("write_file", "execute_command", "create_project", "revert_turn",
-            "task_add", "task_cancel");
+            "task_add", "task_cancel", "memory_delete", "memory_pending_approve", "memory_pending_reject");
     private static final Logger log = LoggerFactory.getLogger(ToolRegistry.class);
     // null = 不沙箱(交互式 CLI 默认行为,与历史一致);仅 app-server 注入
     private CommandSandbox commandSandbox;
@@ -157,6 +157,7 @@ public class ToolRegistry {
         registerOpenPanelTool();
         registerImConnectTool();
         registerTaskTools();
+        registerMemoryQueryTools();
     }
 
     /**
@@ -212,6 +213,13 @@ public class ToolRegistry {
 
     public void setScopedMemorySaver(BiFunction<String, String, Boolean> memorySaver) {
         this.memorySaver = memorySaver;
+    }
+
+    private com.lyhn.wraith.memory.MemoryManager memoryManagerRef;
+
+    /** 注入记忆管理器(读/删/候选审批用;写事实仍走既有 memorySaver 以保留凭证硬拦)。 */
+    public void setMemoryManager(com.lyhn.wraith.memory.MemoryManager memoryManager) {
+        this.memoryManagerRef = memoryManager;
     }
 
     /** 注入实时 TODO 面板的渲染回调;todo_write 工具被调用时回灌完整清单(仿 memorySaver 注入范式)。 */
@@ -1261,6 +1269,101 @@ public class ToolRegistry {
                     boolean ok = taskManager.cancel(id.trim());
                     return ok ? "已取消后台任务 " + id.trim()
                               : "task_cancel 失败: 任务 '" + id.trim() + "' 不存在或已结束";
+                }
+        ));
+    }
+
+    /** 记忆读/删/候选审批工具:与「记忆」面板同一个 MemoryManager。 */
+    private void registerMemoryQueryTools() {
+        tools.put("memory_list", new Tool(
+                "memory_list",
+                "列出已保存的长期记忆。用户问「你记得什么/我让你记过什么」时用。",
+                createParameters(new Param("limit", "integer", "最多返回多少条,默认 30", false)),
+                args -> {
+                    if (memoryManagerRef == null) return "memory_list 失败: 记忆系统未初始化";
+                    int limit = clamp(parseInt(args.get("limit"), 30), 1, 200);
+                    var all = memoryManagerRef.listLongTerm();
+                    if (all.isEmpty()) return "长期记忆为空。";
+                    StringBuilder sb = new StringBuilder("长期记忆 " + all.size() + " 条(显示前 " + Math.min(limit, all.size()) + "):\n");
+                    all.stream().limit(limit).forEach(e ->
+                            sb.append("- [").append(e.getId()).append("] ").append(e.getContent()).append('\n'));
+                    return sb.toString().trim();
+                }
+        ));
+
+        tools.put("memory_search", new Tool(
+                "memory_search",
+                "按关键词搜索长期记忆。",
+                createParameters(
+                        new Param("query", "string", "搜索关键词", true),
+                        new Param("limit", "integer", "最多返回多少条,默认 20", false)),
+                args -> {
+                    if (memoryManagerRef == null) return "memory_search 失败: 记忆系统未初始化";
+                    String q = args.get("query");
+                    if (q == null || q.isBlank()) return "memory_search 失败: query 不能为空";
+                    int limit = clamp(parseInt(args.get("limit"), 20), 1, 100);
+                    var hits = memoryManagerRef.searchLongTerm(q.trim(), limit);
+                    if (hits.isEmpty()) return "没有匹配「" + q.trim() + "」的长期记忆。";
+                    StringBuilder sb = new StringBuilder("匹配 " + hits.size() + " 条:\n");
+                    hits.forEach(e -> sb.append("- [").append(e.getId()).append("] ").append(e.getContent()).append('\n'));
+                    return sb.toString().trim();
+                }
+        ));
+
+        tools.put("memory_delete", new Tool(
+                "memory_delete",
+                "删除一条长期记忆(按 id;先用 memory_list / memory_search 拿 id)。用户说「忘掉这条/别记了」时用。",
+                createParameters(new Param("id", "string", "记忆条目 id", true)),
+                args -> {
+                    if (memoryManagerRef == null) return "memory_delete 失败: 记忆系统未初始化";
+                    String id = args.get("id");
+                    if (id == null || id.isBlank()) return "memory_delete 失败: id 不能为空";
+                    boolean ok = memoryManagerRef.deleteLongTerm(id.trim());
+                    return ok ? "已删除长期记忆 " + id.trim()
+                              : "memory_delete 失败: 没有 id 为 '" + id.trim() + "' 的记忆";
+                }
+        ));
+
+        tools.put("memory_pending_list", new Tool(
+                "memory_pending_list",
+                "列出「待确认」的记忆候选(系统自动从对话里提取、等你批准的)。",
+                createParameters(),
+                args -> {
+                    if (memoryManagerRef == null) return "memory_pending_list 失败: 记忆系统未初始化";
+                    var pending = memoryManagerRef.listPending();
+                    if (pending.isEmpty()) return "没有待确认的记忆候选。";
+                    StringBuilder sb = new StringBuilder("待确认候选 " + pending.size() + " 条:\n");
+                    pending.forEach(p -> sb.append("- [").append(p.id()).append("] (")
+                            .append(p.scope()).append(") ").append(p.fact()).append('\n'));
+                    return sb.toString().trim();
+                }
+        ));
+
+        tools.put("memory_pending_approve", new Tool(
+                "memory_pending_approve",
+                "批准一条待确认候选,把它正式存进长期记忆(按 id;先用 memory_pending_list 拿 id)。",
+                createParameters(new Param("id", "string", "候选 id", true)),
+                args -> {
+                    if (memoryManagerRef == null) return "memory_pending_approve 失败: 记忆系统未初始化";
+                    String id = args.get("id");
+                    if (id == null || id.isBlank()) return "memory_pending_approve 失败: id 不能为空";
+                    boolean ok = memoryManagerRef.approvePending(id.trim());
+                    return ok ? "已批准候选 " + id.trim() + ",已存入长期记忆。"
+                              : "memory_pending_approve 失败: 没有 id 为 '" + id.trim() + "' 的候选";
+                }
+        ));
+
+        tools.put("memory_pending_reject", new Tool(
+                "memory_pending_reject",
+                "驳回一条待确认候选(按 id)。",
+                createParameters(new Param("id", "string", "候选 id", true)),
+                args -> {
+                    if (memoryManagerRef == null) return "memory_pending_reject 失败: 记忆系统未初始化";
+                    String id = args.get("id");
+                    if (id == null || id.isBlank()) return "memory_pending_reject 失败: id 不能为空";
+                    boolean ok = memoryManagerRef.rejectPending(id.trim());
+                    return ok ? "已驳回候选 " + id.trim()
+                              : "memory_pending_reject 失败: 没有 id 为 '" + id.trim() + "' 的候选";
                 }
         ));
     }
