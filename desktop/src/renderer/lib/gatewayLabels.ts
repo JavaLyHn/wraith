@@ -17,3 +17,17 @@ export function bindPhaseLabel(phase: GatewayBindPhase, message?: string): strin
     case 'failed': return message ?? '绑定失败,请重试'
   }
 }
+
+/**
+ * 接入平台卡片的状态文案 —— 只看该平台自身是否可用/已配置,与「当前选中哪张卡」无关。
+ * 之前的 bug 是拿 isSelected && bound 判断,导致只有被选中的卡才可能显示「已配置」。
+ */
+export function platformStatusText(status: string, configured: boolean): string {
+  if (status !== 'available') return '即将支持'
+  return configured ? '✓ 已配置' : '可配置'
+}
+
+/** 配套的文案颜色 class,同样只依赖该平台自身状态。 */
+export function platformStatusColor(status: string, configured: boolean): string {
+  return status === 'available' && configured ? 'text-ok' : 'text-fg-subtle'
+}

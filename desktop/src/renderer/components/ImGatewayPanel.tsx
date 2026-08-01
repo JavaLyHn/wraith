@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import type { GatewayBindPhase, GatewayConfigView, GatewayState, GatewayStatus } from '../../shared/gateway'
-import { maskId, bindPhaseLabel } from '../lib/gatewayLabels'
+import { maskId, bindPhaseLabel, platformStatusText, platformStatusColor } from '../lib/gatewayLabels'
 import { IM_PLATFORMS } from '../lib/imPlatforms'
 import { PlatformIcon } from '../lib/imPlatformIcons'
 import { feishuConfigPayload } from '../lib/feishuConfigPayload'
@@ -41,6 +41,8 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
   const [selectedPlatform, setSelectedPlatform] = useState<string>('qq')
   // 网关是全局单进程:任一平台已配置即可启动;anyBound 汇总所有平台的绑定态。
   const [anyBound, setAnyBound] = useState(false)
+  // 每个平台各自的绑定态(驱动接入平台网格里各卡片自己的「已配置」标签,不受当前选中项影响)。
+  const [boundByPlatform, setBoundByPlatform] = useState<Record<string, boolean>>({})
   // 飞书表单输入(受控)
   const [fsAppId, setFsAppId] = useState('')
   const [fsAppSecret, setFsAppSecret] = useState('')
@@ -98,6 +100,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         window.wraith.gatewayGetConfig('weixin'),
       ])
       setAnyBound(!!qq?.bound || !!fs?.bound || !!wc?.bound || !!wx?.bound)
+      setBoundByPlatform({ qq: !!qq?.bound, feishu: !!fs?.bound, wecom: !!wc?.bound, weixin: !!wx?.bound })
     } catch {
       /* 忽略:失败则按钮保持禁用 */
     }
@@ -247,7 +250,8 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
             {IM_PLATFORMS.map(p => {
               const isAvailable = p.status === 'available'
               const isSelected = isAvailable && selectedPlatform === p.id
-              const statusText = isAvailable ? (isSelected && bound ? '✓ 已配置' : '可配置') : '即将支持'
+              const configured = boundByPlatform[p.id] ?? false
+              const statusText = platformStatusText(p.status, configured)
               return (
                 <div
                   key={p.id}
@@ -265,7 +269,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
                     {PlatformIcon({ id: p.id, className: 'h-5 w-5' }) ?? <span className="text-xl leading-none">{p.icon}</span>}
                   </span>
                   <span className="max-w-full truncate text-2xs text-fg">{p.name}</span>
-                  <span className={'text-3xs ' + (isSelected && bound ? 'text-ok' : 'text-fg-subtle')}>{statusText}</span>
+                  <span className={'text-3xs ' + platformStatusColor(p.status, configured)}>{statusText}</span>
                 </div>
               )
             })}
