@@ -1,4 +1,5 @@
 import type { Item, ToolCard } from './transcriptReducer'
+import { parseSystemEvent } from './systemEvent'
 import type { ResumedMessage } from './types'
 
 /**
@@ -13,7 +14,10 @@ export function messagesToItems(msgs: ResumedMessage[]): Item[] {
 
   for (const m of msgs) {
     if (m.role === 'user') {
-      items.push({ type: 'user', text: m.content ?? '' })
+      // UI 代提的系统事件在后端就是一条 user 消息;还原成 user 气泡会让用户看见
+      // 一句自己没说过的话,故按前缀分流。
+      const sysBody = parseSystemEvent(m.content ?? '')
+      items.push(sysBody !== null ? { type: 'system-event', text: sysBody } : { type: 'user', text: m.content ?? '' })
     } else if (m.role === 'assistant') {
       if (m.reasoningContent) {
         items.push({ type: 'thinking', label: '', text: m.reasoningContent, done: true })

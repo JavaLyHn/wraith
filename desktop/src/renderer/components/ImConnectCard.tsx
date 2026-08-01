@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { bindDoneHint, bindPhaseLabel } from '../lib/gatewayLabels'
+import { bindDoneHint, bindPhaseLabel, IM_SHORT_LABEL as LABELS } from '../lib/gatewayLabels'
 import { applyBindEvent, type BindState } from '../lib/imBind'
 import type { PanelId } from '../lib/panelActions'
 import type { GatewayEvent, GatewayState } from '../../shared/gateway'
@@ -11,15 +11,18 @@ interface ImConnectCardProps {
   workspace?: string | null
   /** feishu/wecom 退化到开面板。 */
   onOpenPanel: (id: PanelId) => void
+  /**
+   * 绑定成功时上报一次(带已查明的网关运行态),供上层补一轮系统事件让 agent 知情。
+   * 只在本卡亲自发起的绑定成功时触发 —— 历史回放重建的卡 started=false,不会误报。
+   */
+  onBound?: (platform: string, gatewayState: GatewayState | null) => void
 }
-
-const LABELS: Record<string, string> = { qq: 'QQ', weixin: '微信', feishu: '飞书', wecom: '企业微信' }
 
 /**
  * 聊天内 IM 接入卡。⚠ 点击「开始」才启动绑定(不在挂载时启动):
  * transcript 历史回放会重建本 item,挂载即 spawn 会在每次 resume 重启绑定进程。
  */
-export default function ImConnectCard({ platform, workspace, onOpenPanel }: ImConnectCardProps): JSX.Element | null {
+export default function ImConnectCard({ platform, workspace, onOpenPanel, onBound }: ImConnectCardProps): JSX.Element | null {
   const p = (platform || '').trim().toLowerCase()
   const [bind, setBind] = useState<BindState | null>(null)
   const [started, setStarted] = useState(false)
@@ -43,12 +46,25 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel }: ImCo
 
   // 绑定成功的瞬间补拉一次运行态:此前可能一条 status 事件都没来过,
   // 不查就只能含糊其辞,没法如实告诉用户「到底能不能用了」。
+  // onBound 通常是父层每次渲染新建的闭包,放 ref 里免得它进 effect 依赖反复触发上报。
+  const onBoundRef = useRef(onBound)
+  useEffect(() => { onBoundRef.current = onBound }, [onBound])
+  const reportedRef = useRef(false)
+
   useEffect(() => {
     if (bind?.phase !== 'bound') return
     let alive = true
-    void window.wraith.gatewayStatus().then(s => { if (alive) setGwState(s.state) })
+    // 先把运行态查出来再上报:agent 拿这条去向用户宣布结果,状态未知就只能含糊其辞。
+    const report = (s: GatewayState | null): void => {
+      if (!alive) return
+      if (s !== null) setGwState(s)
+      if (reportedRef.current) return
+      reportedRef.current = true
+      onBoundRef.current?.(p, s)
+    }
+    void window.wraith.gatewayStatus().then(st => report(st.state), () => report(null))
     return () => { alive = false }
-  }, [bind?.phase])
+  }, [bind?.phase, p])
 
   // feishu / wecom:无扫码,退化到开面板填密钥。
   if (p === 'feishu' || p === 'wecom') {

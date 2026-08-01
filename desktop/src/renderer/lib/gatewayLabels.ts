@@ -18,6 +18,28 @@ export function bindPhaseLabel(phase: GatewayBindPhase, message?: string): strin
   }
 }
 
+/** 四个已支持平台的短名(散文里用;IM_PLATFORMS 里的是目录全名如「飞书 / Lark」)。 */
+export const IM_SHORT_LABEL: Record<string, string> = {
+  qq: 'QQ', weixin: '微信', feishu: '飞书', wecom: '企业微信',
+}
+
+/**
+ * 绑定成功后喂给 agent 的系统事件正文。
+ * ⚠ 必须带上网关运行态:agent 拿到这条就会向用户宣布结果,若不告诉它网关没跑,
+ * 它会顺嘴说成「可以发消息了」,而实际上发不出去。
+ */
+export function imBoundEventText(platform: string, state: GatewayState | null): string {
+  const name = IM_SHORT_LABEL[platform] ?? platform
+  const gw = state === 'running' ? '运行中'
+    : state === 'starting' ? '正在启动'
+    : state === 'stopped' ? '未运行(需用户启动网关后才能收发消息)'
+    : state === 'error' ? '报错(需用户到 IM 网关面板查看日志)'
+    : '未知'
+  // 这段文字有两个读者:agent(据此答复)和用户(会作为「系统事件」气泡原样显示),
+  // 所以要写成人话,不能塞只对模型说的指令腔。
+  return `用户刚刚在聊天内完成了「${name}」的接入绑定。当前网关状态:${gw}。请据此向用户确认结果。`
+}
+
 /**
  * 绑定成功后的「还能不能用」提示。
  * ⚠ 绑定 ≠ 网关在跑:面板里 start/stop 是与绑定彼此独立的开关。只有 running 才敢说

@@ -20,6 +20,7 @@ import {
   setSessionId,
   setSandbox,
   addUserItem,
+  addSystemEventItem,
   truncateAtUserOrdinal,
   markPlanReviewResolved,
   type TranscriptState,
@@ -28,6 +29,10 @@ import {
 } from '../shared/transcriptReducer'
 import { messagesToItems } from '../shared/messagesToItems'
 import { spliceCards } from '../shared/spliceCards'
+import type { GatewayState } from '../shared/gateway'
+import { makeSystemEvent } from '../shared/systemEvent'
+import { imBoundEventText } from './lib/gatewayLabels'
+import { useSystemEventQueue } from './lib/useSystemEventQueue'
 import { EXAMPLE_PROMPTS, pickExamplePrompts } from './lib/welcomePrompts'
 import { lastUserMessage } from './lib/resend'
 import { resolveWorkspacePath } from './lib/paths'
@@ -79,6 +84,7 @@ type LocalAction =
   | { type: 'setWorkspace'; ws: string }
   | { type: 'resetSession'; ws: string }
   | { type: 'addUserItem'; text: string; attachments?: AttachmentRef[] }
+  | { type: 'addSystemEvent'; text: string }
   | { type: 'loadHistory'; items: Item[] }
   | { type: 'setSessionId'; sessionId: string }
   | { type: 'setSandbox'; sandbox: 'macos-seatbelt' | 'none' | 'unknown' }
@@ -115,6 +121,9 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   }
   if ('type' in action && action.type === 'addUserItem') {
     return addUserItem(state, action.text, action.attachments)
+  }
+  if ('type' in action && action.type === 'addSystemEvent') {
+    return addSystemEventItem(state, action.text)
   }
   if ('type' in action && action.type === 'loadHistory') {
     return loadHistory(state, action.items)
@@ -660,6 +669,28 @@ export default function App(): JSX.Element {
     [fetchSessions], // running 守卫读 turnRef,不依赖 state.turn
   )
 
+  // ── IM 绑定成功 → 补一轮「系统事件」,让 agent 知情并向用户确认 ──────────────
+  // 只能走普通 turn.submit:app-server 没有旁路往历史塞一条的 RPC(见 shared/systemEvent
+  // 里对前缀的说明)。文本带 ⊙系统事件⊙ 前缀,会话恢复时由 messagesToItems 还原成
+  // 系统事件气泡,而不是一句用户从没说过的话。
+  const emitSystemEvent = useCallback((text: string) => {
+    dispatch({ type: 'addSystemEvent', text })
+    // 与主 submit 路径对称:submitTurn 前即置 running,从源头关掉 submit→turn.started 竞态窗。
+    dispatch({ type: 'markStarted' })
+    void window.wraith.submitTurn(makeSystemEvent(text)).catch((err: unknown) => {
+      console.error('[wraith] system event submit failed:', err)
+      // markStarted 已提前置 running,RPC 失败后不会再有 turn.* 通知来清,必须自己清。
+      dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
+    })
+  }, [])
+
+  // 绑定完成的时机由用户扫码决定,撞上正在跑的轮次是常态;排队器负责忙时压住、闲时补发。
+  const enqueueSystemEvent = useSystemEventQueue(state.turn === 'running', emitSystemEvent)
+
+  const handleImBound = useCallback((platform: string, gatewayState: GatewayState | null) => {
+    enqueueSystemEvent(imBoundEventText(platform, gatewayState))
+  }, [enqueueSystemEvent])
+
   const handleEditMessage = useCallback(
     (ordinal: number, newText: string) => { void rewindAndResubmit(ordinal, newText) },
     [rewindAndResubmit],
@@ -1090,6 +1121,7 @@ export default function App(): JSX.Element {
                       editors={editors}
                       workspace={state.workspace ?? null}
                       onOpenPanel={(id) => setView(id)}
+                      onImBound={handleImBound}
                     />
                     <div className="shrink-0 px-4 py-3">{composer}</div>
                   </>

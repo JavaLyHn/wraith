@@ -135,6 +135,8 @@ export type Item =
   | { type: 'diff'; filePath: string; before: string; after: string }
   | { type: 'action'; panel: string }
   | { type: 'im-bind'; platform: string }
+  /** UI 侧代提的系统事件(如「绑定成功」);后端历史里是带前缀的 user 消息,见 shared/systemEvent。 */
+  | { type: 'system-event'; text: string }
   | PlanItem
   | PlanReviewItem
   | TeamItem
@@ -883,6 +885,11 @@ export function addUserItem(state: TranscriptState, text: string, attachments?: 
     ? { type: 'user', text, attachments }
     : { type: 'user', text }
   return { ...state, items: [...state.items, item], _messageOpen: false }
+}
+
+/** 追加一条系统事件气泡(封口当前 message),与 addUserItem 对称。 */
+export function addSystemEventItem(state: TranscriptState, text: string): TranscriptState {
+  return { ...state, items: [...state.items, { type: 'system-event', text }], _messageOpen: false }
 }
 
 /**

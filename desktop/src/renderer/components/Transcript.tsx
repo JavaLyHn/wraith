@@ -16,6 +16,7 @@ import { TeamCard } from './TeamCard'
 import ActionCard from './ActionCard'
 import ImConnectCard from './ImConnectCard'
 import type { PanelId } from '../lib/panelActions'
+import type { GatewayState } from '../../shared/gateway'
 import { groupToolRuns } from '../lib/groupToolRuns'
 
 interface TranscriptProps {
@@ -39,9 +40,11 @@ interface TranscriptProps {
   workspace?: string | null
   /** 打开功能面板(action / im-bind 动作卡用)。 */
   onOpenPanel: (id: PanelId) => void
+  /** IM 卡绑定成功上报 —— 上层据此补一轮系统事件让 agent 知情。 */
+  onImBound?: (platform: string, gatewayState: GatewayState | null) => void
 }
 
-export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode, onOpenArtifact, onOpenDiff, onUndo, editors, workspace, onOpenPanel }: TranscriptProps): JSX.Element {
+export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode, onOpenArtifact, onOpenDiff, onUndo, editors, workspace, onOpenPanel, onImBound }: TranscriptProps): JSX.Element {
   let userOrdinal = 0 // 渲染期为 user 气泡计数(1-based),rewind 用
   const totalUsers = items.filter(i => i.type === 'user').length
   const containerRef = useRef<HTMLDivElement>(null)
@@ -168,7 +171,15 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
           return <ActionCard key={`action-${originalIdx}`} panel={item.panel} onOpenPanel={onOpenPanel} />
         }
         if (item.type === 'im-bind') {
-          return <ImConnectCard key={`imbind-${originalIdx}`} platform={item.platform} workspace={workspace} onOpenPanel={onOpenPanel} />
+          return <ImConnectCard key={`imbind-${originalIdx}`} platform={item.platform} workspace={workspace} onOpenPanel={onOpenPanel} onBound={onImBound} />
+        }
+        if (item.type === 'system-event') {
+          return (
+            <div key={`sysev-${originalIdx}`} data-testid="system-event"
+              className="self-center max-w-[85%] rounded-full border border-border bg-surface/60 px-3 py-1 text-2xs text-fg-subtle">
+              ⊙ {item.text}
+            </div>
+          )
         }
         if (item.type === 'plan') {
           return <PlanChecklist key={item.planId} item={item} />
