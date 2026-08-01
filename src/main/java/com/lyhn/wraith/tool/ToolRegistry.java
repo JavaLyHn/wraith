@@ -157,6 +157,7 @@ public class ToolRegistry {
         registerTodoTools();
         registerOpenPanelTool();
         registerImConnectTool();
+        registerImStatusTool();
         registerTaskTools();
         registerMemoryQueryTools();
         registerAutomationTools();
@@ -1204,6 +1205,82 @@ public class ToolRegistry {
                     return "已在桌面对话中为用户开启「接入 " + norm + "」的内联入口(桌面端显示为可点绑定卡)。";
                 }
         ));
+    }
+
+    /**
+     * 只读工具:查看四个 IM 网关(QQ/飞书/企业微信/微信)当前的绑定/配置状态。
+     * 字段口径与判定标准与「IM 网关」面板的 gateway.config.get 完全一致(见 AppServer#handle case "gateway.config.get"),
+     * 目的是让对话内 Agent 回答「现在接通了哪些 IM」时能拿到真实状态,而不是只能凭 capabilities.md 里的静态「支持列表」瞎猜。
+     * 红线:绝不输出 secret/token/appId/ownerOpenid/ownerUserid/botId 等密钥或账号标识,只报「是否已配置」「主人是否已绑定」「工作目录」。
+     */
+    private void registerImStatusTool() {
+        tools.put("im_status", new Tool(
+                "im_status",
+                "只读:查看 QQ / 飞书 / 企业微信 / 微信 四个 IM 网关当前在本机的绑定/配置状态(是否已配置密钥、主人是否已绑定、工作目录)。"
+                        + "用户问「现在接通了哪些 IM / 绑定了没 / IM 网关状态」时,必须先调用此工具核实真实状态,不要凭 capabilities 里的「支持列表」"
+                        + "或对话历史臆断谁已接通。不返回任何密钥/token/账号 id,不产生副作用。注意:「已配置」只代表本机保存了密钥/绑定,"
+                        + "不代表对应的网关守护进程当前正在运行——守护进程是桌面端另起的独立进程,本工具看不到其运行态。",
+                createParameters(),
+                args -> buildImStatusReport()
+        ));
+    }
+
+    private String buildImStatusReport() {
+        com.lyhn.wraith.config.WraithConfig cfg;
+        try {
+            cfg = com.lyhn.wraith.config.WraithConfig.load();
+        } catch (Exception e) {
+            cfg = new com.lyhn.wraith.config.WraithConfig();
+        }
+        com.lyhn.wraith.config.WraithConfig.GatewayConfig gw = cfg == null ? null : cfg.getGateway();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("IM 网关状态(仅反映本机已保存的配置/绑定,不代表对应网关守护进程当前是否在运行——"
+                + "守护进程是桌面端另起的独立进程,后端在此看不到其运行态):\n");
+
+        com.lyhn.wraith.config.WraithConfig.GatewayQqConfig qq = gw == null ? null : gw.getQq();
+        boolean qqBound = qq != null && qq.getClientSecret() != null && !qq.getClientSecret().isBlank();
+        boolean qqOwner = qq != null && qq.getOwnerOpenid() != null && !qq.getOwnerOpenid().isBlank();
+        sb.append(imStatusLine("QQ", qqBound, qqOwner, qq == null ? null : qq.getWorkspace()));
+
+        com.lyhn.wraith.config.WraithConfig.GatewayFeishuConfig fs = gw == null ? null : gw.getFeishu();
+        boolean fsBound = fs != null && fs.getAppSecret() != null && !fs.getAppSecret().isBlank();
+        boolean fsOwner = fs != null && fs.getOwnerOpenid() != null && !fs.getOwnerOpenid().isBlank();
+        sb.append(imStatusLine("飞书", fsBound, fsOwner, fs == null ? null : fs.getWorkspace()));
+
+        com.lyhn.wraith.config.WraithConfig.GatewayWecomConfig wecom = gw == null ? null : gw.getWecom();
+        boolean wecomBound = wecom != null && wecom.getSecret() != null && !wecom.getSecret().isBlank();
+        boolean wecomOwner = wecom != null && wecom.getOwnerUserid() != null && !wecom.getOwnerUserid().isBlank();
+        sb.append(imStatusLine("企业微信", wecomBound, wecomOwner, wecom == null ? null : wecom.getWorkspace()));
+
+        // 微信(weixin):不进 config.json,单独的账号店(token/游标高频写);账号店缺失/损坏 → 按未配置视图,绝不抛异常。
+        boolean weixinBound = false;
+        boolean weixinOwner = false;
+        String weixinWorkspace = null;
+        try {
+            var acc = com.lyhn.wraith.wechat.WechatAccountStore.createDefault().loadLatest();
+            if (acc.isPresent()) {
+                weixinBound = acc.get().token() != null && !acc.get().token().isBlank();
+                weixinOwner = acc.get().boundUserId() != null && !acc.get().boundUserId().isBlank();
+                weixinWorkspace = acc.get().workspace();
+            }
+        } catch (Exception e) {
+            // 账号店缺失/损坏 → 视为未配置,不影响其余平台的报告
+        }
+        sb.append(imStatusLine("微信", weixinBound, weixinOwner, weixinWorkspace));
+
+        return sb.toString().trim();
+    }
+
+    private String imStatusLine(String platform, boolean configured, boolean ownerBound, String workspace) {
+        if (!configured) {
+            return "- " + platform + ":未配置\n";
+        }
+        String detail = ownerBound ? "主人已绑定" : "主人未绑定";
+        if (workspace != null && !workspace.isBlank()) {
+            detail += ",工作目录 " + workspace;
+        }
+        return "- " + platform + ":已配置(" + detail + ")\n";
     }
 
     /** 后台任务工具:与「后台任务」面板同一个 DurableTaskManager,聊天里直接发后即走。 */

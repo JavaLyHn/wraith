@@ -14,7 +14,7 @@ class ToolGatingTest {
             "memory_list", "memory_search", "memory_delete",
             "memory_pending_list", "memory_pending_approve", "memory_pending_reject",
             "automation_list", "automation_upsert", "automation_remove",
-            "automation_run_now", "automation_runs");
+            "automation_run_now", "automation_runs", "im_status");
 
     private static final List<String> MUST_BE_HITL = List.of(
             "task_add", "memory_delete",
@@ -41,7 +41,7 @@ class ToolGatingTest {
     @Test
     void readOnlyToolsDoNotRequireApproval() {
         for (String name : List.of("task_list", "task_get", "memory_list", "memory_search",
-                "memory_pending_list", "automation_list", "automation_runs")) {
+                "memory_pending_list", "automation_list", "automation_runs", "im_status")) {
             assertFalse(com.lyhn.wraith.hitl.ApprovalPolicy.requiresApproval(name),
                     name + " 是只读工具,不该设审批闸");
         }

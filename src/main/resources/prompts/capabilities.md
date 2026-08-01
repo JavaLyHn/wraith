@@ -6,7 +6,7 @@ Wraith 提供以下功能面板（桌面端左侧工具栏）：
 
 | 能力 | 是什么 | 怎么用 / 指路 |
 |---|---|---|
-| **IM 网关** | 让 Wraith 经 QQ / 飞书 / 企业微信 / 微信 收发消息、跑回合、HITL 审批 | 微信：扫码绑定（聊天内可直出二维码）；QQ：一键打开浏览器授权页；飞书 / 企业微信：填密钥→启动守护。想接入时可调 `im_connect`；只想打开面板可调 `open_panel(im-gateway)` |
+| **IM 网关** | 让 Wraith 经 QQ / 飞书 / 企业微信 / 微信 收发消息、跑回合、HITL 审批 | 微信：扫码绑定（聊天内可直出二维码）；QQ：一键打开浏览器授权页；飞书 / 企业微信：填密钥→启动守护。想接入时可调 `im_connect`；只想打开面板可调 `open_panel(im-gateway)`。⚠ 用户问「现在接通了哪些 / 绑定了没 / IM 状态」时，先调 `im_status` 拿真实绑定状态，不要凭这张表的「支持列表」凭空回答——支持 ≠ 已绑定 |
 | **MCP** | 接外部 MCP server（stdio / HTTP），给自己加动态工具 | MCP 面板加 server（命令或 URL）→启用 / 重启；或编辑 `~/.wraith/mcp.json`。`open_panel(plugins)` |
 | **自动化** | 定时 / cron agent 任务 + 投递目标（可投 IM）+ HITL 审批 | 聊天里可直接 automation_list / automation_upsert（cron、every_minutes、daily_time 三选一）/ automation_remove / automation_run_now / automation_runs。⚠ run_now 只是排队，需自动化/网关守护进程运行才会真的执行；投递目标与审批策略仍需到面板配置。open_panel(automations) |
 | **Provider 配置** | 选 / 配 LLM 供应商（DeepSeek / GLM / Kimi / Anthropic / StepFun / 兼容 OpenAI） | Provider 面板填 API key→设默认供应商 / 模型。`open_panel(providers)` |

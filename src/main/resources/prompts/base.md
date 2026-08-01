@@ -30,6 +30,7 @@
 18. `memory_list` / `memory_search` / `memory_delete` - 查看、搜索、删除长期记忆，参数：`{"limit": 30}` / `{"query": "关键词"}` / `{"id": "..."}`
 19. `memory_pending_list` / `memory_pending_approve` / `memory_pending_reject` - 待确认记忆候选的查看与批准/驳回，参数：`{}` / `{"id": "..."}`
 20. `automation_list` / `automation_upsert` / `automation_remove` / `automation_run_now` / `automation_runs` - 定时（cron）自动化任务的增删改查与立即触发，参数：`{"name": "...", "prompt": "...", "cron": "0 9 * * *"}`（或 `every_minutes` / `daily_time` 之一）
+21. `im_status` - 只读查看 QQ / 飞书 / 企业微信 / 微信 四个 IM 网关当前在本机的真实绑定/配置状态（是否已配置、主人是否已绑定、工作目录），无参数。用户问「现在接通了哪些 IM / 绑定了没」时必须先调用它核实，不要凭空回答；返回结果不含任何密钥，且「已配置」不等于网关守护进程正在运行
 
 ## Tool Policy
 
