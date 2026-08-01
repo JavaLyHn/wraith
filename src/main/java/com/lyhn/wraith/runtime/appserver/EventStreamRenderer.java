@@ -22,6 +22,7 @@ public final class EventStreamRenderer implements Renderer {
     private volatile java.util.List<Map<String, Object>> cardRecording; // null=关闭；volatile for cross-thread visibility
     private final PrintStream discard = new PrintStream(OutputStream.nullOutputStream());
     private volatile String currentTurnId = "";
+    private volatile boolean assistantContentEmitted = false;
     private final java.util.concurrent.atomic.AtomicLong approvalSeq = new java.util.concurrent.atomic.AtomicLong();
     private final Map<String, java.util.concurrent.CompletableFuture<ApprovalResult>> pending =
             new java.util.concurrent.ConcurrentHashMap<>();
@@ -39,7 +40,14 @@ public final class EventStreamRenderer implements Renderer {
         this.sessionId = sessionId;
     }
 
-    public void setCurrentTurnId(String turnId) { this.currentTurnId = turnId; }
+    public void setCurrentTurnId(String turnId) { this.currentTurnId = turnId; this.assistantContentEmitted = false; }
+
+    /**
+     * 本轮（自上次 setCurrentTurnId 起）是否已经通过 appendAssistantContentDelta 流出过正文。
+     * AppServer.handleTurn 用它判断 ReAct 静默失败（LLM 调用失败但未抛异常，只返回错误串）时
+     * 是否需要把 runTurn 的返回值当兜底正文推给前端。
+     */
+    public boolean emittedAssistantContent() { return assistantContentEmitted; }
 
     // ---- 卡片录制公共 API ----
 
@@ -154,6 +162,7 @@ public final class EventStreamRenderer implements Renderer {
     }
 
     @Override public void appendAssistantContentDelta(String delta) {
+        assistantContentEmitted = true;
         Map<String, Object> p = base(); p.put("text", delta); writer.notify("message.delta", p);
     }
     @Override public void finishAssistantContent() { writer.notify("message.end", base()); }

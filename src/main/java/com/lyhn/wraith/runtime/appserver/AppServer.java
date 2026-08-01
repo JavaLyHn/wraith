@@ -1114,7 +1114,16 @@ public final class AppServer {
         final String modeFinal = mode;
         Thread t = new Thread(() -> {
             try {
-                session.runTurn(effectiveInput, attFinal.imageParts(), attFinal.imageNames(), modeFinal);
+                String returned = session.runTurn(effectiveInput, attFinal.imageParts(), attFinal.imageNames(), modeFinal);
+                EventStreamRenderer renderer = session.renderer();
+                if (shouldEmitFallback(renderer.emittedAssistantContent(), returned)) {
+                    // ReAct 静默失败兜底：本轮没有流出任何正文，但 runTurn 返回了非空白文本
+                    // （典型如 Agent.runReActLoopInner 捕获 LLM IOException 后返回的 "❌ 调用 LLM 失败: ..."）。
+                    // Plan/Team 已经通过流式 emitPlan*/emitTeam* 或 getLastCleanResult 机制把最终答案发出，
+                    // emittedAssistantContent() 为 true，这里不会二次发送。
+                    renderer.appendAssistantContentDelta(returned);
+                    renderer.finishAssistantContent();
+                }
                 String persisted = session.persistTurn();
                 String reported = (persisted != null) ? persisted : sessionId;
                 if (persisted != null) sessionId = persisted;
@@ -1126,6 +1135,17 @@ public final class AppServer {
         t.setDaemon(true);
         turnThread = t;
         t.start();
+    }
+
+    /**
+     * ReAct 静默失败兜底判定：Agent.runReActLoopInner 捕获 LLM 调用异常（如 402 余额不足）后
+     * 不重新抛出，而是把提示串直接 return——本轮不会有任何 message.delta，也不会触发
+     * turn.failed，桌面端因此显示"空轮次"。仅当本轮从未流出正文且 runTurn 返回了非空白文本时，
+     * 才把该文本当作兜底正文补发；已流式产出内容（含 Plan/Team 的 getLastCleanResult 路径）时
+     * 不应重复。纯函数，不触碰 renderer/session，方便脱离整条 AppServer 独立测试。
+     */
+    static boolean shouldEmitFallback(boolean emittedAssistantContent, String returned) {
+        return !emittedAssistantContent && returned != null && !returned.isBlank();
     }
 
     /**

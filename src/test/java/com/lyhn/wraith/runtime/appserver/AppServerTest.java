@@ -173,6 +173,90 @@ class AppServerTest {
         assertFalse(output.contains("turn.completed"), "不应发出 turn.completed");
     }
 
+    // --- 静默失败兜底（silent-turn-failure fix）---
+
+    /** 最小纯函数单元：覆盖 shouldEmitFallback 的四种判定组合。 */
+    @Test
+    void shouldEmitFallbackPredicate() {
+        assertTrue(AppServer.shouldEmitFallback(false, "❌ 调用 LLM 失败: 余额不足"));
+        assertFalse(AppServer.shouldEmitFallback(true, "❌ 调用 LLM 失败: 余额不足"),
+                "已流式产出正文时不应重复兜底");
+        assertFalse(AppServer.shouldEmitFallback(false, null), "返回 null 不应兜底");
+        assertFalse(AppServer.shouldEmitFallback(false, ""), "返回空字符串不应兜底");
+        assertFalse(AppServer.shouldEmitFallback(false, "   "), "返回空白字符串不应兜底");
+    }
+
+    /**
+     * 端到端回归：runner 复现 Agent.runReActLoopInner 在 LLM 调用失败(如 402 余额不足)时的
+     * 真实行为——不流式任何正文，只把错误提示串作为返回值——断言 handleTurn 的兜底把它
+     * 当作 message.delta/message.end 推给前端，且发生在 turn.completed 之前。
+     */
+    @Test
+    void silentFailureFallbackEmitsReturnedTextAsAssistantContent() throws Exception {
+        String errorText = "❌ 调用 LLM 失败: API请求失败: 402 - 余额不足，请充值";
+        AppServer.SessionRunnerFactory factory = (writer, sessionId, workspaceDir) -> {
+            EventStreamRenderer r = new EventStreamRenderer(writer, sessionId);
+            return new AppServer.SessionRunner() {
+                public EventStreamRenderer renderer() { return r; }
+                public String runTurn(String input) {
+                    return errorText; // 不调用任何 append* —— 模拟静默失败
+                }
+            };
+        };
+
+        String input = String.join("\n",
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.start\",\"params\":{}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"turn.submit\",\"params\":{\"input\":\"hi\"}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayInputStream in = new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(in, out, factory).serve();
+
+        long deadline = System.currentTimeMillis() + 2000;
+        while (System.currentTimeMillis() < deadline
+                && !out.toString(StandardCharsets.UTF_8).contains("turn.completed")) {
+            Thread.sleep(20);
+        }
+
+        List<JsonNode> msgs = parseAll(out.toString(StandardCharsets.UTF_8));
+        List<String> methods = new ArrayList<>();
+        for (JsonNode n : msgs) methods.add(n.has("method") ? n.get("method").asText() : "result:" + n.get("id"));
+
+        assertTrue(methods.contains("message.delta"), "静默失败也应把返回文案作为正文兜底发出");
+        assertTrue(methods.contains("message.end"), "兜底正文后应收束 message.end");
+        int deltaIdx = methods.indexOf("message.delta");
+        int completedIdx = methods.indexOf("turn.completed");
+        assertTrue(deltaIdx >= 0 && completedIdx >= 0 && deltaIdx < completedIdx,
+                "兜底 message.delta 必须发生在 turn.completed 之前");
+
+        JsonNode deltaParams = msgs.get(deltaIdx).get("params");
+        assertEquals(errorText, deltaParams.get("text").asText());
+    }
+
+    /** 回归护栏：已流式正文的轮次不应把 runTurn 返回值重复当作兜底再发一次。 */
+    @Test
+    void streamedTurnDoesNotDuplicateReturnedTextAsFallback() throws Exception {
+        String input = String.join("\n",
+                "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session.start\",\"params\":{}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"turn.submit\",\"params\":{\"input\":\"hi\"}}",
+                "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"shutdown\",\"params\":{}}") + "\n";
+        ByteArrayInputStream in = new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        new AppServer(in, out, fakeFactory()).serve(); // fakeFactory 的 runner 已流式 "hello" 并返回 "hello"
+
+        long deadline = System.currentTimeMillis() + 2000;
+        while (System.currentTimeMillis() < deadline
+                && !out.toString(StandardCharsets.UTF_8).contains("turn.completed")) {
+            Thread.sleep(20);
+        }
+
+        List<JsonNode> msgs = parseAll(out.toString(StandardCharsets.UTF_8));
+        long deltaCount = msgs.stream().filter(n -> "message.delta".equals(n.path("method").asText())).count();
+        assertEquals(1, deltaCount, "已流式输出时不应重复发出兜底 message.delta");
+    }
+
     @Test
     void invalidApprovalDecisionDoesNotKillLoop() throws Exception {
         String input = String.join("\n",

@@ -108,6 +108,18 @@ class EventStreamRendererTest {
     }
 
     @Test
+    void emittedAssistantContentTracksDeltaAndResetsOnNewTurn() throws Exception {
+        // 静默失败兜底（AppServer.handleTurn）依赖这个标记判断"本轮是否已经流过正文"；
+        // 必须在 setCurrentTurnId（每轮入口）时重置，否则上一轮的标记会误压制下一轮的兜底。
+        Captured c = make();
+        assertFalse(c.r().emittedAssistantContent(), "初始应为 false");
+        c.r().appendAssistantContentDelta("答案");
+        assertTrue(c.r().emittedAssistantContent(), "appendAssistantContentDelta 后应为 true");
+        c.r().setCurrentTurnId("turn_2");
+        assertFalse(c.r().emittedAssistantContent(), "新一轮 setCurrentTurnId 应重置为 false");
+    }
+
+    @Test
     void emitMcpStatusOmitsBlankError() throws Exception {
         Captured c = make();
         c.r().emitMcpStatus("fs", "ready", null);
