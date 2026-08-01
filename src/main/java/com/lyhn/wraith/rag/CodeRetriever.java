@@ -19,8 +19,9 @@ public class CodeRetriever implements AutoCloseable {
     private final EmbeddingClient embeddingClient;
     private final VectorStore vectorStore;
 
+    /** 默认后端 = 配置里的「Embedding 后端」(没配过才回落 env/Ollama);别改回 new EmbeddingClient()。 */
     public CodeRetriever(String projectPath) throws SQLException {
-        this.embeddingClient = new EmbeddingClient();
+        this.embeddingClient = EmbeddingClient.fromConfigOrEnv();
         this.vectorStore = new VectorStore(Paths.get(projectPath).toAbsolutePath().normalize().toString());
     }
 

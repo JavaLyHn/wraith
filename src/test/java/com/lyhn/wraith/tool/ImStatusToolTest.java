@@ -8,10 +8,10 @@ import static org.junit.jupiter.api.Assertions.*;
  * im_status 是只读工具:回答「现在接通了哪些 IM」时给模型真实的绑定/配置状态,而不是让它凭
  * capabilities.md 里的静态支持列表瞎猜(修「面板显示 QQ 已配置,聊天里却说全部未接通」的缺口)。
  *
- * 测试隔离说明:该工具内部经 WraithConfig.load() 读取的是硬编码路径
- * ~/.wraith/config.json(WraithConfig.CONFIG_DIR = System.getProperty("user.home")/.wraith,
- * 不支持任何系统属性/构造参数重定向),因此本测试类不对配置内容做任何强断言(不能保证也不能伪造
- * 开发机上的真实绑定状态),更不允许写入该路径。断言范围收窄到:
+ * 测试隔离说明:该工具内部经 WraithConfig.load() 读取 ~/.wraith/config.json。本类保持不重定向、
+ * 不写入该路径,因此不对配置内容做任何强断言(不能保证也不能伪造开发机上的真实绑定状态)。
+ * (若后续要伪造配置,WraithConfig 现已支持 -Dwraith.config.dir 重定向,见 EmbeddingConfigWiringTest。)
+ * 断言范围收窄到:
  * 工具已注册且暴露给 LLM、输出必含四个平台名与「已配置≠守护进程运行中」的免责声明、
  * 在配置缺失/异常时绝不抛异常、以及该工具不在 ApprovalPolicy.DANGEROUS_TOOLS 里(只读,不设审批闸)。
  */

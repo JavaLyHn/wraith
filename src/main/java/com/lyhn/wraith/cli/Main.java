@@ -1771,9 +1771,8 @@ public class Main {
                         return java.util.Map.of("text", appServerBrowserCmd("tabs", browserSession, browserConnectivityCheck, appServerMcp.manager(), registry, hitl));
                     }
                     private com.lyhn.wraith.rag.EmbeddingClient ragEmbeddingClient() {
-                        com.lyhn.wraith.config.WraithConfig.EmbeddingConfig e = com.lyhn.wraith.config.WraithConfig.load().getEmbedding();
-                        if (e == null) return new com.lyhn.wraith.rag.EmbeddingClient();
-                        return com.lyhn.wraith.rag.EmbeddingClient.of(e.getProvider(), e.getModel(), e.getBaseUrl(), e.getApiKey());
+                        // 与 agent 的 search_code / REPL 的 /index 共用同一个解析口,别在这里重写一份
+                        return com.lyhn.wraith.rag.EmbeddingClient.fromConfigOrEnv();
                     }
                     public java.util.Map<String, Object> embeddingGet() {
                         com.lyhn.wraith.config.WraithConfig.EmbeddingConfig e = com.lyhn.wraith.config.WraithConfig.load().getEmbedding();

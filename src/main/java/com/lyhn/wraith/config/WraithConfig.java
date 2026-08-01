@@ -16,9 +16,24 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class WraithConfig {
 
-    private static final Path CONFIG_DIR = Path.of(System.getProperty("user.home"), ".wraith");
-    private static final Path CONFIG_FILE = CONFIG_DIR.resolve("config.json");
     private static final ObjectMapper mapper = new ObjectMapper().enable(SerializationFeature.INDENT_OUTPUT);
+
+    /**
+     * 配置目录。**每次调用都重新解析**（不做 static final 缓存）：缓存会在类初始化那一刻定死路径，
+     * 使 -Dwraith.config.dir 重定向的时机取决于类加载顺序 —— 测试里最坏的结果是悄悄读写开发机
+     * 真实的 ~/.wraith/config.json。解析成本只有一次字符串拼接，不值得为它冒这个风险。
+     */
+    private static Path configDir() {
+        String override = System.getProperty("wraith.config.dir");
+        if (override != null && !override.isBlank()) {
+            return Path.of(override.trim());
+        }
+        return Path.of(System.getProperty("user.home"), ".wraith");
+    }
+
+    private static Path configFile() {
+        return configDir().resolve("config.json");
+    }
 
     private String defaultProvider = "glm";
     private Map<String, ProviderConfig> providers = new LinkedHashMap<>();
@@ -226,9 +241,10 @@ public class WraithConfig {
     }
 
     public static WraithConfig load() {
-        if (Files.exists(CONFIG_FILE)) {
+        Path file = configFile();
+        if (Files.exists(file)) {
             try {
-                return mapper.readValue(CONFIG_FILE.toFile(), WraithConfig.class);
+                return mapper.readValue(file.toFile(), WraithConfig.class);
             } catch (IOException e) {
                 System.err.println("⚠️ 配置文件读取失败，使用默认配置: " + e.getMessage());
             }
@@ -238,8 +254,8 @@ public class WraithConfig {
 
     public void save() {
         try {
-            Files.createDirectories(CONFIG_DIR);
-            mapper.writeValue(CONFIG_FILE.toFile(), this);
+            Files.createDirectories(configDir());
+            mapper.writeValue(configFile().toFile(), this);
         } catch (IOException e) {
             System.err.println("⚠️ 配置保存失败: " + e.getMessage());
         }

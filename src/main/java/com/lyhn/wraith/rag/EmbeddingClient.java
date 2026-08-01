@@ -38,6 +38,34 @@ public class EmbeddingClient {
     }
 
     /**
+     * 按 ~/.wraith/config.json 的「Embedding 后端」构造;没配过则回落到 env/Ollama。
+     *
+     * <p>所有默认入口（{@link CodeRetriever#CodeRetriever(String)}、{@link CodeIndex#CodeIndex()}、
+     * app-server 的 rag.* RPC）都必须走这里。此前只有 app-server 读了配置，agent 的 search_code
+     * 与 REPL 的 /index /search 走的是 env-only 的 {@code new EmbeddingClient()} —— 于是在面板里
+     * 配好云端后端、索引也建成了，agent 一检索却去连本机 11434 报 Connection refused。
+     */
+    public static EmbeddingClient fromConfigOrEnv() {
+        return fromConfig(com.lyhn.wraith.config.WraithConfig.load().getEmbedding());
+    }
+
+    /**
+     * 由配置对象构造(纯函数,便于测试)。整节缺失或四个字段全空时回落到 env/Ollama —— 桌面端
+     * 从未保存过配置时 config.json 里就是个空的 {@code "embedding": {}}，那不该覆盖 EMBEDDING_* 环境变量。
+     */
+    public static EmbeddingClient fromConfig(com.lyhn.wraith.config.WraithConfig.EmbeddingConfig e) {
+        if (e == null || (isBlank(e.getProvider()) && isBlank(e.getModel())
+                && isBlank(e.getBaseUrl()) && isBlank(e.getApiKey()))) {
+            return new EmbeddingClient();
+        }
+        return of(e.getProvider(), e.getModel(), e.getBaseUrl(), e.getApiKey());
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    /**
      * 由(可能不全的)配置构造:空字段按 provider 填默认。
      * provider 空 → ollama;model/baseUrl 空 → 按 provider 默认。供桌面 embedding 配置使用。
      */

@@ -29,8 +29,9 @@ public class CodeIndex {
         }
     }
 
+    /** 默认后端 = 配置里的「Embedding 后端」(没配过才回落 env/Ollama);别改回 new EmbeddingClient()。 */
     public CodeIndex() {
-        this(new EmbeddingClient(), ProgressListener.noop());
+        this(EmbeddingClient.fromConfigOrEnv(), ProgressListener.noop());
     }
 
     public CodeIndex(EmbeddingClient embeddingClient) {
@@ -38,7 +39,7 @@ public class CodeIndex {
     }
 
     public CodeIndex(ProgressListener progressListener) {
-        this(new EmbeddingClient(), progressListener);
+        this(EmbeddingClient.fromConfigOrEnv(), progressListener);
     }
 
     public CodeIndex(EmbeddingClient embeddingClient, ProgressListener progressListener) {
