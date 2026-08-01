@@ -7,12 +7,13 @@ import {
 } from './ui/tooltip'
 import {
   Plus, Search, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
-  Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown,
-  Shield, ShieldAlert, ShieldCheck, ListTodo,
+  Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown, ListTodo, Shield, User,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
 import Logo from './Logo'
 import { sessionDisplayName, partitionStarred, groupSessionsByTime } from '../lib/sessionView'
+import { userAvatarGlyph, accountGlyphDuplicatesName } from '../lib/chatIdentity'
+import type { ProfilePrefs } from '../settings/prefs'
 import type { SessionMeta, ProjectView } from '../../shared/types'
 
 function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDelete }: {
@@ -112,7 +113,8 @@ interface SidebarProps {
   onAddProject: () => void
   onRemoveProject: (path: string) => void
   onRenameProject: (path: string, name: string) => void
-  sandbox: 'macos-seatbelt' | 'none' | 'unknown'
+  /** 账户行的头像/昵称来源(设置→「我」)。沙箱状态已移出侧栏,见顶栏的盾图标。 */
+  profile: ProfilePrefs
   activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
@@ -148,7 +150,7 @@ export default function Sidebar({
   onAddProject,
   onRemoveProject,
   onRenameProject,
-  sandbox,
+  profile,
   activeNav,
   onOpenPlugins,
   onOpenAutomations,
@@ -178,6 +180,10 @@ export default function Sidebar({
   const [groupMode, setGroupMode] = useState<'recent' | 'time'>(() => {
     try { return localStorage.getItem('wraith.sidebar.sessionGroupMode') === 'time' ? 'time' : 'recent' } catch { return 'recent' }
   })
+  // 昵称可以被清空(设置里那个输入框允许空串),空了得有个兜底,否则账户行只剩头像
+  const displayName = profile.name.trim() || '我'
+  // 默认状态(name='我' + 无 avatar)下字形与昵称同字,会渲染成「我 我」——那时头像让位给通用图标
+  const glyphRedundant = accountGlyphDuplicatesName(profile, displayName)
   const toggleGroupMode = (): void => setGroupMode(m => {
     const next = m === 'time' ? 'recent' : 'time'
     try { localStorage.setItem('wraith.sidebar.sessionGroupMode', next) } catch { /* ignore */ }
@@ -346,7 +352,8 @@ export default function Sidebar({
             className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
               (activeNav === 'policy' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
           >
-            <span className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />安全</span>
+            {/* 中性盾:状态语义(ok/未启用)由顶栏那个盾承担,这里只是分类图标,别用带勾的 */}
+            <span className="flex items-center gap-2"><Shield className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />安全</span>
           </button>
           {/* browser */}
           <button
@@ -437,29 +444,39 @@ export default function Sidebar({
           </>
         </div>
 
-        {/* footer: sandbox badge */}
-        <div className="border-t border-border px-3 py-3">
+        {/* footer: 账户行。头像+昵称取自设置→「我」(prefs.profile),点整行进设置面板。
+            单行、无副标题 —— 当前模型在 composer 的切换器里已有,重复写只是占高度。
+            沙箱状态已搬到顶栏的盾图标(全局可见,异常才变红),这里不再常驻一行灰字。 */}
+        <div className="border-t border-border px-3 py-2.5">
           <button
             data-testid="nav-settings"
             onClick={onOpenSettings}
-            className="mb-1 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-fg-muted hover:bg-fg/5 hover:text-accent"
+            title={'设置 · ' + displayName}
+            className={'group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left ' +
+              (activeNav === 'settings'
+                ? 'relative bg-fg/10 before:absolute before:left-0 before:top-1/2 before:h-4 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent'
+                : 'hover:bg-fg/5')}
           >
-            <Settings aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} /><span>设置</span>
+            <span
+              data-testid="account-avatar"
+              aria-hidden
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-sm leading-none"
+            >
+              {glyphRedundant
+                ? <User className="h-3.5 w-3.5 text-fg-muted" strokeWidth={1.5} />
+                : userAvatarGlyph(profile)}
+            </span>
+            <span data-testid="account-name" className={'flex-1 truncate text-xs ' + (activeNav === 'settings' ? 'text-fg' : 'text-fg-muted group-hover:text-fg')}>
+              {displayName}
+            </span>
+            {/* 齿轮只在 hover / 活动态出现:常态下它是冗余的(整行就是设置入口) */}
+            <Settings
+              aria-hidden
+              className={'h-3.5 w-3.5 shrink-0 transition-opacity ' +
+                (activeNav === 'settings' ? 'text-accent opacity-100' : 'text-fg-subtle opacity-0 group-hover:opacity-100')}
+              strokeWidth={1.5}
+            />
           </button>
-          <div
-            data-testid="sandbox-badge"
-            className={
-              'mt-2 flex items-center gap-1 truncate text-2xs ' +
-              (sandbox === 'none' ? 'text-danger' : 'text-fg-subtle')
-            }
-            title={sandbox === 'none' ? '命令未在沙箱内执行' : sandbox === 'macos-seatbelt' ? '命令在 Seatbelt 沙箱内执行' : '沙箱状态未知'}
-          >
-            {sandbox === 'none'
-              ? <><ShieldAlert className="h-3 w-3 shrink-0" strokeWidth={1.5} />沙箱未启用</>
-              : sandbox === 'macos-seatbelt'
-                ? <><ShieldCheck className="h-3 w-3 shrink-0" strokeWidth={1.5} />沙箱: Seatbelt</>
-                : <><Shield className="h-3 w-3 shrink-0" strokeWidth={1.5} />沙箱: —</>}
-          </div>
         </div>
       </aside>
     </TooltipProvider>

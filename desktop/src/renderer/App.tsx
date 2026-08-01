@@ -942,6 +942,8 @@ export default function App(): JSX.Element {
         onToggleTerminal={() => setTerminalOpen(v => !v)}
         rightDockOpen={rightDockOpen}
         onToggleRightDock={() => setRightDockOpen(v => !v)}
+        sandbox={state.sandbox}
+        onOpenPolicy={() => setView('policy')}
       />
       <div className="flex min-h-0 flex-1 overflow-hidden">
       <SidebarDock collapsed={sidebarCollapsed} peek={sidebarPeek} onPeekChange={setSidebarPeek}>
@@ -962,7 +964,7 @@ export default function App(): JSX.Element {
           onAddProject={handleAddProject}
           onRemoveProject={handleRemoveProject}
           onRenameProject={handleRenameProject}
-          sandbox={state.sandbox}
+          profile={appPrefs.profile}
           activeNav={view === 'chat' ? null : view}
           onOpenPlugins={() => setView('plugins')}
           onOpenAutomations={() => setView('automations')}

@@ -4,7 +4,7 @@ import { render, screen, fireEvent, cleanup, within } from '@testing-library/rea
 import TopBar from '../src/renderer/components/TopBar'
 
 afterEach(() => cleanup())
-const base = { platform: 'darwin', sidebarCollapsed: false, onToggleSidebar: vi.fn(), showChat: true, terminalOpen: false, onToggleTerminal: vi.fn(), rightDockOpen: false, onToggleRightDock: vi.fn() }
+const base = { platform: 'darwin', sidebarCollapsed: false, onToggleSidebar: vi.fn(), showChat: true, terminalOpen: false, onToggleTerminal: vi.fn(), rightDockOpen: false, onToggleRightDock: vi.fn(), sandbox: 'macos-seatbelt' as const, onOpenPolicy: vi.fn() }
 
 describe('TopBar', () => {
   it('侧栏切换键恒显,点击触发 onToggleSidebar', () => {

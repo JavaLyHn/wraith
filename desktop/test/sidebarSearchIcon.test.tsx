@@ -18,7 +18,7 @@ function props(over: Partial<SidebarProps> = {}): SidebarProps {
     onNewConversation: noop, onSelectSession: noop, onToggleStar: noop,
     onRenameSession: noop, onDeleteSession: noop, onActivateProject: noop,
     onAddProject: noop, onRemoveProject: noop, onRenameProject: noop,
-    sandbox: 'none', activeNav: null,
+    profile: { name: 'Haonan', avatar: '🦊' }, activeNav: null,
     onOpenPlugins: noop, onOpenAutomations: noop, onOpenImGateway: noop,
     onOpenProviders: noop, onOpenSkills: noop, onOpenMemory: noop,
     onOpenSnapshots: noop, onOpenTasks: noop, onOpenPolicy: noop,

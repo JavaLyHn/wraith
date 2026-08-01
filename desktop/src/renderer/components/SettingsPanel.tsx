@@ -14,7 +14,9 @@ const NAV: { key: Section; label: string; Icon: LucideIcon }[] = [
 ]
 
 export default function SettingsPanel({ onBack, onOpenProviders }: { onBack: () => void; onOpenProviders: () => void }): JSX.Element {
-  const [active, setActive] = useState<Section>('interface')
+  // 落地在「我」:入口已改成侧栏左下的账户行(头像+昵称),点头像却先看到「界面」是断裂的。
+  // pets e2e 显式点 settings-nav-pets,不依赖这个默认值。
+  const [active, setActive] = useState<Section>('me')
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

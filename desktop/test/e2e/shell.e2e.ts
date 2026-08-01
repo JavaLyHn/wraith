@@ -430,7 +430,9 @@ test('sandbox badge shows unavailable when capabilities.sandbox=none', async () 
     env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1', MOCK_SANDBOX: 'none' }
   })
   const win = await app.firstWindow()
-  await expect(win.locator('[data-testid="sandbox-badge"]')).toContainText('未启用', { timeout: 15000 })
+  // 沙箱徽标已从侧栏底部的一行灰字改成顶栏的盾图标:图标不带文字,状态在 aria-label 里
+  await expect(win.locator('[data-testid="sandbox-badge"]'))
+    .toHaveAttribute('aria-label', '沙箱未启用', { timeout: 15000 })
   await app.close()
 })
 
