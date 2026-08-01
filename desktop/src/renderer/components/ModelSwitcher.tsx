@@ -82,7 +82,8 @@ export default function ModelSwitcher({ initialModel, running, onSwitched }: Mod
           {displayModel || '—'}
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-72">
+      {/* w-80(320px):比原 w-72 宽 32px,补偿常驻「设为默认」按钮占走的横向空间,避免模型名被截得更短。 */}
+      <PopoverContent className="w-80">
         {error && (
           <div className="mb-1 rounded-md bg-danger/10 px-2 py-1.5 text-xs text-danger">{error}</div>
         )}
@@ -99,7 +100,7 @@ export default function ModelSwitcher({ initialModel, running, onSwitched }: Mod
           return (
             <div
               key={p.name}
-              className="group mb-0.5 flex items-center gap-1"
+              className="mb-0.5 flex items-center gap-1"
             >
               <button
                 data-testid="model-option"
@@ -121,11 +122,11 @@ export default function ModelSwitcher({ initialModel, running, onSwitched }: Mod
                 <button
                   data-testid="model-set-default"
                   disabled={settingDefault}
-                  title="设为默认"
+                  title={`把 ${label} 设为默认 provider(下次启动生效)`}
                   onClick={(e) => handleSetDefault(p.name, e)}
-                  className="hidden shrink-0 rounded p-1 text-3xs text-fg-subtle hover:text-accent disabled:opacity-40 group-hover:block"
+                  className="shrink-0 whitespace-nowrap rounded border border-border px-1.5 py-1 text-3xs text-fg-subtle hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  默认
+                  设为默认
                 </button>
               )}
             </div>

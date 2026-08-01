@@ -1683,7 +1683,7 @@ test('T45 设为默认:点 model-set-default → record config.setDefaultProvide
   const options = win.locator('[data-testid="model-option"]')
   await expect(options).toHaveCount(1, { timeout: 10000 })
 
-  // 「设为默认」按钮在 group-hover 下显示:先 hover 触发 CSS,再点击
+  // 「设为默认」按钮现为常驻(不再 group-hover 隐藏);hover 保留仅作防御,不再是显示的前提。
   const deepseekOption = options.filter({ hasText: 'deepseek' })
   await deepseekOption.hover()
   const setDefaultBtn = win.locator('[data-testid="model-set-default"]').first()
