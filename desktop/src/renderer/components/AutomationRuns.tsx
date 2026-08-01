@@ -8,17 +8,29 @@ interface AutomationRunsProps {
   onApprove(runId: string): void        // App 弹已缓存的审批(经 push 事件早已入槽;此钮兜底重弹)
 }
 
-/** Inline handler: respond to a pending approval and immediately refresh runs. */
+/**
+ * Inline handler: respond to a pending approval and immediately refresh runs.
+ * ⚠ 必须看返回值:守护进程没运行时决定不会落地(后端已撤回请求,不会在网关启动后
+ * 凭空生效)。此前这里把结果整个丢掉,用户点了「同意」却什么也没发生、且毫无提示。
+ */
 async function handleRespondApproval(
   approvalId: string,
   decision: 'approve' | 'reject',
-  fetchRuns: () => Promise<void>
+  fetchRuns: () => Promise<void>,
+  onNotDelivered?: (msg: string) => void
 ): Promise<void> {
   try {
-    await window.wraith.automationRespondApproval(approvalId, decision)
+    const res = await window.wraith.automationRespondApproval(approvalId, decision)
+    if (res && res.ok === false) {
+      onNotDelivered?.(res.reason === 'gateway-not-running'
+        ? '网关守护进程未运行,这个决定没有生效。请先启动网关再操作。'
+        : '决定未能送达,请重试。')
+      return
+    }
     await fetchRuns()
   } catch (err) {
     console.error('[wraith] automationRespondApproval error:', err)
+    onNotDelivered?.('决定未能送达,请重试。')
   }
 }
 
@@ -31,6 +43,8 @@ const STATUS_COLOR: Record<AutomationRun['status'], string> = {
 }
 
 export default function AutomationRuns({ taskId, projectPath, onOpenSession, onApprove: _onApprove }: AutomationRunsProps): JSX.Element {
+  // 审批未送达时的提示(守护进程没跑)。不提示的话用户点了「同意」毫无反馈。
+  const [notDelivered, setNotDelivered] = useState<string | null>(null)
   const [runs, setRuns] = useState<AutomationRun[]>([])
 
   const fetchRuns = useCallback(async () => {
@@ -60,6 +74,12 @@ export default function AutomationRuns({ taskId, projectPath, onOpenSession, onA
 
   return (
     <div className="flex flex-col gap-1">
+      {notDelivered !== null && (
+        <div data-testid="approval-not-delivered"
+          className="mb-1 rounded-lg border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
+          {notDelivered}
+        </div>
+      )}
       {runs.length === 0 && <div className="text-xs text-fg-subtle">还没有运行记录</div>}
       {runs.map(r => (
         <div key={r.runId} data-testid="automation-run-item" className="rounded-lg bg-surface/60 px-3 py-2">
@@ -82,13 +102,13 @@ export default function AutomationRuns({ taskId, projectPath, onOpenSession, onA
               <div className="flex gap-1.5">
                 <button
                   data-testid="automation-run-approve"
-                  onClick={() => void handleRespondApproval(r.approvalId!, 'approve', fetchRuns)}
+                  onClick={() => void handleRespondApproval(r.approvalId!, 'approve', fetchRuns, setNotDelivered)}
                   className="rounded border border-ok/60 bg-ok/10 px-2 py-0.5 text-2xs text-ok hover:bg-ok/20">
                   批准
                 </button>
                 <button
                   data-testid="automation-run-reject"
-                  onClick={() => void handleRespondApproval(r.approvalId!, 'reject', fetchRuns)}
+                  onClick={() => void handleRespondApproval(r.approvalId!, 'reject', fetchRuns, setNotDelivered)}
                   className="rounded border border-danger/60 bg-danger/10 px-2 py-0.5 text-2xs text-danger hover:bg-danger/20">
                   拒绝
                 </button>

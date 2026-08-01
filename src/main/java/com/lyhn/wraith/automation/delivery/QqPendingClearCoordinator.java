@@ -1,10 +1,9 @@
 package com.lyhn.wraith.automation.delivery;
 
+import com.lyhn.wraith.automation.DaemonRequest;
 import com.lyhn.wraith.automation.RequestInbox;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * QQ 待发队列写操作(删单条 / 清结果)的跨进程协调。
@@ -32,44 +31,26 @@ public final class QqPendingClearCoordinator {
 
     public enum Outcome { CONSUMED_BY_DAEMON, APPLIED_LOCALLY }
 
-    /** 可注入的等待,便于测试模拟「daemon 在第 N 跳消费」。 */
+    /** 转发 {@link DaemonRequest.Waiter},保持既有测试签名。 */
     @FunctionalInterface
     public interface Waiter { void await(long millis) throws InterruptedException; }
 
-    /**
-     * 生产用:总宽限 ~2.4s,分 8 跳 —— daemon 轮询周期 2~3s,足够它接手。
-     * 调小会让本进程从活着的 daemon 手里抢走所有权(结果仍正确,删除是收敛的,
-     * 但可能压掉 daemon 同一瞬间的 enqueue),故只在测试里调。
-     */
-    private static final int DEFAULT_POLLS =
-            Integer.getInteger("wraith.qqclear.polls", 8);
-    private static final long POLL_INTERVAL_MS = 300;
-
     public static Outcome clear(RequestInbox inbox, QqPendingStore store, String id) throws IOException {
-        return clear(inbox, store, id, DEFAULT_POLLS, Thread::sleep);
+        return apply(store, id, DaemonRequest.submit(
+                inbox, new RequestInbox.Request("qq-pending-clear", id, null)));
     }
 
-    /**
-     * @param id    null = 清空全部结果项(审批项保留);非 null = 删除该条
-     * @param polls 轮询次数;每跳间隔 {@value #POLL_INTERVAL_MS}ms
-     */
+    /** @param polls 轮询次数(测试用) */
     public static Outcome clear(RequestInbox inbox, QqPendingStore store, String id,
                                 int polls, Waiter waiter) throws IOException {
-        Path request = inbox.write(new RequestInbox.Request("qq-pending-clear", id, null));
+        return apply(store, id, DaemonRequest.submit(
+                inbox, new RequestInbox.Request("qq-pending-clear", id, null),
+                polls, waiter::await));
+    }
 
-        for (int i = 0; i < polls; i++) {
-            if (!Files.exists(request)) return Outcome.CONSUMED_BY_DAEMON;   // daemon 已接手
-            try {
-                waiter.await(POLL_INTERVAL_MS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;   // 被打断就别再等,按「无人消费」兜底,总比静默丢掉这次清空好
-            }
-        }
-
-        // 抢所有权:删掉才算我们的。删不掉 = daemon 刚好取走,交给它。
-        if (!Files.deleteIfExists(request)) return Outcome.CONSUMED_BY_DAEMON;
-
+    /** 只有确认无人消费时才由本进程落地;daemon 接手了绝不能再动(两进程各写一次会丢更新)。 */
+    private static Outcome apply(QqPendingStore store, String id, DaemonRequest.Outcome outcome) {
+        if (outcome != DaemonRequest.Outcome.ORPHANED) return Outcome.CONSUMED_BY_DAEMON;
         if (id == null || id.isBlank()) store.clearResults();
         else store.removeById(id);
         return Outcome.APPLIED_LOCALLY;

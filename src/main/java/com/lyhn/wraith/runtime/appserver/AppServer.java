@@ -987,15 +987,12 @@ public final class AppServer {
                 // Desktop sends { id: taskId }
                 String taskId = textParam(p, "id");
                 if (taskId == null) { writer.error(msg.id(), -32602, "缺 id"); return true; }
-                try {
-                    java.nio.file.Path reqDir = automationRequestsDir();
-                    com.lyhn.wraith.automation.RequestInbox inbox =
-                            new com.lyhn.wraith.automation.RequestInbox(reqDir);
-                    inbox.write(new com.lyhn.wraith.automation.RequestInbox.Request("run-now", taskId, null));
-                    ok(msg);
-                } catch (java.io.IOException e) {
-                    writer.error(msg.id(), -32000, "写入 run-now 请求失败: " + e.getMessage());
-                }
+                // 只有 daemon 有 runner:它没运行就无法本地兜底,必须如实报失败并回收请求文件,
+                // 否则界面点了没反应、而网关下次启动时这任务会凭空跑起来。等宽限期故走 dispatchAsync。
+                final java.nio.file.Path runReqDir = automationRequestsDir();
+                final String runTaskId = taskId;
+                dispatchAsync(msg.id(), () -> daemonHandoffResult(
+                        runReqDir, new com.lyhn.wraith.automation.RequestInbox.Request("run-now", runTaskId, null)));
             }
             case "automations.respondApproval" -> {
                 JsonNode p = msg.params();
@@ -1006,15 +1003,12 @@ public final class AppServer {
                 String decision = (p != null && p.hasNonNull("decision")) ? p.get("decision").asText() : null;
                 if (approvalId == null) { writer.error(msg.id(), -32602, "缺 approvalId"); return true; }
                 if (decision == null || decision.isBlank()) { writer.error(msg.id(), -32602, "缺 decision"); return true; }
-                try {
-                    java.nio.file.Path reqDir = automationRequestsDir();
-                    com.lyhn.wraith.automation.RequestInbox inbox =
-                            new com.lyhn.wraith.automation.RequestInbox(reqDir);
-                    inbox.write(new com.lyhn.wraith.automation.RequestInbox.Request("approval", approvalId, decision));
-                    ok(msg);
-                } catch (java.io.IOException e) {
-                    writer.error(msg.id(), -32000, "写入 approval 请求失败: " + e.getMessage());
-                }
+                // 同 run-now:审批的落地只有 daemon 能做,不能假装成功(否则决定会在网关启动时凭空生效)。
+                final java.nio.file.Path apReqDir = automationRequestsDir();
+                final String apId = approvalId;
+                final String apDecision = decision;
+                dispatchAsync(msg.id(), () -> daemonHandoffResult(
+                        apReqDir, new com.lyhn.wraith.automation.RequestInbox.Request("approval", apId, apDecision)));
             }
             case "automations.qqPending" -> {
                 // 直读快照:store 原子写(tmp→ATOMIC_MOVE)保证跨进程读到完整旧/新文件;
@@ -1153,6 +1147,22 @@ public final class AppServer {
      */
     static boolean shouldEmitFallback(boolean emittedAssistantContent, String returned) {
         return !emittedAssistantContent && returned != null && !returned.isBlank();
+    }
+
+    /**
+     * 投递一条需要 gateway daemon 执行的请求,把「有没有人接手」如实回给调用方。
+     * ok=false + reason=gateway-not-running 表示没有活着的 daemon,请求已被回收
+     * (不留在 inbox 里,避免网关下次启动时凭空补执行)。
+     */
+    private static Map<String, Object> daemonHandoffResult(
+            java.nio.file.Path requestsDir, com.lyhn.wraith.automation.RequestInbox.Request request)
+            throws java.io.IOException {
+        com.lyhn.wraith.automation.DaemonRequest.Outcome outcome =
+                com.lyhn.wraith.automation.DaemonRequest.submit(
+                        new com.lyhn.wraith.automation.RequestInbox(requestsDir), request);
+        return outcome == com.lyhn.wraith.automation.DaemonRequest.Outcome.CONSUMED_BY_DAEMON
+                ? Map.of("ok", true)
+                : Map.of("ok", false, "reason", "gateway-not-running");
     }
 
     /**

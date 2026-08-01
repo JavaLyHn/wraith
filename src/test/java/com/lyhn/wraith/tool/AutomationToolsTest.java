@@ -110,14 +110,47 @@ class AutomationToolsTest {
     }
 
     @Test
-    void runNowQueuesRequestAndSaysItNeedsDaemon() {
+    void runNowReportsFailureWhenDaemonNotRunning() throws Exception {
+        // 旧断言是「不算失败 + 提一句需要守护进程」。真机推翻:守护进程没运行时请求只会
+        // 永远躺在 inbox 里,用户以为跑了实际没跑,而网关下次启动它又会凭空执行。
+        // 现在必须如实报失败,并且不留下请求文件。
         ToolRegistry reg = new ToolRegistry();
         reg.executeTool("automation_upsert", "{\"name\":\"n\",\"prompt\":\"x\",\"cron\":\"0 9 * * *\"}");
         String id = AutomationStore.openDefault().loadTasks().get(0).id;
         String out = reg.executeTool("automation_run_now", "{\"id\":\"" + id + "\"}");
+        assertTrue(out.startsWith("automation_run_now 失败"), "无守护进程时必须报失败,实际: " + out);
+        assertTrue(out.contains("未运行"), "要说清原因,实际: " + out);
+        assertTrue(out.contains("撤回"), "要说明请求已撤回、不会补跑,实际: " + out);
+
+        java.nio.file.Path reqDir = AutomationStore.defaultRequestsDir();
+        if (java.nio.file.Files.isDirectory(reqDir)) {
+            try (var st = java.nio.file.Files.list(reqDir)) {
+                assertEquals(0, st.filter(f -> f.toString().endsWith(".json")).count(),
+                        "请求必须被回收,否则网关启动后任务会凭空跑起来");
+            }
+        }
+    }
+
+    @Test
+    void runNowSucceedsWhenSomeoneConsumesTheRequest() throws Exception {
+        // 有活着的消费者(真实场景=gateway daemon)时应报成功。
+        ToolRegistry reg = new ToolRegistry();
+        reg.executeTool("automation_upsert", "{\"name\":\"n2\",\"prompt\":\"x\",\"cron\":\"0 9 * * *\"}");
+        String id = AutomationStore.openDefault().loadTasks().get(0).id;
+        java.nio.file.Path reqDir = AutomationStore.defaultRequestsDir();
+        Thread fakeDaemon = new Thread(() -> {
+            for (int i = 0; i < 300; i++) {
+                if (!new com.lyhn.wraith.automation.RequestInbox(reqDir).drain().isEmpty()) return;
+                try { Thread.sleep(10); } catch (InterruptedException e) { return; }
+            }
+        });
+        fakeDaemon.setDaemon(true);
+        fakeDaemon.start();
+
+        String out = reg.executeTool("automation_run_now", "{\"id\":\"" + id + "\"}");
+        fakeDaemon.join(5000);
         assertFalse(out.startsWith("automation_run_now 失败"), out);
-        assertTrue(out.contains("守护"), "必须说明需要守护进程运行才会真的执行,实际: " + out);
-        assertTrue(java.nio.file.Files.isDirectory(AutomationStore.defaultRequestsDir()), "应写出 request inbox 目录");
+        assertTrue(out.contains("交给守护进程"), out);
     }
 
     @Test

@@ -61,12 +61,14 @@ export interface WraithApi {
   automationList(): Promise<{ tasks: AutomationTask[] }>
   automationUpsert(task: AutomationTask): Promise<{ ok: boolean }>
   automationRemove(id: string): Promise<{ ok: boolean }>
-  automationRunNow(id: string): Promise<{ ok: boolean }>
+  /** ok=false 且 reason='gateway-not-running' 表示守护进程未运行、请求已撤回(不会补跑)。 */
+  automationRunNow(id: string): Promise<{ ok: boolean; reason?: string }>
   // v1: 定时任务为进程内回合,不可中断 — UI 层不再暴露 STOP 按钮;此方法仅保留为存根。
   automationStop(runId: string): Promise<{ ok: boolean }>
   automationRuns(): Promise<{ runs: AutomationRun[] }>
   /** Fix-B: aligned to Fix-A contract — forwards { approvalId, decision } */
-  automationRespondApproval(approvalId: string, decision: 'approve' | 'reject'): Promise<{ ok: boolean }>
+  /** 同 automationRunNow:ok=false + reason='gateway-not-running' = 守护进程未运行,决定未落地。 */
+  automationRespondApproval(approvalId: string, decision: 'approve' | 'reject'): Promise<{ ok: boolean; reason?: string }>
   automationPanelOpened(): Promise<{ ok: boolean }>
   onAutomationEvent(cb: (evt: AutomationEvent) => void): () => void
   /** Task 16: 守护进程路由的 CRUD(plural 前缀,channel 对应 wraith:automations*) */
@@ -368,7 +370,7 @@ const wraith: WraithApi = {
   },
 
   automationRunNow(id) {
-    return ipcRenderer.invoke('wraith:automationRunNow', id) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke('wraith:automationRunNow', id) as Promise<{ ok: boolean; reason?: string }>
   },
 
   automationStop(runId) {
@@ -380,7 +382,7 @@ const wraith: WraithApi = {
   },
 
   automationRespondApproval(approvalId, decision) {
-    return ipcRenderer.invoke('wraith:automationRespondApproval', approvalId, decision) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke('wraith:automationRespondApproval', approvalId, decision) as Promise<{ ok: boolean; reason?: string }>
   },
 
   automationPanelOpened() {

@@ -1539,10 +1539,18 @@ public class ToolRegistry {
                         var tasks = com.lyhn.wraith.automation.AutomationStore.openDefault().loadTasks();
                         boolean exists = tasks.stream().anyMatch(t -> id.trim().equals(t.id));
                         if (!exists) return "automation_run_now 失败: 没有 id 为 '" + id.trim() + "' 的任务";
-                        com.lyhn.wraith.automation.RequestInbox.openDefault().write(
-                                new com.lyhn.wraith.automation.RequestInbox.Request("run-now", id.trim(), null));
-                        return "已把任务 " + id.trim() + " 的「立刻运行」请求排入队列。"
-                                + "需自动化/网关守护进程正在运行才会真正执行(未运行则一直排队)。";
+                        // 不能只说「已排入队列」就了事:守护进程没运行时请求永远躺在 inbox 里,
+                        // 用户以为跑了、实际没跑,而网关下次启动时它又会凭空执行。
+                        // DaemonRequest 会确认是否真有人接手,没人接手就回收请求并如实报错。
+                        com.lyhn.wraith.automation.DaemonRequest.Outcome outcome =
+                                com.lyhn.wraith.automation.DaemonRequest.submit(
+                                        com.lyhn.wraith.automation.RequestInbox.openDefault(),
+                                        new com.lyhn.wraith.automation.RequestInbox.Request("run-now", id.trim(), null));
+                        if (outcome == com.lyhn.wraith.automation.DaemonRequest.Outcome.ORPHANED) {
+                            return "automation_run_now 失败: 自动化/网关守护进程未运行,任务无法执行"
+                                    + "(请求已撤回,不会在网关启动后补跑)。请先在 IM 网关面板启动守护进程。";
+                        }
+                        return "已把任务 " + id.trim() + " 的「立刻运行」请求交给守护进程执行。";
                     } catch (Exception e) {
                         return "automation_run_now 失败: " + e.getMessage();
                     }

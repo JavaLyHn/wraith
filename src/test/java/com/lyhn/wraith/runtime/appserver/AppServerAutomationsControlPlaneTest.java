@@ -31,6 +31,33 @@ class AppServerAutomationsControlPlaneTest {
     }
 
     /** Runs the AppServer with the given requests and returns all JSON-RPC replies. */
+    /**
+     * 起一个后台「模拟 daemon」在宽限期内消费 inbox,并捕获它读到的请求。
+     * 没有它,app-server 会判定无人接手 → 回收请求并回 ok:false(见 DaemonRequest),
+     * 这正是本轮修复的行为;这里要覆盖的是「daemon 在跑」那条 happy path。
+     */
+    private Thread startFakeDaemon(Path inboxDir, List<RequestInbox.Request> sink) {
+        Thread t = new Thread(() -> {
+            for (int i = 0; i < 300; i++) {
+                List<RequestInbox.Request> got = new RequestInbox(inboxDir).drain();
+                if (!got.isEmpty()) { synchronized (sink) { sink.addAll(got); } return; }
+                try { Thread.sleep(10); } catch (InterruptedException e) { return; }
+            }
+        }, "fake-gateway-daemon");
+        t.setDaemon(true);
+        t.start();
+        return t;
+    }
+
+    /** dispatchAsync 的回包由后台线程写出,可能晚于 serve() 返回;轮询到目标 id 出现。 */
+    private static void awaitId(ByteArrayOutputStream out, int id) throws Exception {
+        String needle = "\"id\":" + id;
+        for (int i = 0; i < 200; i++) {
+            if (out.toString(StandardCharsets.UTF_8).contains(needle)) return;
+            Thread.sleep(25);
+        }
+    }
+
     private List<JsonNode> run(String... requests) throws Exception {
         System.setProperty("wraith.automation.dir", tempDir.toString());
         AppServer.SessionRunnerFactory f = (writer, sessionId, workspaceDir) -> {
@@ -49,6 +76,7 @@ class AppServerAutomationsControlPlaneTest {
         new AppServer(
                 new ByteArrayInputStream(String.join("\n", lines).concat("\n").getBytes(StandardCharsets.UTF_8)),
                 out, f).serve();
+        awaitId(out, 2);
         List<JsonNode> replies = new ArrayList<>();
         for (String ln : out.toString(StandardCharsets.UTF_8).split("\n"))
             if (!ln.isBlank()) replies.add(JsonRpc.MAPPER.readTree(ln));
@@ -65,21 +93,22 @@ class AppServerAutomationsControlPlaneTest {
     // -------------------------------------------------------------------------
     @Test
     void runNow_writesRunNowRequestFile_drainableByRequestInbox() throws Exception {
+        Path inboxDir = tempDir.resolve("automation-requests");
+        List<RequestInbox.Request> drained = new ArrayList<>();
+        Thread daemon = startFakeDaemon(inboxDir, drained);
+
         List<JsonNode> replies = run(
                 "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"automations.runNow\","
                 + "\"params\":{\"id\":\"task-42\"}}"
         );
+        daemon.join(5000);
 
-        // RPC should return {ok:true}
+        // daemon 接手了 → ok:true(它没跑时应为 ok:false,见 AppServerDaemonRequestTest)
         JsonNode result = byId(replies, 2).get("result");
         assertNotNull(result, "automations.runNow 应返回 result");
-        assertTrue(result.path("ok").asBoolean(), "automations.runNow 应返回 {ok:true}");
+        assertTrue(result.path("ok").asBoolean(), "daemon 已消费,应返回 {ok:true}");
 
-        // RequestInbox should drain exactly one run-now request with the task id
-        Path inboxDir = tempDir.resolve("automation-requests");
-        RequestInbox inbox = new RequestInbox(inboxDir);
-        List<RequestInbox.Request> drained = inbox.drain();
-        assertEquals(1, drained.size(), "应有 1 条 run-now 请求文件");
+        assertEquals(1, drained.size(), "应有 1 条 run-now 请求被 daemon 读到");
         RequestInbox.Request req = drained.get(0);
         assertEquals("run-now", req.type(), "type 应为 run-now");
         assertEquals("task-42", req.id(), "id 应为 taskId");
@@ -105,19 +134,21 @@ class AppServerAutomationsControlPlaneTest {
     // -------------------------------------------------------------------------
     @Test
     void respondApproval_writesApprovalRequestFile_drainableByRequestInbox() throws Exception {
+        Path inboxDir = tempDir.resolve("automation-requests");
+        List<RequestInbox.Request> drained = new ArrayList<>();
+        Thread daemon = startFakeDaemon(inboxDir, drained);
         List<JsonNode> replies = run(
                 "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"automations.respondApproval\","
                 + "\"params\":{\"runId\":\"run-1\",\"approvalId\":\"run-1#3\",\"decision\":\"approve\"}}"
         );
 
+        daemon.join(5000);
+
         JsonNode result = byId(replies, 2).get("result");
         assertNotNull(result, "automations.respondApproval 应返回 result");
-        assertTrue(result.path("ok").asBoolean(), "automations.respondApproval 应返回 {ok:true}");
+        assertTrue(result.path("ok").asBoolean(), "daemon 已消费,应返回 {ok:true}");
 
-        Path inboxDir = tempDir.resolve("automation-requests");
-        RequestInbox inbox = new RequestInbox(inboxDir);
-        List<RequestInbox.Request> drained = inbox.drain();
-        assertEquals(1, drained.size(), "应有 1 条 approval 请求文件");
+        assertEquals(1, drained.size(), "应有 1 条 approval 请求被 daemon 读到");
         RequestInbox.Request req = drained.get(0);
         assertEquals("approval", req.type(), "type 应为 approval");
         assertEquals("run-1#3", req.id(), "id 应为 approvalId");
@@ -129,17 +160,19 @@ class AppServerAutomationsControlPlaneTest {
     // -------------------------------------------------------------------------
     @Test
     void respondApproval_rejectDecision_writesRejectPayload() throws Exception {
+        List<RequestInbox.Request> drained = new ArrayList<>();
+        Thread daemon = startFakeDaemon(tempDir.resolve("automation-requests"), drained);
         List<JsonNode> replies = run(
                 "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"automations.respondApproval\","
                 + "\"params\":{\"approvalId\":\"run-5#2\",\"decision\":\"reject\"}}"
         );
 
+        daemon.join(5000);
+
         JsonNode result = byId(replies, 2).get("result");
         assertNotNull(result);
         assertTrue(result.path("ok").asBoolean());
 
-        RequestInbox inbox = new RequestInbox(tempDir.resolve("automation-requests"));
-        List<RequestInbox.Request> drained = inbox.drain();
         assertEquals(1, drained.size());
         assertEquals("reject", drained.get(0).payload());
         assertEquals("run-5#2", drained.get(0).id());

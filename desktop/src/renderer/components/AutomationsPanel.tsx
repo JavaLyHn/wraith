@@ -22,7 +22,9 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
   const [creating, setCreating] = useState(false)
   const [tab, setTab] = useState<'def' | 'runs'>('def')
   const [removeConfirming, setRemoveConfirming] = useState(false)
-  const [runNowBusy, setRunNowBusy] = useState(false)
+  // null = 不显示;否则为要显示的提示文案(区分「收尾中」与「守护进程没跑」——
+  // 后者是完全不同的处理动作:前者稍后重试,后者必须先去启动网关)。
+  const [runNowHint, setRunNowHint] = useState<string | null>(null)
   const runNowBusyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const [qqPending, setQqPending] = useState<QqPendingItem[]>([])
@@ -116,23 +118,30 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
     await fetchTasks(); setCreating(false); setSelectedId(t.id)
   }, [fetchTasks])
 
+  const showRunNowHint = useCallback((text: string) => {
+    setRunNowHint(text)
+    if (runNowBusyTimerRef.current !== null) clearTimeout(runNowBusyTimerRef.current)
+    runNowBusyTimerRef.current = setTimeout(() => {
+      setRunNowHint(null)
+      runNowBusyTimerRef.current = null
+    }, 6000)
+  }, [])
+
   const handleRunNow = useCallback(async (t: AutomationTask) => {
     try {
       const result = await window.wraith.automationRunNow(t.id)
       if (result.ok) {
         setTab('runs')
       } else {
-        // Task is in settle window (B5) or already active — surface transient hint
-        setRunNowBusy(true)
-        if (runNowBusyTimerRef.current !== null) clearTimeout(runNowBusyTimerRef.current)
-        runNowBusyTimerRef.current = setTimeout(() => {
-          setRunNowBusy(false)
-          runNowBusyTimerRef.current = null
-        }, 3000)
+        // gateway-not-running:请求已被后端撤回,不会在网关启动后补跑 —— 必须说清,
+        // 否则用户等一场空。其余(收尾窗口 B5 / 已在跑)仍是「稍后重试」。
+        showRunNowHint(result.reason === 'gateway-not-running'
+          ? '网关守护进程未运行,任务没有执行(请求已撤回)。请先启动网关。'
+          : '任务正在收尾,稍后重试')
       }
     }
     catch (err) { console.error('[wraith] automationRunNow error:', err) }
-  }, [])
+  }, [showRunNowHint])
 
   const handleRemove = useCallback((id: string) => {
     if (!removeConfirming) { setRemoveConfirming(true); return }
@@ -242,10 +251,10 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
               </button>
             </div>
           )}
-          {runNowBusy && (
+          {runNowHint !== null && (
             <div data-testid="runnow-busy-hint"
               className="mb-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-400">
-              任务正在收尾,稍后重试
+              {runNowHint}
             </div>
           )}
           {!current && !creating ? (
