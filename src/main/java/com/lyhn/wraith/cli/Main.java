@@ -1802,8 +1802,15 @@ public class Main {
                     }
                     public java.util.Map<String, Object> ragIndex() {
                         com.lyhn.wraith.rag.EmbeddingClient ec = ragEmbeddingClient();
-                        try { ec.embed("probe"); } // 先探一次:embedding 不可达即快速报错,不空转整库(index 会吞异常)
-                        catch (Exception ex) { return java.util.Map.of("error", "embedding 后端不可达(" + ex.getClass().getSimpleName() + "),请检查「Embedding 后端」配置"); }
+                        // 先探一次:后端有问题就快速报错,不空转整库。原文必须带上 —— 402「余额不足」、
+                        // 401「key 错」、连接被拒是三件完全不同的事,只回异常类名会把人引到错的地方去查。
+                        try { ec.embed("probe"); }
+                        catch (Exception ex) {
+                            String detail = ex.getMessage() == null || ex.getMessage().isBlank()
+                                    ? ex.getClass().getSimpleName() : ex.getMessage();
+                            if (detail.length() > 300) detail = detail.substring(0, 300) + "…";
+                            return java.util.Map.of("error", "embedding 后端探测失败:" + detail);
+                        }
                         try {
                             // 索引进度经 writer 推 rag.index.progress 事件(writer 线程安全;桌面面板订阅显示)
                             com.lyhn.wraith.rag.CodeIndex.ProgressListener pl =
@@ -1816,6 +1823,9 @@ public class Main {
                             m.put("chunkCount", res.chunkCount());
                             m.put("relationCount", res.relationCount());
                             m.put("message", res.message() != null ? res.message() : "");
+                            // 残缺索引必须能被面板看见:只回 chunkCount 会让「已索引 N 块」看起来一切正常
+                            m.put("failedChunks", res.failedChunks());
+                            m.put("failedFiles", res.failedFiles());
                             return m;
                         } catch (Exception ex) {
                             return java.util.Map.of("error", ex.getClass().getSimpleName());

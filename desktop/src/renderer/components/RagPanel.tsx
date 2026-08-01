@@ -54,7 +54,11 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
     try {
       const r = await window.wraith.ragIndex()
       if (r.error) setError('索引失败:' + r.error)
-      else setNotice(`✅ 已索引 ${r.chunkCount ?? 0} 块 · ${r.relationCount ?? 0} 关系`)
+      else if ((r.failedChunks ?? 0) > 0) {
+        // 残缺索引不能只报成功数:那会让人以为搜得全,其实有一批代码永远搜不到
+        setError(`索引不完整:成功 ${r.chunkCount ?? 0} 块,${r.failedChunks} 块失败`
+          + `(涉及 ${r.failedFiles ?? 0} 个文件)。${r.message ?? ''}`)
+      } else setNotice(`✅ 已索引 ${r.chunkCount ?? 0} 块 · ${r.relationCount ?? 0} 关系`)
       void loadStatus()
     } catch (err) { setError((err as Error).message) }
     finally { setIndexBusy(false); setIndexProgress('') }

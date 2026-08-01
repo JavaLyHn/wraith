@@ -407,6 +407,9 @@ export interface RagIndexResult {
   relationCount?: number
   message?: string
   error?: string
+  /** >0 表示索引残缺:这些代码块向量化失败,搜不到 */
+  failedChunks?: number
+  failedFiles?: number
 }
 
 export interface RagSearchItem {
