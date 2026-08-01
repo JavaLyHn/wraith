@@ -4,7 +4,7 @@
 [![Downloads](https://img.shields.io/github/downloads/JavaLyHn/wraith/total?color=6d5df6)](https://github.com/JavaLyHn/wraith/releases)
 [![macOS Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-000?logo=apple)](https://github.com/JavaLyHn/wraith/releases/latest)
 
-一个成熟的 Java Agent 产品：从第一期的 `ReAct` 单代理循环，演进到第十六期的 `TUI 产品化`，再到桌面 App（macOS + Windows）与常驻 IM 网关（QQ / 飞书 单聊 bot）。核心引擎（ReAct / Plan / Multi-Agent / RAG / MCP / Skill / HITL）在 CLI、桌面、IM 三种形态间复用同一套 Java 内核；桌面 App 已完成 Windows 功能对等（见「Windows 桌面对等」一节）。
+一个成熟的 Java Agent 产品：从第一期的 `ReAct` 单代理循环，演进到第十六期的 `TUI 产品化`，再到桌面 App（macOS + Windows）与常驻 IM 网关（QQ / 飞书 / 企业微信 / 微信）。核心引擎（ReAct / Plan / Multi-Agent / RAG / MCP / Skill / HITL）在 CLI、桌面、IM 三种形态间复用同一套 Java 内核。桌面 App 的 Windows 对等**代码已完成、尚未在真机验证**（见「Windows 桌面对等」一节与 [`docs/windows-dev.md`](docs/windows-dev.md) 的逐条验收清单）。
 
 ## 下载
 
@@ -14,7 +14,7 @@
 
 **Windows**：暂未在 Releases 上架预编译安装包；在 Windows 机器上从源码构建未签名 NSIS 安装包,步骤见 [`docs/windows-dev.md`](docs/windows-dev.md)（`mvn -q clean package -DskipTests` → `cd desktop && npm install --legacy-peer-deps` → `npm run dist:win`,产物在 `desktop/release/*.exe`）。首次运行 SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」（未签名,同 macOS 的 xattr 姿态）。也可先 `npm run dev` 直接跑开发态验证。
 
-当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP、第 24 期 `IM 网关`（QQ / 飞书 单聊 bot + 桌面配置面板 + 定时任务投递）、第 25 期 `安全策略层`、长期记忆的 `自动记忆提取（候选待批）`，以及桌面 App 的 `Windows 功能对等`（可跑 dev / 无边框自绘窗控 / 编辑器探测 / NSIS 打包 / 桌宠点击不抢焦）。
+当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP、第 24 期 `IM 网关`（QQ / 飞书 / 企业微信 / 微信 + 桌面配置面板 + 定时任务投递）、第 25 期 `安全策略层`、第 26 期 `自我认知 + 聊天↔面板能力对等`（能力目录 / 一键动作卡 / 聊天内接入 IM / 三模式贯通 / 15 个面板能力工具）、长期记忆的 `自动记忆提取（候选待批）`，以及桌面 App 的 `Windows 对等`（可跑 dev / 无边框自绘窗控 / 编辑器探测 / NSIS 打包 / 桌宠点击不抢焦——**代码完成，待真机验收**）。
 
 ## 测试策略
 
@@ -280,6 +280,18 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 - CLI 命令：`/policy` 查看安全策略状态、`/audit [N]` 看最近 N 条审计
 
 **为什么不叫沙箱**：本地 Agent CLI（参考 Claude Code / Cursor / Aider）默认都不做容器/VM 沙箱——沙箱削弱 Agent 能力、给虚假安全感、体验更差。生产级 Agent 沙箱实际是 microVM-level（Devin / Modal / Anthropic Computer Use 用 Firecracker / gVisor）。Wraith CLI 的安全模型是 **HITL + 路径校验 + 命令快速拒绝 + 审计**，不是隔离。
+
+### 第二十六期：自我认知 + 聊天↔面板能力对等
+
+起因是一个很实在的缺口：问「现在有哪些 IM 已经集成了」，agent 会去 grep **用户的项目代码**，然后回答「本项目没有 IM 集成」——它完全不知道 Wraith 自己就有 IM 网关。顺着查下去发现更大的落差：左侧面板背后约 90 个 RPC 动作，而 agent 手上只有 20 个工具。
+
+分五阶段补齐：
+
+- **自我认知**：新增 `prompts/capabilities.md`（Wraith 自身 11 个面板的能力目录），由 `PromptAssembler` 无条件拼入系统提示词；`base.md` 加元问题判别策略——问「Wraith 有没有 / 怎么用 X」时依目录回答并指路，**不去 grep 用户项目**
+- **动作卡**：`open_panel` / `im_connect` 两个「UI 意图」工具（纯参数校验、无副作用、不进审计），渲染层对 `tool.call` **按工具名特判**成可交互卡片。**不新造 AppServer 事件类型**
+- **聊天内接入 IM**：微信在卡内直出二维码，QQ 一键打开浏览器授权页，飞书 / 企业微信退化到开面板填密钥；绑定逻辑复用 `ImGatewayPanel` 既有 IPC（抽 `imBind.applyBindEvent` 共享，面板与聊天卡同源）。卡片**点击才启动绑定**——transcript 历史回放会重建卡片，挂载即绑定会在每次 resume 重启绑定进程
+- **三模式贯通**（修 bug）：动作卡原先只在 ReAct 出现。Plan / Team 的执行器只把工具调用 `printToolCalls` 到一个 `nullOutputStream`，于是「工具真的跑了、模型照工具返回串说『已为你呈现入口』、而屏幕上什么都没有」。改为给两个执行器加**默认 no-op 的工具调用观察者**（CLI 输出字节不变），桌面接线时**只放行这两个 UI 意图工具**——普通工具在该路径没有 `tool.result`，放行会让工具卡永久停在「运行中」
+- **三件套工具**：`task_*`（4）/ `memory_*`（6）/ `automation_*`（5）共 15 个，直调面板同一批 Java 服务；高后果写进 HITL + 全部写操作进审计；自动化目录解析统一到 `AutomationStore.openDefault()`，杜绝「agent 写了、面板读不到」
 
 ## 启动界面
 
@@ -668,6 +680,22 @@ I
 - `mcp__{server}__{tool}` - MCP server 动态提供的外部工具
 - `mcp__{server}__list_resources` / `mcp__{server}__read_resource` - 支持 resources 的 MCP server 自动注册的虚拟工具
 
+**UI 意图工具**（仅桌面端有可视效果；CLI / 网关形态下是安全 no-op，只返回提示串）：
+
+- `open_panel` - 在对话里呈现「打开某功能面板」的一键动作卡，参数 `{"panel": "im-gateway"}`（合法：`plugins`(MCP) / `automations` / `im-gateway` / `providers` / `skills` / `memory` / `snapshots` / `tasks` / `policy` / `browser` / `rag`）
+- `im_connect` - 在对话里呈现「接入某 IM」的内联卡，参数 `{"platform": "weixin"}`（`weixin` 直出二维码；`qq` 一键打开浏览器授权页；`feishu` / `wecom` 引导到面板填密钥）
+
+**面板能力工具**（与左侧面板调同一批服务、读写同一份数据）：
+
+- `task_add` / `task_list` / `task_get` / `task_cancel` - 后台异步任务（发后即走）。`task_add` 走 HITL
+- `memory_list` / `memory_search` / `memory_delete` - 长期记忆的查看、搜索、删除。`memory_delete` 走 HITL
+- `memory_pending_list` / `memory_pending_approve` / `memory_pending_reject` - 「待确认」记忆候选的查看与批准 / 驳回
+- `automation_list` / `automation_upsert` / `automation_remove` / `automation_run_now` / `automation_runs` - 定时（cron）自动化任务的增删改查与立即触发；三种排程 `cron` / `every_minutes` / `daily_time` 三选一。三个写操作均走 HITL
+  - ⚠ `automation_run_now` 只把「立刻运行」请求**排入队列**，真正执行由自动化 / 网关守护进程完成；守护未运行时请求会一直排队
+  - 投递目标与审批策略不由工具设置，需到「自动化」面板配置
+
+> 密钥红线：agent 侧**没有**任何读写 API key / IM 密钥的工具；也**不提供**批量清空记忆或自动化的能力。写入长期记忆的唯一入口仍是 `save_memory`，凭证硬拦在该路径上（`memory_pending_approve` 落库同样经过它）。
+
 同一轮模型返回多个工具调用时，Wraith CLI 会并行执行这些工具；如果工具之间有依赖关系，模型应分多轮调用。
 
 文件类与代码检索工具（`read_file` / `write_file` / `list_dir` / `glob_files` / `grep_code` / `create_project`）路径强制限定在项目根之内，越界请求会被策略层拒绝；`execute_command` 通过命令黑名单拦截 `sudo` / `rm -rf 全盘` / `mkfs` / `dd of=/dev` / fork bomb / `curl|sh` 等。`revert_turn` 会批量回写工作区，默认触发 HITL 和审计。所有 `mcp__` 前缀工具默认触发 HITL 和审计。详见 `/policy`。
@@ -897,4 +925,17 @@ cd desktop && npm install --legacy-peer-deps && npm run dist:win   # 产物：de
 # 双击 *.exe 安装（SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」），装完从开始菜单 / 桌面快捷方式启动
 ```
 
-完整前置、逐条验收清单与未签名 / SmartScreen 说明见 [`docs/windows-dev.md`](docs/windows-dev.md)。**已知限制**：桌宠跨虚拟桌面（无官方 API）、`WS_EX_NOACTIVATE` 仅 x64 精确（ia32 自动降级）、编辑器自定义目录 / 注册表安装未覆盖。
+**验证状态（重要）**：以上五块均已**实现**，Java 与桌面测试在 macOS 上全绿（Java 1661 用例 0F/0E、桌面 1022 用例、tsc 0 错误），但**尚未在真 Windows 机器上运行过**。mac 全绿不等于 Windows 能跑——两边真正分岔的地方是窗口 chrome、终端 shell、编辑器打开、spawn `java.exe`、桌宠 FFI、打包，以及文件系统语义（Windows 上目标文件被占用时 rename 会抛 `AccessDeniedException`，已加有界重试）。
+
+**会话栏与左侧工具栏本身没有平台分支**：`Sidebar.tsx` / `Composer.tsx` 里 `platform` 出现 0 次，`Transcript.tsx` 里唯一一处是 IM 平台（qq/weixin）而非操作系统——两端渲染的是同一份 React 代码。平台差异只在窗口外壳这一层：Windows 无边框 + 自绘三键，mac 交通灯 + vibrancy；皮肤上 mac 有 `html.is-mac` 的半透明侧栏，Windows 走实色（有意设计，非缺样式）。
+
+**逐条验收清单**（约 90 条，含前置 / 构建测试 / 窗口外壳 / 11 个面板 / 三模式动作卡 / 三件套工具 / IM 网关 / 桌宠 / 打包安装，每条带预期与翻车时的排查方向）见 [`docs/windows-dev.md`](docs/windows-dev.md)。
+
+**已知限制 / 预期失败**：
+
+- **Petdex 桌宠安装在 Windows 不可用**——`npxSearchDirs` 按 `:` 切 PATH（Windows 用 `;`）、只找 `${dir}/npx` 不找 `npx.cmd`；表现为点安装后明确报错，导入本地图片 / 精灵包不受影响
+- 桌宠跨虚拟桌面常驻（Windows 无官方 API）
+- `WS_EX_NOACTIVATE` 仅 x64 精确，ia32 自动降级为 `focusable:false`
+- 编辑器探测不覆盖自定义安装目录 / 注册表安装
+- 安装包未签名，首次运行触发 SmartScreen（根治需 Authenticode 证书）
+- GitHub Release 目前只发了 mac 版（v1.3.0 dmg/zip），Windows 版需自行 `npm run dist:win`

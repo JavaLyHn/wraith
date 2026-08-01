@@ -1,75 +1,217 @@
-# 在 Windows 上跑 wraith 桌面 dev
+# Windows:开发、打包与**完整验收清单**
 
-> 状态:块 1(可跑 dev + 平台守卫兜底)+ 块 2 窗口 chrome(无边框自绘窗控)+ 块 3(Windows 编辑器探测+打开)+ 块 4(打包生成安装包)+ 块 5(桌宠点击不抢焦)已完成,Windows 对等块 1–5 全部完成。已知降级见文末。
+> **当前状态(诚实版)**:Java 内核与渲染层本就跨平台,平台专属代码只集中在少数几处(窗口 chrome / 终端 shell / 编辑器打开 / spawn java / 桌宠 FFI / 打包)。Windows 对等块 1–5 均已**实现**,但 **截至本文档更新为止,以上全部内容从未在真 Windows 机器上运行过一次** —— mac 侧全绿(Java 1661 用例 0F/0E、桌面 1022 用例、tsc 0)不等于 Windows 能跑。本清单就是用来还这笔验证债的。
+>
+> 逐条打勾即可;每条给了**预期**和**翻车时最可能的原因**,便于你现场判断是环境问题还是真 bug。
 
-## 前置(均需在 PATH)
+---
 
-- JDK 17:`java -version`
-- Maven:`mvn -v`
-- Node(建议 ≥ 18):`node -v`
+## 0. 前置(均需在 PATH)
 
-## 步骤
+| 检查 | 命令 | 预期 |
+|---|---|---|
+| JDK 17 | `java -version` | 17.x |
+| Maven | `mvn -v` | 能输出版本 |
+| Node ≥ 18 | `node -v` | v18+ |
+| (打包才需)jlink | `jlink --version` | 随 JDK 自带 |
 
-1. **备后端 jar**(仓库根):
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1
-   ```
-   产物落到 `%USERPROFILE%\.wraith\wraith.jar`。
+- [ ] 四项前置齐备
 
-2. **装桌面依赖**(取 node-pty 的 Windows 原生二进制):
-   ```powershell
-   cd desktop
-   npm install --legacy-peer-deps
-   ```
-   仓库存在 `@lobehub/icons`→`@lobehub/ui` 的 peer 依赖冲突(react 18 vs 要求 19),干净 checkout 上普通 `npm install` 会 ERESOLVE 失败,需 `--legacy-peer-deps` 绕过。
+---
 
-3. **起 dev**:
-   ```powershell
-   npm run dev
-   ```
-   dev 后端由 Electron 主进程 `spawn('java', ['-jar', %USERPROFILE%\.wraith\wraith.jar, 'app-server'])` 拉起。
-
-## 验收清单(在 Windows 实机逐条打勾)
-
-- [ ] App 起动,主窗出现
-- [ ] 状态显示后端已连接
-- [ ] 发一条消息,有回复
-- [ ] 终端面板能打开、能敲命令(PowerShell / cmd)
-- [ ] 记忆面板能搜索、能保存
-- [ ] (若开启桌宠)开启后 App 不崩、宠物出现
-- [ ] 开启桌宠后,单击/拖动桌宠**不打断**你在其它应用里的操作(不抢焦)
-- [ ] 主窗无系统标题栏(无边框),整窗为自绘表面
-- [ ] 顶条右上角有 最小化 / 最大化 / 关闭 三键,点击各生效
-- [ ] 最大化后按钮图标变"还原",还原后变回"最大化"
-- [ ] 双击顶条空白处 最大化 / 还原
-- [ ] 关闭键悬停变红
-- [ ] 拖顶条空白处可移动窗口
-- [ ] 文件的「用应用打开」能列出已装编辑器(VS Code 等),点击用该编辑器打开文件
-- [ ] `npm run dist:win` 能产出 `desktop/release/*.exe`
-- [ ] 双击安装包能装(可选安装目录)、装完能从开始菜单/桌面快捷方式启动
-- [ ] 安装版启动后核心功能(聊天/终端/记忆/窗控/编辑器打开)通
-
-## 打包:生成 Windows 安装包(在 Windows 机器上)
-
-前置(均在 PATH):JDK(供 jlink,建议 17+)、Node、Maven。
+## 1. 后端:构建与测试
 
 ```powershell
-# 1) 仓库根:构建后端 jar
-mvn -q clean package -DskipTests
-# 2) 桌面依赖(含原生 node-pty)
-cd desktop
-npm install --legacy-peer-deps
-# 3) 打包(向导式 NSIS,未签名)
-npm run dist:win
+# 仓库根
+mvn clean package -DskipTests
+mvn -DskipTests=false test        # ⚠ 本仓库测试默认跳过,必须显式打开
 ```
 
-产物:`desktop/release/` 下的 `*.exe` NSIS 安装包。
+- [ ] `mvn clean package -DskipTests` 成功,产出 `target\wraith-1.0-SNAPSHOT.jar`
+- [ ] `mvn -DskipTests=false test` 全绿(mac 基线:**1661 tests / 0 failures / 0 errors**)
 
-**未签名说明**:安装包未做代码签名,首次运行 Windows SmartScreen 会提示「Windows 已保护你的电脑 / 未知发布者」——点「更多信息 → 仍要运行」即可(与 macOS 版的 xattr 绕过同性质)。根治需 Authenticode 证书,暂未做。
+**重点关注这几个类**(它们最可能暴露 Windows 与 POSIX 的语义差异):
 
-## 已知降级(后续块处理)
+- [ ] `AtomicFileMoveTest` —— tmp→target 原子改名 + Windows 锁重试策略
+- [ ] `AutomationStoreConcurrencyTest` —— **48 线程**并发压 `writeAtomic`(整个套件里对文件系统压力最大的一个)
+- [ ] `AutomationToolsTest` / `AutomationDefaultDirTest` —— `%USERPROFILE%\.wraith` 目录解析
+- [ ] `MemoryToolsTest` —— 记忆库与候选库(两套独立目录)
+- [ ] `SessionStore` 相关用例 —— 会话落盘走同一条原子写路径
 
-- (块 2 已完成)Windows 现为无边框自绘窗 + 右上角自绘窗控,视觉与 mac 对齐。
-- (块 3 已完成)"用应用打开"在 Windows 探测已知编辑器(VS Code / Insiders / Cursor / Sublime Text / Notepad++,默认安装路径)并直接打开;自定义目录/注册表安装暂不覆盖。
-- (块 5 已完成)桌宠"点击不抢焦"在 Windows 已由 WS_EX_NOACTIVATE(koffi FFI)精确实现;**跨虚拟桌面常驻仍为已知限制**(Windows 无官方 API,不做)。
-- (块 4 已完成)Windows 安装包已可产出(`npm run dist:win`);未签名,首次运行触发 SmartScreen 提示,见上「打包」一节。
+> **翻车最可能的原因**:Windows 上目标文件被杀软/索引器短暂占用 → `AccessDeniedException`。已加 5 次有界重试(20/40/60/80ms)。若仍失败,说明占用超过 200ms,请记下报错栈,这是需要调大退避的真实信号 —— **不要**当成 flake 重跑了事。
+
+- [ ] CLI 能起:`java -jar target\wraith-1.0-SNAPSHOT.jar`
+- [ ] CLI 里发一条消息有回复
+
+> Windows 上**没有** mac 那种 `wraith` / `wraith -d` 短命令(那是本机 shell 包装脚本,不随仓库分发),直接用 `java -jar`。
+
+---
+
+## 2. 桌面:开发态启动
+
+```powershell
+powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1   # 构建并放 jar 到 %USERPROFILE%\.wraith\wraith.jar
+cd desktop
+npm install --legacy-peer-deps     # ⚠ 必须带,见下
+npm run dev
+```
+
+- [ ] `dev-win.ps1` 跑通,`%USERPROFILE%\.wraith\wraith.jar` 存在且时间戳是刚才
+- [ ] `npm install --legacy-peer-deps` 成功(含 node-pty 原生二进制)
+- [ ] `npm run dev` 起得来,主窗出现
+- [ ] 顶部/状态区显示**后端已连接**
+
+> `--legacy-peer-deps` 是必须的:`@lobehub/icons`→`@lobehub/ui` 有 react 18 vs 19 的 peer 冲突,干净 checkout 上普通 `npm install` 会 ERESOLVE 失败。
+> **后端连不上时**:主进程是 `spawn('java', ['-jar', %USERPROFILE%\.wraith\wraith.jar, 'app-server'])` —— 先确认 `java` 在 GUI 进程的 PATH 里(GUI 应用不继承登录 shell 的 PATH,这是 Windows 上的常见坑)。
+
+---
+
+## 3. 窗口外壳与视觉(平台专属,mac 与 Windows 是两套)
+
+Windows 走 `frame:false` 无边框 + 渲染层自绘窗控;mac 走交通灯 + vibrancy 磨砂。**皮肤也不同**:mac 有 `html.is-mac` 的半透明侧栏,Windows 走实色(无 vibrancy,这是有意设计,不是缺样式)。
+
+- [ ] 主窗**无系统标题栏**,整窗是自绘表面
+- [ ] 顶条右上角有 最小化 / 最大化 / 关闭 三键
+- [ ] 三键各自点击都生效
+- [ ] 最大化后图标变「还原」,还原后变回「最大化」
+- [ ] 双击顶条空白处能 最大化 / 还原
+- [ ] 关闭键悬停变红
+- [ ] 拖顶条空白处能移动窗口
+- [ ] 顶条左侧**没有**为 mac 交通灯预留的 80px 空白(Windows 应是 `pl-2` 紧凑)
+- [ ] 侧栏/正文是**实色**背景,不透明、无穿透感,对比度正常(深浅色主题各看一次)
+- [ ] 窗口圆角/阴影无异常(Windows 未设 transparent,首帧不应白闪)
+
+---
+
+## 4. 会话栏 + 左侧工具栏(**零平台分支,两端同一份代码** —— 这里出问题就是真 bug)
+
+- [ ] 发消息、流式回复正常
+- [ ] 侧栏折叠/展开正常,折叠图标形态正确(无重叠竖线)
+- [ ] 左侧 11 个面板**逐个能打开且不报错**:
+  - [ ] MCP(plugins) - [ ] 自动化 - [ ] IM 网关 - [ ] Provider 配置
+  - [ ] 技能 - [ ] 记忆 - [ ] 快照 - [ ] 后台任务
+  - [ ] 安全 - [ ] 浏览器 - [ ] 代码检索
+- [ ] 三种执行模式(ReAct / Plan / Team)各跑一次,均有产出
+- [ ] 切换模式后追问「我刚问了什么」能答上来(跨模式上下文)
+
+---
+
+## 5. 平台专属路径(Windows 与 mac 走不同代码)
+
+- [ ] **终端面板**能打开、能敲命令 —— Windows 用 `COMSPEC`(通常 cmd),缺失时回退 `powershell.exe`
+- [ ] 终端里中文/路径显示正常,无乱码
+- [ ] **「用应用打开」**能列出已装编辑器(VS Code / Insiders / Cursor / Sublime Text / Notepad++),点击能用该编辑器打开文件
+  - 探测按**默认安装路径**;自定义目录 / 注册表安装**不覆盖**(已知限制,不算 bug)
+- [ ] 文件路径显示为 Windows 形式(反斜杠),点击可打开
+- [ ] 项目切换、目录选择对话框正常
+
+---
+
+## 6. 第 26 期新增 ①:自我认知 + 动作卡(mac 已验,Windows 未验)
+
+> 这三条是纯事件流 + React,理论上与平台无关;列出来是为了确认「mac 上刚做完的东西在 Windows 上同样在」。
+
+- [ ] 问「**Wraith 有哪些 IM 集成?**」→ 回答列出 QQ/飞书/企业微信/微信,**不会**去 grep 你的项目代码
+- [ ] 问「**怎么配 MCP?**」→ 出现可点的「🧭 打开 MCP 面板」动作卡,点击真的跳到该面板
+- [ ] **ReAct 模式**问「怎么接微信」→ 出现 IM 接入卡
+- [ ] **Plan 模式**同样问 → **动作卡同样出现**(这是本次修的核心 bug:此前只有 ReAct 出卡)
+- [ ] **Team 模式**同样问 → **动作卡同样出现**
+- [ ] 微信接入卡:点「扫码绑定微信」后卡内**内联出现二维码**(不点不会自动开始绑定)
+- [ ] QQ 接入卡:点击后**打开系统浏览器**授权页,卡内显示状态(QQ 无内联二维码,这是设计)
+- [ ] 飞书/企业微信接入卡:显示「打开 IM 网关面板」按钮,点击跳转
+- [ ] 绑定进行中出现「取消」,点击能取消
+- [ ] 同时挂两张接入卡时,**未点击**的那张不显示状态、不出现取消按钮
+
+> **Windows 专属风险点**:IM 绑定要 spawn `java.exe`(`gatewayManager.ts` 已按平台选 `java.exe`/`java`)。若卡在「二维码生成中…」,先查 GUI 进程能否找到 `java`。
+
+---
+
+## 7. 第 26 期新增 ②:三件套工具(聊天里直接操作面板功能)
+
+**自动化(cron)**
+- [ ] 说「**每天早上 9 点帮我跑一遍测试**」→ 弹 HITL 审批 → 批准后创建成功
+- [ ] **打开左侧「自动化」面板,能看到刚才聊天里建的任务**(这条最关键:验证 `%USERPROFILE%\.wraith\automations.json` 两条路径口径一致)
+- [ ] 说「列出定时任务」→ 列表与面板一致
+- [ ] 说「把那个任务改个名字」→ 只改名,**prompt 与排程保持不变**
+- [ ] 说「删掉那个定时任务」→ 弹审批 → 面板里消失
+- [ ] 说「立刻跑一次」→ 回复中**明确说明**需要守护进程运行才会真执行(未起守护时只排队,不算失败)
+
+**后台任务**
+- [ ] 说「**把这个挂后台跑**」→ 弹 HITL 审批 → 返回任务 id
+- [ ] 说「后台任务怎么样了」→ 列出任务与状态
+- [ ] 「后台任务」面板里能看到同一条
+- [ ] 说「取消那个后台任务」→ 成功
+
+**记忆**
+- [ ] 说「**你记得我什么**」→ 列出长期记忆
+- [ ] 说「搜索记忆里关于 X 的」→ 有结果
+- [ ] 说「**忘掉某条**」→ 弹 HITL 审批 → 批准后记忆面板里消失
+- [ ] 说「有哪些待确认的记忆候选」→ 列出(无候选时明确说「没有」,不报错)
+- [ ] 批准/驳回某条候选 → 记忆面板同步
+
+**闸门**
+- [ ] 高危写(建/删/立刻跑 自动化、挂后台任务、删记忆)**都弹了审批**
+- [ ] 只读(列/搜/查)**都没弹**审批
+
+---
+
+## 8. IM 网关(需真账号,可选)
+
+- [ ] IM 网关面板能打开,平台列表正常
+- [ ] 微信扫码绑定跑通(spawn `java.exe ... gateway bind-weixin`)
+- [ ] QQ 扫码绑定跑通(会开系统浏览器)
+- [ ] 飞书/企业微信填密钥后能保存(密钥不回显)
+- [ ] 启动/停止网关守护进程正常,日志可见
+
+---
+
+## 9. 桌宠
+
+- [ ] 开启桌宠后 App 不崩,宠物出现在桌面
+- [ ] 单击/拖动桌宠**不打断**你在其它应用里的操作(`WS_EX_NOACTIVATE` via koffi FFI)
+- [ ] 拖动、滚轮缩放、右键菜单正常
+- [ ] 透明区域点击能穿透到桌面
+- [ ] 关闭桌宠后 App 不崩
+
+---
+
+## 10. 打包与安装版
+
+```powershell
+mvn -q clean package -DskipTests        # 仓库根
+cd desktop
+npm install --legacy-peer-deps
+npm run dist:win                        # 产物:desktop\release\*.exe
+```
+
+- [ ] `npm run dist:win` 成功(内部会 `jlink` 造捆绑 JRE + 复制 jar 到 `resources/`)
+- [ ] `desktop\release\` 下有 `*.exe` NSIS 安装包
+- [ ] 双击安装:向导式、可选安装目录、创建桌面/开始菜单快捷方式
+- [ ] SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」能装(**未签名,属预期**)
+- [ ] 装完从开始菜单/桌面快捷方式能启动
+- [ ] **安装版**(非 dev)核心功能通:聊天 / 终端 / 记忆 / 窗控 / 编辑器打开
+- [ ] 安装版后端用的是**捆绑 JRE**(`resources\runtime\bin\java.exe`),即使机器没装 JDK 也能跑
+
+---
+
+## 11. 已知限制 / **预期失败**(勾上表示"确认是这个已知情况",不是 bug)
+
+- [ ] **Petdex 桌宠安装在 Windows 不可用** —— `npxSearchDirs` 按 `:` 切 PATH(Windows 是 `;`)、只找 `${dir}/npx` 不找 `npx.cmd`(代码注释已写明「本项目 macOS-only,不处理 .cmd」)。表现:点安装后**明确报错**(不是静默失败)。导入本地图片/精灵包不受影响。
+- [ ] 桌宠**跨虚拟桌面**常驻做不到(Windows 无官方 API)
+- [ ] `WS_EX_NOACTIVATE` 仅 **x64** 精确;ia32 自动降级为 `focusable:false`
+- [ ] 编辑器探测不覆盖**自定义安装目录 / 注册表安装**
+- [ ] 安装包**未签名**(根治需 Authenticode 证书)
+- [ ] GitHub Release 目前**只发了 mac 版**(v1.3.0 dmg/zip);Windows 版需自行 `dist:win`
+
+---
+
+## 12. 发现问题怎么记
+
+请把以下信息一并记下,便于定位:
+
+1. 哪一条勾失败
+2. 完整报错(尤其 Java 栈:是 `AccessDeniedException` 还是别的)
+3. 是 dev 态还是安装版
+4. `java -version` 与是否在 GUI 进程 PATH 中
+
+**优先级判断**:第 1、2、10 节失败 = 阻塞(基础跑不起来);第 6、7 节失败 = 第 26 期新功能在 Windows 上的真 bug;第 3、5 节失败 = 平台外壳问题;第 11 节 = 已知,不用报。
