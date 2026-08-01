@@ -346,7 +346,11 @@ public class Agent {
 
                 // 没有工具调用，直接返回结果
                 appendReasoning(reasoningTranscript, response.reasoningContent());
-                conversationHistory.add(LlmClient.Message.assistant(response.content()));
+                // ⚠ 必须连 reasoningContent 一起入历史(与上面工具分支一致)。思考型模型在
+                // thinking mode 下要求把 reasoning_content 原样回传,收尾这条丢了它,
+                // 下一轮请求就会 400（本轮不报,症状延迟一轮出现,极难定位）。
+                conversationHistory.add(
+                        LlmClient.Message.assistant(response.reasoningContent(), response.content()));
 
                 // 存入记忆
                 memoryManager.addAssistantMessage(response.content());

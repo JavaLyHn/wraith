@@ -30,6 +30,21 @@ public class FreeLlmApiClient extends AbstractOpenAiCompatibleClient {
         return apiKey;
     }
 
+    /**
+     * freellmapi 是「一个网关后面挂任意模型」的转发型 provider,常挂思考型模型
+     * (deepseek-v4-pro / glm 等)。这类模型在 thinking mode 下要求把上一条 assistant 的
+     * reasoning_content 原样回传,否则下一次调用直接 400:
+     *   "The `reasoning_content` in the thinking mode must be passed back to the API."
+     * 表现为「只要这一轮调过工具就必炸」—— 工具轮才有第二次 LLM 调用。
+     *
+     * 打开它对非思考型模型无副作用:序列化处只在该条 assistant 消息确实带了
+     * reasoningContent 时才写字段,模型没产出就什么也不加。
+     */
+    @Override
+    protected boolean shouldSendReasoningContentInRequestHistory() {
+        return true;
+    }
+
     @Override
     public String getModelName() {
         return model;
