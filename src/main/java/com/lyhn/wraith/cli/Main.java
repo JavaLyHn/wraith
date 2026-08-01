@@ -349,6 +349,8 @@ public class Main {
             DurableTaskManager taskManager = openTaskManager(llmClientRef);
             taskManager.start();
             Runtime.getRuntime().addShutdownHook(new Thread(taskManager::close, "wraith-task-shutdown"));
+            hitlToolRegistry.setTaskManager(taskManager); // ← 补:交互式 CLI 也要与 /task、app-server 共用同一 DurableTaskManager,
+                                                           //    否则聊天里的 task_* 工具在 CLI 下永远诚实失败(面板/CLI /task 能做、聊天做不到)。
             WechatRuntimeController wechatRuntime = new WechatRuntimeController(renderer);
             Runtime.getRuntime().addShutdownHook(new Thread(wechatRuntime::stop, "wraith-wechat-shutdown"));
             renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));

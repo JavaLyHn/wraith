@@ -128,7 +128,7 @@ public class ToolRegistry {
 
     private com.lyhn.wraith.runtime.task.DurableTaskManager taskManager;
 
-    /** 注入持久后台任务管理器(app-server 装配时下发);未注入时相关工具诚实失败。 */
+    /** 注入持久后台任务管理器(app-server / 交互式 CLI 装配时下发);未注入时相关工具诚实失败。 */
     public void setTaskManager(com.lyhn.wraith.runtime.task.DurableTaskManager taskManager) {
         this.taskManager = taskManager;
     }
@@ -1214,7 +1214,7 @@ public class ToolRegistry {
                         + "返回任务 id,可用 task_get 查进度。",
                 createParameters(new Param("prompt", "string", "要后台执行的完整任务描述", true)),
                 args -> {
-                    if (taskManager == null) return "task_add 失败: 后台任务管理器未初始化(仅桌面/app-server 可用)";
+                    if (taskManager == null) return "task_add 失败: 后台任务管理器未初始化(当前运行形态不支持)";
                     String prompt = args.get("prompt");
                     if (prompt == null || prompt.isBlank()) return "task_add 失败: prompt 不能为空";
                     var t = taskManager.enqueue(prompt.trim());
@@ -1227,7 +1227,7 @@ public class ToolRegistry {
                 "列出后台任务(最近若干条,含状态)。用户问「后台任务怎么样了/有哪些在跑」时用。",
                 createParameters(new Param("limit", "integer", "最多返回多少条,默认 20", false)),
                 args -> {
-                    if (taskManager == null) return "task_list 失败: 后台任务管理器未初始化(仅桌面/app-server 可用)";
+                    if (taskManager == null) return "task_list 失败: 后台任务管理器未初始化(当前运行形态不支持)";
                     int limit = clamp(parseInt(args.get("limit"), 20), 1, 100);
                     var list = taskManager.list(limit);
                     if (list.isEmpty()) return "当前没有后台任务。";
@@ -1245,7 +1245,7 @@ public class ToolRegistry {
                 "查一个后台任务的状态与结果(按 id)。",
                 createParameters(new Param("id", "string", "任务 id", true)),
                 args -> {
-                    if (taskManager == null) return "task_get 失败: 后台任务管理器未初始化(仅桌面/app-server 可用)";
+                    if (taskManager == null) return "task_get 失败: 后台任务管理器未初始化(当前运行形态不支持)";
                     String id = args.get("id");
                     if (id == null || id.isBlank()) return "task_get 失败: id 不能为空";
                     var found = taskManager.find(id.trim());
@@ -1265,7 +1265,7 @@ public class ToolRegistry {
                 "取消一个尚未完成的后台任务(按 id)。",
                 createParameters(new Param("id", "string", "任务 id", true)),
                 args -> {
-                    if (taskManager == null) return "task_cancel 失败: 后台任务管理器未初始化(仅桌面/app-server 可用)";
+                    if (taskManager == null) return "task_cancel 失败: 后台任务管理器未初始化(当前运行形态不支持)";
                     String id = args.get("id");
                     if (id == null || id.isBlank()) return "task_cancel 失败: id 不能为空";
                     boolean ok = taskManager.cancel(id.trim());
@@ -1286,8 +1286,19 @@ public class ToolRegistry {
                     int limit = clamp(parseInt(args.get("limit"), 30), 1, 200);
                     var all = memoryManagerRef.listLongTerm();
                     if (all.isEmpty()) return "长期记忆为空。";
-                    StringBuilder sb = new StringBuilder("长期记忆 " + all.size() + " 条(显示前 " + Math.min(limit, all.size()) + "):\n");
-                    all.stream().limit(limit).forEach(e ->
+                    // getAll() 底层是 ConcurrentHashMap#values(),迭代顺序与内容/时间无关;
+                    // 不排序直接 limit 会把"显示前 N 条"变成一句假话。按时间倒序 + id 兜底,
+                    // 保证跨两次调用顺序一致(时间戳理论上不为 null,仍防御性 nullsLast)。
+                    var sorted = all.stream()
+                            .sorted(java.util.Comparator
+                                    .comparing(com.lyhn.wraith.memory.MemoryEntry::getTimestamp,
+                                            java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                                    .reversed()
+                                    .thenComparing(com.lyhn.wraith.memory.MemoryEntry::getId))
+                            .toList();
+                    StringBuilder sb = new StringBuilder("长期记忆共 " + sorted.size() + " 条,以下 "
+                            + Math.min(limit, sorted.size()) + " 条(按时间倒序;精确查找用 memory_search):\n");
+                    sorted.stream().limit(limit).forEach(e ->
                             sb.append("- [").append(e.getId()).append("] ").append(e.getContent()).append('\n'));
                     return sb.toString().trim();
                 }
@@ -1466,14 +1477,21 @@ public class ToolRegistry {
                         String taskId = args.get("task_id");
                         int limit = clamp(parseInt(args.get("limit"), 20), 1, 100);
                         var runs = com.lyhn.wraith.automation.AutomationStore.openDefault().loadRuns();
+                        // loadRuns() 是磁盘顺序(putRun 按 taskId 分组落盘,组间顺序取决于
+                        // HashMap 迭代——与时间无关);不排序直接 limit,省略 task_id 时拿到的
+                        // 可能是"随便哪几个任务先哈希到"的记录,而不是真正最近的运行。
                         var filtered = runs.stream()
                                 .filter(r -> taskId == null || taskId.isBlank() || taskId.trim().equals(r.taskId))
+                                .sorted(java.util.Comparator
+                                        .comparingLong((com.lyhn.wraith.automation.AutomationRun r) -> r.startedAt)
+                                        .reversed())
                                 .limit(limit)
                                 .toList();
                         if (filtered.isEmpty()) return "没有运行记录。";
-                        StringBuilder sb = new StringBuilder("运行记录 " + filtered.size() + " 条:\n");
+                        StringBuilder sb = new StringBuilder("运行记录 " + filtered.size() + " 条(按开始时间倒序):\n");
                         for (var r : filtered) {
                             sb.append("- ").append(r.runId).append(" task=").append(r.taskId)
+                                    .append(" [").append(formatRunTime(r.startedAt)).append(']')
                                     .append(" status=").append(r.status).append('\n');
                         }
                         return sb.toString().trim();
@@ -1482,6 +1500,17 @@ public class ToolRegistry {
                     }
                 }
         ));
+    }
+
+    private static final java.time.format.DateTimeFormatter RUN_TIME_FORMAT =
+            java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    /** 运行记录时间可读格式(本地时区,仅用于 automation_runs 输出)。 */
+    private static String formatRunTime(long epochMillis) {
+        return java.time.Instant.ofEpochMilli(epochMillis)
+                .atZone(java.time.ZoneId.systemDefault())
+                .toLocalDateTime()
+                .format(RUN_TIME_FORMAT);
     }
 
     /** 排程可读描述(仅用于列表输出)。 */
@@ -1495,12 +1524,47 @@ public class ToolRegistry {
         };
     }
 
+    /**
+     * JSON {@code null} 经 argMap(NullNode#asText() == 字面串 "null")与空串都当"未提供"处理。
+     * 仅供 automation_upsert 的 enabled 字段使用,不改动共享的 parseBoolean 语义(其它调用方
+     * 依赖它对无法识别值一律返回 fallback 的行为)。
+     */
+    private static String normalizeOptionalBoolean(String raw) {
+        if (raw == null || raw.isBlank() || "null".equals(raw.trim())) return null;
+        return raw;
+    }
+
     /** automation_upsert 主体:校验 → 组装 AutomationTask(与面板同口径)→ load-modify-save。 */
     private String upsertAutomation(Map<String, String> args) {
+        String id = args.get("id");
+        boolean isEdit = id != null && !id.isBlank();
+
+        com.lyhn.wraith.automation.AutomationStore store;
+        java.util.List<com.lyhn.wraith.automation.AutomationTask> tasks;
+        try {
+            store = com.lyhn.wraith.automation.AutomationStore.openDefault();
+            tasks = new java.util.ArrayList<>(store.loadTasks());
+        } catch (Exception e) {
+            return "automation_upsert 失败: " + e.getMessage();
+        }
+
+        com.lyhn.wraith.automation.AutomationTask existing = null;
+        if (isEdit) {
+            for (var t : tasks) {
+                if (id.trim().equals(t.id)) { existing = t; break; }
+            }
+            if (existing == null) return "automation_upsert 失败: 没有 id 为 '" + id.trim() + "' 的任务";
+        }
+
+        // name / prompt / 排程三选一:CREATE(无 id)路径硬性必填;EDIT(带 id)路径全部可省略,
+        // 省略即保留既有值——否则模型编辑"改个名字"这种请求时,会被迫替 prompt 造一句复述、
+        // 替排程瞎猜一种(WEEKLY 任务的 weekday 模型根本表达不了),把面板配置的东西静默冲掉。
         String name = args.get("name");
         String prompt = args.get("prompt");
-        if (name == null || name.isBlank()) return "automation_upsert 失败: name 不能为空";
-        if (prompt == null || prompt.isBlank()) return "automation_upsert 失败: prompt 不能为空";
+        if (!isEdit) {
+            if (name == null || name.isBlank()) return "automation_upsert 失败: name 不能为空";
+            if (prompt == null || prompt.isBlank()) return "automation_upsert 失败: prompt 不能为空";
+        }
 
         String cron = args.get("cron");
         String everyRaw = args.get("every_minutes");
@@ -1509,20 +1573,26 @@ public class ToolRegistry {
         if (cron != null && !cron.isBlank()) provided++;
         if (everyRaw != null && !everyRaw.isBlank()) provided++;
         if (daily != null && !daily.isBlank()) provided++;
-        if (provided != 1) {
-            return "automation_upsert 失败: cron / every_minutes / daily_time 三者必须且只能提供一个";
-        }
 
-        com.lyhn.wraith.automation.Schedule schedule = new com.lyhn.wraith.automation.Schedule();
-        if (cron != null && !cron.isBlank()) {
+        com.lyhn.wraith.automation.Schedule schedule;
+        if (provided > 1) {
+            return "automation_upsert 失败: cron / every_minutes / daily_time 三者必须且只能提供一个";
+        } else if (provided == 0) {
+            if (!isEdit) {
+                return "automation_upsert 失败: cron / every_minutes / daily_time 三者必须且只能提供一个";
+            }
+            schedule = existing.schedule; // EDIT 且省略排程 → 原样保留(含面板配的 WEEKLY)
+        } else if (cron != null && !cron.isBlank()) {
             if (!com.lyhn.wraith.automation.NextRun.isValidCron(cron.trim())) {
                 return "automation_upsert 失败: 非法 cron 表达式 '" + cron.trim() + "'(需标准 5 段)";
             }
+            schedule = new com.lyhn.wraith.automation.Schedule();
             schedule.kind = com.lyhn.wraith.automation.ScheduleKind.CRON;
             schedule.expr = cron.trim();
         } else if (everyRaw != null && !everyRaw.isBlank()) {
             int every = parseInt(everyRaw, -1);
             if (every <= 0) return "automation_upsert 失败: every_minutes 必须为正整数";
+            schedule = new com.lyhn.wraith.automation.Schedule();
             schedule.kind = com.lyhn.wraith.automation.ScheduleKind.INTERVAL;
             schedule.everyMinutes = every;
         } else {
@@ -1530,33 +1600,24 @@ public class ToolRegistry {
             if (!t.matches("^([01]\\d|2[0-3]):[0-5]\\d$")) {
                 return "automation_upsert 失败: daily_time 必须是 HH:mm(24 小时制)";
             }
+            schedule = new com.lyhn.wraith.automation.Schedule();
             schedule.kind = com.lyhn.wraith.automation.ScheduleKind.DAILY;
             schedule.time = t;
         }
 
         try {
-            var store = com.lyhn.wraith.automation.AutomationStore.openDefault();
-            var tasks = new java.util.ArrayList<>(store.loadTasks());
-            String id = args.get("id");
-            com.lyhn.wraith.automation.AutomationTask existing = null;
-            if (id != null && !id.isBlank()) {
-                for (var t : tasks) {
-                    if (id.trim().equals(t.id)) { existing = t; break; }
-                }
-                if (existing == null) return "automation_upsert 失败: 没有 id 为 '" + id.trim() + "' 的任务";
-            }
-
             long now = System.currentTimeMillis();
             var task = new com.lyhn.wraith.automation.AutomationTask();
             task.id = existing != null ? existing.id : java.util.UUID.randomUUID().toString();
-            task.name = name.trim();
-            task.prompt = prompt.trim();
+            task.name = (name != null && !name.isBlank()) ? name.trim() : existing.name;
+            task.prompt = (prompt != null && !prompt.isBlank()) ? prompt.trim() : existing.prompt;
             String ws = args.get("workspace");
             task.workspace = (ws != null && !ws.isBlank()) ? ws.trim()
                     : (existing != null && existing.workspace != null ? existing.workspace : projectPath);
             task.schedule = schedule;
-            task.enabled = args.containsKey("enabled")
-                    ? parseBoolean(args.get("enabled"), true)
+            String enabledRaw = normalizeOptionalBoolean(args.get("enabled"));
+            task.enabled = enabledRaw != null
+                    ? parseBoolean(enabledRaw, true)
                     : (existing == null || existing.enabled);
             task.deliverTo = existing != null ? existing.deliverTo : null;
             task.approval = existing != null ? existing.approval : null;
@@ -1567,7 +1628,8 @@ public class ToolRegistry {
             tasks.add(task);
             store.saveTasks(tasks);
             return (existing != null ? "已更新" : "已创建") + "自动化任务 " + task.id
-                    + "(" + task.name + ",计划 " + describeSchedule(schedule) + ")。"
+                    + "(" + task.name + "," + (task.enabled ? "启用" : "停用")
+                    + ",计划 " + describeSchedule(schedule) + ")。"
                     + "投递目标与审批策略如需设置,请打开「自动化」面板。";
         } catch (Exception e) {
             return "automation_upsert 失败: " + e.getMessage();
