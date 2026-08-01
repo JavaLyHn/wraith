@@ -50,6 +50,8 @@ public class AgentOrchestrator {
     private final SubAgent reviewer;
     private final MemoryManager memoryManager;
     private final ToolRegistry toolRegistry;
+    /** 本轮的总任务原文(run 入口写入),供 buildStepContext 转达给 worker。 */
+    private String currentGoal = "";
     private final PrintStream out;
     private Supplier<String> externalContextSupplier = () -> "";
     private String conversationContext = "";
@@ -177,6 +179,8 @@ public class AgentOrchestrator {
      * 运行多 Agent 协作任务
      */
     public String run(String userInput) {
+        // 记住总任务:worker 的步骤上下文要带上它(见 buildStepContext)。
+        this.currentGoal = userInput == null ? "" : userInput.trim();
         log.info("Multi-Agent run started: inputLength={}", userInput == null ? 0 : userInput.length());
         this.lastCleanResult = ""; // 早退路径（取消/规划失败）不赋值 → 桌面不发底部消息
         memoryManager.addUserMessage(userInput);
@@ -662,6 +666,15 @@ public class AgentOrchestrator {
     String buildStepContext(List<ExecutionStep> steps, ExecutionStep currentStep) {
         StringBuilder context = new StringBuilder();
         context.append("总任务上下文：\n");
+        // ⚠ 必须写入总任务原文。此前只打了上面这行标题、底下什么都不放,worker 于是只看到
+        // 一句孤立的步骤描述(如「获取仓库根目录页面」)。真机后果:用户问某个 GitHub 仓库,
+        // planner 已明确要用 web_fetch,worker 却把「仓库」当成当前工作目录,一路
+        // list_dir/glob_files 分析了本地文件夹。URL、文件名这类关键信息只存在于原文里。
+        if (currentGoal != null && !currentGoal.isBlank()) {
+            context.append("总任务：").append(currentGoal).append("\n")
+                   .append("(以上是用户的原始请求;步骤描述可能省略其中的 URL、路径等关键信息,")
+                   .append("请以原始请求为准,不要把它当成本地工作目录的任务。)\n\n");
+        }
 
         for (ExecutionStep step : steps) {
             if (step.status() == StepStatus.COMPLETED && currentStep.dependencies().contains(step.id())) {
