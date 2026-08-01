@@ -201,6 +201,18 @@ export default function Sidebar({
             <Logo className="h-7 w-7 object-contain" />
             <span className="text-sm font-bold tracking-wide text-fg">WRAITH</span>
           </button>
+          {/* 搜索:原为 nav 里一整行「🔍 搜索」,现收进标题行只留图标(省一行高度)。
+              必须是 brand-home 的**兄弟**而非其子元素 —— 后者会连带触发「新对话」。 */}
+          <button
+            type="button"
+            data-testid="nav-search"
+            onClick={onOpenSearch}
+            aria-label="搜索"
+            title="搜索(⌘K)"
+            className="mr-3 shrink-0 rounded-lg p-1.5 text-fg-muted transition-colors hover:bg-fg/5 hover:text-accent"
+          >
+            <Search className="h-4 w-4" strokeWidth={1.5} />
+          </button>
         </div>
 
         <ProjectSwitcher
@@ -226,15 +238,6 @@ export default function Sidebar({
 
         {/* nav */}
         <nav className="mt-3 flex flex-col gap-0.5 px-3">
-          {/* search — 点击打开命令面板 */}
-          <button
-            data-testid="nav-search"
-            onClick={onOpenSearch}
-            className="rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-fg/5"
-          >
-            <span className="flex items-center gap-2"><Search className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />搜索</span>
-          </button>
-
           {/* 工具组(可折叠;进入工具页自动展开)*/}
           <button
             data-testid="nav-tools-toggle"
