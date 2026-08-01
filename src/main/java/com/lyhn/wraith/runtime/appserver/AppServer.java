@@ -937,21 +937,31 @@ public final class AppServer {
                     writer.error(msg.id(), -32602, "非法 cron 表达式: " + task.schedule.expr);
                     return true;
                 }
-                com.lyhn.wraith.automation.AutomationStore st = automationStore();
-                List<com.lyhn.wraith.automation.AutomationTask> existing = new ArrayList<>(st.loadTasks());
-                existing.removeIf(t -> t.id.equals(task.id));
-                existing.add(task);
-                st.saveTasks(existing);
+                // load→removeIf→save 是复合操作,必须整段包在 AutomationStore.TASKS_LOCK
+                // 里——分别给 loadTasks()/saveTasks() 加锁不足以防止与 agent 工具线程
+                // (ToolRegistry automation_upsert)交叠出丢失更新,详见 AutomationStore 的
+                // TASKS_LOCK javadoc。
+                synchronized (com.lyhn.wraith.automation.AutomationStore.TASKS_LOCK) {
+                    com.lyhn.wraith.automation.AutomationStore st = automationStore();
+                    List<com.lyhn.wraith.automation.AutomationTask> existing = new ArrayList<>(st.loadTasks());
+                    existing.removeIf(t -> t.id.equals(task.id));
+                    existing.add(task);
+                    st.saveTasks(existing);
+                }
                 ok(msg);
             }
             case "automations.remove" -> {
                 JsonNode p = msg.params();
                 String taskId = textParam(p, "id");
                 if (taskId == null) { writer.error(msg.id(), -32602, "缺 id"); return true; }
-                com.lyhn.wraith.automation.AutomationStore st = automationStore();
-                List<com.lyhn.wraith.automation.AutomationTask> remaining = new ArrayList<>(st.loadTasks());
-                remaining.removeIf(t -> t.id.equals(taskId));
-                st.saveTasks(remaining);
+                // 同上:load→removeIf→save 整段包锁,防止与 ToolRegistry automation_remove
+                // 交叠出丢失更新。
+                synchronized (com.lyhn.wraith.automation.AutomationStore.TASKS_LOCK) {
+                    com.lyhn.wraith.automation.AutomationStore st = automationStore();
+                    List<com.lyhn.wraith.automation.AutomationTask> remaining = new ArrayList<>(st.loadTasks());
+                    remaining.removeIf(t -> t.id.equals(taskId));
+                    st.saveTasks(remaining);
+                }
                 // Note: automation-runs.json and automation-state.json are daemon-owned single-writer files.
                 // The app-server must NOT write them to avoid racing the daemon. Orphaned runs age out via
                 // RUNS_PER_TASK; the desktop can filter by existing task ids. This intentionally supersedes

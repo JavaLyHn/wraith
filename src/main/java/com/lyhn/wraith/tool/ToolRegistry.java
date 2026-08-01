@@ -1431,15 +1431,21 @@ public class ToolRegistry {
                 args -> {
                     String id = args.get("id");
                     if (id == null || id.isBlank()) return "automation_remove 失败: id 不能为空";
-                    try {
-                        var store = com.lyhn.wraith.automation.AutomationStore.openDefault();
-                        var tasks = new java.util.ArrayList<>(store.loadTasks());
-                        boolean removed = tasks.removeIf(t -> id.trim().equals(t.id));
-                        if (!removed) return "automation_remove 失败: 没有 id 为 '" + id.trim() + "' 的任务";
-                        store.saveTasks(tasks);
-                        return "已删除自动化任务 " + id.trim();
-                    } catch (Exception e) {
-                        return "automation_remove 失败: " + e.getMessage();
+                    // load→removeIf→save 是复合操作,必须整段包在 AutomationStore.TASKS_LOCK
+                    // 里——分别给 loadTasks()/saveTasks() 加锁不足以防止与桌面 RPC 线程
+                    // (AppServer automations.remove)交叠出丢失更新,详见 AutomationStore 的
+                    // TASKS_LOCK javadoc。
+                    synchronized (com.lyhn.wraith.automation.AutomationStore.TASKS_LOCK) {
+                        try {
+                            var store = com.lyhn.wraith.automation.AutomationStore.openDefault();
+                            var tasks = new java.util.ArrayList<>(store.loadTasks());
+                            boolean removed = tasks.removeIf(t -> id.trim().equals(t.id));
+                            if (!removed) return "automation_remove 失败: 没有 id 为 '" + id.trim() + "' 的任务";
+                            store.saveTasks(tasks);
+                            return "已删除自动化任务 " + id.trim();
+                        } catch (Exception e) {
+                            return "automation_remove 失败: " + e.getMessage();
+                        }
                     }
                 }
         ));
@@ -1539,100 +1545,107 @@ public class ToolRegistry {
         String id = args.get("id");
         boolean isEdit = id != null && !id.isBlank();
 
-        com.lyhn.wraith.automation.AutomationStore store;
-        java.util.List<com.lyhn.wraith.automation.AutomationTask> tasks;
-        try {
-            store = com.lyhn.wraith.automation.AutomationStore.openDefault();
-            tasks = new java.util.ArrayList<>(store.loadTasks());
-        } catch (Exception e) {
-            return "automation_upsert 失败: " + e.getMessage();
-        }
-
-        com.lyhn.wraith.automation.AutomationTask existing = null;
-        if (isEdit) {
-            for (var t : tasks) {
-                if (id.trim().equals(t.id)) { existing = t; break; }
+        // 整个方法体(load → 校验/组装 → save)是一个复合操作,必须整段包在
+        // AutomationStore.TASKS_LOCK 里——分别给 loadTasks()/saveTasks() 加锁不足以防止
+        // 与桌面 RPC 线程(AppServer automations.upsert)交叠出丢失更新,详见 AutomationStore
+        // 的 TASKS_LOCK javadoc。方法体里散落的 early return 在 synchronized 块内依然正确
+        // 释放锁,不需要额外改造。
+        synchronized (com.lyhn.wraith.automation.AutomationStore.TASKS_LOCK) {
+            com.lyhn.wraith.automation.AutomationStore store;
+            java.util.List<com.lyhn.wraith.automation.AutomationTask> tasks;
+            try {
+                store = com.lyhn.wraith.automation.AutomationStore.openDefault();
+                tasks = new java.util.ArrayList<>(store.loadTasks());
+            } catch (Exception e) {
+                return "automation_upsert 失败: " + e.getMessage();
             }
-            if (existing == null) return "automation_upsert 失败: 没有 id 为 '" + id.trim() + "' 的任务";
-        }
 
-        // name / prompt / 排程三选一:CREATE(无 id)路径硬性必填;EDIT(带 id)路径全部可省略,
-        // 省略即保留既有值——否则模型编辑"改个名字"这种请求时,会被迫替 prompt 造一句复述、
-        // 替排程瞎猜一种(WEEKLY 任务的 weekday 模型根本表达不了),把面板配置的东西静默冲掉。
-        String name = args.get("name");
-        String prompt = args.get("prompt");
-        if (!isEdit) {
-            if (name == null || name.isBlank()) return "automation_upsert 失败: name 不能为空";
-            if (prompt == null || prompt.isBlank()) return "automation_upsert 失败: prompt 不能为空";
-        }
+            com.lyhn.wraith.automation.AutomationTask existing = null;
+            if (isEdit) {
+                for (var t : tasks) {
+                    if (id.trim().equals(t.id)) { existing = t; break; }
+                }
+                if (existing == null) return "automation_upsert 失败: 没有 id 为 '" + id.trim() + "' 的任务";
+            }
 
-        String cron = args.get("cron");
-        String everyRaw = args.get("every_minutes");
-        String daily = args.get("daily_time");
-        int provided = 0;
-        if (cron != null && !cron.isBlank()) provided++;
-        if (everyRaw != null && !everyRaw.isBlank()) provided++;
-        if (daily != null && !daily.isBlank()) provided++;
-
-        com.lyhn.wraith.automation.Schedule schedule;
-        if (provided > 1) {
-            return "automation_upsert 失败: cron / every_minutes / daily_time 三者必须且只能提供一个";
-        } else if (provided == 0) {
+            // name / prompt / 排程三选一:CREATE(无 id)路径硬性必填;EDIT(带 id)路径全部可省略,
+            // 省略即保留既有值——否则模型编辑"改个名字"这种请求时,会被迫替 prompt 造一句复述、
+            // 替排程瞎猜一种(WEEKLY 任务的 weekday 模型根本表达不了),把面板配置的东西静默冲掉。
+            String name = args.get("name");
+            String prompt = args.get("prompt");
             if (!isEdit) {
+                if (name == null || name.isBlank()) return "automation_upsert 失败: name 不能为空";
+                if (prompt == null || prompt.isBlank()) return "automation_upsert 失败: prompt 不能为空";
+            }
+
+            String cron = args.get("cron");
+            String everyRaw = args.get("every_minutes");
+            String daily = args.get("daily_time");
+            int provided = 0;
+            if (cron != null && !cron.isBlank()) provided++;
+            if (everyRaw != null && !everyRaw.isBlank()) provided++;
+            if (daily != null && !daily.isBlank()) provided++;
+
+            com.lyhn.wraith.automation.Schedule schedule;
+            if (provided > 1) {
                 return "automation_upsert 失败: cron / every_minutes / daily_time 三者必须且只能提供一个";
+            } else if (provided == 0) {
+                if (!isEdit) {
+                    return "automation_upsert 失败: cron / every_minutes / daily_time 三者必须且只能提供一个";
+                }
+                schedule = existing.schedule; // EDIT 且省略排程 → 原样保留(含面板配的 WEEKLY)
+            } else if (cron != null && !cron.isBlank()) {
+                if (!com.lyhn.wraith.automation.NextRun.isValidCron(cron.trim())) {
+                    return "automation_upsert 失败: 非法 cron 表达式 '" + cron.trim() + "'(需标准 5 段)";
+                }
+                schedule = new com.lyhn.wraith.automation.Schedule();
+                schedule.kind = com.lyhn.wraith.automation.ScheduleKind.CRON;
+                schedule.expr = cron.trim();
+            } else if (everyRaw != null && !everyRaw.isBlank()) {
+                int every = parseInt(everyRaw, -1);
+                if (every <= 0) return "automation_upsert 失败: every_minutes 必须为正整数";
+                schedule = new com.lyhn.wraith.automation.Schedule();
+                schedule.kind = com.lyhn.wraith.automation.ScheduleKind.INTERVAL;
+                schedule.everyMinutes = every;
+            } else {
+                String t = daily.trim();
+                if (!t.matches("^([01]\\d|2[0-3]):[0-5]\\d$")) {
+                    return "automation_upsert 失败: daily_time 必须是 HH:mm(24 小时制)";
+                }
+                schedule = new com.lyhn.wraith.automation.Schedule();
+                schedule.kind = com.lyhn.wraith.automation.ScheduleKind.DAILY;
+                schedule.time = t;
             }
-            schedule = existing.schedule; // EDIT 且省略排程 → 原样保留(含面板配的 WEEKLY)
-        } else if (cron != null && !cron.isBlank()) {
-            if (!com.lyhn.wraith.automation.NextRun.isValidCron(cron.trim())) {
-                return "automation_upsert 失败: 非法 cron 表达式 '" + cron.trim() + "'(需标准 5 段)";
-            }
-            schedule = new com.lyhn.wraith.automation.Schedule();
-            schedule.kind = com.lyhn.wraith.automation.ScheduleKind.CRON;
-            schedule.expr = cron.trim();
-        } else if (everyRaw != null && !everyRaw.isBlank()) {
-            int every = parseInt(everyRaw, -1);
-            if (every <= 0) return "automation_upsert 失败: every_minutes 必须为正整数";
-            schedule = new com.lyhn.wraith.automation.Schedule();
-            schedule.kind = com.lyhn.wraith.automation.ScheduleKind.INTERVAL;
-            schedule.everyMinutes = every;
-        } else {
-            String t = daily.trim();
-            if (!t.matches("^([01]\\d|2[0-3]):[0-5]\\d$")) {
-                return "automation_upsert 失败: daily_time 必须是 HH:mm(24 小时制)";
-            }
-            schedule = new com.lyhn.wraith.automation.Schedule();
-            schedule.kind = com.lyhn.wraith.automation.ScheduleKind.DAILY;
-            schedule.time = t;
-        }
 
-        try {
-            long now = System.currentTimeMillis();
-            var task = new com.lyhn.wraith.automation.AutomationTask();
-            task.id = existing != null ? existing.id : java.util.UUID.randomUUID().toString();
-            task.name = (name != null && !name.isBlank()) ? name.trim() : existing.name;
-            task.prompt = (prompt != null && !prompt.isBlank()) ? prompt.trim() : existing.prompt;
-            String ws = args.get("workspace");
-            task.workspace = (ws != null && !ws.isBlank()) ? ws.trim()
-                    : (existing != null && existing.workspace != null ? existing.workspace : projectPath);
-            task.schedule = schedule;
-            String enabledRaw = normalizeOptionalBoolean(args.get("enabled"));
-            task.enabled = enabledRaw != null
-                    ? parseBoolean(enabledRaw, true)
-                    : (existing == null || existing.enabled);
-            task.deliverTo = existing != null ? existing.deliverTo : null;
-            task.approval = existing != null ? existing.approval : null;
-            task.createdAt = existing != null && existing.createdAt > 0 ? existing.createdAt : now;
-            task.enabledAt = existing != null && existing.enabledAt > 0 ? existing.enabledAt : now;
+            try {
+                long now = System.currentTimeMillis();
+                var task = new com.lyhn.wraith.automation.AutomationTask();
+                task.id = existing != null ? existing.id : java.util.UUID.randomUUID().toString();
+                task.name = (name != null && !name.isBlank()) ? name.trim() : existing.name;
+                task.prompt = (prompt != null && !prompt.isBlank()) ? prompt.trim() : existing.prompt;
+                String ws = args.get("workspace");
+                task.workspace = (ws != null && !ws.isBlank()) ? ws.trim()
+                        : (existing != null && existing.workspace != null ? existing.workspace : projectPath);
+                task.schedule = schedule;
+                String enabledRaw = normalizeOptionalBoolean(args.get("enabled"));
+                task.enabled = enabledRaw != null
+                        ? parseBoolean(enabledRaw, true)
+                        : (existing == null || existing.enabled);
+                task.deliverTo = existing != null ? existing.deliverTo : null;
+                task.approval = existing != null ? existing.approval : null;
+                task.createdAt = existing != null && existing.createdAt > 0 ? existing.createdAt : now;
+                task.enabledAt = existing != null && existing.enabledAt > 0 ? existing.enabledAt : now;
 
-            tasks.removeIf(t -> task.id.equals(t.id));
-            tasks.add(task);
-            store.saveTasks(tasks);
-            return (existing != null ? "已更新" : "已创建") + "自动化任务 " + task.id
-                    + "(" + task.name + "," + (task.enabled ? "启用" : "停用")
-                    + ",计划 " + describeSchedule(schedule) + ")。"
-                    + "投递目标与审批策略如需设置,请打开「自动化」面板。";
-        } catch (Exception e) {
-            return "automation_upsert 失败: " + e.getMessage();
+                tasks.removeIf(t -> task.id.equals(t.id));
+                tasks.add(task);
+                store.saveTasks(tasks);
+                return (existing != null ? "已更新" : "已创建") + "自动化任务 " + task.id
+                        + "(" + task.name + "," + (task.enabled ? "启用" : "停用")
+                        + ",计划 " + describeSchedule(schedule) + ")。"
+                        + "投递目标与审批策略如需设置,请打开「自动化」面板。";
+            } catch (Exception e) {
+                return "automation_upsert 失败: " + e.getMessage();
+            }
         }
     }
 
