@@ -6,6 +6,7 @@ import AutomationForm from './AutomationForm'
 import AutomationRuns from './AutomationRuns'
 import QqPendingBlock from './QqPendingBlock'
 import { computeNextRunLabel } from '../lib/automationLabels'
+import { useNowTicker } from '../lib/useNowTicker'
 import { taskStatusLabel, gatewayPillView } from '../lib/gatewayGate'
 import type { GatewayStatus } from '../../shared/gateway'
 
@@ -29,6 +30,9 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
   const [gatewayStatus, setGatewayStatus] = useState<GatewayStatus>({ state: 'stopped' })
   const [flushToast, setFlushToast] = useState<number | null>(null)
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 「下次」标签依赖当前时刻。本面板原本只在 runs-changed 时刷新,而任务从未触发过时
+  // (守护进程没起)根本没有事件 → 标签会一直冻在创建那一刻。定时取一次 now 让它走字。
+  const now = useNowTicker(30_000)
 
   const layoutRef = useRef<HTMLDivElement>(null)
   const [narrow, setNarrow] = useState(false)
@@ -191,7 +195,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
                   className={'flex-1 truncate rounded-lg px-2 py-2 text-left text-xs ' +
                     (current?.id === t.id && !creating ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>
                   <div className="truncate">{t.name}</div>
-                  <div className="text-3xs text-fg-subtle">{t.enabled ? computeNextRunLabel(t) : '已暂停'}</div>
+                  <div className="text-3xs text-fg-subtle">{t.enabled ? computeNextRunLabel(t, now) : '已暂停'}</div>
                 </button>
                 <button data-testid="automation-toggle" title={t.enabled ? '点击暂停' : '点击启用'}
                   onClick={() => void handleToggle(t)}

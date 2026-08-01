@@ -79,4 +79,51 @@ describe('computeNextRunLabel', () => {
     const label = computeNextRunLabel(task({ enabledAt: Date.now(), lastFiredAt: null }))
     expect(label).toMatch(/^下次 \d{2}-\d{2} \d{2}:\d{2}$/)
   })
+
+  // ── 「下次」必须是未来时刻,且随时间推进 ──────────────────────────────────
+  // 真机 bug:每分钟一次的任务,守护进程没起 → lastFiredAt 永远是 null →
+  // computeNextRun 恒等于 enabledAt+1min,标签固定停在创建后一分钟那个时刻
+  // (实测停在 08-01 16:17,而彼时已 16:52)。「下次」显示一个 35 分钟前的
+  // 时刻毫无意义。调度器那侧的"单步不追赶"语义是**故意**的(靠 miss 推进锚点),
+  // 不能动;这里只改**显示**。
+  const MIN = 60_000
+  function labelToMinutes(label: string): number {
+    const m = /(\d{2}):(\d{2})$/.exec(label)!
+    return Number(m[1]) * 60 + Number(m[2])
+  }
+
+  it('interval 已过期:滚到 now 之后的下一个整周期,而不是停在过去', () => {
+    const anchor = new Date(2026, 7, 1, 16, 16).getTime()
+    const now = anchor + 35 * MIN              // 16:51,已过期 35 分钟
+    const t = task({ schedule: { kind: 'interval', everyMinutes: 1 }, enabledAt: anchor, lastFiredAt: null })
+    expect(computeNextRunLabel(t, now)).toBe('下次 08-01 16:52')
+  })
+
+  it('时间往前走,标签跟着走(这正是用户要的「实时」)', () => {
+    const anchor = new Date(2026, 7, 1, 16, 16).getTime()
+    const t = task({ schedule: { kind: 'interval', everyMinutes: 1 }, enabledAt: anchor, lastFiredAt: null })
+    const a = computeNextRunLabel(t, anchor + 35 * MIN)
+    const b = computeNextRunLabel(t, anchor + 36 * MIN)
+    expect(a).not.toBe(b)
+    expect(labelToMinutes(b)).toBe(labelToMinutes(a) + 1)
+  })
+
+  it('未过期时保持原样(单步),不提前跳周期', () => {
+    const anchor = new Date(2026, 7, 1, 16, 16).getTime()
+    const t = task({ schedule: { kind: 'interval', everyMinutes: 10 }, enabledAt: anchor, lastFiredAt: null })
+    // now 在 anchor 之后 3 分钟,anchor+10min 仍在未来 → 应原样返回 16:26
+    expect(computeNextRunLabel(t, anchor + 3 * MIN)).toBe('下次 08-01 16:26')
+  })
+
+  it('已触发过的任务以 lastFiredAt 为锚点滚动', () => {
+    const fired = new Date(2026, 7, 1, 16, 40).getTime()
+    const t = task({ schedule: { kind: 'interval', everyMinutes: 5 }, enabledAt: fired - 60 * MIN, lastFiredAt: fired })
+    expect(computeNextRunLabel(t, fired + 12 * MIN)).toBe('下次 08-01 16:55')
+  })
+
+  it('daily 不受影响(其 computeNextRun 本就依赖 now 自行滚动)', () => {
+    const now = new Date(2026, 7, 1, 16, 0).getTime()
+    const t = task({ schedule: { kind: 'daily', time: '09:30' }, enabledAt: now - 86_400_000, lastFiredAt: null })
+    expect(computeNextRunLabel(t, now)).toBe('下次 08-02 09:30')
+  })
 })

@@ -1,12 +1,32 @@
 import type { AutomationTask, AutomationRun, ApprovalMode, ApprovalPolicy, DeliveryTarget } from '../../shared/types'
 import { computeNextRun } from '../../main/automationSchedule'
 
-/** 「下次 MM-DD HH:mm」标签;renderer 直接复用 main 的纯函数(无 Node 依赖)。 */
-export function computeNextRunLabel(t: AutomationTask): string {
+/**
+ * 「下次 MM-DD HH:mm」标签;renderer 直接复用 main 的纯函数(无 Node 依赖)。
+ *
+ * ⚠ interval 的显示要自己滚动到 now 之后。`computeNextRun` 对 interval 是**故意**
+ * 「单步不追赶」的(返回 锚点+一个周期,可能早于 now,由调度器以 miss 记录推进锚点)——
+ * 那是调度语义,不能动。但直接拿来显示就出问题:守护进程没起时 lastFiredAt 恒为 null,
+ * 标签永远钉在「创建时刻+一个周期」这个早已过去的点上(真机实测:每分钟的任务停在
+ * 16:17 不动,而彼时已 16:52)。把 35 分钟前的时刻叫「下次」是错的。
+ *
+ * now 参数便于测试;生产不传取当前时刻 —— 配合调用方定时重渲染即可"实时"。
+ */
+export function computeNextRunLabel(t: AutomationTask, now: number = Date.now()): string {
   if (t.lastFiredAt === null && t.enabledAt === 0) return '待触发'
-  const next = new Date(computeNextRun(t.schedule, Date.now(), t.lastFiredAt, t.enabledAt))
+  const next = new Date(nextRunAt(t, now))
   const pad = (n: number): string => String(n).padStart(2, '0')
   return `下次 ${pad(next.getMonth() + 1)}-${pad(next.getDate())} ${pad(next.getHours())}:${pad(next.getMinutes())}`
+}
+
+/** 展示用的下次触发时刻:interval 过期则滚到 now 之后的下一个整周期,其余照搬调度语义。 */
+function nextRunAt(t: AutomationTask, now: number): number {
+  const base = computeNextRun(t.schedule, now, t.lastFiredAt, t.enabledAt)
+  if (t.schedule.kind !== 'interval' || base > now) return base
+  const period = t.schedule.everyMinutes * 60_000
+  if (!(period > 0)) return base            // 脏数据兜底:周期非正就别做除法
+  const anchor = t.lastFiredAt ?? t.enabledAt
+  return anchor + (Math.floor((now - anchor) / period) + 1) * period
 }
 
 // ---------------------------------------------------------------------------
