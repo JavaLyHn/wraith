@@ -15,8 +15,10 @@ const TASK: AutomationTask = {
 }
 
 const STABLE_EMPTY = { items: [] as never[] }
+let gwState: 'running' | 'stopped' = 'running'
 
 beforeEach(() => {
+  gwState = 'running'
   ;(globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = class {
     observe(): void {} unobserve(): void {} disconnect(): void {}
   }
@@ -28,7 +30,7 @@ beforeEach(() => {
     qqPending: vi.fn(() => Promise.resolve(STABLE_EMPTY)),
     automationPanelOpened: vi.fn(() => Promise.resolve()),
     onAutomationEvent: vi.fn(() => () => {}),
-    gatewayStatus: vi.fn(() => Promise.resolve({ state: 'stopped' })),
+    gatewayStatus: vi.fn(() => Promise.resolve({ state: gwState })),
     onGatewayEvent: vi.fn(() => () => {}),
   }
 })
@@ -46,6 +48,14 @@ function nextLabel(): string {
 }
 
 describe('自动化面板「下次」实时性', () => {
+  it('网关未运行:不显示任何时刻,直说原因', async () => {
+    gwState = 'stopped'
+    await mountAt(ENABLED_AT + 35 * 60_000)
+    expect(screen.queryByText(/^下次 /)).toBeNull()
+    // 头部胶囊也含「网关未运行」,故断列表项独有的这句
+    expect(screen.getByText('未排期 · 网关未运行')).toBeTruthy()
+  })
+
   it('挂载时显示的是 now 之后的时刻,不是创建时刻+一周期那个过去的点', async () => {
     await mountAt(ENABLED_AT + 35 * 60_000)   // 16:51
     expect(nextLabel()).toBe('下次 08-01 16:52')

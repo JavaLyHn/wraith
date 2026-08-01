@@ -1,4 +1,20 @@
 import type { GatewayState, GatewayStatus } from '../../shared/gateway'
+import type { AutomationTask } from '../../shared/types'
+import { computeNextRunLabel } from './automationLabels'
+
+/**
+ * 任务列表项副标签。
+ *
+ * ⚠ 只有网关 running 才给具体时刻。调度器活在 GatewayDaemon 里,网关没起 = 任务
+ * 根本不会执行,此时报一个「下次 HH:mm」是纯粹的谎话 —— 真机上就是这样:任务
+ * 停在「下次 16:17」,而它从创建起 35 分钟一次都没跑过,用户完全看不出问题在哪。
+ */
+export function nextRunSubLabel(task: AutomationTask, gatewayState: GatewayState, now?: number): string {
+  if (!task.enabled) return '已暂停'
+  if (gatewayState === 'starting') return '网关启动中…'
+  if (gatewayState !== 'running') return '未排期 · 网关未运行'
+  return computeNextRunLabel(task, now)
+}
 
 /** 任务副标签:网关没跑时不称"运行中"(避免误导:调度器在网关里,网关没跑任务不执行)。 */
 export function taskStatusLabel(enabled: boolean, gatewayState: GatewayState): string {

@@ -5,9 +5,8 @@ import type { AutomationTask, ProjectView, QqPendingItem } from '../../shared/ty
 import AutomationForm from './AutomationForm'
 import AutomationRuns from './AutomationRuns'
 import QqPendingBlock from './QqPendingBlock'
-import { computeNextRunLabel } from '../lib/automationLabels'
 import { useNowTicker } from '../lib/useNowTicker'
-import { taskStatusLabel, gatewayPillView } from '../lib/gatewayGate'
+import { taskStatusLabel, gatewayPillView, nextRunSubLabel } from '../lib/gatewayGate'
 import type { GatewayStatus } from '../../shared/gateway'
 
 interface AutomationsPanelProps {
@@ -195,7 +194,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
                   className={'flex-1 truncate rounded-lg px-2 py-2 text-left text-xs ' +
                     (current?.id === t.id && !creating ? 'bg-surface text-fg' : 'text-fg-muted hover:bg-surface/60')}>
                   <div className="truncate">{t.name}</div>
-                  <div className="text-3xs text-fg-subtle">{t.enabled ? computeNextRunLabel(t, now) : '已暂停'}</div>
+                  <div className="text-3xs text-fg-subtle">{nextRunSubLabel(t, gatewayStatus.state, now)}</div>
                 </button>
                 <button data-testid="automation-toggle" title={t.enabled ? '点击暂停' : '点击启用'}
                   onClick={() => void handleToggle(t)}
