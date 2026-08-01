@@ -30,7 +30,13 @@ export default function BrowserPanel({ onBack }: { onBack: () => void }): JSX.El
       <div className="min-h-0 flex-1 overflow-y-auto p-4 panel-content">
         <div className="mb-3 rounded-lg border border-border bg-surface/40 px-3 py-2 text-3xs leading-relaxed text-fg-subtle">
           管理 agent 用哪个浏览器:<b className="text-fg-muted">隔离</b>(无痕、无登录态)↔ <b className="text-fg-muted">共享</b>(接管本机已登录 Chrome,可访问需登录页面)。
-          <div className="mt-1">前置:① 本机 Chrome 以 <code className="text-fg">--remote-debugging-port=9222</code> 启动;② 「MCP」面板里配置了 <code className="text-fg">chrome-devtools</code>(npx 自动装)。未满足时连接会提示未配置。</div>
+          <div className="mt-1">
+            切到<b className="text-fg-muted">共享</b>推荐用<b className="text-fg-muted">「连接(自动)」</b>:先在 Chrome 打开 <code className="text-fg">chrome://inspect/#remote-debugging</code> 勾选 Allow remote debugging 即可,复用的就是你当前已登录的 Chrome。
+          </div>
+          <div className="mt-1">
+            <b className="text-fg-muted">「按端口连接」</b>走的是旧式 CDP 接口,需要 Chrome 以 <code className="text-fg">--remote-debugging-port</code> <b className="text-fg-muted">命令行</b>启动;Chrome 144+ 用上面那个开关开的端口<b className="text-fg-muted">不提供</b>该接口,会报 HTTP 404 —— 属正常,改用「连接(自动)」即可。
+          </div>
+          <div className="mt-1">另需「MCP」面板里配置了 <code className="text-fg">chrome-devtools</code>(npx 自动装),未配置时连接会提示。</div>
         </div>
 
         <div className="mb-3 flex flex-wrap items-center gap-2">

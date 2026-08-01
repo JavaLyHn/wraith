@@ -3741,8 +3741,7 @@ public class Main {
         }
         BrowserConnectivityCheck.ProbeResult probe = connectivityCheck.probe(port);
         if (!probe.ok()) {
-            return "❌ 未检测到 Chrome 调试端口 127.0.0.1:" + port + "：" + probe.message() + "\n\n"
-                    + chromeLaunchHelp(port);
+            return com.lyhn.wraith.browser.BrowserConnectHelp.forFailedProbe(port, probe);
         }
 
         McpServer server = mcpServerManager.server("chrome-devtools");
@@ -3794,16 +3793,6 @@ public class Main {
         } catch (NumberFormatException e) {
             return -1;
         }
-    }
-
-    private static String chromeLaunchHelp(int port) {
-        return """
-                请先用调试端口启动 Chrome：
-                  macOS: open -na "Google Chrome" --args --remote-debugging-port=%d --user-data-dir=/tmp/wraith-chrome-profile
-                  Windows: start chrome.exe --remote-debugging-port=%d --user-data-dir=%%TEMP%%\\wraith-chrome-profile
-                  Linux: google-chrome --remote-debugging-port=%d --user-data-dir=/tmp/wraith-chrome-profile
-                然后重新执行 /browser connect %d
-                """.formatted(port, port, port, port).trim();
     }
 
     private static void printMcpCommandResult(PrintStream out, String result) {

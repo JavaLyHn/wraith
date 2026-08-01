@@ -1,6 +1,7 @@
 package com.lyhn.wraith.cli;
 
 import com.lyhn.wraith.browser.BrowserConnectivityCheck;
+import com.lyhn.wraith.browser.BrowserConnectivityCheck.Failure;
 import com.lyhn.wraith.browser.BrowserMode;
 import com.lyhn.wraith.browser.BrowserSession;
 import com.lyhn.wraith.hitl.HitlToolRegistry;
@@ -110,7 +111,7 @@ class MainBrowserCommandTest {
         @Override
         public ProbeResult probe(int port) {
             probeCount++;
-            return new ProbeResult(false, null, "should not probe");
+            return new ProbeResult(false, null, "should not probe", Failure.UNREACHABLE);
         }
     }
 
