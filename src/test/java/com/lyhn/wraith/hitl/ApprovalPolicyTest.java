@@ -89,7 +89,7 @@ class ApprovalPolicyTest {
     }
 
     @Test
-    void getDangerousToolsContainsAllThree() {
+    void getDangerousToolsContainsExactlyTheNineNamedTools() {
         Set<String> tools = ApprovalPolicy.getDangerousTools();
         assertTrue(tools.contains("write_file"));
         assertTrue(tools.contains("execute_command"));
@@ -100,7 +100,7 @@ class ApprovalPolicyTest {
         assertTrue(tools.contains("automation_upsert"));
         assertTrue(tools.contains("automation_remove"));
         assertTrue(tools.contains("automation_run_now"));
-        assertTrue(tools.size() >= 9, "危险工具集合至少应含上述 9 个");
+        assertEquals(9, tools.size(), "危险工具集合应恰好是上述 9 个,精确断言可挡住误加/漏加");
     }
 
     @Test
@@ -144,7 +144,7 @@ class ApprovalPolicyTest {
     @Test
     void mcpToolStaysOutsideOfBuiltinDangerousTools() {
         // mcp__ 前缀不应污染 DANGEROUS_TOOLS 集合本身（保证 set 含义清晰）
-        assertTrue(ApprovalPolicy.getDangerousTools().size() >= 9, "危险工具集合至少应含上述 9 个");
+        assertEquals(9, ApprovalPolicy.getDangerousTools().size(), "危险工具集合应恰好是 9 个");
         assertFalse(ApprovalPolicy.getDangerousTools().contains("mcp__demo__tool"));
     }
 }
