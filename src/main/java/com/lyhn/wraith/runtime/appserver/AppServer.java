@@ -915,7 +915,9 @@ public final class AppServer {
             }
             case "automations.list" -> {
                 com.lyhn.wraith.automation.AutomationStore aStore = automationStore();
-                writer.result(msg.id(), Map.of("tasks", aStore.loadTasks()));
+                // loadTasksForView 而非 loadTasks:后者不含 lastFiredAt(归 automation-state.json),
+                // 桌面据此算「下次触发」,拿不到就永远从 enabledAt 推、与真实执行脱节。
+                writer.result(msg.id(), Map.of("tasks", aStore.loadTasksForView()));
             }
             case "automations.upsert" -> {
                 JsonNode p = msg.params();

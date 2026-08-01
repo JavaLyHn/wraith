@@ -106,6 +106,30 @@ public final class AutomationStore {
         }
     }
 
+    /**
+     * 给 UI 的任务视图 = 定义 + 运行态 lastFiredAt。
+     *
+     * 为什么要单独一条路:lastFiredAt 归 automation-state.json 所有,{@link AutomationTask}
+     * 刻意不含该字段(见其类注释)。但回读给桌面的 automations.list 此前直接返回
+     * {@link #loadTasks()} —— 两个文件从不合流,UI 永远看到 null,「下次触发」只能从
+     * enabledAt 推算,与真实执行完全脱节(真机:跑了 29 次,盘上仍是 null)。
+     *
+     * ⚠ 只在视图层合并,不回写定义文件 —— 否则同一事实两处存储,迟早不一致。
+     * ⚠ 刻意不持有嵌套锁:loadTasks 用 TASKS_LOCK、lastFiredAt 用实例锁,此处顺序取用、
+     *   不在持有其一时索取其二,避免与「外层包 TASKS_LOCK 再调实例方法」的写入路径死锁。
+     */
+    public List<Map<String,Object>> loadTasksForView() {
+        List<AutomationTask> tasks = loadTasks();
+        List<Map<String,Object>> out = new ArrayList<>(tasks.size());
+        for (AutomationTask t : tasks) {
+            @SuppressWarnings("unchecked")
+            Map<String,Object> m = M.convertValue(t, LinkedHashMap.class);
+            m.put("lastFiredAt", lastFiredAt(t.id));   // 没跑过则显式 null,前端才分得清"没跑"与"字段缺失"
+            out.add(m);
+        }
+        return out;
+    }
+
     // --- 状态(读写,加锁) ---
     public synchronized Long lastFiredAt(String taskId) {
         Map<String,Object> lf = lastFiredMap();
