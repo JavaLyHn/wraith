@@ -100,16 +100,32 @@ public class SideGitManager {
                 .toList();
     }
 
+    /**
+     * {@code restorePreTurn(offset)} 将要恢复到的那个快照;越界返回空。
+     *
+     * 供审批预览使用,且 restorePreTurn 自己也调它 —— 一个来源,预览与实际不可能错开。
+     * 只在 pre-turn 里按序号取(listSnapshots 含 post-turn / pre-restore,按序号取会偏)。
+     */
+    public synchronized java.util.Optional<TurnSnapshot> preTurnTarget(int offset)
+            throws IOException, GitAPIException {
+        if (!config.enabled()) return java.util.Optional.empty();
+        int n = Math.max(1, offset);
+        List<TurnSnapshot> preTurns = listPreTurnSnapshots(Math.max(n, config.maxSnapshots()));
+        return preTurns.size() < n ? java.util.Optional.empty() : java.util.Optional.of(preTurns.get(n - 1));
+    }
+
     public synchronized RestoreResult restorePreTurn(int offset) throws IOException, GitAPIException {
         if (!config.enabled()) {
             return RestoreResult.failure("快照功能已关闭");
         }
         int normalizedOffset = Math.max(1, offset);
-        List<TurnSnapshot> preTurns = listPreTurnSnapshots(Math.max(normalizedOffset, config.maxSnapshots()));
-        if (preTurns.size() < normalizedOffset) {
+        // ⚠ 目标选择只有这一个来源(preTurnTarget):审批预览也调它。若各算一遍,
+        // 预览说的和实际恢复的可能不是同一个 commit —— 用户是照着预览批准的,那比没有预览更糟。
+        java.util.Optional<TurnSnapshot> found = preTurnTarget(normalizedOffset);
+        if (found.isEmpty()) {
             return RestoreResult.failure("找不到最近第 " + normalizedOffset + " 个 pre-turn 快照");
         }
-        TurnSnapshot target = preTurns.get(normalizedOffset - 1);
+        TurnSnapshot target = found.get();
         TurnSnapshot current = preRestoreSnapshot("restore-" + Instant.now().toEpochMilli(),
                 "Before restoring " + target.shortCommitId());
         try (Git git = openGit(); Repository repository = git.getRepository()) {
@@ -232,12 +248,19 @@ public class SideGitManager {
         String[] parts = firstLine.split("\\s+", 2);
         SnapshotPhase phase = parsePhase(parts.length > 0 ? parts[0] : "");
         String turnId = parts.length > 1 ? parts[1] : "";
+        // summary 取 commit **body**:createSnapshot 把调用方给的 "mode=…\ninput=…" 写在 \n\n 之后。
+        // 此前只读 getShortMessage()(首行)→ body 整个丢掉,于是 TurnSnapshot.summary 恒为
+        // "pre-turn <turnId>":桌面 snapshotView.summaryInput() 抠不到 input=,面板的「当时输入」
+        // 永远是空的;审批预览也无从说明要回到哪一轮。无 body 时回落首行(旧行为,不至于变空)。
+        String full = Optional.ofNullable(commit.getFullMessage()).orElse("").trim();
+        int sep = full.indexOf("\n\n");
+        String summary = sep >= 0 ? full.substring(sep + 2).trim() : firstLine;
         return new TurnSnapshot(
                 commit.getId().name(),
                 phase,
                 turnId,
                 Instant.ofEpochSecond(commit.getCommitTime()),
-                firstLine
+                summary
         );
     }
 

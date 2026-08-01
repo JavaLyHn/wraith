@@ -66,6 +66,12 @@ public class SnapshotService implements AutoCloseable {
         return manager.listSnapshots(limit);
     }
 
+    /** {@code restorePreTurn(offset)} 将要恢复到的快照;供审批预览用,与实际恢复同一来源。 */
+    public java.util.Optional<TurnSnapshot> preTurnTarget(int offset) throws Exception {
+        awaitIdle();
+        return manager.preTurnTarget(offset);
+    }
+
     public RestoreResult restorePreTurn(int offset) throws Exception {
         awaitIdle();
         return manager.restorePreTurn(offset);

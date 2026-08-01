@@ -843,6 +843,49 @@ public class ToolRegistry {
     }
 
     private void registerSnapshotTools() {
+        tools.put("snapshot_list", new Tool(
+                "snapshot_list",
+                "列出 Side-Git 快照(最近在前):序号、阶段、时间、当时的输入。只读,无副作用。"
+                        + "回滚前先用它确认要恢复的是哪一个 —— revert_turn 的 offset 就是这里的 pre-turn 序号。",
+                createParameters(new Param("limit", "integer", "最多返回条数,默认 20", false)),
+                args -> {
+                    int limit = clamp(parseInt(args.get("limit"), 20), 1, 100);
+                    try {
+                        var all = snapshotService.listSnapshots(limit);
+                        if (all.isEmpty()) return "当前项目还没有任何快照。";
+                        StringBuilder sb = new StringBuilder("快照(最近在前,共 " + all.size() + " 条):\n");
+                        int preTurnSeq = 0;
+                        for (var s : all) {
+                            // pre-turn 单独编号:revert_turn 的 offset 只在 pre-turn 里数,
+                            // 直接用全表行号会让模型/用户按错的数字回滚。
+                            String ord = s.phase() == com.lyhn.wraith.snapshot.SnapshotPhase.PRE_TURN
+                                    ? "offset=" + (++preTurnSeq) : "—";
+                            sb.append(String.format("  %-10s %-11s %s  %s  %s%n",
+                                    ord, s.phase().label(), s.shortCommitId(),
+                                    s.createdAt(), oneLine(s.summary())));
+                        }
+                        sb.append("(offset 仅对 pre-turn 有效,可直接传给 revert_turn)");
+                        return sb.toString();
+                    } catch (Exception e) {
+                        return "snapshot_list 失败: " + e.getMessage();
+                    }
+                }
+        ));
+
+        tools.put("snapshot_status", new Tool(
+                "snapshot_status",
+                "当前项目的快照状态(是否启用、快照仓库位置、条数等)。只读,无副作用。"
+                        + "用户问「现在处于哪个快照」时先用它,再配合 snapshot_list。",
+                createParameters(),
+                args -> {
+                    try {
+                        return snapshotService.status();
+                    } catch (Exception e) {
+                        return "snapshot_status 失败: " + e.getMessage();
+                    }
+                }
+        ));
+
         tools.put("revert_turn", new Tool(
                 "revert_turn",
                 "恢复到 Side-Git 记录的最近第 N 个 pre-turn 快照。会先记录 pre-restore 快照；属于高危写入操作，必须经 HITL 审批。",
@@ -857,6 +900,37 @@ public class ToolRegistry {
                     }
                 }
         ));
+    }
+
+
+    /**
+     * 给审批卡的预览文本;不需要预览的工具返回 null。
+     *
+     * revert_turn 只带一个 offset,审批卡上就是干巴巴的 `{offset:3}` —— 用户根本不知道
+     * 3 号是什么状态、会丢什么,唯一的护栏因此形同虚设。这里把目标快照的时间与当时输入
+     * 摊开。目标选择走 SnapshotService.preTurnTarget,与真正的恢复同一来源,预览不会说错。
+     */
+    public String approvalPreview(String toolName, String argumentsJson) {
+        if (!"revert_turn".equals(toolName)) return null;
+        try {
+            int offset = Math.max(1, mapper.readTree(argumentsJson).path("offset").asInt(1));
+            var target = snapshotService.preTurnTarget(offset);
+            if (target.isEmpty()) return "找不到最近第 " + offset + " 个 pre-turn 快照 —— 无可恢复目标。";
+            var t = target.get();
+            return "将把工作区恢复到第 " + offset + " 个 pre-turn 快照之前的状态:\n"
+                    + "  快照: " + t.shortCommitId() + "  时间: " + t.createdAt() + "\n"
+                    + "  那一轮: " + oneLine(t.summary()) + "\n"
+                    + "此后所有文件改动将被覆盖(恢复前会自动存一个 pre-restore 快照)。";
+        } catch (Exception e) {
+            return null;   // 预览失败不能挡住审批本身
+        }
+    }
+
+    /** 折成单行,避免多行 summary 把审批卡撑乱。 */
+    private static String oneLine(String text) {
+        if (text == null) return "";
+        String flat = text.replaceAll("\\s+", " ").trim();
+        return flat.length() > 120 ? flat.substring(0, 120) + "…" : flat;
     }
 
     private static int parseInt(String value, int fallback) {

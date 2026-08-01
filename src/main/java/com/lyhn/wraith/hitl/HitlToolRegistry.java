@@ -58,6 +58,11 @@ public class HitlToolRegistry extends ToolRegistry {
         ApprovalRequest request = ApprovalRequest.of(name, argumentsJson, null, null, sensitiveNotice);
         if ("write_file".equals(name)) {
             request = request.withBeforeContent(readWriteFileBefore(argumentsJson));
+        } else {
+            // 其余工具的审批预览由 ToolRegistry 决定(目前:revert_turn 说明要回到哪一轮)。
+            // 没有预览就返回 null,与旧行为一致。
+            String preview = approvalPreview(name, argumentsJson);
+            if (preview != null) request = request.withBeforeContent(preview);
         }
         ApprovalResult result = hitlHandler.requestApproval(request);
 
