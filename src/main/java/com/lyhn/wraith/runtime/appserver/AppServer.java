@@ -1038,16 +1038,21 @@ public final class AppServer {
             }
             case "automations.qqPendingClear" -> {
                 JsonNode p = msg.params();
-                String pendingId = textParam(p, "id"); // null → daemon 侧 clearResults
-                try {
-                    com.lyhn.wraith.automation.RequestInbox inbox =
-                            new com.lyhn.wraith.automation.RequestInbox(automationRequestsDir());
-                    inbox.write(new com.lyhn.wraith.automation.RequestInbox.Request(
-                            "qq-pending-clear", pendingId, null));
-                    ok(msg);
-                } catch (java.io.IOException e) {
-                    writer.error(msg.id(), -32000, "写入 qq-pending-clear 请求失败: " + e.getMessage());
-                }
+                String pendingId = textParam(p, "id"); // null → 清空全部结果项
+                // 经 RequestInbox 交给 daemon(它持有实例锁);daemon 没运行时由本进程兜底,
+                // 否则点了「清空」什么都不会发生、下次网关起来那些消息还会照发。
+                // 会等待宽限期,故必须走 dispatchAsync —— 分发线程是单线程,阻塞它会卡死整个后端。
+                final java.nio.file.Path reqDir = automationRequestsDir();
+                dispatchAsync(msg.id(), () -> {
+                    com.lyhn.wraith.automation.delivery.QqPendingClearCoordinator.Outcome outcome =
+                            com.lyhn.wraith.automation.delivery.QqPendingClearCoordinator.clear(
+                                    new com.lyhn.wraith.automation.RequestInbox(reqDir),
+                                    new com.lyhn.wraith.automation.delivery.QqPendingStore(reqDir.getParent()),
+                                    pendingId);
+                    return Map.of("ok", true, "appliedBy",
+                            outcome == com.lyhn.wraith.automation.delivery.QqPendingClearCoordinator
+                                    .Outcome.APPLIED_LOCALLY ? "app-server" : "daemon");
+                });
             }
             case "shutdown" -> {
                 writer.result(msg.id(), Map.of("ok", true));

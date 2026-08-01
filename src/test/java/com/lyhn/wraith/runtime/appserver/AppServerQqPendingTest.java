@@ -22,6 +22,18 @@ class AppServerQqPendingTest {
     @AfterEach
     void clearProperty() { System.clearProperty("wraith.automation.dir"); }
 
+    /** 等待某个 id 的回包出现在输出里(异步 dispatchAsync 用);0 = 不等。 */
+    private static void awaitId(ByteArrayOutputStream out, int id) throws Exception {
+        if (id <= 0) return;
+        String needle = "\"id\":" + id;
+        for (int i = 0; i < 100; i++) {
+            if (out.toString(StandardCharsets.UTF_8).contains(needle)) return;
+            Thread.sleep(50);
+        }
+    }
+
+    private int awaitReplyId = 0;
+
     private List<JsonNode> run(String... requests) throws Exception {
         System.setProperty("wraith.automation.dir", tempDir.toString());
         AppServer.SessionRunnerFactory f = (writer, sessionId, workspaceDir) -> {
@@ -40,6 +52,9 @@ class AppServerQqPendingTest {
         new AppServer(
                 new ByteArrayInputStream(String.join("\n", lines).concat("\n").getBytes(StandardCharsets.UTF_8)),
                 out, f).serve();
+        // dispatchAsync 的回包由后台线程写出,可能晚于 serve() 返回(shutdown 紧随其后)。
+        // 直接读 out 会漏掉它 —— 轮询到目标 id 出现为止。
+        awaitId(out, awaitReplyId);
         List<JsonNode> replies = new ArrayList<>();
         for (String ln : out.toString(StandardCharsets.UTF_8).split("\n"))
             if (!ln.isBlank()) replies.add(JsonRpc.MAPPER.readTree(ln));
@@ -91,30 +106,31 @@ class AppServerQqPendingTest {
 
     @Test
     void qqPendingClearWritesInboxRequest() throws Exception {
+        // daemon 没在跑 → 宽限期后由 app-server 兜底执行并清掉请求文件。
+        // 旧断言(请求文件应残留、由 daemon 稍后消费)已被真机推翻:daemon 绝大多数时候
+        // 不在运行,那个文件就永远躺着,界面点了「清空」毫无反应、队列纹丝不动。
+        awaitReplyId = 2;
         List<JsonNode> replies = run(
                 "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"automations.qqPendingClear\",\"params\":{\"id\":\"some-id\"}}");
-        assertTrue(byId(replies, 2).path("result").path("ok").asBoolean());
+        JsonNode res = byId(replies, 2).path("result");
+        assertTrue(res.path("ok").asBoolean());
+        assertEquals("app-server", res.path("appliedBy").asText(), "无 daemon 时必须本进程兜底");
         Path reqDir = tempDir.resolve("automation-requests");
-        List<Path> files;
-        try (var s = Files.list(reqDir)) { files = s.filter(p -> p.toString().endsWith(".json")).toList(); }
-        assertEquals(1, files.size());
-        JsonNode req = JsonRpc.MAPPER.readTree(Files.readAllBytes(files.get(0)));
-        assertEquals("qq-pending-clear", req.path("type").asText());
-        assertEquals("some-id", req.path("id").asText());
-        assertTrue(req.path("payload").isNull());
+        if (Files.exists(reqDir)) {
+            try (var s2 = Files.list(reqDir)) {
+                assertEquals(0, s2.filter(p -> p.toString().endsWith(".json")).count(),
+                        "兜底执行后不许留下请求文件,否则 daemon 起来会再执行一次");
+            }
+        }
     }
 
     @Test
     void qqPendingClearWithoutIdMeansClearResults() throws Exception {
+        awaitReplyId = 2;
         List<JsonNode> replies = run(
                 "{\"jsonrpc\":\"2.0\",\"id\":__ID__,\"method\":\"automations.qqPendingClear\",\"params\":{}}");
-        assertTrue(byId(replies, 2).path("result").path("ok").asBoolean());
-        Path reqDir = tempDir.resolve("automation-requests");
-        List<Path> files;
-        try (var s = Files.list(reqDir)) { files = s.filter(p -> p.toString().endsWith(".json")).toList(); }
-        assertEquals(1, files.size());
-        JsonNode req = JsonRpc.MAPPER.readTree(Files.readAllBytes(files.get(0)));
-        assertEquals("qq-pending-clear", req.path("type").asText());
-        assertTrue(req.path("id").isNull());
+        JsonNode res = byId(replies, 2).path("result");
+        assertTrue(res.path("ok").asBoolean());
+        assertEquals("app-server", res.path("appliedBy").asText());
     }
 }

@@ -146,14 +146,21 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
     void fetchTasks()
   }, [fetchTasks])
 
-  const handleQqRemove = useCallback(async (id: string) => {
-    await window.wraith.qqPendingClear(id)
-    setTimeout(() => { void fetchQqPending() }, 3500) // daemon poller 2-3s 消费,延后刷一次
-  }, [fetchQqPending])
-  const handleQqClearResults = useCallback(async () => {
-    await window.wraith.qqPendingClear()
+  // qqPendingClear 现在是「做完才返回」:daemon 在跑就由它执行,不在就由 app-server 兜底
+  // (旧行为是只往 RequestInbox 丢个请求文件就返回 ok,daemon 没起时点了等于没点)。
+  // 故 resolve 后立即刷新;3.5s 那次留作 daemon 接手路径的兜底。
+  const refreshQqSoonAndLater = useCallback(() => {
+    void fetchQqPending()
     setTimeout(() => { void fetchQqPending() }, 3500)
   }, [fetchQqPending])
+  const handleQqRemove = useCallback(async (id: string) => {
+    await window.wraith.qqPendingClear(id)
+    refreshQqSoonAndLater()
+  }, [refreshQqSoonAndLater])
+  const handleQqClearResults = useCallback(async () => {
+    await window.wraith.qqPendingClear()
+    refreshQqSoonAndLater()
+  }, [refreshQqSoonAndLater])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">

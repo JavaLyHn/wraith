@@ -101,13 +101,17 @@ public final class RequestInbox {
      * does not already exist. The written JSON is round-trippable by {@link #drain()}.
      *
      * @param request the request to persist; must not be null
+     * @return 落盘的请求文件路径。调用方可据此判断请求是否已被消费——文件还在即无人接手,
+     *         且 {@code Files.deleteIfExists} 的返回值构成跨进程的原子所有权凭据
+     *         (谁删掉谁负责执行)。
      * @throws IOException if the directory cannot be created or the file cannot be written
      */
-    public void write(Request request) throws IOException {
+    public Path write(Request request) throws IOException {
         Files.createDirectories(requestsDir);
         String filename = request.type() + "-" + UUID.randomUUID() + ".json";
         Path file = requestsDir.resolve(filename);
         Files.write(file, M.writeValueAsBytes(request));
+        return file;
     }
 
     // ---- internal ----------------------------------------------------------
