@@ -1,5 +1,7 @@
 package com.lyhn.wraith.skill;
 
+import com.lyhn.wraith.util.AtomicFileMove;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -38,11 +40,7 @@ public final class SkillStore {
         Path tmp = skillDir.resolve("SKILL.md.tmp");
         Files.writeString(tmp, content);
         try {
-            try {
-                Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
-                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
-            }
+            AtomicFileMove.moveIntoPlace(tmp, target);
         } catch (IOException e) {
             Files.deleteIfExists(tmp);
             throw e;

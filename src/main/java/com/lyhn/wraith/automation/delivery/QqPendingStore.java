@@ -1,6 +1,7 @@
 package com.lyhn.wraith.automation.delivery;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lyhn.wraith.util.AtomicFileMove;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.*;
@@ -134,11 +135,7 @@ public final class QqPendingStore {
             root.put(ROOT_KEY, list);
             Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
             Files.write(tmp, M.writerWithDefaultPrettyPrinter().writeValueAsBytes(root));
-            try {
-                Files.move(tmp, file, StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING);
-            }
+            AtomicFileMove.moveIntoPlace(tmp, file);
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         }

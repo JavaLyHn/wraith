@@ -1,6 +1,7 @@
 package com.lyhn.wraith.automation;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lyhn.wraith.util.AtomicFileMove;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.*;
@@ -165,8 +166,7 @@ public final class AutomationStore {
             Files.createDirectories(p.getParent());
             Path tmp = p.resolveSibling(p.getFileName() + ".tmp");
             Files.write(tmp, M.writerWithDefaultPrettyPrinter().writeValueAsBytes(value));
-            try { Files.move(tmp, p, StandardCopyOption.ATOMIC_MOVE); }
-            catch (AtomicMoveNotSupportedException e) { Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING); }
+            AtomicFileMove.moveIntoPlace(tmp, p);
         } catch (IOException e) { throw new UncheckedIOException(e); }
     }
 }
