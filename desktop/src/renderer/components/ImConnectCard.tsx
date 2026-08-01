@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { bindPhaseLabel } from '../lib/gatewayLabels'
+import { bindDoneHint, bindPhaseLabel } from '../lib/gatewayLabels'
 import { applyBindEvent, type BindState } from '../lib/imBind'
 import type { PanelId } from '../lib/panelActions'
-import type { GatewayEvent } from '../../shared/gateway'
+import type { GatewayEvent, GatewayState } from '../../shared/gateway'
 
 interface ImConnectCardProps {
   /** 后端 im_connect 工具传来的平台 id。 */
@@ -23,6 +23,8 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel }: ImCo
   const p = (platform || '').trim().toLowerCase()
   const [bind, setBind] = useState<BindState | null>(null)
   const [started, setStarted] = useState(false)
+  // 网关运行态:绑定成功后用来决定敢不敢说「可以发消息了」。null = 还没查到。
+  const [gwState, setGwState] = useState<GatewayState | null>(null)
   // useEffect(..., []) 的闭包只捕获挂载时的初值,普通 state 无法反映"是否已点击开始";
   // 用 ref 才能让事件回调实时读到最新的启动状态。
   const startedRef = useRef(false)
@@ -32,9 +34,21 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel }: ImCo
   useEffect(() => {
     const unsub = window.wraith.onGatewayEvent((evt: GatewayEvent) => {
       if (evt.kind === 'bind' && startedRef.current) setBind(prev => applyBindEvent(prev, evt))
+      // 运行态是全局的(不属于某次绑定),故不受 startedRef 门控 —— 只读,不会像 bind 那样
+      // 让本卡误接管别处正在跑的绑定。
+      else if (evt.kind === 'status') setGwState(evt.status.state)
     })
     return () => unsub()
   }, [])
+
+  // 绑定成功的瞬间补拉一次运行态:此前可能一条 status 事件都没来过,
+  // 不查就只能含糊其辞,没法如实告诉用户「到底能不能用了」。
+  useEffect(() => {
+    if (bind?.phase !== 'bound') return
+    let alive = true
+    void window.wraith.gatewayStatus().then(s => { if (alive) setGwState(s.state) })
+    return () => { alive = false }
+  }, [bind?.phase])
 
   // feishu / wecom:无扫码,退化到开面板填密钥。
   if (p === 'feishu' || p === 'wecom') {
@@ -59,6 +73,12 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel }: ImCo
     else void window.wraith.gatewayBindStart()
   }
 
+  // 引导区(二维码 / 浏览器授权提示)只属于 scanning。终态(bound/failed/cancelled/
+  // secret-invalid)必须整块撤掉 —— 否则会像老 bug 那样,「请扫码」「二维码生成中…」
+  // 和「✅ 绑定成功」同屏并存,自相矛盾。
+  const scanning = bind?.phase === 'scanning'
+  const bound = bind?.phase === 'bound'
+
   return (
     <div data-testid="im-connect-card" className="self-start flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-3 text-sm text-fg">
       <span className="font-medium">接入 {LABELS[p]}</span>
@@ -71,11 +91,11 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel }: ImCo
         >{p === 'weixin' ? '扫码绑定微信' : '打开 QQ 授权页'}</button>
       )}
 
-      {started && p === 'qq' && (
+      {scanning && p === 'qq' && (
         <div className="text-xs text-fg-muted">已在系统浏览器打开 QQ 扫码授权页,请在浏览器完成授权;完成后此处会显示结果。</div>
       )}
 
-      {started && p === 'weixin' && (
+      {scanning && p === 'weixin' && (
         <div className="flex flex-col items-center gap-2 rounded-lg border border-border bg-surface/40 p-3">
           <div className="text-xs text-fg-muted">请用目标微信扫描二维码</div>
           {bind?.qr ? (
@@ -89,9 +109,31 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel }: ImCo
         </div>
       )}
 
-      {started && bind && (
-        <div data-testid="im-connect-status" className={'text-xs ' + (bind.phase === 'bound' ? 'text-ok' : bind.phase === 'failed' || bind.phase === 'secret-invalid' ? 'text-danger' : 'text-fg-muted')}>
+      {/* bound 有专属收尾块(下方),这里只报非成功态,避免两处重复说同一件事。 */}
+      {started && bind && !bound && (
+        <div data-testid="im-connect-status" className={'text-xs ' + (bind.phase === 'failed' || bind.phase === 'secret-invalid' ? 'text-danger' : 'text-fg-muted')}>
           {bindPhaseLabel(bind.phase, bind.message)}
+        </div>
+      )}
+
+      {bound && (
+        <div data-testid="im-connect-done" className="flex flex-col gap-1.5 rounded-lg border border-ok/40 bg-ok/5 p-2.5">
+          <span className="text-xs text-ok">✅ {LABELS[p]} 已配置好,主人身份已绑定。</span>
+          <span className="text-2xs text-fg-muted">{bindDoneHint(LABELS[p]!, gwState)}</span>
+          <div className="flex flex-wrap gap-1.5">
+            {gwState === 'stopped' && (
+              <button
+                data-testid="im-connect-start-gateway"
+                onClick={() => void window.wraith.gatewayStart()}
+                className="rounded-lg border border-accent px-2.5 py-1 text-xs text-accent hover:bg-accent/10"
+              >▶ 启动网关</button>
+            )}
+            <button
+              data-testid="im-connect-open-panel"
+              onClick={() => onOpenPanel('im-gateway')}
+              className="rounded-lg border border-border px-2.5 py-1 text-xs hover:border-accent hover:text-accent"
+            >🧭 打开 IM 网关面板</button>
+          </div>
         </div>
       )}
 

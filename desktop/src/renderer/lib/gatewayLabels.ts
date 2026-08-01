@@ -1,4 +1,4 @@
-import type { GatewayBindPhase } from '../../shared/gateway'
+import type { GatewayBindPhase, GatewayState } from '../../shared/gateway'
 
 /** 打码：保留首尾各 4 位,中间星号(≤8 位只留前 2)。 */
 export function maskId(s: string | null): string {
@@ -15,6 +15,22 @@ export function bindPhaseLabel(phase: GatewayBindPhase, message?: string): strin
     case 'secret-invalid': return message ?? 'openclaw 返回的密钥无法换取 token,请手填机器人密钥'
     case 'cancelled': return '已取消绑定'
     case 'failed': return message ?? '绑定失败,请重试'
+  }
+}
+
+/**
+ * 绑定成功后的「还能不能用」提示。
+ * ⚠ 绑定 ≠ 网关在跑:面板里 start/stop 是与绑定彼此独立的开关。只有 running 才敢说
+ * 「可以发消息了」,否则就是骗用户 —— 这也是本函数存在的唯一理由。
+ * state 为 null 表示运行态还没查回来。
+ */
+export function bindDoneHint(platformLabel: string, state: GatewayState | null): string {
+  switch (state) {
+    case 'running': return `现在可以直接在${platformLabel}里给我发消息了。`
+    case 'starting': return '网关正在启动,稍等片刻即可开始对话。'
+    case 'stopped': return '还差一步:网关未运行,启动后才能收发消息。'
+    case 'error': return '网关当前报错,请到 IM 网关面板查看日志。'
+    default: return '正在查询网关运行状态…'
   }
 }
 
