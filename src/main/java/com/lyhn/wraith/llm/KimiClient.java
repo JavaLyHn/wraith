@@ -33,10 +33,6 @@ public class KimiClient extends AbstractOpenAiCompatibleClient {
         return apiKey;
     }
 
-    @Override
-    protected boolean shouldSendReasoningContentInRequestHistory() {
-        return true;
-    }
 
     @Override
     public String getModelName() {

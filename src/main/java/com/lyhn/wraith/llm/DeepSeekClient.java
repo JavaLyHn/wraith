@@ -45,10 +45,6 @@ public class DeepSeekClient extends AbstractOpenAiCompatibleClient {
         return apiKey;
     }
 
-    @Override
-    protected boolean shouldSendReasoningContentInRequestHistory() {
-        return true;
-    }
 
     @Override
     protected OkHttpClient httpClient() {

@@ -21,6 +21,7 @@ import com.lyhn.wraith.image.ImageReferenceParser;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AbstractOpenAiCompatibleClientImageInputTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -84,8 +85,13 @@ class AbstractOpenAiCompatibleClientImageInputTest {
         }
     }
 
+    /**
+     * 曾断言「不回传 reasoning_content」，理由是它属日志/展示信息。该判断被真机推翻:
+     * 思考型模型在 thinking mode 下要求原样回传，否则下一次调用 400。基类默认已改为
+     * 回传，本用例随之反向 —— 保留它是为了守住「确实带 reasoning 时必须写进请求」。
+     */
     @Test
-    void doesNotSendReasoningContentBackInRequestHistory() throws Exception {
+    void sendsReasoningContentBackInRequestHistory() throws Exception {
         try (MockWebServer server = new MockWebServer()) {
             server.enqueue(new MockResponse()
                     .setHeader("Content-Type", "text/event-stream")
@@ -104,8 +110,9 @@ class AbstractOpenAiCompatibleClientImageInputTest {
                     .path("messages").get(0);
 
             assertEquals("visible answer", message.path("content").asText());
-            assertFalse(message.has("reasoning_content"),
-                    "reasoning_content 是日志/展示信息，不应回传进下一轮请求历史");
+            assertTrue(message.has("reasoning_content"),
+                    "思考型模型要求回传 reasoning_content，缺失会让工具轮的第二次调用 400");
+            assertEquals("hidden reasoning", message.path("reasoning_content").asText());
         }
     }
 

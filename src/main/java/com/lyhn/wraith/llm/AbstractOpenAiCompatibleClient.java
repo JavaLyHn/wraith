@@ -46,8 +46,24 @@ public abstract class AbstractOpenAiCompatibleClient implements LlmClient {
 
     protected abstract String getApiKey();
 
+    /**
+     * 是否把 assistant 历史里的 reasoning_content 回传。
+     *
+     * 默认 true。曾经默认 false(以为 reasoning 纯属日志/展示信息),被真机推翻:思考型
+     * 模型在 thinking mode 下**要求**原样回传,否则下一次调用直接 400
+     * ("The `reasoning_content` in the thinking mode must be passed back to the API")，
+     * 表现为「只要这一轮调过工具就必炸」。
+     *
+     * 只给具名 client 挨个覆写不管用 —— 用户配置里的 provider id 常带实例后缀
+     * (freellmapi-2)，normalizeProvider 不归一后缀，工厂会落到 GenericOpenAiClient。
+     * 故改为基类默认开启。
+     *
+     * 安全性:序列化处只在该条 assistant 消息**确实带了** reasoningContent 时才写字段，
+     * 而 reasoning 只可能由同一个 provider 自己产出，原样还回去语义上永远成立。
+     * 若某家 provider 确实不吃这个字段，覆写回 false 即可(开关特意保留)。
+     */
     protected boolean shouldSendReasoningContentInRequestHistory() {
-        return false;
+        return true;
     }
 
     @Override
