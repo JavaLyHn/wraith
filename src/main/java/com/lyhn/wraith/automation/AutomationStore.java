@@ -40,8 +40,14 @@ public final class AutomationStore {
         return new AutomationStore(defaultDir());
     }
 
-    // --- 定义(读写,app-server 单写者) ---
-    public List<AutomationTask> loadTasks() {
+    // --- 定义(读写) ---
+    /**
+     * 加载全量任务定义列表(automations.json)。与 {@link #saveTasks} 同步(synchronized),
+     * 消除同进程内的 load-modify-save 竞态(桌面 RPC 线程 × agent 工具线程可能在同一 JVM
+     * 里并发读改写);跨进程(CLI / 网关守护 / agent 工具 / 桌面 app-server 各自一个 JVM)
+     * 各自持有独立的锁对象,互不阻塞,仍是 last-writer-wins —— 这是已知且接受的限制。
+     */
+    public synchronized List<AutomationTask> loadTasks() {
         Map<String,Object> root = readMap(defs);
         Object tasks = root.get("tasks");
         if (tasks == null) return List.of();
@@ -49,8 +55,12 @@ public final class AutomationStore {
                 .constructCollectionType(List.class, AutomationTask.class));
     }
 
-    /** 原子写全量任务定义列表到 automations.json。app-server 是 automations.json 的单一写者。 */
-    public void saveTasks(List<AutomationTask> tasks) {
+    /**
+     * 原子写全量任务定义列表到 automations.json。多方(CLI / 网关守护 / agent 工具 / 桌面
+     * app-server)都可能是写者,跨进程 last-writer-wins;writeAtomic 的 tmp+rename 保证
+     * 单次写不会被读到半份内容,但不提供跨进程互斥。
+     */
+    public synchronized void saveTasks(List<AutomationTask> tasks) {
         Map<String,Object> root = new LinkedHashMap<>();
         root.put("tasks", tasks);
         writeAtomic(defs, root);

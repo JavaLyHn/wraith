@@ -52,9 +52,12 @@ public final class GatewayDaemon {
         }
 
         // ── Step 2: AutomationStore ──────────────────────────────────────────
+        // 用 openDefault() 而非手搓 Path.of(home, ".wraith"):后者会绕开 wraith.automation.dir
+        // 系统属性,和 CLI / agent 工具 / 桌面 app-server 的目录解析口径产生漂移
+        // (见 AutomationStore.defaultDir() 的 javadoc)。
         String home = System.getProperty("user.home");
         Path wraithDir = Path.of(home, ".wraith");
-        AutomationStore store = new AutomationStore(wraithDir);
+        AutomationStore store = AutomationStore.openDefault();
 
         // QQ 待发队列:与 QqProvider 共享同一实例(实例级锁,双实例会对同一文件竞态)
         QqPendingStore qqPending = new QqPendingStore(wraithDir);
@@ -114,7 +117,7 @@ public final class GatewayDaemon {
         Scheduler sch = new Scheduler(store, engine, deliverer::deliver, 3, System::currentTimeMillis);
 
         // ── Step 9: RequestInbox poller — run-now + approval, 2-3s ───────────
-        RequestInbox inbox = new RequestInbox(wraithDir.resolve("automation-requests"));
+        RequestInbox inbox = RequestInbox.openDefault();
         ScheduledExecutorService inboxPoller = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "wraith-inbox-poller");
             t.setDaemon(true);
