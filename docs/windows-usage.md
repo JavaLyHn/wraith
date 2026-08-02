@@ -632,6 +632,45 @@ where.exe npx        # 找出真身,通常有 npx 和 npx.cmd 两行
 
 ---
 
+#### 情况 C：npx 能解析了，MCP server 还是起不来
+
+以 `chrome-devtools` 为例（它是默认自动创建的那个）。**原生 Windows 是官方支持的**
+（[官方 troubleshooting](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md) 明确说 WSL 下 Chrome 反而起不来，建议用原生 Windows / PowerShell），
+所以起不来一定有具体原因。三个常见的：
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `MCP error -32000: Connection closed` | server 进程起来了又立刻死 | 看面板的**「日志」**页签，里面是 server 的 stderr 原文 |
+| 加完之后一直「启动中…」，约一分钟后失败 | **首次运行 `npx -y` 要下载整个包**，默认 60 秒初始化超时不够 | 见下方「调超时」 |
+| 日志里报找不到 Chrome | Chrome 没装，或装在非标准路径 | 装 Chrome；仍不行就按官方建议在参数里加一行 `--executablePath=C:\Program Files\Google\Chrome\Application\chrome.exe` |
+
+**调超时**（首次装包慢的话）：
+
+```powershell
+$env:WRAITH_MCP_INITIALIZE_TIMEOUT_SECONDS = "180"
+npm run dev
+```
+
+也可以先在终端手动跑一次，把包**预热**到 npx 缓存里，之后就快了：
+
+```powershell
+npx -y chrome-devtools-mcp@latest --version
+```
+
+> **官方给的两个 Windows 解法，wraith 已经自动做了第二个**（用 npx 的绝对路径，
+> 扩展名可能是 `.cmd` / `.bat` / `.exe`）。所以正常情况下你**不需要**把命令改成
+> `cmd /c npx …` 那种写法。
+>
+> ⚠️ 顺带一提，**不建议**手动改成 `cmd /c` —— 那样参数会经过 cmd 再解析一层，
+> 而 MCP 配置可以来自项目里的 `.wraith\mcp.json`（也就是**从别人仓库 clone 来的**）。
+> 参数里一个 `&` 就能变成命令注入。走绝对路径没有这一层。
+
+**工具数量对不对得上？** 工具列表是 server 启动后自己报的（`tools/list`），
+所以**要么全有、要么一个没有**，不存在少几个。两台机器数量不同只有一种可能：
+`@latest` 解析到了不同版本（各自 npx 缓存不同）。想完全对齐就把 `@latest` 换成固定版本号。
+
+---
+
 ### Electron 二进制下载失败（证书 / 网络）
 
 典型报错：
