@@ -195,8 +195,13 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
           ) : !current ? (
             <div data-testid="mcp-overview" className="flex flex-col gap-5">
               <section>
-                <div className="mb-1 text-sm font-bold text-fg">内置能力 · 开箱即用</div>
-                <div className="mb-3 text-2xs text-fg-subtle">Wraith 自带的能力,无需配置即可在对话中调用。</div>
+                <div className="mb-1 text-sm font-bold text-fg">内置能力</div>
+                {/* 小标题此前写的是「无需配置即可在对话中调用」——对九项里的两项是假话,
+                    用户照着它试,再被 agent 告知 web_search 需要 key,只会认为产品在骗人。
+                    「内置」说的是"工具在 ToolRegistry 里、不用装 MCP",不等于"零依赖"。 */}
+                <div data-testid="mcp-builtin-subtitle" className="mb-3 text-2xs text-fg-subtle">
+                  Wraith 自带的能力,不用装 MCP 就能在对话中调用;标「需配置」的还需要一个 key 或本机依赖。
+                </div>
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
                   {BUILTIN_CAPABILITIES.map(c => (
                     <button key={c.id} type="button" data-testid="mcp-builtin-card"
@@ -206,9 +211,14 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                       <div className="flex items-center gap-2">
                         <span className="text-base leading-none">{c.icon}</span>
                         <span className="truncate text-xs font-medium text-fg">{c.name}</span>
-                        <span className="ml-auto shrink-0 rounded bg-surface px-1.5 py-0.5 text-4xs text-fg-subtle">已内置</span>
+                        <span className={'ml-auto shrink-0 rounded px-1.5 py-0.5 text-4xs '
+                          + (c.requires ? 'bg-warn/15 text-warn' : 'bg-surface text-fg-subtle')}>
+                          {c.requires ? '需配置' : '已内置'}
+                        </span>
                       </div>
                       <div className="mt-1 text-2xs text-fg-muted">{c.desc}</div>
+                      {/* 缺什么直接写在卡面上:要点进去才看得到的话,等于没说 */}
+                      {c.requires && <div className="mt-1 text-3xs leading-relaxed text-warn/90">{c.requires}</div>}
                     </button>
                   ))}
                 </div>

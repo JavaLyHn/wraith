@@ -13,6 +13,18 @@ export interface BuiltinCapability {
   name: string
   desc: string
   tools: string[] // 背后真实内置工具名
+  /**
+   * 前置条件;真·零配置的能力不填。
+   *
+   * <p>这一栏是后补的:面板此前对九项一律标「已内置」,小标题还写着「无需配置即可调用」,
+   * 而其中两项确实需要配置 —— 用户于是问「为什么都不可用,不是都内置了吗」。
+   * 「内置」说的是"这个工具在 ToolRegistry 里,不用装 MCP",不等于"零依赖"。
+   *
+   * <p>刻意用**静态标注**而不是实时探测:静态说法在任何机器上都成立
+   * (这项能力确实内置、也确实需要一个 key),而实时探测一旦探不到就会反过来误报。
+   * 真实可用性由 agent 调用时 provider 自己的"未配置"提示负责。
+   */
+  requires?: string
 }
 
 export interface RecommendedMcp {
@@ -31,8 +43,18 @@ export const BUILTIN_CAPABILITIES: BuiltinCapability[] = [
   { id: 'search', icon: '🔍', name: '代码搜索', desc: '按内容 / 文件名 / 目录检索代码', tools: ['grep_code', 'glob_files', 'search_code', 'list_dir'] },
   { id: 'exec', icon: '⌨️', name: '执行命令', desc: '在沙箱内运行 shell 命令', tools: ['execute_command'] },
   { id: 'project', icon: '📦', name: '新建项目', desc: '脚手架创建新项目', tools: ['create_project'] },
-  { id: 'web', icon: '🌐', name: '网页搜索与抓取', desc: '联网搜索并抓取网页内容', tools: ['web_search', 'web_fetch'] },
-  { id: 'browser', icon: '🖥️', name: '浏览器接管', desc: '连接并驱动本地浏览器', tools: ['browser_connect', 'browser_disconnect', 'browser_status'] },
+  // web_search 需要一个搜索 provider 的 key;web_fetch 本身零配置(所以描述里点明"抓取可直接用")。
+  // key 的取值链:环境变量 / 系统属性 / .env / ~/.wraith/config.json(桌面 Provider 面板存的就是它)。
+  {
+    id: 'web', icon: '🌐', name: '网页搜索与抓取', desc: '联网搜索并抓取网页内容',
+    tools: ['web_search', 'web_fetch'],
+    requires: '搜索需一个 provider key:GLM_API_KEY(与 GLM 推理共用)/ SERPAPI_KEY / SEARXNG_URL 任一;抓取(web_fetch)零配置',
+  },
+  {
+    id: 'browser', icon: '🖥️', name: '浏览器接管', desc: '连接并驱动本地浏览器',
+    tools: ['browser_connect', 'browser_disconnect', 'browser_status'],
+    requires: '需本机装有 Node(起内置的 chrome-devtools MCP)与 Chrome',
+  },
   { id: 'skill', icon: '🧩', name: '技能加载', desc: '按需加载 Skill 扩展能力', tools: ['load_skill'] },
   { id: 'memory', icon: '🧠', name: '长期记忆', desc: '保存跨会话记忆', tools: ['save_memory'] },
   { id: 'todo', icon: '✅', name: '任务清单', desc: '拆解与跟踪多步任务', tools: ['todo_write'] },
