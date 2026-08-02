@@ -38,17 +38,18 @@
 ## 0. 全程一眼
 
 ```
-前置(JDK17/Maven/Node)  →  git clone  →  ⚠ 切到 feat/windows-parity-block1
+前置(JDK17/Maven[/Node])  →  git clone  →  ⚠ 切到 feat/windows-parity-block1
                                               │
-                        ┌─────────────────────┴─────────────────────┐
-                   路线 A 开发态                              路线 B 装包
-                   (最快跑起来)                              (要一个能分发的 exe)
-                   dev-win.ps1                               mvn package
-                   npm install                               npm install
-                   npm run dev                               npm run dist:win → 装
-                        └─────────────────────┬─────────────────────┘
+              ┌───────────────────────────────┼───────────────────────────────┐
+        路线 A 开发态                    路线 B 装包                    路线 C 只用命令行
+        (最快看到桌面)                 (要一个能分发的 exe)            (不需要 Node)
+        dev-win.ps1                     mvn package                    mvn package
+        npm install                     npm install                    java -jar …
+        npm run dev                     npm run dist:win → 装          (第 8 节)
+              └───────────────────────────────┼───────────────────────────────┘
                                               ↓
                                     配一个模型(第 2 节)
+                                     三条路线共用同一份配置
                                               ↓
                                         发第一条消息
                                               ↓
@@ -56,7 +57,12 @@
                               四条探针,确认沙箱真在拦
 ```
 
-只想跑起来看看 → **路线 A**。想要一个能给别人的安装包 → **路线 B**。
+只想跑起来看看 → **路线 A**。想要一个能给别人的安装包 → **路线 B**。只在终端里用、不想装 Node → **路线 C(第 8 节)**。
+
+> **想要 `wraith` / `wraith -d` 这两条短命令**(而不是每次手打 `java -jar …` / `npm run dev`):
+> 在仓库根跑一次 `powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1`,
+> 然后**新开一个终端**。三条路线都适用,详见 [§1 A4](#a4-装上-wraith-短命令)。
+> 装完 `wraith -h` 能看到全部用法。
 
 > **为什么建议早跑 doctor**：沙箱起不来时 wraith 是 **fail-open** 的 ——
 > 命令照常执行、不会报错，只是没有围栏。也就是说**你不主动查，是不会知道的**。
@@ -154,11 +160,16 @@ npm run dev
 
 改完 Java 代码要重跑 A1（dev 态起的是 `%USERPROFILE%\.wraith\wraith.jar`，不是 `target\` 里那个）。改前端代码则热更新，不用管。**完整的「改了什么 → 重跑到哪一步」对照表见第 5 节。**
 
-#### A4（可选）装上 `wraith` 短命令
+#### A4. 装上 `wraith` 短命令
+
+> 这一步严格说可跳过（`java -jar …` / `npm run dev` 一样能用），但**跳过之后就没有 `wraith` 命令**——
+> 直接敲会看到 `无法将"wraith"项识别为 cmdlet、函数、脚本文件或可运行程序的名称`。
+> 这一条同时服务路线 A / B / C，建议装。
 
 mac 上有 `wraith`（终端 CLI）和 `wraith -d`（桌面 dev）两条短命令。Windows 也有，装一次：
 
 ```powershell
+# 必须在仓库根跑（脚本靠自身位置反推仓库）
 powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
 ```
 
@@ -167,11 +178,21 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
 **必须新开一个终端**，当前窗口读不到新 PATH。之后：
 
 ```powershell
-wraith              # 终端 CLI
+wraith              # 终端 CLI（交互式对话）
 wraith -d           # 桌面端 dev
+wraith -h           # 全部用法（不需要 jar 就能看）
 wraith-install      # 改完 Java 后端后重新构建装 jar
-wraith --continue   # 其余参数原样透传给 CLI
+
+wraith -c                    # 接着上一次会话
+wraith -r                    # 列出历史会话挑一个恢复
+wraith sandbox doctor        # 沙箱体检
 ```
+
+- [ ] 新终端里 `wraith -h` 打印用法（不打印 = PATH 没生效，见 §6「`wraith` 不是内部或外部命令」）
+- [ ] `wraith-install` 结尾打印 `已安装 -> C:\Users\<你>\.wraith\wraith.jar`
+
+> **`-d` 和 `-h` 是启动器截走的，其余参数原样透传给 Java CLI。** 这样安全是因为
+> Java CLI 自己只认 `-c/--continue` 和 `-r/--resume`，没有 `-d` 也没有 `-h`。
 
 > 装了短命令后，第 5 节那句「改完 Java 重跑 `dev-win.ps1`」就简化成一句 `wraith-install`。
 >
@@ -413,6 +434,7 @@ npm run dev
 
 | 症状 | 最可能的原因 | 怎么办 |
 |---|---|---|
+| **`无法将"wraith"项识别为 cmdlet、函数、脚本文件或可运行程序的名称`** | 没装短命令，或装了但**没新开终端** | 见下方「`wraith` 不是内部或外部命令」 |
 | `git clone` 报 `ssh: connect to host github.com port 22: Connection refused` | 用了 SSH 形式（`git@github.com:`），而 **22 端口被网络挡了**（公司网/校园网/部分 ISP 常见）；且全新机器也还没配 SSH 密钥 | 本仓库是**公开**的，直接用 HTTPS：`git clone https://github.com/JavaLyHn/wraith.git`，零认证配置。非要用 SSH 就走 443 通道，见下 |
 | 装的时候被 SmartScreen 拦 | 安装包未签名 | 「更多信息」→「仍要运行」 |
 | App 起来了但显示**后端未连接** | 走的是**开发态**（`npm run dev`），主进程 `spawn('java', …)` 找不到 java | 确认 `java` 在 **GUI 进程**的 PATH 里 —— GUI 应用不继承登录 shell 的 PATH，这是 Windows 上的经典坑。装好的 App 用捆绑 JRE，不该出这个问题 |
@@ -431,6 +453,48 @@ npm run dev
 | `npm error path ...\node_modules\electron` + `RequestError: unable to verify the first certificate` | npm 包已下完，卡在 **electron postinstall 下载 Electron 二进制**（约 100MB，不走 registry，直连 GitHub Releases）。TLS 证书链验证失败，通常是杀软/企业网关拆 HTTPS | 见下方「Electron 二进制下载失败」——先设 `ELECTRON_MIRROR` |
 | 「用应用打开」找不到编辑器 | 只按已知安装路径探测 | 见下方已知限制 |
 | 文件操作偶发 `AccessDeniedException` | 杀软 / 索引器短暂占用目标文件 | 已内置 5 次有界重试（20/40/60/80ms）。**若仍失败请记下报错栈** —— 那说明占用超过 200ms，是需要调大退避的真实信号，不要当 flake 重跑了事 |
+
+---
+
+### `wraith` 不是内部或外部命令
+
+```
+wraith : 无法将"wraith"项识别为 cmdlet、函数、脚本文件或可运行程序的名称。
+```
+
+`wraith` / `wraith -d` / `wraith-install` 是**要装一次**的短命令，不是 clone 下来就有。按顺序查：
+
+**① 装过没有？** 在**仓库根**（不是 `desktop\` 子目录）跑：
+
+```powershell
+cd D:\wraith                # 仓库根
+powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
+```
+
+结尾应打印 `已把 ...\scripts\windows 加入用户 PATH`。
+
+**② 新开终端了吗？** —— 最常见的原因。PATH 是进程启动时读的，**装完的那个窗口读不到**。
+关掉重开一个 PowerShell，再敲 `wraith -h`。
+
+**③ PATH 到底进去没有？** 新终端里：
+
+```powershell
+$env:Path -split ';' | Select-String wraith
+where.exe wraith
+```
+
+第一条应列出 `...\scripts\windows`，第二条应指到 `wraith.cmd`。都空 = 装的那步没成功，看 ① 的输出有没有报错。
+
+**④ 不想装也行。** 短命令只是省事，等价的长写法一直可用：
+
+| 短命令 | 等价长写法 |
+|---|---|
+| `wraith` | `java -jar %USERPROFILE%\.wraith\wraith.jar` |
+| `wraith -d` | `cd desktop` + `npm run dev` |
+| `wraith-install` | `powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1` |
+
+> **`wraith: 还没安装 jar`** 是另一回事——PATH 好了，但 `%USERPROFILE%\.wraith\wraith.jar` 不在。
+> 跑一次 `wraith-install` 补上（它构建后端并装到那个位置）。
 
 ---
 
@@ -912,33 +976,123 @@ profile 本身留在系统里不占资源，也不影响别的程序；真要删
 
 ---
 
-## 8. 只想用命令行
+## 8. 只想用命令行（路线 C）
 
-不装桌面 App 也能用，CLI 与桌面共用同一套 Java 内核。**只需要 JDK 17 + Maven**，不需要 Node：
+CLI 与桌面 App **共用同一套 Java 内核**：同一份配置、同一份会话历史、同一套工具、同一个后台任务队列。区别只在外壳。
+
+**只需要 JDK 17 + Maven，不需要 Node。**
 
 > ⚠️ 一个例外：**内建的 `chrome-devtools` MCP server 用 `npx` 启动**。
 > 没装 Node 的话，启动时会看到 `Cannot run program "npx"` —— 这不影响 CLI 本身和 38 个内置工具，
 > 关掉即可：环境变量 `WRAITH_MCP_BUILTIN_BROWSER=off`（永久），或 `/mcp disable chrome-devtools`（本次会话）。
 > 详见第 6 节「加 MCP server 报 `Cannot run program "npx"`」。
 
+### 8.1 装
+
 ```powershell
 git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
 git checkout feat/windows-parity-block1      # 仍然要切,理由见下
+
+# 二选一 ——
+# ① 装短命令(推荐):构建 + 装 jar + 把 wraith 挂上 PATH,一步到位
+powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
+# ② 不装短命令:自己构建,之后每次手打 java -jar
 mvn clean package -DskipTests
-java -jar target\wraith-1.0-SNAPSHOT.jar
 ```
 
-> **CLI 也要切分支。** Java 内核确实跨平台，但有一处 Windows 专属修复只在这个分支上：`AtomicFileMove` 给 tmp→target 的原子改名加了有界重试（20/40/60/80ms），应对 Windows 上目标文件被杀软/索引器短暂占用时抛的 `AccessDeniedException`。**会话落盘、技能库、QQ 待发**三处都走它。停在 `main` 上，这些写入在 Windows 会偶发失败。
->
-> Windows **也有** `wraith` / `wraith -d` / `wraith-install` 短命令，装一次即可（见 §1 的 A4）。不装就直接 `java -jar`。
+走 ① 的话**必须新开一个终端**，当前窗口读不到新 PATH。
 
-CLI 还有几个不进对话的子命令：
+- [ ] 新终端里 `wraith -h` 打印用法
+- [ ] `java -version` 是 17+
+
+> **CLI 也要切分支。** Java 内核确实跨平台，但有一处 Windows 专属修复只在这个分支上：`AtomicFileMove` 给 tmp→target 的原子改名加了有界重试（20/40/60/80ms），应对 Windows 上目标文件被杀软/索引器短暂占用时抛的 `AccessDeniedException`。**会话落盘、技能库、QQ 待发**三处都走它。停在 `main` 上，这些写入在 Windows 会偶发失败。
+
+### 8.2 配一个模型
+
+**配置与桌面 App 共享同一份** `%USERPROFILE%\.wraith\config.json`——在哪边配好，另一边都认。所以：
+
+- 已经在桌面 App 里配过 → **什么都不用做**，直接跳到 8.3
+- 只用 CLI → 第 2 节的三种方式（`.env` / 环境变量 / 进 CLI 后 `/config`）都行
+
+> **CLI 没配模型是硬失败**，跟桌面不一样。桌面会以「无模型」状态起来并引导你去配；
+> CLI 会直接退出：
+>
+> ```
+> ❌ 错误: 未找到可用的 API Key
+> 请在 .env 文件中添加 GLM_API_KEY、DEEPSEEK_API_KEY、…
+> ```
+>
+> 这句话只提了 `.env`，但 `config.json` 同样有效（读取顺序是 config.json → 环境变量 → `.env`）。
+
+### 8.3 起 + 冒烟验一遍
+
+```powershell
+wraith
+# 没装短命令就是:  java -jar target\wraith-1.0-SNAPSHOT.jar
+```
+
+- [ ] 出现开场动画 + banner，底部是输入提示符
+- [ ] 敲 `/` 弹出命令列表（Tab 补全可用）
+- [ ] 发一句「你好」，有流式回复
+- [ ] 发「读一下 README.md 的前 20 行」→ 工具调用 → **弹 HITL 审批** → 批准后有内容
+- [ ] `/model` 显示当前模型
+- [ ] `/context` 显示 token 用量与上下文模式
+- [ ] `/exit` 能退出（`/quit` 同义）
+
+会话自动落盘。退出后 `wraith -c` 接着上一次，`wraith -r` 列出历史挑一个。
+
+### 8.4 ⚠ CLI 与桌面的一处**安全**差异
+
+**交互式 CLI 不套命令沙箱。** `CommandSandbox` 只在 **app-server（桌面）/ IM 网关 / 定时任务** 三条路径注入；CLI 的 `ToolRegistry` 沙箱是 `null`。
+
+也就是说在 CLI 里 agent 执行的命令：
+
+| | 桌面 | CLI |
+|---|---|---|
+| AppContainer 围栏（断网 / 写限工作区 / `.git` 只读） | ✅ | ❌ **没有** |
+| 命令黑名单（`rd /s /q C:\`、`format C:` …） | ✅ | ✅ |
+| HITL 审批弹窗 | ✅ | ✅ |
+| 危险工具审计（`~/.wraith/audit/`） | ✅ | ✅ |
+
+`wraith sandbox doctor` 体检的是**沙箱本身能不能用**（给桌面/网关/定时任务用的），
+它报「就绪」**不代表你正在 CLI 里跑的命令被关起来了**。这是刻意的设计
+（交互式终端里你本来就在自己的 shell 上下文里作业），但得知道。
+
+### 8.5 不进对话的子命令
 
 ```powershell
 wraith sandbox doctor        # 沙箱体检(四条探针,见 §6.5)
-wraith gateway bind <平台>   # 绑定 IM 账号
+wraith gateway bind <平台>   # 绑定 IM 账号(qq / feishu / wecom / weixin)
 wraith app-server            # 桌面端用的 JSON-RPC 后端(一般不用手敲)
+wraith wechat <...>          # 个人微信 iLink 通道
+wraith serve --http          # Runtime HTTP API
 ```
 
-CLI 里可以用 `/config` 写配置、`/model` 切模型，配置同样落 `%USERPROFILE%\.wraith\config.json`，与桌面 App **共享同一份**——在哪边配好，另一边都认。
+> ⚠️ `wraith wechat` 与桌面里的微信网关**不能同跑**（同一个 iLink 通道）。
+
+### 8.6 对话内命令一览
+
+敲 `/` 加 Tab 就能补全，这里按用途列一遍（不是全部参数形态）：
+
+| 用途 | 命令 |
+|---|---|
+| 会话 | `/clear` `/compact` `/history clear` `/export` `/resume` `/cancel` `/exit`(`/quit`) |
+| 模型与配置 | `/model` `/config` `/context`(`/ctx`) `/hitl on\|off` |
+| 记忆 | `/memory`(`/mem`) `list` `search <词>` `delete <id>` `pending` `approve <id>` `reject <id>` `clear`、`/save [内容]` |
+| 检索 | `/index` `/search <词>` `/graph` |
+| 编排 | `/plan <目标>` `/team <目标>` `/skill` `/task` |
+| 安全 | `/policy` `/audit` |
+| 快照 | `/snapshot` `/restore` |
+| 外部 | `/mcp`（`restart`/`logs`/`disable`/`enable`/`resources`/`prompts`）`/browser` `/wechat` |
+| 工程 | `/init`（生成项目记忆） |
+
+### 8.7 改了代码之后
+
+| 改了什么 | CLI 怎么重来 |
+|---|---|
+| Java 后端 | `wraith-install`（或 `mvn clean package -DskipTests`），然后重开 `wraith` |
+| 只改前端 | 与 CLI 无关 |
+
+> 装了短命令后 `wraith-install` 一条搞定：它内部复用 `dev-win.ps1`，
+> 构建产物同时供 CLI 和桌面 dev 使用（两者读的是同一个 `%USERPROFILE%\.wraith\wraith.jar`）。

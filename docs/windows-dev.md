@@ -44,10 +44,34 @@ mvn -DskipTests=false test        # ⚠ 本仓库测试默认跳过,必须显式
 
 > **翻车最可能的原因**:Windows 上目标文件被杀软/索引器短暂占用 → `AccessDeniedException`。已加 5 次有界重试(20/40/60/80ms)。若仍失败,说明占用超过 200ms,请记下报错栈,这是需要调大退避的真实信号 —— **不要**当成 flake 重跑了事。
 
-- [ ] CLI 能起:`java -jar target\wraith-1.0-SNAPSHOT.jar`
-- [ ] CLI 里发一条消息有回复
+**短命令**(`scripts\windows\wraith-install.ps1`,**须新开终端**才生效)
 
-> Windows 也有 `wraith` / `wraith -d` / `wraith-install` 短命令,装一次即可(`powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1`,**须新开终端**)。不装就直接用 `java -jar`。
+- [ ] 在**仓库根**跑 `powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1`,结尾打印「已把 …\scripts\windows 加入用户 PATH」+「已安装 -> …\.wraith\wraith.jar」
+- [ ] **新开**终端:`where.exe wraith` 指到 `wraith.cmd`
+- [ ] `wraith -h` 打印用法(**不需要 jar 也能打印** —— help 分支在 jar 检查之前)
+- [ ] 重复跑一次 install:打印「PATH 里已有 …」而**不是**把同一段追加第二遍
+- [ ] 临时把 `%USERPROFILE%\.wraith\wraith.jar` 改名 → `wraith` 报「还没安装 jar」并指向 `wraith-install`(不是 java 的堆栈)
+
+**终端 CLI**
+
+- [ ] `wraith` 能起(没装短命令则 `java -jar target\wraith-1.0-SNAPSHOT.jar`)
+- [ ] 开场动画 + banner + 输入提示符都在
+- [ ] 敲 `/` 弹命令列表,Tab 补全可用
+- [ ] 发一条消息有**流式**回复
+- [ ] 让它读一个文件 → 弹 HITL 审批 → 批准后有内容
+- [ ] `/model` / `/context` / `/policy` 各有输出
+- [ ] `/exit` 干净退出(不留孤儿 java 进程:`Get-Process java`)
+- [ ] 退出后 `wraith -c` 能接上刚才那次会话;`wraith -r` 列得出历史
+- [ ] **配置共享**:桌面里配的 key,CLI 直接可用(反之亦然,同一份 `%USERPROFILE%\.wraith\config.json`)
+
+**参数分流**(启动器只截 `-d`/`-h`,其余透传)
+
+- [ ] `wraith -d` 起的是桌面 dev,**不是** CLI
+- [ ] `wraith sandbox doctor` 走到 doctor,不是进 REPL
+- [ ] 在仓库外的目录敲 `wraith -d` → 仍能起(靠脚本自身位置反推仓库根);设 `WRAITH_REPO` 也能起
+
+> ⚠ **CLI 不套命令沙箱**(`setCommandSandbox` 只在 app-server / gateway / automation 三处调用)。
+> 所以 §5.1 那批围栏用例**必须在桌面里验**,在 CLI 里验会全部"通过"——因为压根没有围栏在拦。
 
 ---
 

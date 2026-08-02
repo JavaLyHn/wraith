@@ -16,23 +16,32 @@
 
 > ⚠️ 本版本未签名/未公证，下载后被 Gatekeeper 隔离会误报「已损坏，无法打开」（右键「打开」对此无效）。解决：把 `Wraith.app` 拖到 `/应用程序`，在「终端」执行 `sudo xattr -cr /Applications/Wraith.app`（会提示输入登录密码；必须加 `sudo`，因内置 JRE 含只读文件），再双击打开。
 
-**Windows**：暂未在 Releases 上架预编译安装包，需在 Windows 机器上从源码构建（前置 JDK 17 / Maven / Node ≥ 18 均在 PATH）：
+**Windows**：暂未在 Releases 上架预编译安装包，需在 Windows 机器上从源码构建（前置 JDK 17 / Maven；桌面端另需 Node ≥ 18，**只用 CLI 的话不需要 Node**）：
 
 ```powershell
 git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
 git checkout feat/windows-parity-block1   # ⚠ 不能省,见下
 
-# 路线 A：开发态最快跑起来
+# ── 先装短命令（推荐，三条路线通用）：构建 + 装 jar + 把 wraith 挂上用户 PATH
+powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
+#    ⚠ 装完必须【新开一个终端】，当前窗口读不到新 PATH
+#    之后：wraith 起 CLI / wraith -d 起桌面 dev / wraith -h 看用法 / wraith-install 改完 Java 重装 jar
+
+# 路线 A：桌面开发态（等价于 wraith -d）
 powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1   # 备后端 jar 到 %USERPROFILE%\.wraith\wraith.jar
 cd desktop && npm install --legacy-peer-deps && npm run dev
 
 # 路线 B：出一个能分发的安装包
 mvn clean package -DskipTests
 cd desktop && npm install --legacy-peer-deps && npm run dist:win       # 产物：desktop\release\Wraith Setup <版本>.exe
+
+# 路线 C：只用终端 CLI（不需要 Node）
+mvn clean package -DskipTests
+java -jar target\wraith-1.0-SNAPSHOT.jar          # 或装了短命令后直接 wraith
 ```
 
-装上短命令后（`powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1`，**需新开终端**），Windows 与 macOS 用法一致：`wraith` 起 CLI、`wraith -d` 起桌面 dev、`wraith-install` 改完 Java 后重新装 jar。
+装上短命令后 Windows 与 macOS 用法一致。**没装就没有 `wraith` 命令**——直接敲会看到 `无法将"wraith"项识别为 cmdlet…`，那不是 bug，见 [Windows 使用文档 §6](docs/windows-usage.md)。CLI 与桌面共用同一份配置、会话与工具；**但交互式 CLI 不套命令沙箱**（只有桌面 / IM 网关 / 定时任务套），细节见 [§8.4](docs/windows-usage.md)。
 
 > ⚠️ **`git checkout` 那步不能省。** Windows 的活还没合进 `main`——`main` 上**一个 Windows 专属文件都没有**（无自绘窗控、无 `dev-win.ps1`、无 NSIS 配置），而且 Java 侧的 `AtomicFileMove`（Windows 文件占用时的原子改名重试）也只在这个分支。停在 `main` 上照样构建得出来，但拿到的是没有任何 Windows 对等的东西，**不会有任何报错提示你走错了**。
 
@@ -306,7 +315,7 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 
 - `PathGuard` 路径围栏：文件类工具强制限定在项目根之内，拦截绝对路径外逃 / `..` 穿越 / 符号链接逃逸
 - `CommandGuard` 命令快速拒绝：HITL 之前的 fast-fail 黑名单，减少 HITL 弹窗骚扰。两套并存——POSIX 形状（`sudo` / `rm -rf 全盘` / `mkfs` / `dd of=/dev` / fork bomb / `curl|sh` / `find /` / `chmod 777 /` / `shutdown`）与 Windows 形状（`rd`/`del` 打向盘符根 / `format` / `diskpart` / `reg delete` / `takeown` / `icacls … /T` / `vssadmin delete shadows` / `bcdedit` / `Stop-Computer` / `iwr|iex`）
-- `policy/sandbox` 命令沙箱：agent 触发的 shell 命令包进操作系统原生沙箱（macOS Seatbelt / Windows AppContainer），默认断网 + 限写 + `.git` 只读；沙箱起不来时 fail-open 降级并把原因带到 UI。详见[第二十七期](#第二十七期windows-命令沙箱与-execute_command-的-posix-假设清算)
+- `policy/sandbox` 命令沙箱：agent 触发的 shell 命令包进操作系统原生沙箱（macOS Seatbelt / Windows AppContainer），默认断网 + 限写 + `.git` 只读；沙箱起不来时 fail-open 降级并把原因带到 UI。**注入范围是 app-server（桌面）/ IM 网关 / 定时任务三条路径——交互式 CLI 不套沙箱**（那里你本就在自己的 shell 上下文里作业），但黑名单、HITL、审计对 CLI 照常生效。详见[第二十七期](#第二十七期windows-命令沙箱与-execute_command-的-posix-假设清算)
 - `AuditLog` 结构化审计：危险工具调用按天写 JSONL 到 `~/.wraith/audit/`，含 `outcome (allow|deny|error)` 与 `approver (hitl|policy|none)`；`revert_turn` 也纳入危险工具链
 - `write_file` 单文件 5MB 上限；`execute_command` 60 秒超时（超时连同**子孙进程整棵杀掉**）
 - CLI 命令：`/policy` 查看安全策略状态、`/audit [N]` 看最近 N 条审计、`wraith sandbox doctor` 体检沙箱
