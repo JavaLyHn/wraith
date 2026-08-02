@@ -144,6 +144,29 @@ npm run dev
 
 改完 Java 代码要重跑 A1（dev 态起的是 `%USERPROFILE%\.wraith\wraith.jar`，不是 `target\` 里那个）。改前端代码则热更新，不用管。**完整的「改了什么 → 重跑到哪一步」对照表见第 5 节。**
 
+#### A4（可选）装上 `wraith` 短命令
+
+mac 上有 `wraith`（终端 CLI）和 `wraith -d`（桌面 dev）两条短命令。Windows 也有，装一次：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
+```
+
+它做两件事：构建并安装 jar 到 `%USERPROFILE%\.wraith\wraith.jar`（内部**复用 `dev-win.ps1`**，不是另一套构建逻辑），然后把 `scripts\windows` 加进**用户级** PATH（不需要管理员）。
+
+**必须新开一个终端**，当前窗口读不到新 PATH。之后：
+
+```powershell
+wraith              # 终端 CLI
+wraith -d           # 桌面端 dev
+wraith-install      # 改完 Java 后端后重新构建装 jar
+wraith --continue   # 其余参数原样透传给 CLI
+```
+
+> 装了短命令后，第 5 节那句「改完 Java 重跑 `dev-win.ps1`」就简化成一句 `wraith-install`。
+>
+> 与 mac 版的一点差别：mac 那个脚本把仓库路径**写死**在里面（换台机器就废）。Windows 这版从脚本自身位置反推仓库根，仓库挪到哪都能用；真要把 `wraith.cmd` 复制到仓库外，设 `WRAITH_REPO` 指向仓库根即可。
+
 **跳到第 2 节配模型。**
 
 ---
@@ -302,7 +325,7 @@ git pull
 
 | 改动落在 | 要做什么 | 不做会怎样 |
 |---|---|---|
-| **Java 后端**（`src/main/java/**`、`src/main/resources/**`） | 重跑 `dev-win.ps1` + **重启 App** | ⚠️ **改动完全不生效，且没有任何报错**。dev 态起的是 `%USERPROFILE%\.wraith\wraith.jar`，不是 `target\` 里那个 —— 光跑 `mvn package` 等于没改 |
+| **Java 后端**（`src/main/java/**`、`src/main/resources/**`） | 重跑 `dev-win.ps1`（装了短命令则一句 `wraith-install`）+ **重启 App** | ⚠️ **改动完全不生效，且没有任何报错**。dev 态起的是 `%USERPROFILE%\.wraith\wraith.jar`，不是 `target\` 里那个 —— 光跑 `mvn package` 等于没改 |
 | **渲染层**（`desktop/src/renderer/**`） | 什么都不用做 | — 热更新，存盘即刷新 |
 | **主进程 / preload**（`desktop/src/main/**`、`desktop/src/preload/**`） | **完全重启 App**（Ctrl+C 后重跑 `npm run dev`） | 报 `window.wraith.X is not a function` —— preload **不热更新**，这是陈旧进程，不是代码 bug |
 | **`desktop/package.json` 依赖变动** | `npm install --legacy-peer-deps` | 起不来或缺模块 |

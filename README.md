@@ -28,6 +28,8 @@ mvn clean package -DskipTests
 cd desktop && npm install --legacy-peer-deps && npm run dist:win       # 产物：desktop\release\Wraith Setup <版本>.exe
 ```
 
+装上短命令后（`powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1`，**需新开终端**），Windows 与 macOS 用法一致：`wraith` 起 CLI、`wraith -d` 起桌面 dev、`wraith-install` 改完 Java 后重新装 jar。
+
 > ⚠️ **`git checkout` 那步不能省。** Windows 的活还没合进 `main`——`main` 上**一个 Windows 专属文件都没有**（无自绘窗控、无 `dev-win.ps1`、无 NSIS 配置），而且 Java 侧的 `AtomicFileMove`（Windows 文件占用时的原子改名重试）也只在这个分支。停在 `main` 上照样构建得出来，但拿到的是没有任何 Windows 对等的东西，**不会有任何报错提示你走错了**。
 
 首次运行 SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」（未签名，同 macOS 的 xattr 姿态）。装好的 App **捆绑了 JRE，不需要系统装 Java**（上面那套 JDK/Maven/Node 只是构建时要的）。`npm run dist:win` 必须在 Windows 上跑——捆绑 JRE 由宿主 `jlink` 产出、`node-pty` 是原生模块，交叉出包会被构建脚本硬拦下。
