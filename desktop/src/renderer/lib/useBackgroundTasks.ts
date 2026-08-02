@@ -13,7 +13,7 @@ import { initialWatchState, pollIntervalMs, stepWatch, type WatchState } from '.
  * 定时器被反复清掉重设 —— 那样在快节奏渲染下可能一次都轮不到。
  */
 export function useBackgroundTasks(
-  list: (limit: number) => Promise<{ tasks: DurableTaskView[] } | { tasks?: DurableTaskView[] }>,
+  list: (limit: number) => Promise<{ tasks?: DurableTaskView[]; enabled?: boolean }>,
   onFinished: (tasks: DurableTaskView[]) => void,
 ): number {
   const [active, setActive] = useState(0)
@@ -29,9 +29,11 @@ export function useBackgroundTasks(
       let tasks: DurableTaskView[] | null = null
       try {
         const r = await list(30)
-        tasks = r.tasks ?? []
+        // enabled:false = 这次读不到(会话未建立 / 该形态不支持后台任务),与抛错同等对待。
+        // 不能当成空列表 —— 见下面 tasks===null 分支的理由。
+        if (('enabled' in r ? r.enabled : true) !== false) tasks = r.tasks ?? []
       } catch {
-        // 后端没起来 / 该形态不支持后台任务:静默退避,别把错误糊到对话里
+        // 后端没起来:静默退避,别把错误糊到对话里
       }
       if (stopped) return
       if (tasks === null) {

@@ -41,6 +41,24 @@ describe('useBackgroundTasks', () => {
     expect(onFinished).not.toHaveBeenCalled()
   }, 30_000)
 
+  it('enabled:false(会话未建立)与失败同等对待,同样不播种', async () => {
+    // main 把后端的 "no session" 翻译成 enabled:false 以免每次轮询刷一屏错误栈;
+    // 但它**不能**被当成空列表 —— 那等于用空集合完成播种,下次成功拉取会误报全部历史任务。
+    const onFinished = vi.fn()
+    let call = 0
+    const list = vi.fn(async () => {
+      call++
+      if (call === 1) return { enabled: false, tasks: [] }
+      return { enabled: true, tasks: [task('a', 'completed'), task('b', 'completed')] }
+    })
+
+    render(<Probe list={list} onFinished={onFinished} />)
+
+    await waitFor(() => expect(list.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 20_000 })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(onFinished).not.toHaveBeenCalled()
+  }, 30_000)
+
   it('播种之后新完成的任务才回调', async () => {
     const onFinished = vi.fn()
     let call = 0

@@ -1061,7 +1061,19 @@ ipcMain.handle('wraith:contextState', async () => {
 // 后台任务(转发 AppServer task.*;与 CLI /task 共享 ~/.wraith/tasks/tasks.db)
 ipcMain.handle('wraith:taskList', async (_e, limit: number) => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('task.list', { limit: limit ?? 20 })
+  try {
+    return await client.request('task.list', { limit: limit ?? 20 })
+  } catch (e) {
+    // 后端的 task.list 挂在 SessionRunner 上,会话建立前一律回 "no session"。
+    // 但这是**轮询**接口(侧栏计数 / 完成提醒每 15s 拉一次),启动窗口内必然撞上 ——
+    // 让它抛出去的话,Electron 会给每一次轮询打一整段 "Error occurred in handler" 栈,
+    // 控制台被刷满。队列本身是全局的,"还没有会话"只是尚不可读,不是故障:
+    // 回 enabled:false 表示"这次没数据",调用方据此跳过(**不能**回空数组 —— 那会被
+    // 当成"确实没有任务"并完成播种,下次成功拉取时历史完成项会被全当成新完成的)。
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('no session')) return { enabled: false, tasks: [] }
+    throw e
+  }
 })
 ipcMain.handle('wraith:taskAdd', async (_e, prompt: string) => {
   if (!client) throw new Error('Backend not connected')
