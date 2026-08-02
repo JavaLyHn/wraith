@@ -1,10 +1,10 @@
-# Wraith CLI
+# Wraith
 
 [![Release](https://img.shields.io/github/v/release/JavaLyHn/wraith?label=release&color=6d5df6)](https://github.com/JavaLyHn/wraith/releases/latest)
 [![Downloads](https://img.shields.io/github/downloads/JavaLyHn/wraith/total?color=6d5df6)](https://github.com/JavaLyHn/wraith/releases)
 [![macOS Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-000?logo=apple)](https://github.com/JavaLyHn/wraith/releases/latest)
 
-一个成熟的 Java Agent 产品：从第一期的 `ReAct` 单代理循环，演进到第十六期的 `TUI 产品化`，再到桌面 App（macOS + Windows）与常驻 IM 网关（QQ / 飞书 / 企业微信 / 微信）。核心引擎（ReAct / Plan / Multi-Agent / RAG / MCP / Skill / HITL）在 CLI、桌面、IM 三种形态间复用同一套 Java 内核。桌面 App 的 Windows 对等**代码已完成、尚未在真机验证**（见「Windows 桌面对等」一节与 [`docs/windows-dev.md`](docs/windows-dev.md) 的逐条验收清单）。
+一个成熟的 Java Agent 产品：从第一期的 `ReAct` 单代理循环，演进到第十六期的 `TUI 产品化`，再到桌面 App（macOS + Windows）与常驻 IM 网关（QQ / 飞书 / 企业微信 / 微信）。核心引擎（ReAct / Plan / Multi-Agent / RAG / MCP / Skill / HITL）在 CLI、桌面、IM 三种形态间复用同一套 Java 内核。桌面 App 的 Windows 对等**代码已完成、尚未在真机验证**（上手见 [`docs/windows-usage.md`](docs/windows-usage.md)，验收清单见 [`docs/windows-dev.md`](docs/windows-dev.md)）。
 
 ## 下载
 
@@ -12,9 +12,30 @@
 
 > ⚠️ 本版本未签名/未公证，下载后被 Gatekeeper 隔离会误报「已损坏，无法打开」（右键「打开」对此无效）。解决：把 `Wraith.app` 拖到 `/应用程序`，在「终端」执行 `sudo xattr -cr /Applications/Wraith.app`（会提示输入登录密码；必须加 `sudo`，因内置 JRE 含只读文件），再双击打开。
 
-**Windows**：暂未在 Releases 上架预编译安装包；在 Windows 机器上从源码构建未签名 NSIS 安装包（`mvn -q clean package -DskipTests` → `cd desktop && npm install --legacy-peer-deps` → `npm run dist:win`,产物在 `desktop/release/*.exe`）。首次运行 SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」（未签名,同 macOS 的 xattr 姿态）。装好的 App **捆绑了 JRE,不需要系统装 Java**（上面那套 JDK/Maven/Node 只是出包时要的）；也可先 `npm run dev` 直接跑开发态验证。
+**Windows**：暂未在 Releases 上架预编译安装包，需在 Windows 机器上从源码构建（前置 JDK 17 / Maven / Node ≥ 18 均在 PATH）：
 
-> **从装完到用起来的完整教程见 [`docs/windows-usage.md`](docs/windows-usage.md)**（配模型的三条路 / 界面导览 / 故障对照表 / 已知不可用）。[`docs/windows-dev.md`](docs/windows-dev.md) 是另一回事——它是逐条**验收清单**,给验证这个端口的人用的,不是使用说明。
+```powershell
+git clone git@github.com:JavaLyHn/wraith.git
+cd wraith
+git checkout feat/windows-parity-block1   # ⚠ 不能省,见下
+
+# 路线 A：开发态最快跑起来
+powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1   # 备后端 jar 到 %USERPROFILE%\.wraith\wraith.jar
+cd desktop && npm install --legacy-peer-deps && npm run dev
+
+# 路线 B：出一个能分发的安装包
+mvn clean package -DskipTests
+cd desktop && npm install --legacy-peer-deps && npm run dist:win       # 产物：desktop\release\Wraith Setup <版本>.exe
+```
+
+> ⚠️ **`git checkout` 那步不能省。** Windows 的活还没合进 `main`——`main` 上**一个 Windows 专属文件都没有**（无自绘窗控、无 `dev-win.ps1`、无 NSIS 配置），而且 Java 侧的 `AtomicFileMove`（Windows 文件占用时的原子改名重试）也只在这个分支。停在 `main` 上照样构建得出来，但拿到的是没有任何 Windows 对等的东西，**不会有任何报错提示你走错了**。
+
+首次运行 SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」（未签名，同 macOS 的 xattr 姿态）。装好的 App **捆绑了 JRE，不需要系统装 Java**（上面那套 JDK/Maven/Node 只是构建时要的）。`npm run dist:win` 必须在 Windows 上跑——捆绑 JRE 由宿主 `jlink` 产出、`node-pty` 是原生模块，交叉出包会被构建脚本硬拦下。
+
+> 三份 Windows 文档分工不同，别拿错：
+> **[`docs/windows-usage.md`](docs/windows-usage.md)** —— 从 `git clone` 到能对话的完整步骤 + 配模型三条路 + 界面导览 + 故障对照表（**想用就看这份**）；
+> [`docs/windows-release.md`](docs/windows-release.md) —— 出包与发布 runbook；
+> [`docs/windows-dev.md`](docs/windows-dev.md) —— 逐条验收清单（102 勾），给验证这个端口的人用的，不是使用说明。
 
 当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP、第 24 期 `IM 网关`（QQ / 飞书 / 企业微信 / 微信 + 桌面配置面板 + 定时任务投递）、第 25 期 `安全策略层`、第 26 期 `自我认知 + 聊天↔面板能力对等`（能力目录 / 一键动作卡 / 聊天内接入 IM / 三模式贯通 / 15 个面板能力工具）、长期记忆的 `自动记忆提取（候选待批）`，以及桌面 App 的 `Windows 对等`（可跑 dev / 无边框自绘窗控 / 编辑器探测 / NSIS 打包 / 桌宠点击不抢焦——**代码完成，待真机验收**）。
 
@@ -153,7 +174,7 @@ mvn test -DskipTests=false
 - Agent 遇到登录页、权限不足或明确需要登录态页面时，会先调用 `browser_connect` 自动切到 shared；公开页面如微信公众号文章不提前切换
 - `/browser connect <port>` 保留旧式 CDP 端口兼容路径：先探活 `127.0.0.1:<port>/json/version`，成功后切到 `--browser-url=http://127.0.0.1:<port>`；失败时不会改 MCP 启动参数，并输出 macOS / Windows / Linux 的 Chrome 启动命令
 - 切换 shared / isolated 模式都会清空 `chrome-devtools` 的 server 维度全部放行，避免旧信任跨模式延续
-- shared 模式下 `close_page` 只能关闭 Wraith CLI 自己创建的 tab；无法证明是 Wraith CLI 创建的 tab 会被策略层拒绝
+- shared 模式下 `close_page` 只能关闭 Wraith 自己创建的 tab；无法证明是 Wraith 创建的 tab 会被策略层拒绝
 - 敏感页面命中规则后，`click` / `fill_form` / `evaluate_script` 等改写型浏览器工具必须单步 HITL 审批，不复用全部放行；读型工具如 `take_snapshot` 仍可继续使用
 - 审计日志为 chrome-devtools 工具追加可选浏览器 metadata：`browser_mode`、`sensitive`、`target_url`，旧格式 JSONL 仍可读取
 
@@ -163,14 +184,14 @@ mvn test -DskipTests=false
 
 - 三层加载位置（按优先级，后者整体覆盖同名 skill）：jar 内置 < 用户级 `~/.wraith/skills/<name>/` < 项目级 `<project>/.wraith/skills/<name>/`
 - 启动期把启用 skill 的 `name` + `description` 注入三处 Agent 系统提示词索引段（启用上限 20 个，索引段 ≤ 4KB）
-- 内置工具 `load_skill(name)`：LLM 在 system prompt 看到匹配 description 时主动调用，Wraith CLI 把 SKILL.md 正文（5KB 截断）写入 `SkillContextBuffer`，下一轮 user message 自动前置注入
+- 内置工具 `load_skill(name)`：LLM 在 system prompt 看到匹配 description 时主动调用，Wraith 把 SKILL.md 正文（5KB 截断）写入 `SkillContextBuffer`，下一轮 user message 自动前置注入
 - 内置 web-access skill：决策手册（浏览哲学四步法 + 工具选择表 + 浏览器优先级 + Jina 兜底说明）+ 6 个站点经验文件（mp.weixin / zhuanlan.zhihu / x.com / xiaohongshu / github / juejin）+ cdp-cheatsheet
 - frontmatter 走手写 YAML 子集解析，不引 SnakeYAML；解析失败 stderr 警告但不阻塞启动
 - CLI 命令：`/skill list` / `/skill show <name>` / `/skill on <name>` / `/skill off <name>` / `/skill reload`
 - 启用状态持久化：`~/.wraith/skills.json` 的 `disabled` 列表，默认全启用
 - 与 HITL 协同：Skill 内调用 `execute_command` 等危险工具仍走既有 HITL 审批，沿用 `execute_command` 工具维度全放行；不给 Skill 单独审批维度
 
-设计意图：从「写工具」演进到「打包专家手册」。当工具堆成山（Wraith CLI 当前内置 9 个 + MCP 60+ 工具），用 Skill 给 LLM 一份按场景展开的"专家手册"，比往 system prompt 里塞更多规则更可扩展。
+设计意图：从「写工具」演进到「打包专家手册」。当工具堆成山（Wraith 当前内置 9 个 + MCP 60+ 工具），用 Skill 给 LLM 一份按场景展开的"专家手册"，比往 system prompt 里塞更多规则更可扩展。
 
 ### 第十六期：TUI 产品化（v16.1 形态修正后：双形态可切换）
 
@@ -250,12 +271,12 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 ### 第二十三期：微信 iLink 通道（文本 MVP）
 
 - 新增进程级入口：`wraith wechat setup`、`wraith wechat start`、`wraith wechat status`、`wraith wechat daemon start|stop|restart|status|logs`
-- 新增交互式入口：在 Wraith CLI 主界面输入 `/wechat` 可扫码绑定并在当前进程后台启动微信通道；`/wechat setup` 重新扫码绑定，`/wechat status` 查看状态，`/wechat stop` 停止通道
+- 新增交互式入口：在 CLI 主界面输入 `/wechat` 可扫码绑定并在当前进程后台启动微信通道；`/wechat setup` 重新扫码绑定，`/wechat status` 查看状态，`/wechat stop` 停止通道
 - 默认不开启微信通道；用户必须主动执行 `setup` 并扫码确认完成绑定
 - 支持在 Warp / iTerm2 / WezTerm 等兼容终端内直接显示 260px PNG 二维码；不支持终端图片协议时回退为字符二维码和链接
 - 微信侧使用 iLink `getupdates` 长轮询收消息、`sendmessage` 分片回消息，不依赖 SSE；这是独立通道，不是 Skill，也不是 Runtime API
 - 运行时只接受绑定用户私聊；普通消息单并发排队，`/help`、`/status`、`/pause`、`/resume`、`/stop` 走队列外控制路径
-- 微信侧用户消息会回显到 Wraith CLI 终端 transcript；Wraith CLI 终端继续显示 thinking / 工具调用过程，微信侧只接收 assistant 正文。iLink 协议层仍是 `text_item.text` 文本消息，没有显式 Markdown parse mode；Wraith CLI 会保留 ClawBot 稳定支持的 Markdown 子集（列表、引用、粗体、行内代码、真实代码块），把标题转成粗体标题、把表格转成移动端更稳的键值/列表，并过滤图片 Markdown / H5-H6 / 中文斜体等兼容性差的标记；非代码类 fenced block（流程说明、长中文箭头链）会解包并换行，避免微信侧出现横向滚动代码块。iLink 不提供真正 SSE 或改单条消息能力。
+- 微信侧用户消息会回显到 CLI 终端 transcript；CLI 终端继续显示 thinking / 工具调用过程，微信侧只接收 assistant 正文。iLink 协议层仍是 `text_item.text` 文本消息，没有显式 Markdown parse mode；Wraith 会保留 ClawBot 稳定支持的 Markdown 子集（列表、引用、粗体、行内代码、真实代码块），把标题转成粗体标题、把表格转成移动端更稳的键值/列表，并过滤图片 Markdown / H5-H6 / 中文斜体等兼容性差的标记；非代码类 fenced block（流程说明、长中文箭头链）会解包并换行，避免微信侧出现横向滚动代码块。iLink 不提供真正 SSE 或改单条消息能力。
 - 微信通道使用非交互式默认拒绝策略：只读工具默认允许，`write_file` / `create_project` 继续受 workspace PathGuard 限制，`execute_command` 必须精确命中命令白名单，`mcp__*` 必须命中 MCP 白名单，`revert_turn` 和浏览器会话切换默认拒绝
 - 当前文本 MVP 会保留图片 / 文件消息的媒体元数据提示，但 CDN 下载解密、图片块输入和 `/send` 文件推送仍待后续媒体链路补齐
 
@@ -281,7 +302,7 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 - `write_file` 单文件 5MB 上限
 - CLI 命令：`/policy` 查看安全策略状态、`/audit [N]` 看最近 N 条审计
 
-**为什么不叫沙箱**：本地 Agent CLI（参考 Claude Code / Cursor / Aider）默认都不做容器/VM 沙箱——沙箱削弱 Agent 能力、给虚假安全感、体验更差。生产级 Agent 沙箱实际是 microVM-level（Devin / Modal / Anthropic Computer Use 用 Firecracker / gVisor）。Wraith CLI 的安全模型是 **HITL + 路径校验 + 命令快速拒绝 + 审计**，不是隔离。
+**为什么不叫沙箱**：本地 Agent CLI（参考 Claude Code / Cursor / Aider）默认都不做容器/VM 沙箱——沙箱削弱 Agent 能力、给虚假安全感、体验更差。生产级 Agent 沙箱实际是 microVM-level（Devin / Modal / Anthropic Computer Use 用 Firecracker / gVisor）。Wraith 的安全模型是 **HITL + 路径校验 + 命令快速拒绝 + 审计**，不是隔离。
 
 ### 第二十六期：自我认知 + 聊天↔面板能力对等
 
@@ -309,7 +330,7 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
    ╚███╔███╔╝██║  ██║██║  ██║██║   ██║   ██║  ██║
     ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝
 
-   Wraith CLI  v16.1.0
+   Wraith  v16.1.0
    Model DeepSeek-V4-Flash (freellmapi)
    MCP 1/1 · 29 tools · 1/1 skills · ReAct
    ReAct · Plan · MCP · Browser · Image · Tools · Memory · RAG
@@ -433,7 +454,7 @@ $env:GLM_API_KEY = "your_api_key_here"                                          
 > Windows 上 `.env` 也可以放 `%USERPROFILE%\.env`（后端按「当前工作目录 → 用户目录」两级查找）——从开始菜单启动的桌面 App 工作目录是安装目录而非仓库，仓库里的 `.env` 它看不见。
 > **桌面 App 用户更推荐直接在图形界面里配**：左侧栏「配置 → Provider 配置」填 API Key / 模型 / Base URL，可「测试连接」再保存，改完即时生效、不牵扯进程环境。完整步骤见 [`docs/windows-usage.md`](docs/windows-usage.md)。
 
-也可以在 Wraith CLI 内用命令写入 `~/.wraith/config.json`（Windows 为 `%USERPROFILE%\.wraith\config.json`），不会覆盖 Kimi 配置：
+也可以在 CLI 内用命令写入 `~/.wraith/config.json`（Windows 为 `%USERPROFILE%\.wraith\config.json`），不会覆盖 Kimi 配置：
 
 ```text
 /config provider freellmapi --base-url http://localhost:5173/v1 --api-key <key> --model auto
@@ -486,7 +507,7 @@ WRAITH_LOG_TOTAL_SIZE_CAP=100MB
 
 ### 2. 可选：配置 MCP server
 
-MCP 子系统默认开启。`~/.wraith/mcp.json` 不存在时，Wraith CLI 会自动创建默认 chrome-devtools 配置：
+MCP 子系统默认开启。`~/.wraith/mcp.json` 不存在时，Wraith 会自动创建默认 chrome-devtools 配置：
 
 ```json
 {
@@ -526,7 +547,7 @@ MCP 子系统默认开启。`~/.wraith/mcp.json` 不存在时，Wraith CLI 会�
 
 `command` 表示 stdio server，`url` 表示 Streamable HTTP server。`${PROJECT_DIR}` / `${HOME}` 是内置变量，其他 `${VAR}` 从环境变量读取；缺失会在启动时直接提示。
 
-`step_search` 是约定名称：如果项目 `.env`、用户 `~/.env` 或系统环境变量里存在 `STEP_API_KEY`，Wraith CLI 会自动内置这个远程 MCP；上面的手写配置只用于覆盖默认地址或自定义鉴权。当前模型为 `step-3.7-flash*` 时，内置 `web_search` / `web_fetch` 会优先代理到该 MCP server。
+`step_search` 是约定名称：如果项目 `.env`、用户 `~/.env` 或系统环境变量里存在 `STEP_API_KEY`，Wraith 会自动内置这个远程 MCP；上面的手写配置只用于覆盖默认地址或自定义鉴权。当前模型为 `step-3.7-flash*` 时，内置 `web_search` / `web_fetch` 会优先代理到该 MCP server。
 
 需要复用当前登录态时，Chrome 144+ 推荐打开 `chrome://inspect/#remote-debugging` 并勾选 `Allow remote debugging for this browser instance`。旧版本或需要显式 CDP 端口时，可以启动带远程调试端口和独立 user-data-dir 的 Chrome，并在这个调试 Chrome 中完成登录：
 
@@ -541,7 +562,7 @@ start chrome.exe --remote-debugging-port=9222 --user-data-dir=%TEMP%\wraith-chro
 google-chrome --remote-debugging-port=9222 --user-data-dir=/tmp/wraith-chrome-profile
 ```
 
-通常不需要用户预先切换；Agent 如果遇到登录页会自己调用 `browser_connect`。手工调试时也可以在 Wraith CLI 内执行：
+通常不需要用户预先切换；Agent 如果遇到登录页会自己调用 `browser_connect`。手工调试时也可以在 CLI 内执行：
 
 ```text
 /browser status
@@ -708,7 +729,7 @@ I
 
 > 密钥红线：agent 侧**没有**任何读写 API key / IM 密钥的工具；也**不提供**批量清空记忆或自动化的能力。写入长期记忆的唯一入口仍是 `save_memory`，凭证硬拦在该路径上（`memory_pending_approve` 落库同样经过它）。
 
-同一轮模型返回多个工具调用时，Wraith CLI 会并行执行这些工具；如果工具之间有依赖关系，模型应分多轮调用。
+同一轮模型返回多个工具调用时，Wraith 会并行执行这些工具；如果工具之间有依赖关系，模型应分多轮调用。
 
 文件类与代码检索工具（`read_file` / `write_file` / `list_dir` / `glob_files` / `grep_code` / `create_project`）路径强制限定在项目根之内，越界请求会被策略层拒绝；`execute_command` 通过命令黑名单拦截 `sudo` / `rm -rf 全盘` / `mkfs` / `dd of=/dev` / fork bomb / `curl|sh` 等。`revert_turn` 会批量回写工作区，默认触发 HITL 和审计。所有 `mcp__` 前缀工具默认触发 HITL 和审计。详见 `/policy`。
 
@@ -727,8 +748,8 @@ I
 
 - `/wechat` - 扫码绑定并启动微信 iLink 通道；已绑定时直接启动
 - `/wechat setup` - 重新扫码绑定并启动微信通道
-- `/wechat status` - 查看当前 Wraith CLI 进程内微信通道状态
-- `/wechat stop` - 停止当前 Wraith CLI 进程内微信通道
+- `/wechat status` - 查看当前 CLI 进程内微信通道状态
+- `/wechat stop` - 停止当前 CLI 进程内微信通道
 - `/plan` - 下一条任务使用 Plan-and-Execute 模式
 - `/plan <任务>` - 直接用 Plan-and-Execute 模式执行这条任务
 - `/team` - 下一条任务使用 Multi-Agent 协作模式
@@ -781,7 +802,7 @@ I
    ╚███╔███╔╝██║  ██║██║  ██║██║   ██║   ██║  ██║
     ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝   ╚═╝  ╚═╝
 
-   Wraith CLI  v16.1.0
+   Wraith  v16.1.0
    Model glm-5.1 (glm)
    MCP 4/4 · 61 tools · 2/2 skills · ReAct
    ReAct · Plan · MCP · Browser · Image · Tools · Memory · RAG
@@ -911,37 +932,18 @@ src/main/java/com/lyhn/wraith
 4. **打包**：`npm run dist:win` 产未签名 NSIS 安装包（向导式，可选安装目录 + 桌面 / 开始菜单快捷方式）；捆绑 Windows JRE（本机 jlink）+ 原生 node-pty（本机 `npm install`）。
 5. **桌宠点击不抢焦**：koffi FFI 给桌宠窗 HWND 加 `WS_EX_NOACTIVATE`（精确不抢焦，FFI 失败降级 `focusable:false`）；跨虚拟桌面常驻为已知限制（Windows 无官方 API）。
 
-**在 Windows 上启动**（前置 JDK 17 / Maven / Node 均在 PATH）—— CLI 与桌面两端分别如下：
+**在 Windows 上启动**：完整步骤（前置检查 → clone → 切分支 → 开发态/装包两条路线 → 配模型 → 发第一条消息）见 **[`docs/windows-usage.md`](docs/windows-usage.md)**，命令摘要见本文顶部「下载」一节。
 
-**① CLI 端**（纯终端，与 mac 共用同一套 Java 内核）：
+两点容易踩的：
 
-```powershell
-mvn clean package -DskipTests               # 仓库根：构建 jar
-java -jar target\wraith-1.0-SNAPSHOT.jar    # 启动交互式 CLI
-```
+- **必须 `git checkout feat/windows-parity-block1`。** 桌面端不用说（`main` 上零个 Windows 专属文件）；**CLI 端同样要切** —— Java 内核虽然跨平台，但 `AtomicFileMove`（tmp→target 原子改名的有界重试，应对 Windows 上目标文件被杀软/索引器占用时抛的 `AccessDeniedException`）只在这个分支，而会话落盘 / 技能库 / QQ 待发三处都走它。
+- Windows 上没有 mac 那种 `wraith` / `wraith -d` 短命令（那是本机 shell 包装脚本、不随仓库分发），CLI 直接 `java -jar target\wraith-1.0-SNAPSHOT.jar`。
 
-> Windows 上没有 mac 那种 `wraith` / `wraith -d` 短命令（那是本机 shell 包装脚本、不随仓库分发），直接用 `java -jar` 启动即可。
-
-**② 桌面端**（Electron App）：
-
-```powershell
-# 跑开发态
-powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1   # 构建并放后端 jar 到 %USERPROFILE%\.wraith\wraith.jar
-cd desktop
-npm install --legacy-peer-deps     # 仓库存在 @lobehub peer 冲突，须 --legacy-peer-deps
-npm run dev
-
-# 或出安装包后使用
-mvn -q clean package -DskipTests    # 仓库根：构建 jar
-cd desktop && npm install --legacy-peer-deps && npm run dist:win   # 产物：desktop\release\*.exe
-# 双击 *.exe 安装（SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」），装完从开始菜单 / 桌面快捷方式启动
-```
-
-**验证状态（重要）**：以上五块均已**实现**，Java 与桌面测试在 macOS 上全绿（Java 1661 用例 0F/0E、桌面 1022 用例、tsc 0 错误），但**尚未在真 Windows 机器上运行过**。mac 全绿不等于 Windows 能跑——两边真正分岔的地方是窗口 chrome、终端 shell、编辑器打开、spawn `java.exe`、桌宠 FFI、打包，以及文件系统语义（Windows 上目标文件被占用时 rename 会抛 `AccessDeniedException`，已加有界重试）。
+**验证状态（重要）**：以上五块均已**实现**，Java 与桌面测试在 macOS 上全绿（Java 1661 用例 0F/0E、桌面 1174 用例 / 137 文件、tsc 0 错误），但**尚未在真 Windows 机器上运行过**。mac 全绿不等于 Windows 能跑——两边真正分岔的地方是窗口 chrome、终端 shell、编辑器打开、spawn `java.exe`、桌宠 FFI、打包，以及文件系统语义（Windows 上目标文件被占用时 rename 会抛 `AccessDeniedException`，已加有界重试）。
 
 **会话栏与左侧工具栏本身没有平台分支**：`Sidebar.tsx` / `Composer.tsx` 里 `platform` 出现 0 次，`Transcript.tsx` 里唯一一处是 IM 平台（qq/weixin）而非操作系统——两端渲染的是同一份 React 代码。平台差异只在窗口外壳这一层：Windows 无边框 + 自绘三键，mac 交通灯 + vibrancy；皮肤上 mac 有 `html.is-mac` 的半透明侧栏，Windows 走实色（有意设计，非缺样式）。
 
-**逐条验收清单**（约 90 条，含前置 / 构建测试 / 窗口外壳 / 11 个面板 / 三模式动作卡 / 三件套工具 / IM 网关 / 桌宠 / 打包安装，每条带预期与翻车时的排查方向）见 [`docs/windows-dev.md`](docs/windows-dev.md)。
+**逐条验收清单**（102 条，含前置 / 构建测试 / 窗口外壳 / 11 个面板 / 三模式动作卡 / 三件套工具 / IM 网关 / 桌宠 / 打包安装，每条带预期与翻车时的排查方向）见 [`docs/windows-dev.md`](docs/windows-dev.md)。
 
 **已知限制 / 预期失败**：
 
