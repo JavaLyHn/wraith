@@ -2,7 +2,7 @@
 
 > 在 **Windows 机器**上照着走。每步都给了**预期产出**和**不对时怎么办**。
 >
-> 相关文档：[`windows-usage.md`](windows-usage.md)（怎么用）· [`windows-dev.md`](windows-dev.md)（102 条验收清单）
+> 相关文档：[`windows-usage.md`](windows-usage.md)（怎么用）· [`windows-dev.md`](windows-dev.md)（124 条验收清单）
 
 ---
 
@@ -87,7 +87,7 @@ mvn clean package -DskipTests
 mvn -DskipTests=false test
 ```
 
-- [ ] 全绿。mac 基线 **1736 tests / 0 failures / 0 errors**
+- [ ] 全绿。mac 基线 **1810 tests / 0 failures / 0 errors**
 
 > 本仓库测试**默认跳过**，必须显式 `-DskipTests=false`。
 > 最可能在 Windows 上露馅的是文件系统语义：`AtomicFileMoveTest`、`AutomationStoreConcurrencyTest`（48 线程压 `writeAtomic`）。目标文件被杀软/索引器占用会抛 `AccessDeniedException`，已内置 5 次有界重试（20/40/60/80ms）。**若仍失败请留栈**——那是要调大退避的真实信号，别当 flake 重跑。
@@ -110,7 +110,7 @@ npm test
 npx tsc --noEmit -p tsconfig.json
 ```
 
-- [ ] mac 基线 **1174 passed / 137 files**，tsc **0**
+- [ ] mac 基线 **1227 passed / 143 files**，tsc **0**
 
 ### 4.5 出包
 
@@ -145,7 +145,9 @@ desktop\resources\runtime\bin\java.exe -version
 - [ ] 窗口**无系统标题栏**，右上角是自绘的 最小/最大/关闭 三键
 - [ ] 左侧栏「配置 → Provider 配置」能配一个 provider，**「测试连接」通过**
 - [ ] 发一条消息**有流式回复** ← 这条过了才说明后端真的起来了
-- [ ] 顶栏盾牌是**中性墨色**、写「当前平台无沙箱」。**若是红色「沙箱未启用」= bug**（那是 mac 专属态）
+- [ ] 顶栏盾牌是**中性墨色**、写「沙箱: AppContainer」。**若是红色「沙箱未启用」= AppContainer 没起来**，跑 `wraith sandbox doctor` 看缺哪一项（此前这条写的是「中性墨色 + 当前平台无沙箱」，那是 Windows 还没有沙箱实现时的口径）
+- [ ] `wraith sandbox doctor` 退出码 0，四条探针全 ✔ —— 其中「工作区外拒写」「断网」两条**期望失败**，显示「已被拦截（符合预期）」才算对
+- [ ] 让 agent 执行 `dir` 能拿到输出（不是 `CreateProcess error=2`）；含中文输出的命令不乱码
 
 > 任何一条不过就停下，记录后回来改，别发。
 
@@ -153,7 +155,7 @@ desktop\resources\runtime\bin\java.exe -version
 
 ## 6. 完整验收
 
-冒烟过了之后，照 [`windows-dev.md`](windows-dev.md) 走 **102 勾**。里面每条都带预期和翻车方向。
+冒烟过了之后，照 [`windows-dev.md`](windows-dev.md) 走 **124 勾**。里面每条都带预期和翻车方向。
 
 **发布门槛（must）**——这几节全过才发：
 
@@ -200,7 +202,7 @@ gh release create v1.4.0-beta.1 `
 Release notes 里请如实写明：
 
 - 未签名，首次运行触发 SmartScreen
-- 已知不可用：Petdex 在线安装、桌宠跨虚拟桌面、`WS_EX_NOACTIVATE` 仅 x64 精确、编辑器探测不覆盖自定义安装目录
+- 已知不可用 / 降级：Petdex 在线安装、桌宠跨虚拟桌面、`WS_EX_NOACTIVATE` 仅 x64 精确、编辑器探测不覆盖自定义安装目录、沙箱首条命令慢 1–2 秒、沙箱改工作区 ACL 且关闭时不自动撤销、用户目录下的工具链需手工 `icacls` 授权
 - 这是 pre-release，Windows 首个版本
 
 ---

@@ -8,7 +8,7 @@
 > |---|---|---|
 > | 本文 `windows-usage.md` | **从零到跑起来 + 怎么用** | 你要用 wraith |
 > | [`windows-release.md`](windows-release.md) | 出包与发布 runbook | 你要出一个可分发的安装包 |
-> | [`windows-dev.md`](windows-dev.md) | 逐条**验收清单**（102 勾） | 你要验证这个端口有没有做对 |
+> | [`windows-dev.md`](windows-dev.md) | 逐条**验收清单**（124 勾） | 你要验证这个端口有没有做对 |
 >
 > **诚实声明**：Windows 端代码已完成，但**尚未在真 Windows 机器上跑过一次**。本文按代码实际行为编写，若你遇到与本文不符的情况，那大概率是真 bug，欢迎照第 6 节的排查方向记录下来。
 
@@ -71,6 +71,9 @@ git --version
 四项都要在 PATH 里。缺 JDK 17 就先装 JDK 17 —— 仓库按 Java 17 编译。
 
 > 只走**路线 B 装完之后**用 App 的人不需要 Java（安装包捆绑了 JRE）。但**构建**这一步需要。
+>
+> ⚠️ **Node 是个例外：它既是构建依赖，也可能是运行时依赖。** 安装包捆绑 JRE，但**不捆绑 Node**。
+> 只要你打算用 `npx` 起 MCP server，装好的 App 也需要系统里有 Node —— 详见第 6 节「加 MCP server 报 `Cannot run program "npx"`」。不用 MCP 则完全不需要。
 
 ### 1.2 拉代码 —— ⚠ 必须切分支
 
@@ -197,9 +200,11 @@ desktop\resources\runtime\bin\java.exe -version
 - 向导式安装，可改安装目录，会建**桌面**和**开始菜单**快捷方式。
 - 从开始菜单启动。
 
-#### 装完之后不需要再装 Java
+#### 装完之后不需要再装 Java（但 MCP 可能需要 Node）
 
-安装包**捆绑了 JRE**（`resources\runtime\bin\java.exe`）和后端 jar。用装好的 App 的人**不需要**系统里有 JDK —— 前面那套 JDK/Maven/Node 只是**构建**时要的。也因此路线 B 装完后不会遇到路线 A 那个 PATH 坑。
+安装包**捆绑了 JRE**（`resources\runtime\bin\java.exe`）和后端 jar。用装好的 App 的人**不需要**系统里有 JDK —— 前面那套 JDK/Maven 只是**构建**时要的。也因此路线 B 装完后不会遇到路线 A 那个 PATH 坑。
+
+**Node 不在捆绑之列。** 装好的 App 里，除非你要加 `npx` 形式的 MCP server，否则用不到 Node；一旦要加，就得系统里有。判断方法和三条替代路线见第 6 节「加 MCP server 报 `Cannot run program "npx"`」。
 
 ---
 
@@ -301,11 +306,11 @@ cmd.exe 里则是 `set GLM_API_KEY=你的key`（当前窗口）／`setx GLM_API_
 
 ### 顶栏那个盾牌
 
-右上角有个小盾。在 Windows 上它显示 **「当前平台无沙箱」** —— **这是正常的，不是故障。**
+右上角有个小盾，正常态是浅墨的，悬停显示 **「沙箱: AppContainer」**——agent 执行的命令被关在 Windows 自带的 AppContainer 里，断网 + 写围栏。
 
-命令沙箱用的是 macOS 的 Seatbelt（`sandbox-exec`），Windows 和 Linux 没有对应机制。此时 agent 执行的 shell 命令**仍然受命令黑名单（CommandGuard）保护**，但不在沙箱里跑。点盾牌进「安全」面板可以看审批策略和危险操作审计。
+盾**变红**写着「沙箱未启用」就是要处理的异常了：说明 AppContainer 没起来。点盾牌进「安全」面板会显示具体缺哪一项，或者命令行跑 `wraith sandbox doctor` 逐项体检。详见 [6.5 命令沙箱](#65-命令沙箱appcontainer)。
 
-> 如果你在 mac 上看到这个盾变**红**并写着「沙箱未启用」，那才是要处理的异常。
+> 沙箱没起来时命令照常执行（仍受命令黑名单和 HITL 审批保护），只是没有围栏——不会把你卡住。
 
 ### 顶栏右上角三个键
 
@@ -390,7 +395,7 @@ npm run dev
 | 发消息报没有 API Key | 配了但没生效 | 回第 2 节 ①；若卡片上有**设默认**就点一下 |
 | 设了环境变量但 App 不认 | 环境变量是进程启动时读的 | 重启 App；或直接改用图形界面配 |
 | `npm install` ERESOLVE 失败 | react peer 冲突 | 必须带 `--legacy-peer-deps` |
-| 加 MCP server 报 `Cannot run program "npx"` / `CreateProcess error=2` | Windows 上 npx 实际是 **`npx.cmd`**，而 `CreateProcess` 不做 `PATHEXT` 补全（Linux/macOS 的 `execvp` 会） | 已修复，拉代码后**重跑 `wraith-install`**；不想更新就把命令填成 `where.exe npx` 查到的 `.cmd` 完整路径。见下方「加 MCP server 报 …」 |
+| 加 MCP server 报 `Cannot run program "npx"` / `CreateProcess error=2` | **两个原因共用同一句错**：① 机器上没装 Node（Windows 不自带，安装包也不含）；② Node 有，但 Windows 上 npx 实际是 `npx.cmd`，`CreateProcess` 不做 `PATHEXT` 补全 | 先 `where.exe npx` 分诊：找不到 = ①，去装 Node 或改用 HTTP transport；列出两行 = ②，已修复，**重跑 `wraith-install`** 即可。见下方「加 MCP server 报 …」 |
 | `npm install` 报错末尾有「**Log files were not written** ... `_logs`」 | **npm 缓存目录不可用**，与项目无关。连日志都落不下就是这个病的指纹，不管上面报 `EPERM` 还是 `ENOENT` | 见下方「npm 缓存目录不可用」——先 `npm config get cache` |
 | `EPERM ... mkdir '<某盘>\...\_cacache\...'` | 缓存目录**存在但不可写**。常见于把 npm 缓存搬到 Node 安装盘（如 `E:\nodejs\node_cache`），该目录归 Administrators | 同上，把 cache 改到 `%LOCALAPPDATA%` |
 | `ENOENT ... mkdir '<项目路径>\$env:...\_cacache\tmp'` | 缓存路径**不存在**，且被拼在了项目目录后 → 存进 `.npmrc` 的是个相对路径 | 在 cmd 里跑了 PowerShell 写法 `"$env:LOCALAPPDATA\..."`。改用 `"%LOCALAPPDATA%\..."`，并删掉误建的怪目录 |
@@ -477,7 +482,120 @@ npm install --legacy-peer-deps
 CreateProcess error=2, 系统找不到指定的文件。
 ```
 
-**Node 装了、`npx` 在终端里也能敲**，但后端就是起不来。原因是 Windows 与 Linux/macOS 的一个根本差异：
+> ⚠️ **这一句错有两个完全不同的原因，先分诊再动手。**
+>
+> 后端解析不到 `npx` 时会把原名原样交给操作系统，让它报自己的错——所以「机器上压根没有 Node」和「Node 有但 Windows 不补扩展名」**报出来的是同一句话**。
+> 按错的那个原因去修，会一路走进死胡同。
+>
+> 一条命令就能分开：
+>
+> ```powershell
+> where.exe npx
+> ```
+>
+> | `where.exe npx` 的输出 | 说明 | 去看 |
+> |---|---|---|
+> | `信息: 用提供的模式无法找到文件。` | **机器上没有 Node** | 情况 A |
+> | 列出 `...\npx` 和 `...\npx.cmd` 两行 | Node 有，是扩展名补全的问题 | 情况 B |
+
+---
+
+#### 情况 A：机器上根本没有 Node（`where.exe npx` 找不到）
+
+> 🔎 **「我根本没加过 MCP server，为什么会报这个？」**
+>
+> 因为有一份**默认配置是自动创建的**。交互式 CLI（`wraith` / `java -jar …`）首次启动时，
+> 若 `%USERPROFILE%\.wraith\mcp.json` 不存在，会自动写入一份默认的 chrome-devtools 配置，
+> 而它用的正是 `npx`：
+>
+> ```json
+> { "mcpServers": { "chrome-devtools": {
+>     "command": "npx", "args": ["-y", "chrome-devtools-mcp@latest", "--isolated=true"] } } }
+> ```
+>
+> 所以**没装 Node 的机器，什么都没做就会看到这条错**。
+> （桌面端自己不创建这份文件，但只要你跑过一次 CLI，它就在那儿了，桌面端也会读到。）
+>
+> **不想用浏览器 MCP 的话，关掉它最省事**，三种方式任选：
+>
+> | 方式 | 怎么做 |
+> |---|---|
+> | 桌面面板 | 「MCP」面板选中 `chrome-devtools` → 点**「停用」** |
+> | CLI | `/mcp disable chrome-devtools` |
+> | 改文件 | 把 `%USERPROFILE%\.wraith\mcp.json` 里那一项删掉，或整个换成 `{ "mcpServers": {} }` |
+>
+> **关掉不影响 wraith 的任何内置能力**——38 个内置工具与 MCP 无关。
+
+**Windows 不自带 Node，也不自带 npx。** 而且——
+
+> **装了 wraith 安装包 ≠ 有 Node。** 安装包捆绑的是 **JRE**（所以不用装 Java）和后端 jar，**不含 Node**。
+> 第 1.1 节那句「路线 B 装完之后不需要 Java」说的只是 Java。
+> **只要你要用 `npx` 起 MCP server，就得自己装 Node**——这是运行时依赖，不是构建时依赖。
+
+三条路，按省事程度排：
+
+**A1. 装 Node（最直接）**
+
+到 [nodejs.org](https://nodejs.org/) 下 LTS 安装包，一路下一步。装完**新开一个终端**（旧终端读不到新 PATH）：
+
+```powershell
+node -v      # 期望 v18+
+where.exe npx    # 期望列出 npx 与 npx.cmd
+```
+
+然后回 MCP 面板重新连一次即可，wraith 侧不用改任何配置。
+
+**A2. 换成不需要 Node 的 MCP server**
+
+`npx` 只是 Node 生态 MCP server 的启动方式。别的形态不需要它：
+
+| server 形态 | 「命令(stdio)」填什么 | 需要什么 |
+|---|---|---|
+| Python（uv 生态） | `uvx` | 装 [uv](https://docs.astral.sh/uv/)，不需要 Node |
+| 独立可执行文件 | 那个 `.exe` 的完整路径 | 什么都不需要 |
+| Node，但已全局安装 | `where.exe <命令>` 查到的 `.cmd` 完整路径 | 仍需 Node |
+
+**A3. 换用 HTTP 远程 server（本机什么运行时都不用装）**
+
+wraith 的 MCP 支持两种 transport，`npx` 那条只是其中之一：
+
+- **stdio** —— 把 server 当子进程拉起（需要本机有对应运行时）
+- **Streamable HTTP** —— 连一个远程 server（**本机什么都不用装**）
+
+⚠️ **桌面「MCP」面板目前只能加 stdio 的**（表单里只有「命令(stdio)」，没有 URL 字段；而且保存时会主动清掉 `url`——后端要求 transport 二选一）。HTTP server 得**手写配置文件**：
+
+```
+%USERPROFILE%\.wraith\mcp.json          用户级(所有项目)
+<项目根>\.wraith\mcp.json                项目级
+```
+
+```json
+{
+  "mcpServers": {
+    "my-remote": {
+      "url": "https://example.com/mcp",
+      "headers": { "Authorization": "Bearer ${MY_TOKEN}" }
+    }
+  }
+}
+```
+
+两个要点：
+
+- **`command` 与 `url` 只能有一个。** 都写或都不写，启动时会直接报
+  `MCP server 必须且只能配置 command 或 url`。
+- **`${VAR}` 按环境变量展开**，密钥不必明文落盘（另支持 `${HOME}` 与 `${PROJECT_DIR}`）。
+  但**变量没设不是留空，是直接失败**：`MCP 配置引用了未设置的环境变量: MY_TOKEN`。
+
+改完**重启后端**才生效（见第 5 节）。
+
+> 三条路都不想走也没关系：**MCP 是可选能力**。不加任何 MCP server，wraith 的 38 个内置工具（读写文件 / 执行命令 / 代码检索 / 联网 / 快照回滚等）照常可用。
+
+---
+
+#### 情况 B：Node 装了、`npx` 在终端里也能敲，但后端起不来
+
+原因是 Windows 与 Linux/macOS 的一个根本差异：
 
 | | Linux / macOS | Windows |
 |---|---|---|
@@ -595,6 +713,82 @@ rmdir /s /q empty_tmp
 
 ---
 
+## 6.5 命令沙箱（AppContainer）
+
+### 它是什么
+
+agent 执行的每条命令会被关进一个 **AppContainer**——Windows 自带的进程级隔离，免管理员。两条围栏：
+
+| 围栏 | 效果 |
+|---|---|
+| **断网** | 沙箱 profile 不带 `internetClient` 能力，**内核直接拒绝 socket**。面板上的「命令沙箱联网」开关就是切这个 |
+| **写围栏** | 只有工作区和沙箱专用临时目录可写；`.git` 显式拒写（防止 agent 改你的提交历史） |
+
+这是 macOS Seatbelt 在 Windows 上的对等物，语义一致。
+
+### 先体检
+
+```cmd
+wraith sandbox doctor
+```
+
+它会真跑四条探针，**不是只看配置**：
+
+```
+沙箱种类  : windows-appcontainer
+
+AppContainer 前置条件
+  ✔ 平台           Windows 11
+  ✔ Windows 版本   10.0
+  ✔ powershell.exe C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+  ✔ 发射器脚本      C:\Users\LyHn\.wraith\sandbox\appcontainer-run.ps1
+
+探针（工作区 D:\wraith-test）
+  ✔ stdio 管道               通过
+  ✔ 工作区内可写                 通过
+  ✔ 工作区外拒写（期望失败）           已被拦截（符合预期）
+  ✔ 断网（期望失败）               已被拦截（符合预期）
+```
+
+**后两条「期望失败」才是重点。** 前两条只说明沙箱没碍事；只有后两条被拦住，才说明它真在拦。若它们显示「本应被拦截却成功了」，说明对应围栏没生效——请把整段输出发出来。
+
+### 排查
+
+| 现象 | 原因 | 处理 |
+|---|---|---|
+| `✘ stdio 管道` 且提示「退出码 0 但没拿到输出」 | 管道未授权给 AppContainer（DACL 不够） | 这是最可能翻车的一环，请反馈 |
+| `✘ powershell.exe` | 被组策略移除/禁用 | 沙箱自动降级为无，命令照常跑 |
+| 命令大面积失败、报找不到文件 | 工具链装在用户目录下（如 `%APPDATA%\npm`），AppContainer 读不到 | 见下方「手工授权工具链」 |
+| 面板顶栏红盾 + 「沙箱未启用」 | 前置条件缺项 | 跑 doctor 看是哪一项 |
+
+> **降级不阻断。** 沙箱起不来时命令照常执行，只是没有围栏——面板会显示具体原因，顶栏盾变红。这是刻意的：一个「因为没授权 npm 缓存目录就默默掐掉 `npm install`」的沙箱，排查成本远高于它的安全收益。
+
+### 手工授权工具链
+
+`C:\Windows` 和 `C:\Program Files` 默认已对 AppContainer 开放读+执行，装在那儿的工具链开箱可用。装在用户目录下的需要手工加：
+
+```cmd
+:: 先从 doctor 输出里拿到 sid=S-1-15-2-... 那一行
+icacls "%APPDATA%\npm" /grant *<那个SID>:(OI)(CI)(RX)
+```
+
+### 撤销（重要）
+
+**在面板里关掉沙箱不会撤销已经授出去的 ACL。** 想彻底还原：
+
+```cmd
+:: 撤销工作区授权(<SID> 从 doctor 输出里取)
+icacls "D:\wraith-test" /remove *<SID> /T
+icacls "D:\wraith-test\.git" /remove:d *<SID> /T
+
+:: 删掉沙箱临时目录
+rd /s /q "%LOCALAPPDATA%\wraith\sandbox-temp"
+```
+
+profile 本身留在系统里不占资源，也不影响别的程序；真要删用 PowerShell 的 `Remove-AppContainerProfile`（需 `-Name wraith-sandbox-nonet` / `wraith-sandbox-net`）。
+
+---
+
 ## 7. 已知不可用 / 降级
 
 这些是**当前明确不支持**的，不用浪费时间排查：
@@ -603,15 +797,18 @@ rmdir /s /q empty_tmp
 - **桌宠跨虚拟桌面常驻** —— Windows 没有官方 API。
 - **桌宠点击不抢焦仅 x64 精确** —— 走 koffi FFI 给窗口加 `WS_EX_NOACTIVATE`；ia32 上自动降级为 `focusable:false`，FFI 失败也会降级，不会崩。
 - **编辑器探测范围有限** —— 只按已知安装路径找 VS Code / VS Code Insiders / Cursor / Sublime Text / Notepad++；自定义安装目录、注册表安装不覆盖。
-- **命令沙箱** —— 见第 4 节，平台不支持。
 - **安装包未签名** —— 每次大版本首次运行都会触发 SmartScreen。
-- **CLI 没有 `wraith` 短命令** —— mac 上那个是本机 shell 包装脚本，不随仓库分发。Windows 上直接 `java -jar target\wraith-1.0-SNAPSHOT.jar`。
+- **`npx` 形式的 MCP server 需要自己装 Node** —— Windows 不自带，wraith 安装包也只捆绑 JRE 不捆绑 Node。不是 bug；三条替代路线（装 Node / 换 `uvx` 等非 Node server / 改用 HTTP transport）见第 6 节。
 
 ---
 
 ## 8. 只想用命令行
 
 不装桌面 App 也能用，CLI 与桌面共用同一套 Java 内核。**只需要 JDK 17 + Maven**，不需要 Node：
+
+> ⚠️ 一个例外：**CLI 首次启动会自动创建一份用 `npx` 的默认 MCP 配置**（chrome-devtools）。
+> 没装 Node 的话，启动时会看到 `Cannot run program "npx"` —— 这不影响 CLI 本身和 38 个内置工具，
+> 关掉那个 server 即可，见第 6 节「加 MCP server 报 `Cannot run program "npx"`」。
 
 ```powershell
 git clone https://github.com/JavaLyHn/wraith.git

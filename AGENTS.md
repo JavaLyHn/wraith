@@ -85,7 +85,8 @@ src/main/java/com/lyhn/wraith/
 ├── mcp/         McpClient, McpServerManager, transport/, resources/, mention/
 ├── hitl/        HitlToolRegistry, ApprovalPolicy, TerminalHitlHandler
 ├── web/         SearchProvider, WebFetcher, HtmlExtractor, NetworkPolicy
-├── policy/      PathGuard, CommandGuard, AuditLog
+├── policy/      PathGuard, CommandGuard, AuditLog, sandbox/(CommandSandbox, SandboxKind,
+│               ShellCommand, SeatbeltProfile, AppContainer*, SandboxDoctor)
 ├── skill/       SkillRegistry, SkillContextBuffer, SkillIndexFormatter
 └── render/      Renderer, InlineRenderer, PlainRenderer, RendererFactory
 ```
@@ -126,10 +127,13 @@ src/main/java/com/lyhn/wraith/
 
 ### HITL + 策略层
 
-- 拦截顺序：HitlToolRegistry → ToolRegistry → PathGuard/CommandGuard
+- 拦截顺序：HitlToolRegistry → ToolRegistry → PathGuard/CommandGuard → CommandSandbox（OS 进程沙箱）
 - 用户无法批准策略拒绝的请求
 - PathGuard 强制路径限定在项目根内
-- CommandGuard 是辅助黑名单，不是主防线
+- CommandGuard 是辅助黑名单，不是主防线。**规则分 POSIX 与 Windows 两套，全平台都跑**——命令文本里出现 `format C:` 在 mac 上也没有放行的理由，而且按平台分叉会让「这条规则在哪儿生效」变成一件要推理的事
+- CommandSandbox 只在 app-server / gateway / automation 注入，**交互式 CLI 不用**（ToolRegistry 的 sandbox 为 null）。macOS 走 Seatbelt、Windows 走 AppContainer、其余为 `NONE`；不可用时 **fail-open**（裸跑 + warning 带到 UI），不阻断用户
+- 改沙箱前先读 `docs/specs/2026-08-02-windows-sandbox-design.md` §5「我验不了什么」——Windows 那条链路无 Windows 机器时原理性无法验证，只能靠 `wraith sandbox doctor` 在真机验
+- **平台判定统一用 `ShellCommand.isWindows`**（前缀 `windows`，不是 `contains("win")`——**"Darwin" 里含 "win"**）
 - 微信 iLink 通道没有人工审批面板，必须走非交互式默认拒绝策略：只读工具默认允许，`execute_command` 必须精确命中命令白名单，`mcp__*` 必须命中 MCP 白名单，`revert_turn` 和浏览器会话切换默认拒绝，文件写入仍由 PathGuard 限定在绑定 workspace 内。
 
 ### Plan 审阅交互
@@ -197,6 +201,8 @@ src/main/java/com/lyhn/wraith/
 
 ### 5.4 改 HITL/策略 → `policy/` + ToolRegistry + HitlToolRegistry + 提示词 + `.env.example` + 文档 + 测试
 
+改沙箱另需连带：`sandbox.get/set` RPC 回包 + `initialize` 的 `capabilities.sandbox` + 桌面 `topBar.ts:sandboxChipView` / `sandboxPanel.ts` / `shared/types.ts:SandboxKindWire` + `docs/windows-usage.md` §6.5 + `docs/windows-dev.md` §5.1 验收项。
+
 ### 5.5 改 MCP → `mcp/` + ToolRegistry + HITL + AuditLog + 提示词 + 文档 + 测试
 
 ### 6. 不提交 `.env` / 真实 API Key / `target/` 产物
@@ -234,7 +240,7 @@ src/main/java/com/lyhn/wraith/
 
 ## 当前已知边界
 
-以下在路线图但未交付：容器/VM 沙箱 / MCP OAuth + sampling + server 自动重启
+以下在路线图但未交付：容器/VM 沙箱（现有的是**操作系统进程级**沙箱 Seatbelt / AppContainer，不是容器或 microVM）/ Linux 命令沙箱（bubblewrap 未做）/ MCP OAuth + sampling + server 自动重启
 
 不要把 `ROADMAP.md` 中"将来要做"误读成"现在已有"。
 

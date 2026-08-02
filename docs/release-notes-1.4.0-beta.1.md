@@ -29,7 +29,8 @@
 - **「用应用打开」** —— 按已知安装路径探测 VS Code / VS Code Insiders / Cursor / Sublime Text / Notepad++，直接拉起。
 - **NSIS 安装包** —— 捆绑 JRE 与后端 jar，装完即用。
 - **桌宠点击不抢焦** —— 用 koffi FFI 给桌宠窗加 `WS_EX_NOACTIVATE`，点它不会把 wraith 抢到前台。
-- **顶栏沙箱盾** —— Windows 上显示「当前平台无沙箱」（中性墨色，**不是告警**）。命令沙箱是 macOS Seatbelt 专有；此时 agent 的 shell 命令仍受命令黑名单保护。
+- **命令沙箱（AppContainer）** —— agent 执行的命令关进 Windows 自带的 AppContainer：**默认断网**（不给 `internetClient` 能力，内核级拒绝）+ **写限工作区** + `.git` 只读。顶栏盾正常态显示「沙箱: AppContainer」；起不来时变红并在安全面板给出具体缺失项。跑 `wraith sandbox doctor` 可四条探针逐项体检。
+- **`execute_command` 在 Windows 上真的能跑了** —— 此前它在所有平台写死 `bash -c`，而 Git for Windows 默认不把 `bash.exe` 放进 PATH。同批修掉：命令黑名单补 Windows/PowerShell 形状规则（此前九条全是 POSIX 词汇，`rd /s /q C:\`、`format`、`reg delete` 一条不拦）、超时连同子孙进程整棵杀、子进程输出按 OS 本地编码解码（JDK ≥18 上中文原本必乱码）。
 
 ---
 
@@ -74,8 +75,11 @@
 | **桌宠跨虚拟桌面常驻** | Windows 无官方 API。 |
 | **桌宠不抢焦仅 x64 精确** | ia32 自动降级为 `focusable:false`；FFI 失败同样降级，不会崩。 |
 | **编辑器探测范围** | 只按已知安装路径找；自定义安装目录、注册表安装不覆盖。 |
-| **命令沙箱** | macOS Seatbelt 专有，Windows/Linux 无对应机制，仅命令黑名单生效。 |
-| **CLI 无 `wraith` 短命令** | mac 上那个是本机 shell 包装脚本，不随仓库分发。Windows 用 `java -jar`。 |
+| **沙箱首条命令慢 1–2 秒** | PowerShell 发射器要 `Add-Type` 就地编译 C# P/Invoke，之后走缓存。 |
+| **沙箱会改工作区文件 ACL** | 授权给 AppContainer SID。**面板里关掉沙箱不会自动撤销**，撤销方式见 `docs/windows-usage.md` §6.5。 |
+| **用户目录下的工具链读不到** | 装在 `%APPDATA%\npm` 之类位置的工具 AppContainer 读不到，需手工 `icacls` 授权；`C:\Windows` 与 `C:\Program Files` 默认已开放。 |
+| **非 NTFS / 网络盘上无沙箱** | `icacls` 会失败，沙箱降级为无（命令仍可执行，面板显示原因）。 |
+| **Linux 无命令沙箱** | Seatbelt 是 macOS 专有、AppContainer 是 Windows 专有，Linux 暂无对应实现（bubblewrap 未做）。 |
 
 ---
 

@@ -43,9 +43,9 @@ cd desktop && npm install --legacy-peer-deps && npm run dist:win       # 产物�
 > 三份 Windows 文档分工不同，别拿错：
 > **[`docs/windows-usage.md`](docs/windows-usage.md)** —— 从 `git clone` 到能对话的完整步骤 + 配模型三条路 + 界面导览 + 故障对照表（**想用就看这份**）；
 > [`docs/windows-release.md`](docs/windows-release.md) —— 出包与发布 runbook；
-> [`docs/windows-dev.md`](docs/windows-dev.md) —— 逐条验收清单（102 勾），给验证这个端口的人用的，不是使用说明。
+> [`docs/windows-dev.md`](docs/windows-dev.md) —— 逐条验收清单（124 勾），给验证这个端口的人用的，不是使用说明。
 
-当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP、第 24 期 `IM 网关`（QQ / 飞书 / 企业微信 / 微信 + 桌面配置面板 + 定时任务投递）、第 25 期 `安全策略层`、第 26 期 `自我认知 + 聊天↔面板能力对等`（能力目录 / 一键动作卡 / 聊天内接入 IM / 三模式贯通 / 15 个面板能力工具）、长期记忆的 `自动记忆提取（候选待批）`，以及桌面 App 的 `Windows 对等`（可跑 dev / 无边框自绘窗控 / 编辑器探测 / NSIS 打包 / 桌宠点击不抢焦——**代码完成，待真机验收**）。
+当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP、第 24 期 `IM 网关`（QQ / 飞书 / 企业微信 / 微信 + 桌面配置面板 + 定时任务投递）、第 25 期 `安全策略层`、第 26 期 `自我认知 + 聊天↔面板能力对等`（能力目录 / 一键动作卡 / 聊天内接入 IM / 三模式贯通 / 15 个面板能力工具）、第 27 期 `Windows 命令沙箱 + execute_command 的 POSIX 假设清算`（AppContainer 断网/写围栏 / `bash -c` 写死修正 / Windows 命令黑名单 / 超时杀进程树 / `wraith sandbox doctor`）、长期记忆的 `自动记忆提取（候选待批）`，以及桌面 App 的 `Windows 对等`（可跑 dev / 无边框自绘窗控 / 编辑器探测 / NSIS 打包 / 桌宠点击不抢焦 / 命令沙箱——**代码完成，待真机验收**）。
 
 ## 测试策略
 
@@ -302,15 +302,16 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 
 ### 第二十五期：安全策略层（第六期 HITL 的后续增强 —— 路径围栏 / 命令快速拒绝 / 操作审计）
 
-`com.lyhn.wraith.policy` 包，在第六期 HITL 之上叠一层策略防线（不是沙箱、不提供进程隔离）：
+`com.lyhn.wraith.policy` 包，在第六期 HITL 之上叠一层策略防线：
 
 - `PathGuard` 路径围栏：文件类工具强制限定在项目根之内，拦截绝对路径外逃 / `..` 穿越 / 符号链接逃逸
-- `CommandGuard` 命令快速拒绝：HITL 之前的 fast-fail 黑名单（`sudo` / `rm -rf 全盘` / `mkfs` / `dd of=/dev` / fork bomb / `curl|sh` / `find /` / `chmod 777 /` / `shutdown`），减少 HITL 弹窗骚扰
+- `CommandGuard` 命令快速拒绝：HITL 之前的 fast-fail 黑名单，减少 HITL 弹窗骚扰。两套并存——POSIX 形状（`sudo` / `rm -rf 全盘` / `mkfs` / `dd of=/dev` / fork bomb / `curl|sh` / `find /` / `chmod 777 /` / `shutdown`）与 Windows 形状（`rd`/`del` 打向盘符根 / `format` / `diskpart` / `reg delete` / `takeown` / `icacls … /T` / `vssadmin delete shadows` / `bcdedit` / `Stop-Computer` / `iwr|iex`）
+- `policy/sandbox` 命令沙箱：agent 触发的 shell 命令包进操作系统原生沙箱（macOS Seatbelt / Windows AppContainer），默认断网 + 限写 + `.git` 只读；沙箱起不来时 fail-open 降级并把原因带到 UI。详见[第二十七期](#第二十七期windows-命令沙箱与-execute_command-的-posix-假设清算)
 - `AuditLog` 结构化审计：危险工具调用按天写 JSONL 到 `~/.wraith/audit/`，含 `outcome (allow|deny|error)` 与 `approver (hitl|policy|none)`；`revert_turn` 也纳入危险工具链
-- `write_file` 单文件 5MB 上限
-- CLI 命令：`/policy` 查看安全策略状态、`/audit [N]` 看最近 N 条审计
+- `write_file` 单文件 5MB 上限；`execute_command` 60 秒超时（超时连同**子孙进程整棵杀掉**）
+- CLI 命令：`/policy` 查看安全策略状态、`/audit [N]` 看最近 N 条审计、`wraith sandbox doctor` 体检沙箱
 
-**为什么不叫沙箱**：本地 Agent CLI（参考 Claude Code / Cursor / Aider）默认都不做容器/VM 沙箱——沙箱削弱 Agent 能力、给虚假安全感、体验更差。生产级 Agent 沙箱实际是 microVM-level（Devin / Modal / Anthropic Computer Use 用 Firecracker / gVisor）。Wraith 的安全模型是 **HITL + 路径校验 + 命令快速拒绝 + 审计**，不是隔离。
+**关于「沙箱」这个词的边界**：Wraith 用的是**操作系统进程级沙箱**（Seatbelt / AppContainer），不是容器或 VM。生产级 Agent 沙箱是 microVM-level（Devin / Modal / Anthropic Computer Use 用 Firecracker / gVisor），那一层本项目没有、也不打算做——本地编程 Agent 一旦换进容器就拿不到用户的真实工具链，得不偿失。所以这里的定位是：**HITL 审批为主防线，进程沙箱 + 路径校验 + 命令黑名单 + 审计为纵深**，每层都假设上一层会失守，但都不声称能挡住有意的越狱。
 
 ### 第二十六期：自我认知 + 聊天↔面板能力对等
 
@@ -323,6 +324,33 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 - **聊天内接入 IM**：微信在卡内直出二维码，QQ 一键打开浏览器授权页，飞书 / 企业微信退化到开面板填密钥；绑定逻辑复用 `ImGatewayPanel` 既有 IPC（抽 `imBind.applyBindEvent` 共享，面板与聊天卡同源）。卡片**点击才启动绑定**——transcript 历史回放会重建卡片，挂载即绑定会在每次 resume 重启绑定进程
 - **三模式贯通**（修 bug）：动作卡原先只在 ReAct 出现。Plan / Team 的执行器只把工具调用 `printToolCalls` 到一个 `nullOutputStream`，于是「工具真的跑了、模型照工具返回串说『已为你呈现入口』、而屏幕上什么都没有」。改为给两个执行器加**默认 no-op 的工具调用观察者**（CLI 输出字节不变），桌面接线时**只放行这两个 UI 意图工具**——普通工具在该路径没有 `tool.result`，放行会让工具卡永久停在「运行中」
 - **三件套工具**：`task_*`（4）/ `memory_*`（6）/ `automation_*`（5）共 15 个，直调面板同一批 Java 服务；高后果写进 HITL + 全部写操作进审计；自动化目录解析统一到 `AutomationStore.openDefault()`，杜绝「agent 写了、面板读不到」
+
+### 第二十七期：Windows 命令沙箱与 `execute_command` 的 POSIX 假设清算
+
+起因是一句用户反馈：「windows 没有沙箱」。查下去发现**「没沙箱」只是露出水面的部分**——底下压着三个更要命的洞，都源自同一个病根：**把 POSIX 的进程 / shell 假设直接套到 Windows**（与第二十六期后修的 MCP `npx` → `npx.cmd` 同源）。
+
+**先补的三个地基**（与沙箱无关，但沙箱盖在上面）：
+
+| 缺陷 | 现象 | 修法 |
+|---|---|---|
+| `execute_command` 全平台写死 `bash -c` | Windows 上能否执行完全取决于 `bash.exe` 恰好在 PATH——而 Git for Windows 默认只把 `<install>\cmd` 加进 PATH，`bash.exe` 在 `<install>\bin`，**默认不在** | 抽 `ShellCommand`：Windows → `%ComSpec% /c`，其余 → `bash -c`。此前 `ToolRegistry` 与 `CommandSandbox` **各写死一份**，这也是同一个缺陷能同时存在于两处的原因 |
+| `CommandGuard` 九条规则全是 POSIX 词汇 | `rd /s /q C:\`、`format`、`diskpart`、`reg delete`、`vssadmin delete shadows` 一条不拦——而无沙箱时给用户看的文案偏偏写着「仍受命令黑名单保护」，**在 Windows 上那是一句空承诺** | 补 10 条 Windows / PowerShell 形状规则；同时锁死误杀边界（`rd /s /q build`、不带 `/T` 的 `icacls` 必须放行） |
+| 超时只杀直接子进程 | Windows 上杀 `cmd.exe` 不连带杀子孙，超时命令留下一地孤儿 | `ProcessHandle.descendants()` 整棵杀。**必须先收集再动手**——杀了父进程这棵树就断了 |
+| 子进程输出按 JVM 默认编码解 | JEP 400 之后默认编码恒为 UTF-8，而 Windows 控制台吐的是本地代码页（中文 Windows 是 GBK），**JDK ≥18 上中文必乱码** | 改用 `native.encoding`（Java 17+ 提供，报告的正是 OS 本地编码，不受 JEP 400 影响） |
+
+**沙箱本体**：Windows 用 **AppContainer**——唯一「免管理员 + 内核强制 + 不换工具链」的选项。不给 `internetClient` 能力即内核级断网；写围栏靠把工作区授权给 profile SID，`.git` 显式拒写。语义与 Seatbelt 一一对应。
+
+几个关键取舍：
+
+- **PowerShell 当发射器，不引 JNA**。AppContainer 的难点不是调 Win32，是 **stdio**：走 JNA 得自建管道、把 `HANDLE` 循环 `ReadFile` 桥回 `InputStream`，`ProcessBuilder` 的流处理全部作废。改由 PowerShell 发射（`Add-Type` 就地编译 C# P/Invoke，靠 Windows 自带 .NET 编译器，**不要 MSVC**），它自己的 stdout 就是 Java 给的管道，往下继承即可——**Java 侧一行不用改，零新依赖**
+- **两个 profile 而不是一个**：AppContainer 的能力集在**创建时**定死，之后改不了，所以断网 / 联网各建一个，开关只决定用哪个
+- **管道必须显式授权给 AppContainer**：其令牌被严格削过，默认 DACL 的匿名管道可能读写被拒。漏掉这步的症状是「命令跑完但一个字都没输出」，极难归因
+- **fail-open 而非 fail-closed**：沙箱起不来时裸跑 + 警告。一个「因为没授权 npm 缓存目录就默默掐掉 `npm install`」的沙箱，排查成本远高于它的安全收益。但降级原因这次**一路带到 UI**（此前只进 `log.warn`，桌面用户根本看不到）
+- **沙箱状态从 boolean 升为三态**：`macos-seatbelt | windows-appcontainer | none`。此前后端只回布尔，Windows 与「mac 上 sandbox-exec 不见了」拿到同一个 `none`，前端只能靠 `platform` 反推——根因是**后端没把话说清楚**。现在后端直说，前端的 `platform` 判据收窄到只用于区分 Linux（确实没有实现）
+
+**`wraith sandbox doctor`**：四条探针**真跑**，不是看配置。其中两条是**「期望失败」**——工作区外写、联网。前两条绿只说明沙箱没碍事，只有这两条被拦住，才说明它真在拦。这是把验证能力交到用户手里的唯一办法（作者没有 Windows 机器，Win32 调用序列 / 管道 DACL / icacls 授权 / 工具链可读性全部只能在真机验出来）。
+
+> ⚠️ **沙箱会修改工作区的文件 ACL**（授权给 AppContainer SID），**在面板里关掉沙箱不会自动撤销**。撤销方式见 [`docs/windows-usage.md`](docs/windows-usage.md) §6.5。
 
 ## 界面一览
 
@@ -434,10 +462,11 @@ Tips for getting started:
 ### 第六期 HITL 增强
 
 - 🛡️ 路径围栏：文件类工具强制限定在项目根之内，绝对路径外逃 / `..` 穿越 / 符号链接逃逸全部拦截
-- 🧯 命令快速拒绝：HITL 之前的 fast-fail 黑名单（`sudo` / `rm -rf 全盘` / `mkfs` / `dd of=/dev` / fork bomb / `curl|sh` / `find /` / `chmod 777 /` / `shutdown`），减少 HITL 弹窗骚扰
-- 📦 资源上限：`write_file` 5MB；`execute_command` 60 秒超时 + 8KB 输出截断
+- 🧯 命令快速拒绝：HITL 之前的 fast-fail 黑名单，POSIX 与 Windows 两套并存（`sudo` / `rm -rf 全盘` / `mkfs` / `dd of=/dev` / fork bomb / `curl|sh` / `find /` / `chmod 777 /` / `shutdown`；`rd`/`del` 打向盘符根 / `format` / `diskpart` / `reg delete` / `takeown` / `vssadmin delete shadows` / `bcdedit` / `iwr|iex`），减少 HITL 弹窗骚扰
+- 🧱 命令沙箱：macOS Seatbelt / Windows AppContainer，默认断网 + 写限工作区 + `.git` 只读；不可用时 fail-open 并在 UI 显示原因
+- 📦 资源上限：`write_file` 5MB；`execute_command` 60 秒超时（连同子孙进程整棵杀）+ 8KB 输出截断
 - 📋 结构化审计：危险工具调用按天写一行 JSONL 到 `~/.wraith/audit/`，可通过 `/audit [N]` 查看
-- 🧱 定位：HITL 之外的辅助层，不是沙箱、不提供进程隔离
+- 🚧 边界：进程级沙箱，不是容器 / VM；HITL 审批仍是主防线
 
 ## 快速开始
 
@@ -753,7 +782,7 @@ I
 
 同一轮模型返回多个工具调用时，Wraith 会并行执行这些工具；如果工具之间有依赖关系，模型应分多轮调用。
 
-文件类与代码检索工具（`read_file` / `write_file` / `list_dir` / `glob_files` / `grep_code` / `create_project`）路径强制限定在项目根之内，越界请求会被策略层拒绝；`execute_command` 通过命令黑名单拦截 `sudo` / `rm -rf 全盘` / `mkfs` / `dd of=/dev` / fork bomb / `curl|sh` 等。`revert_turn` 会批量回写工作区，默认触发 HITL 和审计。所有 `mcp__` 前缀工具默认触发 HITL 和审计。详见 `/policy`。
+文件类与代码检索工具（`read_file` / `write_file` / `list_dir` / `glob_files` / `grep_code` / `create_project`）路径强制限定在项目根之内，越界请求会被策略层拒绝；`execute_command` 通过命令黑名单拦截 `sudo` / `rm -rf 全盘` / `mkfs` / `dd of=/dev` / fork bomb / `curl|sh`（POSIX）与 `rd`/`del` 打向盘符根 / `format` / `diskpart` / `reg delete` / `vssadmin delete shadows` / `iwr|iex`（Windows）等，并在桌面 / IM / 定时任务三条路径上包进操作系统沙箱（macOS Seatbelt / Windows AppContainer：默认断网、写限工作区、`.git` 只读）。`revert_turn` 会批量回写工作区，默认触发 HITL 和审计。所有 `mcp__` 前缀工具默认触发 HITL 和审计。详见 `/policy`，沙箱体检见 `wraith sandbox doctor`。
 
 ## 命令
 
@@ -787,8 +816,8 @@ I
 - `/mcp enable <name>` - 运行时启用 MCP server
 - `/mcp resources <name>` - 查看 MCP server 暴露的 resources
 - `/mcp prompts <name>` - 查看 MCP server 暴露的 prompts（只查看，不注入对话）
-- `/policy` - 查看安全策略状态（路径围栏 / 命令黑名单 / 资源上限 / 审计目录）
-- `/audit [N]` - 查看今日最近 N 条危险工具审计记录（默认 10）
+- `/policy` - 查看安全策略状态（路径围栏 / 命令黑名单 / 命令沙箱 / 资源上限 / 审计目录）
+- `/audit [N]` - 查看最近 N 条危险工具审计记录（默认 10；跨天回溯，默认往回找 30 天）
 - `/snapshot` - 查看最近 Side-Git 快照
 - `/snapshot status` - 查看 Side-Git 快照状态
 - `/snapshot clean` - 清理当前项目 Side-Git 快照目录
@@ -946,26 +975,28 @@ src/main/java/com/lyhn/wraith
 
 ## Windows 桌面对等
 
-桌面 App 原以 macOS 为主；这一阶段把 mac 上的能力逐块搬到 Windows，分五块推进（Java 内核与渲染层本就跨平台，改动集中在少数平台专属处，均在分支 `feat/windows-parity-block1`）：
+桌面 App 原以 macOS 为主；这一阶段把 mac 上的能力逐块搬到 Windows，分六块推进（Java 内核与渲染层本就跨平台，改动集中在少数平台专属处，均在分支 `feat/windows-parity-block1`）：
 
 1. **可跑 dev + 平台守卫**：`npm run dev` 在 Windows 起得来，核心功能（聊天 / 终端 / 记忆 / 面板）全通；平台分支抽成纯函数在 mac 上单测。终端 shell 用 `COMSPEC` / PowerShell；后端 `spawn('java', …)` 走系统 PATH。
 2. **窗口视觉对等**：Windows 主窗无边框（`frame:false`）+ 顶条右上角自绘 最小 / 最大-还原 / 关闭（混合风：Windows 位置行为 + wraith 单色墨字形，关闭悬停红，双击标题栏最大化）；mac 的红绿灯 / vibrancy 不变。
 3. **编辑器探测 + 打开**：「用应用打开」在 Windows 按已知安装路径探测 VS Code / VS Code Insiders / Cursor / Sublime Text / Notepad++，直接 spawn 其 exe 打开文件（自定义目录 / 注册表安装暂不覆盖）。
 4. **打包**：`npm run dist:win` 产未签名 NSIS 安装包（向导式，可选安装目录 + 桌面 / 开始菜单快捷方式）；捆绑 Windows JRE（本机 jlink）+ 原生 node-pty（本机 `npm install`）。
 5. **桌宠点击不抢焦**：koffi FFI 给桌宠窗 HWND 加 `WS_EX_NOACTIVATE`（精确不抢焦，FFI 失败降级 `focusable:false`）；跨虚拟桌面常驻为已知限制（Windows 无官方 API）。
+6. **命令沙箱 + `execute_command` 可用**：AppContainer 沙箱（断网 + 写围栏 + `.git` 只读，经 PowerShell 发射器、零新依赖），并修掉三个此前被「没沙箱」遮住的地基缺陷——`bash -c` 写死、命令黑名单全是 POSIX 词汇、超时只杀直接子进程。详见[第二十七期](#第二十七期windows-命令沙箱与-execute_command-的-posix-假设清算)。
 
 **在 Windows 上启动**：完整步骤（前置检查 → clone → 切分支 → 开发态/装包两条路线 → 配模型 → 发第一条消息）见 **[`docs/windows-usage.md`](docs/windows-usage.md)**，命令摘要见本文顶部「下载」一节。
 
-两点容易踩的：
+一点容易踩的：
 
-- **必须 `git checkout feat/windows-parity-block1`。** 桌面端不用说（`main` 上零个 Windows 专属文件）；**CLI 端同样要切** —— Java 内核虽然跨平台，但 `AtomicFileMove`（tmp→target 原子改名的有界重试，应对 Windows 上目标文件被杀软/索引器占用时抛的 `AccessDeniedException`）只在这个分支，而会话落盘 / 技能库 / QQ 待发三处都走它。
-- Windows 上没有 mac 那种 `wraith` / `wraith -d` 短命令（那是本机 shell 包装脚本、不随仓库分发），CLI 直接 `java -jar target\wraith-1.0-SNAPSHOT.jar`。
+- **必须 `git checkout feat/windows-parity-block1`。** 桌面端不用说（`main` 上零个 Windows 专属文件）；**CLI 端同样要切** —— Java 内核虽然跨平台，但 `AtomicFileMove`（tmp→target 原子改名的有界重试，应对 Windows 上目标文件被杀软/索引器占用时抛的 `AccessDeniedException`）与本期的 `ShellCommand` / `policy/sandbox` 都只在这个分支。**停在 `main` 上照样构建得出来，但 `execute_command` 在 Windows 上跑不起来，且不会有任何报错提示你走错了。**
 
-**验证状态（重要）**：以上五块均已**实现**，Java 与桌面测试在 macOS 上全绿（Java 1736 用例 0F/0E、桌面 1174 用例 / 137 文件、tsc 0 错误），但**尚未在真 Windows 机器上运行过**。mac 全绿不等于 Windows 能跑——两边真正分岔的地方是窗口 chrome、终端 shell、编辑器打开、spawn `java.exe`、桌宠 FFI、打包，以及文件系统语义（Windows 上目标文件被占用时 rename 会抛 `AccessDeniedException`，已加有界重试）。
+装上短命令后（见顶部「下载」一节），Windows 与 macOS 用法一致：`wraith` / `wraith -d` / `wraith-install`。
+
+**验证状态（重要）**：以上六块均已**实现**，Java 与桌面测试在 macOS 上全绿（Java **1810** 用例 0F/0E、桌面 **1227** 用例 / 143 文件、tsc 0 错误、Electron E2E 55 通过 + 1 跳过），但**尚未在真 Windows 机器上完整验证过**。mac 全绿不等于 Windows 能跑——两边真正分岔的地方是窗口 chrome、终端 shell、编辑器打开、spawn `java.exe`、桌宠 FFI、打包、文件系统语义（rename 遇占用抛 `AccessDeniedException`，已加有界重试），以及**本期风险最高的一块：AppContainer 的 Win32 调用序列、管道 DACL、icacls 授权、工具链可读性**——这几项在 mac 上原理性无法验证，只能靠 `wraith sandbox doctor` 在真机跑出来。
 
 **会话栏与左侧工具栏本身没有平台分支**：`Sidebar.tsx` / `Composer.tsx` 里 `platform` 出现 0 次，`Transcript.tsx` 里唯一一处是 IM 平台（qq/weixin）而非操作系统——两端渲染的是同一份 React 代码。平台差异只在窗口外壳这一层：Windows 无边框 + 自绘三键，mac 交通灯 + vibrancy；皮肤上 mac 有 `html.is-mac` 的半透明侧栏，Windows 走实色（有意设计，非缺样式）。
 
-**逐条验收清单**（102 条，含前置 / 构建测试 / 窗口外壳 / 11 个面板 / 三模式动作卡 / 三件套工具 / IM 网关 / 桌宠 / 打包安装，每条带预期与翻车时的排查方向）见 [`docs/windows-dev.md`](docs/windows-dev.md)。
+**逐条验收清单**（124 条，含前置 / 构建测试 / 窗口外壳 / 11 个面板 / **命令沙箱与 `execute_command`** / 三模式动作卡 / 三件套工具 / IM 网关 / 桌宠 / 打包安装，每条带预期与翻车时的排查方向）见 [`docs/windows-dev.md`](docs/windows-dev.md)。
 
 **已知限制 / 预期失败**：
 
@@ -975,3 +1006,7 @@ src/main/java/com/lyhn/wraith
 - 编辑器探测不覆盖自定义安装目录 / 注册表安装
 - 安装包未签名，首次运行触发 SmartScreen（根治需 Authenticode 证书）
 - GitHub Release 目前只发了 mac 版（v1.3.0 dmg/zip），Windows 版需自行 `npm run dist:win`
+- 沙箱首条命令慢 1–2 秒（PowerShell 发射器要 `Add-Type` 就地编译 C#，之后走缓存）
+- 沙箱会修改工作区文件 ACL，**面板里关掉沙箱不会自动撤销**（撤销方式见 `docs/windows-usage.md` §6.5）
+- 装在用户目录下的工具链（如 `%APPDATA%\npm`）AppContainer 读不到，需手工 `icacls` 授权；`C:\Windows` 与 `C:\Program Files` 默认已开放
+- 工作区在非 NTFS / 网络盘上时 `icacls` 会失败，沙箱降级为无（命令仍可执行）

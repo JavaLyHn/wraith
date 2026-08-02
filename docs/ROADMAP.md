@@ -9,7 +9,7 @@
 | 阶段 | 内容 | 关键产出 |
 |---|---|---|
 | **P1** 后端协议骨架 | app-server 入口 + `EventStreamRenderer` + stdio JSON-RPC 2.0(JSONL)+ headless harness | `src/main/java/com/lyhn/wraith/runtime/appserver/`;事件流端到端验证 |
-| **P2** 沙箱 | macOS Seatbelt(`sandbox-exec`)包裹命令子进程:默认断网、限写、宽读;fail-open 降级 + 警告 | `policy/sandbox/`;`ToolRegistry` 注入 `CommandSandbox` |
+| **P2** 沙箱 | macOS Seatbelt(`sandbox-exec`)包裹命令子进程:默认断网、限写、宽读;fail-open 降级 + 警告。**2026-08-02 补 Windows AppContainer 对等**(经 PowerShell 发射器,不给 `internetClient` 即内核级断网;`SandboxKind` 三态取代原来的 boolean) | `policy/sandbox/`;`ToolRegistry` 注入 `CommandSandbox`;spec `docs/specs/2026-08-02-windows-sandbox-design.md` |
 | **P3a** 协议补全 + 流式 | 单飞守卫、`session.start` 目录校验、`initialize` 能力位;**工具卡片实时输出**(`tool.output.delta`/`tool.result`,ThreadLocal callId) | `AppServer` 4 参构造;`CommandOutputObserver` |
 | **P3b** Electron 壳 | spawn/守护 java、JSON-RPC client、transcript+markdown、可折叠思考块、工具卡片、**最小审批弹窗**、断连横幅、Playwright-electron E2E | `desktop/`(electron-vite + React18 + TS);preload CJS |
 | **Phase A** 前门 + 视觉身份 | Wraith 柔和浅色视觉身份(Tailwind + shadcn/Radix token 主题);欢迎空态`今天做点什么？`;富 Composer(**功能**:替我审批开关 + 重选目录;**占位**:附件、模型/强度只读——**已于占位兑现波兑现附件+模型切换,强度留待真 reasoning 模型**);静态侧栏骨架(搜索占位——**已于占位兑现波兑现**);5 组件重皮;唯一后端 `session.setApprovalMode`→`hitl.setEnabled(!auto)` | 合并 `174115a`(9 提交);vitest 35 + Playwright 6 + Java 2/2;spec `docs/specs/2026-07-01-desktop-phase-a-front-door.md`、plan `docs/plans/2026-07-01-desktop-phase-a.md` |

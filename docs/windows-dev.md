@@ -4,7 +4,7 @@
 > 如果你只是想在 Windows 上**把 wraith 用起来**(装包 / 配模型 / 界面导览 / 出问题怎么查),
 > 请看 [`windows-usage.md`](windows-usage.md)。
 
-> **当前状态(诚实版)**:Java 内核与渲染层本就跨平台,平台专属代码只集中在少数几处(窗口 chrome / 终端 shell / 编辑器打开 / spawn java / 桌宠 FFI / 打包)。Windows 对等块 1–5 均已**实现**,但 **截至本文档更新为止,以上全部内容从未在真 Windows 机器上运行过一次** —— mac 侧全绿(Java 1736 用例 0F/0E、桌面 1174 用例 / 137 文件、tsc 0)不等于 Windows 能跑。本清单就是用来还这笔验证债的。
+> **当前状态(诚实版)**:Java 内核与渲染层本就跨平台,平台专属代码只集中在少数几处(窗口 chrome / 终端 shell / 编辑器打开 / spawn java / 桌宠 FFI / 打包)。Windows 对等块 1–6 均已**实现**,但 **截至本文档更新为止,以上绝大部分从未在真 Windows 机器上运行过** —— mac 侧全绿(Java 1810 用例 0F/0E、桌面 1227 用例 / 143 文件、tsc 0、E2E 55+1)不等于 Windows 能跑。**本批风险最高的是第 5.1 节的命令沙箱**:AppContainer 的 Win32 调用序列、管道 DACL、icacls 授权、工具链可读性在 mac 上原理性无法验证。本清单就是用来还这笔验证债的。
 >
 > 逐条打勾即可;每条给了**预期**和**翻车时最可能的原因**,便于你现场判断是环境问题还是真 bug。
 
@@ -32,7 +32,7 @@ mvn -DskipTests=false test        # ⚠ 本仓库测试默认跳过,必须显式
 ```
 
 - [ ] `mvn clean package -DskipTests` 成功,产出 `target\wraith-1.0-SNAPSHOT.jar`
-- [ ] `mvn -DskipTests=false test` 全绿(mac 基线:**1736 tests / 0 failures / 0 errors**)
+- [ ] `mvn -DskipTests=false test` 全绿(mac 基线:**1810 tests / 0 failures / 0 errors**)
 
 **重点关注这几个类**(它们最可能暴露 Windows 与 POSIX 的语义差异):
 
@@ -47,7 +47,7 @@ mvn -DskipTests=false test        # ⚠ 本仓库测试默认跳过,必须显式
 - [ ] CLI 能起:`java -jar target\wraith-1.0-SNAPSHOT.jar`
 - [ ] CLI 里发一条消息有回复
 
-> Windows 上**没有** mac 那种 `wraith` / `wraith -d` 短命令(那是本机 shell 包装脚本,不随仓库分发),直接用 `java -jar`。
+> Windows 也有 `wraith` / `wraith -d` / `wraith-install` 短命令,装一次即可(`powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1`,**须新开终端**)。不装就直接用 `java -jar`。
 
 ---
 
@@ -122,14 +122,15 @@ Windows 走 `frame:false` 无边框 + 渲染层自绘窗控;mac 走交通灯 + v
 
 **顶栏沙箱盾**(平台专属,mac 与 Windows 预期**不同**)
 
-- [ ] 盾显示为**中性墨色**,悬停 tooltip 是「当前平台不支持 Seatbelt 沙箱 · 命令仅受命令黑名单保护」
-- [ ] 盾**不是红色**、文案**不含「未启用」** —— 那是 mac 专属的可行动异常态,Windows 出现即为 bug
+- [ ] 盾显示为**中性墨色**,悬停 tooltip 是「命令在 AppContainer 沙箱内执行」
+- [ ] 盾**若是红色「沙箱未启用」** = AppContainer 没起来 → 跑 `wraith sandbox doctor` 查缺失项(见 §5.1)
 - [ ] 点盾能进「安全」面板
 - [ ] 在面板页(非对话页)盾仍在;终端/右栏两键则正确收起
 
-> 后端 `CommandSandbox.available()` = `os.name contains "mac" && /usr/bin/sandbox-exec 可执行`,
-> 所以 Windows 恒定回 `capabilities.sandbox='none'`。渲染层据 `platform` 把这个 `none`
-> 判为「平台不支持」而非「你没开」—— 否则就是一颗永远消不掉、点进去又无事可做的红点。
+> **这条预期在 2026-08-02 反过来了。** 旧版清单写的是「中性墨色 + 当前平台无沙箱,红色即为 bug」——
+> 那是 Windows 还没有沙箱实现时的口径。现在 Windows 有 AppContainer,后端直接回
+> `capabilities.sandbox='windows-appcontainer'`,**红色不再是 bug,而是「本该有却没起来」的真告警**。
+> 渲染层的 `platform` 反推也随之收窄到只用于区分 Linux(确实没有实现)。
 
 ---
 
@@ -141,6 +142,54 @@ Windows 走 `frame:false` 无边框 + 渲染层自绘窗控;mac 走交通灯 + v
   - 探测按**默认安装路径**;自定义目录 / 注册表安装**不覆盖**(已知限制,不算 bug)
 - [ ] 文件路径显示为 Windows 形式(反斜杠),点击可打开
 - [ ] 项目切换、目录选择对话框正常
+
+### 5.1 `execute_command` 与命令沙箱(**本批全新,风险最高**)
+
+> 这批全部**未经真机验证**——作者没有 Windows 机器。Win32 调用序列、管道 DACL、
+> icacls 授权、工具链可读性只能在这里验出来。**任一条不过请把整段输出发出来。**
+
+**先跑体检**(所有后续条目的前提):
+
+```cmd
+wraith sandbox doctor
+```
+
+- [ ] 四条前置全 ✔(平台 / Windows 版本 / powershell.exe / 发射器脚本)
+- [ ] 探针 `stdio 管道` ✔ —— **最可能翻车的一环**。若报「退出码 0 但没拿到输出」,是管道 DACL 没授给 AppContainer
+- [ ] 探针 `工作区内可写` ✔
+- [ ] 探针 `工作区外拒写` ✔(显示"已被拦截") —— 显示"本应被拦截却成功了"= 写围栏没生效
+- [ ] 探针 `断网` ✔(显示"已被拦截") —— 显示"本应被拦截却成功了"= 断网没生效
+- [ ] doctor 退出码为 0
+
+**基本执行**(此前 Windows 上写死 `bash -c`,而 Git for Windows 默认不把 `bash.exe` 放进 PATH):
+
+- [ ] 聊天里让 agent 跑 `dir`,能拿到输出(不是 `CreateProcess error=2`)
+- [ ] 跑一条有中文输出的命令,**不乱码**(JEP 400 之后默认编码变 UTF-8,而 cmd 吐的是本地代码页)
+- [ ] 跑 `npm -v` / `git --version` 之类工具链命令,能正常执行
+- [ ] 跑一条长命令(如 `npm install`)不因沙箱 ACL 缺失而失败
+
+**围栏语义**:
+
+- [ ] 让 agent 往工作区外写文件(如 `%USERPROFILE%\x.txt`),被拒
+- [ ] 让 agent 改 `.git` 里的文件,被拒
+- [ ] 面板「命令沙箱联网」开关**可点**(不再灰着),顶栏盾是浅墨「沙箱: AppContainer」
+- [ ] 关着开关时 agent 联网命令失败;打开后成功
+- [ ] 沙箱不可用时(可临时改名发射器脚本模拟):顶栏盾变红、面板显示具体缺失原因、**命令仍能执行**(fail-open 不阻断)
+
+**命令黑名单**(此前九条全是 POSIX 词汇,Windows 上形同虚设):
+
+- [ ] 让 agent 执行 `rd /s /q C:\`,被黑名单拒(不进审批弹窗)
+- [ ] 让 agent 执行 `format C:`,被拒
+- [ ] 让 agent 执行 `Remove-Item -Recurse -Force $env:USERPROFILE`,被拒
+- [ ] **误杀检查**:`rd /s /q build`、`del target\classes\x.class`、`icacls C:\wraith-test`(不带 `/T`)**不被拦**
+
+**超时清理**:
+
+- [ ] 让 agent 跑一条超 60 秒的命令,超时后用任务管理器确认**子孙进程也没了**(此前只杀直接子进程)
+
+**撤销**(验完清理机器):
+
+- [ ] 按 `docs/windows-usage.md` §6.5「撤销」把 ACL 和临时目录清掉
 
 ---
 
@@ -237,6 +286,10 @@ npm run dist:win                        # 产物:desktop\release\*.exe
 - [ ] 桌宠**跨虚拟桌面**常驻做不到(Windows 无官方 API)
 - [ ] `WS_EX_NOACTIVATE` 仅 **x64** 精确;ia32 自动降级为 `focusable:false`
 - [ ] 编辑器探测不覆盖**自定义安装目录 / 注册表安装**
+- [ ] 沙箱**首条命令慢 1–2 秒** —— PowerShell 发射器要 `Add-Type` 就地编译 C# P/Invoke,之后有缓存
+- [ ] 沙箱把工作区授权给 AppContainer SID 时会**改文件 ACL**,面板里关掉沙箱**不会自动撤销**(撤销方式见 windows-usage.md §6.5)
+- [ ] 装在用户目录下的工具链(如 `%APPDATA%\npm`)AppContainer **读不到**,需手工 `icacls` 授权;`C:\Windows` 与 `C:\Program Files` 默认已开放
+- [ ] 工作区在**非 NTFS / 网络盘**上时 `icacls` 会失败 → 沙箱降级为无
 - [ ] 安装包**未签名**(根治需 Authenticode 证书)
 - [ ] GitHub Release 目前**只发了 mac 版**(v1.3.0 dmg/zip);Windows 版需自行 `dist:win`
 
