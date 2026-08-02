@@ -5,6 +5,7 @@ import {
   baseProviderId, nextInstanceId, instanceDisplayName, prefillForm,
 } from '../../shared/providerCatalog'
 import ProviderIcon from './ProviderIcon'
+import { baseUrlFixHint, BASE_URL_PLACEHOLDER } from '../lib/providerHints'
 import type { ModelListResult, ProviderView } from '../../shared/types'
 
 type TestState = { status: 'idle' | 'testing' | 'ok' | 'fail'; msg?: string }
@@ -155,10 +156,17 @@ export default function ProvidersPanel({ onBack, onSaved }: { onBack: () => void
             <datalist id="pm-suggest">{(e?.suggestedModels ?? []).map(m => <option key={m} value={m} />)}</datalist></label>
           <label className="mt-2 block text-3xs text-fg-subtle">Base URL
             <input data-testid="provider-baseurl" value={form.baseUrl} onChange={ev => patchForm({ baseUrl: ev.target.value })}
+              placeholder={BASE_URL_PLACEHOLDER}
               className="mt-1 w-full rounded border border-border bg-bg px-2 py-1.5 text-xs outline-none focus:border-accent" /></label>
           {test.status !== 'idle' && (
             <div data-testid="provider-test-result" className={`mt-2 text-3xs ${test.status === 'ok' ? 'text-accent' : test.status === 'fail' ? 'text-danger' : 'text-fg-subtle'}`}>
               {test.status === 'testing' ? '测试中…' : test.status === 'ok' ? `✓ ${test.msg}` : `✗ ${test.msg}`}
+            </div>
+          )}
+          {/* 报错原文说了「路径不对」,但没人有义务知道那意味着 Base URL 该补 /v1。把这步推理补上。 */}
+          {test.status === 'fail' && baseUrlFixHint(form.baseUrl, test.msg ?? '') && (
+            <div data-testid="provider-baseurl-hint" className="mt-1 text-3xs text-fg-muted">
+              💡 {baseUrlFixHint(form.baseUrl, test.msg ?? '')}
             </div>
           )}
           {error && <div className="mt-2 text-3xs text-danger">{error}</div>}
