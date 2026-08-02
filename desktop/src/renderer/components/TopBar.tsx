@@ -23,7 +23,7 @@ export default function TopBar({ platform, sidebarCollapsed, onToggleSidebar, sh
     'flex items-center rounded-[10px] p-1.5 transition duration-150 active:scale-90 motion-reduce:transform-none [-webkit-app-region:no-drag] ' +
     (open ? 'text-fg' : 'text-fg-muted hover:text-fg')
 
-  const sb = sandboxChipView(sandbox)
+  const sb = sandboxChipView(sandbox, platform)
   const SbIcon = sb.kind === 'ok' ? ShieldCheck : sb.kind === 'off' ? ShieldAlert : Shield
 
   return (

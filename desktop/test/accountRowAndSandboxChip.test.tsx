@@ -115,15 +115,15 @@ describe('侧栏账户行', () => {
 
 describe('顶栏沙箱盾', () => {
   it('三种状态各有自己的无障碍名,「未启用」是异常态的判定词', () => {
-    expect(sandboxChipView('macos-seatbelt').label).toBe('沙箱: Seatbelt')
-    expect(sandboxChipView('none').label).toBe('沙箱未启用')
-    expect(sandboxChipView('unknown').label).toBe('沙箱状态未知')
+    expect(sandboxChipView('macos-seatbelt', 'darwin').label).toBe('沙箱: Seatbelt')
+    expect(sandboxChipView('none', 'darwin').label).toBe('沙箱未启用')
+    expect(sandboxChipView('unknown', 'darwin').label).toBe('沙箱状态未知')
   })
 
   it('只有未启用用 danger 墨色;正常态压到 muted,不跟其它顶栏键争注意力', () => {
-    expect(sandboxChipView('none').tone).toContain('text-danger')
-    expect(sandboxChipView('macos-seatbelt').tone).not.toContain('danger')
-    expect(sandboxChipView('unknown').tone).not.toContain('danger')
+    expect(sandboxChipView('none', 'darwin').tone).toContain('text-danger')
+    expect(sandboxChipView('macos-seatbelt', 'darwin').tone).not.toContain('danger')
+    expect(sandboxChipView('unknown', 'darwin').tone).not.toContain('danger')
   })
 
   it('渲染在顶栏,aria-label 带状态', () => {
@@ -147,5 +147,71 @@ describe('顶栏沙箱盾', () => {
   it('盾是 no-drag 的,否则点它会变成拖窗口', () => {
     render(<TopBar {...topBarProps} />)
     expect(screen.getByTestId('sandbox-badge').className).toContain('no-drag')
+  })
+})
+
+/**
+ * 后端的 `CommandSandbox.available()` 判的是 `os.name contains "mac" && /usr/bin/sandbox-exec 可执行`,
+ * 所以 Windows / Linux **恒定**拿到 `capabilities.sandbox = 'none'`(jshell 实测:Windows=false→none)。
+ *
+ * 这意味着盾牌一旦只看后端回包,在 Windows 上就是一颗**永远消不掉的红点**,
+ * tooltip 还写着「点击查看安全设置」—— 用户点进去无事可做。
+ * 那不只是刺眼,是在说假话:它暗示存在一处可修的错配。
+ * 判据必须是 platform:同一个 `none`,在 mac 上可行动(该红),在别处不可行动(不该红)。
+ */
+describe('沙箱盾在非 mac 平台', () => {
+  /** win32 下 TopBar 会挂 WindowControls,它在 mount 时就读 window.wraith.windowControls。 */
+  function stubWindowControls(): void {
+    ;(window as unknown as { wraith: unknown }).wraith = {
+      platform: 'win32',
+      windowControls: {
+        minimize: vi.fn(), toggleMaximize: vi.fn(), close: vi.fn(),
+        isMaximized: vi.fn(async () => false), onMaximizeChange: vi.fn(() => () => {}),
+      },
+    }
+  }
+
+  it('win32 + none:不是 danger —— 平台不支持不是可行动的告警', () => {
+    expect(sandboxChipView('none', 'win32').tone).not.toContain('danger')
+    expect(sandboxChipView('none', 'linux').tone).not.toContain('danger')
+  })
+
+  it('win32 + none:文案说「平台无沙箱」,不说「未启用」', () => {
+    const v = sandboxChipView('none', 'win32')
+    expect(v.label).toBe('当前平台无沙箱')
+    expect(v.label).not.toContain('未启用')   // 「未启用」专属 mac 异常态,别复用
+  })
+
+  it('win32 + none:tooltip 交代清楚还剩什么保护,不留悬念', () => {
+    expect(sandboxChipView('none', 'win32').title).toContain('黑名单')
+  })
+
+  it('kind 与 mac 异常态是两个值 —— 图标据此分岔(plain Shield vs ShieldAlert)', () => {
+    expect(sandboxChipView('none', 'win32').kind).toBe('unsupported')
+    expect(sandboxChipView('none', 'darwin').kind).toBe('off')
+  })
+
+  it('mac 上 none 仍然红 —— 修 Windows 不能顺手把 mac 的真告警一起消音', () => {
+    expect(sandboxChipView('none', 'darwin').tone).toContain('text-danger')
+  })
+
+  it('端到端:platform=win32 的顶栏渲染出的是「无沙箱」而非红色「未启用」', () => {
+    stubWindowControls()
+    render(<TopBar {...topBarProps} platform="win32" sandbox="none" />)
+    const badge = screen.getByTestId('sandbox-badge')
+    expect(badge.getAttribute('aria-label')).toBe('当前平台无沙箱')
+    expect(badge.className).not.toContain('danger')
+  })
+
+  it('win32 下盾与自绘窗控同时在场,且盾排在窗控左边(不抢窗控的角落)', () => {
+    // 这个组合此前从未被渲染过一次:win32 的用例 sandbox 恒为 macos-seatbelt,
+    // 而 Windows 上真正会发生的只有 none。
+    stubWindowControls()
+    const { container } = render(<TopBar {...topBarProps} platform="win32" sandbox="none" />)
+    const badge = screen.getByTestId('sandbox-badge')
+    const controls = screen.getByTestId('window-controls')
+    expect(container.contains(badge) && container.contains(controls)).toBe(true)
+    // compareDocumentPosition: FOLLOWING(4) 表示 controls 在 badge 之后
+    expect(badge.compareDocumentPosition(controls) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 })
