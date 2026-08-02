@@ -182,9 +182,30 @@ desktop\resources\runtime\bin\java.exe -version
 
 ## 2. 首次启动：配一个模型
 
-启动后 wraith 还不能对话 —— 它不知道用哪个模型、拿什么密钥。**有三条路，桌面用户走第一条就行。**
+启动后 wraith 还不能对话 —— 它不知道用哪个模型、拿什么密钥。
 
-### ① 图形界面配（推荐）
+> ## ⚠️ 全新装机必须先在应用外面配好第一个 key
+>
+> **当前版本存在一个首次运行的死锁，请先读完这段再动手。**
+>
+> 后端在没有任何 API Key 时会**直接退出**（`Main.java` 的 app-server / CLI / serve 三个入口都是 `System.exit(1)`）。而桌面端的「Provider 配置」面板是通过后端 RPC 写配置的（`config.setProvider`）—— 后端不在，面板也存不了。**想配 key 得先有 key。**
+>
+> 症状是启动后控制台狂刷：
+>
+> ```
+> app-server: 未找到可用 API Key
+> Error occurred in handler for 'wraith:initialize': Error: Backend not connected
+> Error occurred in handler for 'wraith:modelList': Error: Backend not connected
+> ...
+> ```
+>
+> 第一行才是病因，后面全是后端已死的连带反应。界面上目前**不会**告诉你缺 key。
+>
+> **破局办法：先用下面的 ② 或 ③ 配好第一个 key，重启应用。** 之后后端能起来了，① 图形界面就正常可用（换模型、加第二家 provider、改 Base URL 都走 GUI）。
+>
+> 这不是 Windows 特有的，mac 全新装机同样会撞。
+
+### ① 图形界面配（后端起来之后用这个）
 
 1. 左侧栏找到 **配置 → Provider 配置**
 2. 搜索或在列表里挑一个 provider（GLM / DeepSeek / Kimi / StepFun / 讯飞星辰 …），点 **＋配置**
@@ -195,7 +216,7 @@ desktop\resources\runtime\bin\java.exe -version
 
 配置落到 `%USERPROFILE%\.wraith\config.json`。**密钥不会出现在日志或任何回包里**，界面回读时只告诉你「已配置」，不回明文。
 
-### ② 放一个 `.env` 到用户目录
+### ② 放一个 `.env` 到用户目录（全新装机走这条）
 
 后端找 `.env` 的顺序是**当前工作目录**，然后是**用户目录**：
 
@@ -212,8 +233,21 @@ File[] envFiles = { new File(".env"), new File(System.getProperty("user.home"), 
 内容就是 `KEY=VALUE`，一行一条：
 
 ```
-GLM_API_KEY=你的key
+DEEPSEEK_API_KEY=你的key
 ```
+
+可用的 key 名（挑你有的那家）：`GLM_API_KEY`、`DEEPSEEK_API_KEY`、`STEP_API_KEY`、`KIMI_API_KEY`、`FREELLMAPI_API_KEY`、`XFYUN_MAAS_API_KEY`。
+
+cmd 里一条命令建好：
+
+```cmd
+echo DEEPSEEK_API_KEY=你的key> "%USERPROFILE%\.env"
+type "%USERPROFILE%\.env"
+```
+
+> `>` **前面不要留空格** —— cmd 会把空格一起写进值里。写完 `type` 一下确认。
+
+配好后重启 `npm run dev`，控制台不再出现「未找到可用 API Key」就说明后端起来了。
 
 ### ③ PowerShell 环境变量
 
@@ -280,7 +314,8 @@ mac 那种半透明磨砂侧栏在 Windows 上是**实色**，这是有意设计
 | `git clone` 报 `ssh: connect to host github.com port 22: Connection refused` | 用了 SSH 形式（`git@github.com:`），而 **22 端口被网络挡了**（公司网/校园网/部分 ISP 常见）；且全新机器也还没配 SSH 密钥 | 本仓库是**公开**的，直接用 HTTPS：`git clone https://github.com/JavaLyHn/wraith.git`，零认证配置。非要用 SSH 就走 443 通道，见下 |
 | 装的时候被 SmartScreen 拦 | 安装包未签名 | 「更多信息」→「仍要运行」 |
 | App 起来了但显示**后端未连接** | 走的是**开发态**（`npm run dev`），主进程 `spawn('java', …)` 找不到 java | 确认 `java` 在 **GUI 进程**的 PATH 里 —— GUI 应用不继承登录 shell 的 PATH，这是 Windows 上的经典坑。装好的 App 用捆绑 JRE，不该出这个问题 |
-| 发消息报没有 API Key | 没配 provider，或配了但没「设默认」 | 回第 2 节 ①，注意最后要点**设默认** |
+| 控制台刷 `app-server: 未找到可用 API Key` + 满屏 `Backend not connected` | **后端因为没有任何 API Key 直接退出了**，后面每个 IPC 都是连带反应。而 GUI 配 provider 也要经过后端 → 死锁 | 先在应用外配好第一个 key（第 2 节 ② 或 ③），重启。**界面上不会提示缺 key，只能看控制台第一行** |
+| 发消息报没有 API Key | 后端起来了但没设默认 provider | 回第 2 节 ①，注意最后要点**设默认** |
 | 设了环境变量但 App 不认 | 环境变量是进程启动时读的 | 重启 App；或直接改用图形界面配 |
 | `npm install` ERESOLVE 失败 | react peer 冲突 | 必须带 `--legacy-peer-deps` |
 | `npm install` 报错末尾有「**Log files were not written** ... `_logs`」 | **npm 缓存目录不可用**，与项目无关。连日志都落不下就是这个病的指纹，不管上面报 `EPERM` 还是 `ENOENT` | 见下方「npm 缓存目录不可用」——先 `npm config get cache` |
