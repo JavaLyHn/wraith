@@ -12,7 +12,9 @@ import java.nio.file.StandardOpenOption;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Locale;
 
@@ -80,34 +82,55 @@ public class AuditLog {
     }
 
     /**
-     * 读取今天审计文件最近 n 条记录，按写入顺序返回（最新的在末尾）。
+     * 最近 n 条审计记录，按时间升序（最旧在前，与面板的渲染顺序一致）。
+     *
+     * <p>**跨天读**:审计按天一个文件，早先这里只打开今天那一个 —— 昨天的记录就在隔壁却永远看不到，
+     * 且一过午夜面板就空了，看起来像"从来没发生过任何事"。而审计的用途正是"回头查什么危险操作跑过"，
+     * 按自然日切断没有道理。故从今天往回逐日翻，凑够 n 条即停。
+     *
+     * <p>回溯有上限({@code -Dwraith.audit.lookbackDays}，默认 30):没有上限的话，一个跑了两年的
+     * 目录每次刷新都要 stat 七百多个文件；而中间某天没文件只是那天没危险调用，不能当作终点。
      */
     public List<AuditEntry> readRecent(int n) {
         if (n <= 0) return List.of();
-        Path file = todayFile();
-        if (!Files.exists(file)) return List.of();
+        Deque<AuditEntry> newestFirst = new ArrayDeque<>();
+        LocalDate day = LocalDate.now();
+        for (int back = 0; back < lookbackDays() && newestFirst.size() < n; back++, day = day.minusDays(1)) {
+            readDayInto(fileFor(day), n, newestFirst);
+        }
+        return new ArrayList<>(newestFirst);
+    }
 
+    /** 把某一天的记录从后往前塞进 acc 的头部，凑够 limit 即停。文件不存在/读坏都当成"这天没有"。 */
+    private void readDayInto(Path file, int limit, Deque<AuditEntry> acc) {
+        if (!Files.exists(file)) return;
+        List<String> lines;
         try {
-            List<String> lines = Files.readAllLines(file);
-            int from = Math.max(0, lines.size() - n);
-            List<AuditEntry> entries = new ArrayList<>();
-            for (int i = from; i < lines.size(); i++) {
-                String line = lines.get(i);
-                if (line.isBlank()) continue;
-                try {
-                    entries.add(mapper.readValue(line, new TypeReference<AuditEntry>() {}));
-                } catch (Exception ignored) {
-                    // 单行格式错误跳过，不影响其他记录
-                }
-            }
-            return entries;
+            lines = Files.readAllLines(file);
         } catch (IOException e) {
-            return List.of();
+            return;
+        }
+        for (int i = lines.size() - 1; i >= 0 && acc.size() < limit; i--) {
+            String line = lines.get(i);
+            if (line.isBlank()) continue;
+            try {
+                acc.addFirst(mapper.readValue(line, new TypeReference<AuditEntry>() {}));
+            } catch (Exception ignored) {
+                // 单行格式错误跳过，不影响其他记录
+            }
         }
     }
 
+    private static int lookbackDays() {
+        return Math.max(1, Integer.getInteger("wraith.audit.lookbackDays", 30));
+    }
+
+    private Path fileFor(LocalDate day) {
+        return auditDir.resolve("audit-" + day.format(DATE_FMT) + ".jsonl");
+    }
+
     private Path todayFile() {
-        return auditDir.resolve("audit-" + LocalDate.now().format(DATE_FMT) + ".jsonl");
+        return fileFor(LocalDate.now());
     }
 
     private static Path defaultAuditDir() {

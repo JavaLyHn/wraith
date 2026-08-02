@@ -149,7 +149,8 @@ export default function PolicyPanel({ onBack }: { onBack: () => void }): JSX.Ele
         {busy && entries.length === 0 ? (
           <div className="text-xs text-fg-subtle">加载中…</div>
         ) : entries.length === 0 ? (
-          <div className="text-xs text-fg-subtle">今日尚无审计记录。危险工具(写文件 / 执行命令等)一经调用即记录在此。</div>
+          // 后端已跨天回溯(默认 30 天),文案不能再说「今日」—— 那会让人以为只是今天还没跑过
+          <div className="text-xs text-fg-subtle">近 30 天无审计记录。危险工具(写文件 / 执行命令等)一经调用即记录在此。</div>
         ) : (
           <div className="flex flex-col gap-2">
             {entries.map((e, i) => (

@@ -417,35 +417,39 @@ export default function Sidebar({
         </div>
 
         {/* footer: 账户行。头像+昵称取自设置→「我」(prefs.profile),点整行进设置面板。
-            单行、无副标题 —— 当前模型在 composer 的切换器里已有,重复写只是占高度。
-            沙箱状态已搬到顶栏的盾图标(全局可见,异常才变红),这里不再常驻一行灰字。 */}
+            沙箱状态已搬到顶栏的盾图标,这里不再常驻一行灰字。
+
+            v2 —— 第一版「无底色 + 齿轮只在 hover 出现」静止态一个可点的信号都不剩,读作装饰。
+            三处补回可供性:
+              1. 常驻 bg-fg/5 —— 与上方「新对话」同一套底色,是本侧栏里"这是个按钮"的既有语言;
+              2. 齿轮常显(hover/活动态才提亮),它是"这里通向设置"的唯一图形线索;
+              3. 昵称用 text-fg 而非 muted —— 它是这行的主标签,之前比装饰性的头像还淡。 */}
         <div className="border-t border-border px-3 py-2.5">
           <button
             data-testid="nav-settings"
             onClick={onOpenSettings}
             title={'设置 · ' + displayName}
-            className={'group flex w-full items-center gap-2.5 rounded-lg px-2 py-1.5 text-left ' +
+            className={'group flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors ' +
               (activeNav === 'settings'
                 ? 'relative bg-fg/10 before:absolute before:left-0 before:top-1/2 before:h-4 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent'
-                : 'hover:bg-fg/5')}
+                : 'bg-fg/5 hover:bg-fg/10')}
           >
             <span
               data-testid="account-avatar"
               aria-hidden
-              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-sm leading-none"
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent/15 text-xs leading-none"
             >
               {glyphRedundant
-                ? <User className="h-3.5 w-3.5 text-fg-muted" strokeWidth={1.5} />
+                ? <User className="h-3 w-3 text-fg-muted" strokeWidth={1.5} />
                 : userAvatarGlyph(profile)}
             </span>
-            <span data-testid="account-name" className={'flex-1 truncate text-xs ' + (activeNav === 'settings' ? 'text-fg' : 'text-fg-muted group-hover:text-fg')}>
+            <span data-testid="account-name" className="flex-1 truncate text-xs text-fg">
               {displayName}
             </span>
-            {/* 齿轮只在 hover / 活动态出现:常态下它是冗余的(整行就是设置入口) */}
             <Settings
               aria-hidden
-              className={'h-3.5 w-3.5 shrink-0 transition-opacity ' +
-                (activeNav === 'settings' ? 'text-accent opacity-100' : 'text-fg-subtle opacity-0 group-hover:opacity-100')}
+              className={'h-3.5 w-3.5 shrink-0 transition-colors ' +
+                (activeNav === 'settings' ? 'text-accent' : 'text-fg-subtle group-hover:text-accent')}
               strokeWidth={1.5}
             />
           </button>

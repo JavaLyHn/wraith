@@ -88,6 +88,24 @@ describe('侧栏账户行', () => {
     expect(row.className).toContain('bg-fg/10')
   })
 
+  it('静止态就要看得出能点:有底色 + 齿轮常显', () => {
+    // v1 是「无底色 + 齿轮只在 group-hover 才 opacity-100」,静止态一个可点信号都没有,读作装饰。
+    // 这条钉住可供性,免得下次又被「简洁」掉。
+    const { container } = render(<Sidebar {...sidebarProps()} />)
+    const row = container.querySelector('[data-testid="nav-settings"]')!
+    expect(row.className, '静止态没有底色,不像个控件').toMatch(/bg-fg\/5/)
+    const gear = row.querySelector('svg.lucide-settings') ?? row.querySelectorAll('svg')[row.querySelectorAll('svg').length - 1]
+    expect(gear, '齿轮不在').toBeTruthy()
+    expect(gear!.getAttribute('class') ?? '', '齿轮静止态被藏起来了').not.toMatch(/opacity-0/)
+  })
+
+  it('昵称是主标签,不能比装饰性的头像还淡', () => {
+    const { container } = render(<Sidebar {...sidebarProps()} />)
+    const name = container.querySelector('[data-testid="account-name"]')!
+    expect(name.className).toContain('text-fg')
+    expect(name.className).not.toContain('text-fg-muted')
+  })
+
   it('侧栏底部不再有沙箱文案(已搬到顶栏)', () => {
     const { container } = render(<Sidebar {...sidebarProps()} />)
     expect(container.textContent).not.toContain('沙箱')
