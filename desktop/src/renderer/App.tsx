@@ -52,6 +52,7 @@ import DisconnectedBanner from './components/DisconnectedBanner'
 import ModelFallbackBanner from './components/ModelFallbackBanner'
 import SubmitErrorBanner from './components/SubmitErrorBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
+import TaskDonePill from './components/TaskDonePill'
 import Sidebar from './components/Sidebar'
 import SidebarDock from './components/SidebarDock'
 import TopBar from './components/TopBar'
@@ -896,6 +897,12 @@ export default function App(): JSX.Element {
     turn: state.turn,
   })
 
+  // 空态没有 Transcript,药丸得单独取出来喂给 WelcomeEmptyState。
+  // 只在空态用得上,故不做记忆化 —— items 本来就每轮在变。
+  const taskDoneNotices = pv.showWelcome
+    ? state.items.filter((i): i is Extract<Item, { type: 'task-done' }> => i.type === 'task-done')
+    : []
+
   // 折叠态下导航目标变化(切会话/切视图)→ 自动收浮层
   useEffect(() => {
     if (sidebarCollapsed) setSidebarPeek(false)
@@ -1147,7 +1154,15 @@ export default function App(): JSX.Element {
                   </>
                 ) : (
                   <div className="min-h-0 flex-1">
-                    <WelcomeEmptyState examples={examplePrompts} onPickExample={(t) => { setInputValue(t); setComposerFocus(n => n + 1) }}>{composer}</WelcomeEmptyState>
+                    {/* 空态也要能显后台任务完成:从面板提交任务后回到新会话时,
+                        Transcript 不渲染(showWelcome),通知否则就丢了。 */}
+                    <WelcomeEmptyState
+                      examples={examplePrompts}
+                      onPickExample={(t) => { setInputValue(t); setComposerFocus(n => n + 1) }}
+                      notices={taskDoneNotices.length > 0 ? taskDoneNotices.map((n) => (
+                        <TaskDonePill key={n.taskId} text={n.text} ok={n.ok} onOpen={() => setView('tasks')} />
+                      )) : undefined}
+                    >{composer}</WelcomeEmptyState>
                   </div>
                 )}
                 {/* 终端抽屉:最底部(Composer 下方),常驻挂载,由 open 控制丝滑展开/收起 */}

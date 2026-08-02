@@ -15,6 +15,7 @@ import { PlanChecklist, PlanReviewCard } from './PlanCard'
 import { TeamCard } from './TeamCard'
 import ActionCard from './ActionCard'
 import ImConnectCard from './ImConnectCard'
+import TaskDonePill from './TaskDonePill'
 import type { PanelId } from '../lib/panelActions'
 import type { GatewayState } from '../../shared/gateway'
 import { groupToolRuns } from '../lib/groupToolRuns'
@@ -183,18 +184,8 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
         }
         if (item.type === 'task-done') {
           return (
-            <button
-              key={`taskdone-${item.taskId}`}
-              data-testid="task-done-pill"
-              onClick={() => onOpenPanel('tasks')}
-              title="打开后台任务面板查看结果"
-              className={'self-center max-w-[85%] truncate rounded-full border px-3 py-1 text-2xs transition-colors ' +
-                (item.ok
-                  ? 'border-border bg-surface/60 text-fg-subtle hover:border-accent hover:text-accent'
-                  : 'border-danger/40 bg-danger/5 text-danger hover:border-danger')}
-            >
-              {item.ok ? '✓' : '✕'} {item.text} · 点击查看
-            </button>
+            <TaskDonePill key={`taskdone-${item.taskId}`} text={item.text} ok={item.ok}
+              onOpen={() => onOpenPanel('tasks')} />
           )
         }
         if (item.type === 'plan') {

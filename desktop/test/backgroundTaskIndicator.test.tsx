@@ -85,6 +85,32 @@ describe('对话里的任务完成药丸', () => {
     expect(st.items.filter((i) => i.type === 'task-done')).toHaveLength(1)
   })
 
+  it('首页空态也能显药丸 —— 那里不渲染 Transcript,否则通知会丢', async () => {
+    // 场景:从后台任务面板提交任务 → 回到一个全新会话(showWelcome)→ 任务完成。
+    // Transcript 只在 hasStarted 时渲染,空态若不给插槽,这条通知就无处可去。
+    const { default: WelcomeEmptyState } = await import('../src/renderer/components/WelcomeEmptyState')
+    const { default: TaskDonePill } = await import('../src/renderer/components/TaskDonePill')
+    const onOpen = vi.fn()
+    render(
+      <WelcomeEmptyState examples={['示例一']} onPickExample={vi.fn()}
+        notices={<TaskDonePill text="后台任务完成:数 md 文件 · 3s" ok onOpen={onOpen} />}>
+        <div>composer</div>
+      </WelcomeEmptyState>,
+    )
+    expect(screen.getByTestId('welcome-notices')).toBeTruthy()
+    expect(screen.getByTestId('task-done-pill').textContent).toContain('数 md 文件')
+    // 示例卡不能因为一条后台通知就消失 —— 空态的主职责还是"开始一段新对话"
+    expect(screen.getByText('示例一')).toBeTruthy()
+    fireEvent.click(screen.getByTestId('task-done-pill'))
+    expect(onOpen).toHaveBeenCalled()
+  })
+
+  it('没有通知时空态不多出一个空容器', async () => {
+    const { default: WelcomeEmptyState } = await import('../src/renderer/components/WelcomeEmptyState')
+    render(<WelcomeEmptyState examples={[]} onPickExample={vi.fn()}><div>composer</div></WelcomeEmptyState>)
+    expect(screen.queryByTestId('welcome-notices')).toBeNull()
+  })
+
   it('药丸不进后端历史(纯 UI 态)', () => {
     // system-event 会作为带前缀的 user 消息回到后端;任务完成只是通知,不该引出一轮回复
     const st = addTaskDoneItem(initialState, 't1', 'a', true)
