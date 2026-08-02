@@ -1209,11 +1209,19 @@ public class Main {
         final java.util.concurrent.atomic.AtomicReference<String> taskRoot =
                 new java.util.concurrent.atomic.AtomicReference<>(
                         java.nio.file.Path.of(".").toAbsolutePath().normalize().toString());
-        final com.lyhn.wraith.llm.LlmClient taskClient = client;
+        // ⚠ 这里**不能**捕获启动那一刻的 client。后端现在允许「无模型」启动(首次运行死锁的修复),
+        //   此时 client 为 null;lambda 一旦把 null 捕获进去就永久是 null ——
+        //   用户在 GUI 里配好 provider、对话链路已被 ensureClient 热装之后,
+        //   后台任务仍会抛 `LlmClient.supportsTools() because "this.llmClient" is null`。
+        //   与紧邻的 taskRoot 一样,client 也是**会变的东西**,必须用活的持有者。
+        //   (交互式 CLI 那条路径本来就是对的:openTaskManager(AtomicReference)。)
+        final java.util.concurrent.atomic.AtomicReference<com.lyhn.wraith.llm.LlmClient> appClientRef =
+                new java.util.concurrent.atomic.AtomicReference<>(client);
         com.lyhn.wraith.runtime.task.DurableTaskManager taskManagerTmp;
         try {
             taskManagerTmp = com.lyhn.wraith.runtime.task.DurableTaskManager.openDefault(
-                    prompt -> runHeadlessTaskAt(prompt, taskClient, taskRoot.get()));
+                    prompt -> runHeadlessTaskAt(
+                            prompt, requireTaskClient(appClientRef, config), taskRoot.get()));
             taskManagerTmp.start();
             Runtime.getRuntime().addShutdownHook(
                     new Thread(taskManagerTmp::close, "wraith-appserver-task-shutdown"));
@@ -1315,6 +1323,8 @@ public class Main {
                         currentClient[0] = fresh;
                         agent.setLlmClient(fresh);
                         sessionStore.setProviderModel(fresh.getProviderName(), fresh.getModelName());
+                        // 同步给后台任务:否则对话能用了、后台任务还要自己再装一个
+                        appClientRef.compareAndSet(null, fresh);
                         System.err.println("app-server: 已装载模型 "
                                 + fresh.getProviderName() + " / " + fresh.getModelName());
                     }
@@ -1456,6 +1466,9 @@ public class Main {
                         currentClient[0] = newClient;
                         agent.setLlmClient(newClient);
                         sessionStore.setProviderModel(newClient.getProviderName(), newClient.getModelName());
+                        // 后台任务跟随当前模型 —— 否则会被钉死在「第一次装上的那个」,
+                        // 用户切了模型却发现后台任务还在用旧的,又是一处说不清的分叉
+                        appClientRef.set(newClient);
                         return java.util.Map.of(
                                 "provider", newClient.getProviderName(),
                                 "model", newClient.getModelName());
@@ -2360,6 +2373,34 @@ public class Main {
         agent.setPricingTable(new com.lyhn.wraith.context.PricingTable(
                 com.lyhn.wraith.config.WraithConfig.load().getPricing()));
         return agent.run(prompt);
+    }
+
+    /**
+     * 后台任务执行时解析 LLM client —— <b>调用时</b>解析，不是启动时。
+     *
+     * <p>后端允许「无模型」启动，所以启动那一刻 {@code ref} 里可能是 null。
+     * 用户随后在 GUI 配好 provider（{@code config.setProvider} 会改这个内存 config 对象并落盘），
+     * 此处就能按当前配置就地装一个，并写回 {@code ref} 供后续任务复用。
+     *
+     * <p>仍然拿不到时<b>抛出人话</b>而不是让 NPE 冒到面板上 ——
+     * 「{@code Cannot invoke "LlmClient.supportsTools()" because "this.llmClient" is null}」
+     * 对用户毫无意义，他需要知道的是「去配个模型」。
+     *
+     * @throws IllegalStateException 没有任何可用模型时
+     */
+    static LlmClient requireTaskClient(AtomicReference<LlmClient> ref, WraithConfig config) {
+        LlmClient existing = ref.get();
+        if (existing != null) {
+            return existing;
+        }
+        LlmClient fresh = LlmClientFactory.createFromConfig(config);
+        if (fresh == null) {
+            throw new IllegalStateException(
+                    "尚未配置任何模型，后台任务无法执行。请在「配置 → Provider 配置」里填入一个 API Key 并保存后重试。");
+        }
+        // compareAndSet:并发跑多个任务时只保留第一个装上的,避免每个任务各建一个 client
+        ref.compareAndSet(null, fresh);
+        return ref.get();
     }
 
     private static DurableTaskManager openTaskManager(AtomicReference<LlmClient> llmClientRef) {
