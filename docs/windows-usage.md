@@ -12,6 +12,27 @@
 >
 > **诚实声明**：Windows 端代码已完成，但**尚未在真 Windows 机器上跑过一次**。本文按代码实际行为编写，若你遇到与本文不符的情况，那大概率是真 bug，欢迎照第 5 节的排查方向记录下来。
 
+> ### ⚠️ 先确认你在 PowerShell 里，不是 cmd
+>
+> 本文所有命令按 **PowerShell** 写。看提示符就能分辨：
+>
+> | 提示符 | 是什么 | 能否照抄本文 |
+> |---|---|---|
+> | `PS D:\wraith>` | PowerShell | ✅ |
+> | `D:\wraith>` | cmd.exe | ❌ 部分命令不存在 |
+>
+> 在 cmd 里敲 `powershell` 回车即可切换（目录不变）。
+>
+> **两者最容易咬人的差异**：
+>
+> | 用途 | PowerShell | cmd |
+> |---|---|---|
+> | 环境变量取值 | `$env:LOCALAPPDATA` | `%LOCALAPPDATA%` |
+> | 删目录 | `Remove-Item -Recurse -Force x` | `rmdir /s /q x` |
+> | 设环境变量 | `$env:FOO = "v"` | `set FOO=v` |
+>
+> 尤其注意第一行：在 cmd 里跑带 `$env:` 的命令**不会报错**，而是把 `$env:LOCALAPPDATA` 当普通字符串原样传下去 —— 比如 `npm config set cache "$env:LOCALAPPDATA\npm-cache"` 会真的把缓存设到一个叫 `$env:LOCALAPPDATA` 的目录。静默走偏，比报错难查。
+
 ---
 
 ## 0. 全程一眼
@@ -298,6 +319,27 @@ npm install --legacy-peer-deps
 mkdir empty_tmp
 robocopy empty_tmp node_modules /MIR
 Remove-Item -Recurse -Force node_modules, empty_tmp
+```
+
+**如果你在 cmd 而不是 PowerShell**（提示符是 `D:\...>` 而非 `PS D:\...>`），同一套操作的 cmd 写法：
+
+```cmd
+npm config get cache
+npm config set cache "%LOCALAPPDATA%\npm-cache"
+
+cd /d D:\wraith\desktop
+rmdir /s /q node_modules
+
+npm install --legacy-peer-deps
+```
+
+删不动时的兜底：
+
+```cmd
+mkdir empty_tmp
+robocopy empty_tmp node_modules /MIR
+rmdir /s /q node_modules
+rmdir /s /q empty_tmp
 ```
 
 **建议把仓库目录加进 Windows Defender 排除项**（设置 → 隐私和安全性 → Windows 安全中心 → 病毒和威胁防护 → 管理设置 → 排除项）。`node_modules` 是几万个小文件，实时扫描既让安装慢好几倍，也是那些 `EPERM rmdir` 的常见元凶。
