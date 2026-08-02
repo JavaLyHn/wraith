@@ -2139,12 +2139,14 @@ public class ToolRegistry {
         }
     }
 
-    /** 决定 execute_command 子进程命令行:注入了 sandbox 则包裹,否则裸 bash -c。 */
+    /** 决定 execute_command 子进程命令行:注入了 sandbox 则包裹,否则裸跑平台 shell。 */
     List<String> resolveProcessCommand(String normalized) {
         CommandSandbox sandbox = this.commandSandbox;
         boolean networkOnce = consumeNetworkOnce(); // 无沙箱也消费,避免标记泄漏到后续命令
         if (sandbox == null) {
-            return List.of("bash", "-c", normalized);
+            // 交互式 CLI 走这条(不注入沙箱)。此前这里写死 bash -c,
+            // 在 Windows 上等于赌 bash.exe 在 PATH —— 而 Git for Windows 默认不放它进去。
+            return com.lyhn.wraith.policy.sandbox.ShellCommand.wrap(normalized);
         }
         if (networkOnce) {
             sandbox = new CommandSandbox(true); // 仅本条命令放行网络,读/写限制不变
@@ -2189,7 +2191,7 @@ public class ToolRegistry {
 
             boolean finished = process.waitFor(commandTimeoutSeconds, TimeUnit.SECONDS);
             if (!finished) {
-                process.destroyForcibly();
+                killTree(process);
                 process.waitFor(2, TimeUnit.SECONDS);
                 outputFuture.cancel(true);
                 safeOnResult(callId, false, -1);
@@ -2202,15 +2204,11 @@ public class ToolRegistry {
             return String.format("命令执行完成 (exit code: %d)\n%s", exitCode, output);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            if (process != null) {
-                process.destroyForcibly();
-            }
+            killTree(process);
             safeOnResult(callId, false, -1);
             return "用户取消了此次工具调用";
         } catch (Exception e) {
-            if (process != null) {
-                process.destroyForcibly();
-            }
+            killTree(process);
             safeOnResult(callId, false, -1);
             return "执行命令失败: " + e.getMessage();
         } finally {
@@ -2218,10 +2216,44 @@ public class ToolRegistry {
         }
     }
 
+    /**
+     * 杀掉整棵进程树（先收集后代，再从叶到根杀）。
+     *
+     * <p><b>为什么不能只 {@code destroyForcibly()}：</b>Windows 上杀 {@code cmd.exe}
+     * 不会连带杀它的子孙——超时的命令会留下一地没人管的孤儿进程，而 Windows 上
+     * 又没有沙箱兜着它们。macOS 同样有收益：Seatbelt 不阻止 fork。
+     *
+     * <p><b>顺序要紧</b>：必须<b>先</b>把 {@code descendants()} 收进列表再动手。
+     * 杀了父进程之后这棵树就断了，再查后代只会查到空。
+     */
+    static void killTree(Process process) {
+        if (process == null) {
+            return;
+        }
+        java.util.List<ProcessHandle> descendants;
+        try {
+            descendants = process.toHandle().descendants().toList();
+        } catch (Exception e) {
+            descendants = java.util.List.of();
+        }
+        process.destroyForcibly();
+        for (ProcessHandle h : descendants) {
+            try {
+                h.destroyForcibly();
+            } catch (Exception ignored) {
+                // 进程可能已自行退出;清理是尽力而为,不该反过来影响主流程
+            }
+        }
+    }
+
     private String readProcessOutput(Process process, String callId) throws Exception {
         StringBuilder output = new StringBuilder();
         StringBuilder fullBuf = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+        // 显式给字符集:JEP 400 之后 Charset.defaultCharset() 恒为 UTF-8,
+        // 而 Windows 控制台程序吐的是本地代码页(中文 Windows 是 GBK)——
+        // 不指定的话中文输出在 JDK 18+ 上必乱码。见 ShellCommand.outputCharset。
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(
+                process.getInputStream(), com.lyhn.wraith.policy.sandbox.ShellCommand.outputCharset()))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (callId != null) {

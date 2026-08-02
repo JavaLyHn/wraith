@@ -232,6 +232,14 @@ public class Main {
             com.lyhn.wraith.gateway.bind.BindCommand.dispatch(args);
             return;
         }
+        if (com.lyhn.wraith.policy.sandbox.SandboxDoctor.isCommand(args)) {
+            configureLogging();
+            int code = com.lyhn.wraith.policy.sandbox.SandboxDoctor.run(args);
+            if (code != 0) {
+                System.exit(code);
+            }
+            return;
+        }
 
         configureLogging();
 
@@ -1791,17 +1799,11 @@ public class Main {
                         return java.util.Map.of("entries", out);
                     }
                     public java.util.Map<String, Object> sandboxGet() {
-                        com.lyhn.wraith.policy.sandbox.CommandSandbox cs = agent.getToolRegistry().getCommandSandbox();
-                        return java.util.Map.of(
-                                "available", com.lyhn.wraith.policy.sandbox.CommandSandbox.available(),
-                                "networkAllowed", cs != null && cs.networkAllowed());
+                        return sandboxState(agent.getToolRegistry().getCommandSandbox());
                     }
                     public java.util.Map<String, Object> sandboxSet(boolean networkAllowed) {
                         agent.getToolRegistry().setCommandSandbox(new com.lyhn.wraith.policy.sandbox.CommandSandbox(networkAllowed));
-                        com.lyhn.wraith.policy.sandbox.CommandSandbox cs = agent.getToolRegistry().getCommandSandbox();
-                        return java.util.Map.of(
-                                "available", com.lyhn.wraith.policy.sandbox.CommandSandbox.available(),
-                                "networkAllowed", cs != null && cs.networkAllowed());
+                        return sandboxState(agent.getToolRegistry().getCommandSandbox());
                     }
                     public java.util.Map<String, Object> browserStatus() {
                         return java.util.Map.of("text", appServerBrowserCmd("status", browserSession, browserConnectivityCheck, appServerMcp.manager(), registry, hitl));
@@ -2229,7 +2231,7 @@ public class Main {
                     }
                 };
             }, buildInitializeResult(client == null ? null : client.getModelName(),
-                    com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
+                    com.lyhn.wraith.policy.sandbox.CommandSandbox.detect()));
 
         try {
             server.serve();
@@ -2263,6 +2265,38 @@ public class Main {
         return n;
     }
 
+    /**
+     * sandbox.get / sandbox.set 的统一回包。
+     *
+     * <p>两个 RPC 回同一个函数的结果 —— 让它们各拼一份的话，
+     * 「set 之后面板显示的状态」与「刷新后显示的状态」迟早会分叉。
+     *
+     * <p>{@code available} 保留是为了兼容旧前端；新前端读 {@code kind}。
+     * {@code degradedReason} 是本次新增：此前 fail-open 的原因只进 {@code log.warn}，
+     * 桌面用户根本看不到自己为什么没有沙箱。
+     */
+    static java.util.Map<String, Object> sandboxState(
+            com.lyhn.wraith.policy.sandbox.CommandSandbox cs) {
+        com.lyhn.wraith.policy.sandbox.SandboxKind kind =
+                com.lyhn.wraith.policy.sandbox.CommandSandbox.detect();
+        java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("available", kind.sandboxed());
+        m.put("kind", kind.wire());
+        m.put("networkAllowed", cs != null && cs.networkAllowed());
+        String reason = null;
+        if (!kind.sandboxed()) {
+            reason = com.lyhn.wraith.policy.sandbox.CommandSandbox.noSandboxWarning(
+                    System.getProperty("os.name", ""));
+            com.lyhn.wraith.policy.sandbox.AppContainerSupport.Diagnosis d =
+                    com.lyhn.wraith.policy.sandbox.AppContainerSupport.diagnose();
+            if (d.reason() != null) {
+                reason = reason + "（" + d.reason() + "）";
+            }
+        }
+        m.put("degradedReason", reason);
+        return m;
+    }
+
     /** app-server 沙箱工厂:默认断网,-Dwraith.sandbox.network=on 全局放行网络。 */
     static com.lyhn.wraith.policy.sandbox.CommandSandbox buildAppServerSandbox() {
         boolean networkAllowed =
@@ -2271,13 +2305,18 @@ public class Main {
     }
 
     /** app-server initialize 响应:serverInfo/protocol/model/capabilities(spec §5.1)。 */
-    static java.util.Map<String, Object> buildInitializeResult(String model, boolean sandboxAvailable) {
+    static java.util.Map<String, Object> buildInitializeResult(
+            String model, com.lyhn.wraith.policy.sandbox.SandboxKind sandboxKind) {
         java.util.Map<String, Object> caps = new java.util.LinkedHashMap<>();
         caps.put("streaming", true);
         caps.put("approvals", true);
         caps.put("toolOutputStreaming", true);
         caps.put("diff", true);
-        caps.put("sandbox", sandboxAvailable ? "macos-seatbelt" : "none");
+        // 报**具体哪一种**沙箱,不是布尔。此前只回 macos-seatbelt|none,
+        // 于是 Windows 与「mac 上 sandbox-exec 没了」拿到同一个 none,
+        // 前端只好靠 platform 反推语义 —— 根因是后端没把话说清楚。
+        caps.put("sandbox", (sandboxKind == null
+                ? com.lyhn.wraith.policy.sandbox.SandboxKind.NONE : sandboxKind).wire());
         // 后端现在允许「无模型」启动(否则首次运行会死锁,见 startAppServer)。
         // 空 model 就是那个状态 —— 显式回一个布尔,免得前端去猜空串的含义。
         caps.put("modelConfigured", model != null && !model.isBlank());

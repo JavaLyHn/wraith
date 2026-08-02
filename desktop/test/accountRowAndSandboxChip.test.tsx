@@ -151,15 +151,22 @@ describe('顶栏沙箱盾', () => {
 })
 
 /**
- * 后端的 `CommandSandbox.available()` 判的是 `os.name contains "mac" && /usr/bin/sandbox-exec 可执行`,
- * 所以 Windows / Linux **恒定**拿到 `capabilities.sandbox = 'none'`(jshell 实测:Windows=false→none)。
+ * 沙箱盾在各平台的语义。
  *
- * 这意味着盾牌一旦只看后端回包,在 Windows 上就是一颗**永远消不掉的红点**,
- * tooltip 还写着「点击查看安全设置」—— 用户点进去无事可做。
- * 那不只是刺眼,是在说假话:它暗示存在一处可修的错配。
- * 判据必须是 platform:同一个 `none`,在 mac 上可行动(该红),在别处不可行动(不该红)。
+ * **这批断言在 2026-08-02 整体改过口径,原因是根因被消掉了。**
+ *
+ * 旧世界:后端只回 `macos-seatbelt | none`,Windows 恒定拿 `none`,
+ * 于是盾牌只能靠 platform 反推——把 Windows 的 `none` 呈现为「平台不支持」(灰),
+ * 避免一颗永远消不掉、点进去也无事可做的红点。
+ *
+ * 新世界:Windows 有了 AppContainer 实现,后端直接报 `windows-appcontainer`。
+ * 此时 Windows 上的 `none` 不再是「这平台没这东西」,而是
+ * **「本该有却没起来」——可行动,该红**;安全面板会给出具体缺失项,
+ * 命令行还有 `wraith sandbox doctor` 可查。
+ *
+ * platform 参数没有删掉,但职责收窄了:只用来区分 Linux(确实没有实现,不该红)。
  */
-describe('沙箱盾在非 mac 平台', () => {
+describe('沙箱盾在各平台', () => {
   /** win32 下 TopBar 会挂 WindowControls,它在 mount 时就读 window.wraith.windowControls。 */
   function stubWindowControls(): void {
     ;(window as unknown as { wraith: unknown }).wraith = {
@@ -171,35 +178,47 @@ describe('沙箱盾在非 mac 平台', () => {
     }
   }
 
-  it('win32 + none:不是 danger —— 平台不支持不是可行动的告警', () => {
-    expect(sandboxChipView('none', 'win32').tone).not.toContain('danger')
-    expect(sandboxChipView('none', 'linux').tone).not.toContain('danger')
+  it('win32 + appcontainer:正常态,浅墨不喊', () => {
+    const v = sandboxChipView('windows-appcontainer', 'win32')
+    expect(v.kind).toBe('ok')
+    expect(v.label).toBe('沙箱: AppContainer')
+    expect(v.tone).not.toContain('danger')
   })
 
-  it('win32 + none:文案说「平台无沙箱」,不说「未启用」', () => {
+  it('win32 + none:现在该红了 —— Windows 有实现,没起来就是可行动的异常', () => {
     const v = sandboxChipView('none', 'win32')
+    expect(v.kind).toBe('off')
+    expect(v.tone).toContain('text-danger')
+    expect(v.label).toBe('沙箱未启用')
+  })
+
+  it('linux + none:仍然不红 —— 这个平台确实没有实现,点进去也没得修', () => {
+    const v = sandboxChipView('none', 'linux')
+    expect(v.kind).toBe('unsupported')
+    expect(v.tone).not.toContain('danger')
     expect(v.label).toBe('当前平台无沙箱')
-    expect(v.label).not.toContain('未启用')   // 「未启用」专属 mac 异常态,别复用
   })
 
-  it('win32 + none:tooltip 交代清楚还剩什么保护,不留悬念', () => {
-    expect(sandboxChipView('none', 'win32').title).toContain('黑名单')
+  it('linux 的 tooltip 交代清楚还剩什么保护,不留悬念', () => {
+    expect(sandboxChipView('none', 'linux').title).toContain('黑名单')
   })
 
-  it('kind 与 mac 异常态是两个值 —— 图标据此分岔(plain Shield vs ShieldAlert)', () => {
-    expect(sandboxChipView('none', 'win32').kind).toBe('unsupported')
-    expect(sandboxChipView('none', 'darwin').kind).toBe('off')
-  })
-
-  it('mac 上 none 仍然红 —— 修 Windows 不能顺手把 mac 的真告警一起消音', () => {
+  it('mac 上 none 仍然红 —— 改 Windows 不能顺手把 mac 的真告警一起消音', () => {
     expect(sandboxChipView('none', 'darwin').tone).toContain('text-danger')
   })
 
-  it('端到端:platform=win32 的顶栏渲染出的是「无沙箱」而非红色「未启用」', () => {
+  it('两种沙箱都是 ok 态,但名字要分得清 —— 否则排障时不知道自己在用哪个', () => {
+    expect(sandboxChipView('macos-seatbelt', 'darwin').kind).toBe('ok')
+    expect(sandboxChipView('windows-appcontainer', 'win32').kind).toBe('ok')
+    expect(sandboxChipView('macos-seatbelt', 'darwin').label)
+      .not.toBe(sandboxChipView('windows-appcontainer', 'win32').label)
+  })
+
+  it('端到端:platform=win32 且 AppContainer 可用时,顶栏是正常态而非红点', () => {
     stubWindowControls()
-    render(<TopBar {...topBarProps} platform="win32" sandbox="none" />)
+    render(<TopBar {...topBarProps} platform="win32" sandbox="windows-appcontainer" />)
     const badge = screen.getByTestId('sandbox-badge')
-    expect(badge.getAttribute('aria-label')).toBe('当前平台无沙箱')
+    expect(badge.getAttribute('aria-label')).toBe('沙箱: AppContainer')
     expect(badge.className).not.toContain('danger')
   })
 

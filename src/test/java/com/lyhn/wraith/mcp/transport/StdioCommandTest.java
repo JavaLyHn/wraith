@@ -125,6 +125,16 @@ class StdioCommandTest {
     }
 
     @Test
+    void Darwin_不能被误判成_Windows() {
+        // "Darwin" 里含 "win" —— 旧的 contains("win") 写法在这儿翻车。
+        // JVM 在 macOS 上报的是 "Mac OS X" 所以生产上不咬人,但只要有人把
+        // `uname -s` 的结果喂进来就会走 Windows 分支去解析 PATHEXT。
+        assertFalse(StdioCommand.isWindows("Darwin"));
+        assertFalse(StdioCommand.isWindows("darwin"));
+        assertTrue(StdioCommand.isWindows("Windows 11"));
+    }
+
+    @Test
     void 空参数与_null_参数都不炸() {
         assertEquals(List.of("npx"), StdioCommand.build("npx", null, MAC, null, null, fs()));
         assertEquals(List.of("npx"), StdioCommand.build("npx", List.of(), MAC, null, null, fs()));

@@ -62,9 +62,35 @@ public class PromptAssembler {
 
     private static String runtimeContext() {
         ZoneId zone = ZoneId.systemDefault();
-        return "## Runtime Context\n\n"
-                + "- 当前日期: " + LocalDate.now(zone) + "\n"
-                + "- 当前时区: " + zone;
+        return runtimeContext(LocalDate.now(zone).toString(), zone.toString(),
+                System.getProperty("os.name", ""));
+    }
+
+    /**
+     * 可测版本。
+     *
+     * <p><b>为什么要告诉模型 shell 是什么：</b>{@code execute_command} 在 Windows 上走
+     * {@code cmd.exe /c}（而不是此前写死的 {@code bash -c}——那在 Windows 上是赌
+     * {@code bash.exe} 恰好在 PATH）。模型若不知道这件事，会照 POSIX 习惯吐
+     * {@code ls -la} / {@code rm -rf build}，然后拿一堆「不是内部或外部命令」回来，
+     * 白白烧掉几轮往返才自己纠正过来。
+     */
+    static String runtimeContext(String date, String zone, String osName) {
+        boolean win = com.lyhn.wraith.policy.sandbox.ShellCommand.isWindows(osName);
+        StringBuilder sb = new StringBuilder("## Runtime Context\n\n");
+        sb.append("- 当前日期: ").append(date).append('\n');
+        sb.append("- 当前时区: ").append(zone).append('\n');
+        sb.append("- 操作系统: ").append(osName == null || osName.isBlank() ? "未知" : osName).append('\n');
+        if (win) {
+            sb.append("- `execute_command` 的 shell 是 **cmd.exe**（Windows）。"
+                    + "请用 Windows 命令：`dir` 而非 `ls`，`type` 而非 `cat`，"
+                    + "`del` / `rd /s /q` 而非 `rm -rf`，`copy` 而非 `cp`，"
+                    + "路径分隔符用 `\\`，环境变量写 `%VAR%`。"
+                    + "命令之间用 `&&` 串联；不要使用管道进 `sh`/`bash` 的写法。");
+        } else {
+            sb.append("- `execute_command` 的 shell 是 **bash**。");
+        }
+        return sb.toString();
     }
 
     private static String applyVariables(String template, PromptContext context) {

@@ -40,6 +40,20 @@ public final class StdioCommand {
     }
 
     /**
+     * 在 Windows 上把一个裸命令名解析成完整可执行文件路径；解析不到或非 Windows 返回 null。
+     *
+     * <p>供 MCP 之外的调用方复用（如沙箱要找 {@code powershell.exe}）——
+     * 「Windows 上按 PATH × PATHEXT 找可执行文件」这件事跟 MCP 无关，
+     * 只是恰好先在这里被需要。
+     */
+    public static String resolveExecutable(String command) {
+        String osName = System.getProperty("os.name", "");
+        if (!isWindows(osName)) return null;
+        return resolveOnWindows(command, System.getenv("PATH"), System.getenv("PATHEXT"),
+                p -> Files.isRegularFile(Path.of(p)));
+    }
+
+    /**
      * 可测版本：环境全部注入，便于在 mac 上验证 Windows 分支。
      *
      * @param exists 判定某个绝对路径是否是一个存在的文件
@@ -55,8 +69,9 @@ public final class StdioCommand {
         return out;
     }
 
+    /** 见 {@code ShellCommand.isWindows} 的说明：用前缀而非 {@code contains("win")}，因为 "Darwin" 里含 "win"。 */
     static boolean isWindows(String osName) {
-        return osName != null && osName.toLowerCase(Locale.ROOT).contains("win");
+        return osName != null && osName.toLowerCase(Locale.ROOT).startsWith("windows");
     }
 
     /**

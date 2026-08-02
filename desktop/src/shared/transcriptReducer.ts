@@ -11,7 +11,7 @@
  *   scanning the items array and is O(1).
  */
 
-import type { BackendEvent, StatusData, PlanStepView } from './types'
+import type { BackendEvent, StatusData, PlanStepView, SandboxKindWire } from './types'
 import { shouldPopChatApproval } from './approvalScope'
 
 // ---------------------------------------------------------------------------
@@ -167,7 +167,7 @@ export interface TranscriptState {
   /** 当前活跃会话 id(turn.completed / resume 更新)。 */
   sessionId: string
   /** 沙箱状态(来自 initialize.capabilities.sandbox)。 */
-  sandbox: 'macos-seatbelt' | 'none' | 'unknown'
+  sandbox: SandboxKindWire
   /** token 状态(status 事件,resetSession 清空)。 */
   status: StatusData | null
   /** 上下文治理可观测(Phase C;watermark/compaction 事件 + snapshot 合成事件三源合并,resetSession 显式清零)。 */
@@ -831,7 +831,7 @@ export function setSessionId(state: TranscriptState, sessionId: string): Transcr
 }
 
 /** 设置沙箱状态。 */
-export function setSandbox(state: TranscriptState, sandbox: 'macos-seatbelt' | 'none' | 'unknown'): TranscriptState {
+export function setSandbox(state: TranscriptState, sandbox: SandboxKindWire): TranscriptState {
   return { ...state, sandbox }
 }
 

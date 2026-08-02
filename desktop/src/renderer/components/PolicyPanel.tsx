@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, ShieldCheck, RefreshCw } from 'lucide-react'
 import type { PolicyStatusView, AuditEntryView, SandboxState } from '../../shared/types'
+import { sandboxNetHint, sandboxToggleEnabled } from '../lib/sandboxPanel'
 import { outcomeLabel, approverLabel, formatAuditTime, auditArgFields, auditArgFieldsFull } from '../lib/policyView'
 
 const FIXED_POLICY = [
   '路径围栏:read_file / write_file / list_dir / create_project 强制限定在项目根内',
-  '命令黑名单:sudo、rm -rf 全盘、mkfs、dd of=/dev、fork bomb、curl|sh、chmod 777 /、shutdown 等',
-  '写入文件上限 5MB;命令执行上限 60 秒、输出 8KB(截断)',
+  // 补 Windows 一行的原因:黑名单原本九条全是 POSIX 词汇,Windows 上真正能拆家的命令
+  // 一条都不拦,而这里偏偏写着「命令黑名单」—— 在 Windows 上那是一句空承诺。
+  'POSIX 命令黑名单:sudo、rm -rf 全盘、mkfs、dd of=/dev、fork bomb、curl|sh、chmod 777 /、shutdown 等',
+  'Windows 命令黑名单:rd/del 打向盘符根、format、diskpart、reg delete、takeown、vssadmin delete shadows、bcdedit、iwr|iex 等',
+  '写入文件上限 5MB;命令执行上限 60 秒、输出 8KB(截断);超时连同子孙进程整棵杀掉',
 ]
 
 function outcomeClass(outcome: string): string {
@@ -116,15 +120,13 @@ export default function PolicyPanel({ onBack }: { onBack: () => void }): JSX.Ele
             <span className="min-w-0 flex-1">
               <span className="text-fg-muted">命令沙箱联网</span>
               <span className="mt-0.5 block text-3xs text-fg-subtle">
-                {sandbox && !sandbox.available
-                  ? '当前无沙箱(非 macOS 或不可用),命令不受网络限制'
-                  : '关=禁止 agent 命令联网(默认更安全);开=本次运行放行,重启恢复禁网'}
+                {sandboxNetHint(sandbox)}
               </span>
             </span>
             <button
               data-testid="sandbox-net-toggle"
               onClick={() => void toggleSandbox()}
-              disabled={!sandbox || !sandbox.available}
+              disabled={!sandboxToggleEnabled(sandbox)}
               aria-label="命令沙箱联网"
               className={'relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-40 ' + (sandbox?.networkAllowed ? 'bg-accent' : 'bg-border')}
             >

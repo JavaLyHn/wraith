@@ -1,6 +1,6 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
-import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode } from '../shared/types'
+import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire } from '../shared/types'
 import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
 import type { EditorApp } from '../shared/editors'
 import type { McpFormValue } from './components/McpServerForm'
@@ -94,7 +94,7 @@ type LocalAction =
   | { type: 'addTaskDone'; taskId: string; text: string; ok: boolean }
   | { type: 'loadHistory'; items: Item[] }
   | { type: 'setSessionId'; sessionId: string }
-  | { type: 'setSandbox'; sandbox: 'macos-seatbelt' | 'none' | 'unknown' }
+  | { type: 'setSandbox'; sandbox: SandboxKindWire }
   | { type: 'truncateAtUser'; ordinal: number }
   | { type: 'markPlanReviewResolved'; reviewId: string }
 
@@ -158,8 +158,13 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
 // Sandbox value normalizer
 // ---------------------------------------------------------------------------
 
-function normalizeSandbox(sb: string | undefined): 'macos-seatbelt' | 'none' | 'unknown' {
-  return sb === 'none' ? 'none' : sb === 'macos-seatbelt' ? 'macos-seatbelt' : 'unknown'
+function normalizeSandbox(sb: string | undefined): SandboxKindWire {
+  if (sb === 'none') return 'none'
+  if (sb === 'macos-seatbelt') return 'macos-seatbelt'
+  if (sb === 'windows-appcontainer') return 'windows-appcontainer'
+  // 认不出的值一律 unknown 而不是 none —— 前者是灰盾「状态未知」,
+  // 后者是红盾「未启用」。老后端 / 新前端组合下把未知说成异常是误报。
+  return 'unknown'
 }
 
 // Override initial state: treat initial connection as 'connected' to avoid

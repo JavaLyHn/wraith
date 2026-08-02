@@ -40,7 +40,61 @@ public final class CommandGuard {
             new DenyRule("禁止 chmod 777 全盘",
                     Pattern.compile("(?i)\\bchmod\\s+-R\\s+777\\s+(/|~)")),
             new DenyRule("禁止 shutdown / reboot / halt",
-                    Pattern.compile("(?i)\\b(shutdown|reboot|halt|poweroff)\\b"))
+                    Pattern.compile("(?i)\\b(shutdown|reboot|halt|poweroff)\\b")),
+
+            // ── 以下为 Windows / PowerShell 形状 ──────────────────────────────
+            //
+            // 为什么要补：上面九条全是 POSIX 词汇。Windows 上真正能拆家的命令
+            // (rd /s /q C:\、format、diskpart、reg delete …) 此前一条都不拦，
+            // 而无沙箱时给用户看的文案偏偏是「仍受命令黑名单保护」——
+            // 在 Windows 上那句话基本是空的。
+            //
+            // 不按平台分开判：命令文本里出现 `format C:` 在 mac 上也没有放行的理由，
+            // 而且按平台分叉会让「这条规则在哪儿生效」变成一件要推理的事。
+
+            // rd / rmdir / del 打向盘符根或用户目录。盘符根写法很多：C:\ C:\* C:/ %SystemDrive%
+            new DenyRule("禁止 rd/rmdir/del 递归删除盘符根或用户目录",
+                    Pattern.compile("(?i)\\b(rd|rmdir|del|erase)\\b[^\\n]*?\\s"
+                            + "([a-z]:[\\\\/]?(\\*|\\s|$)|%systemdrive%|%userprofile%|%homepath%)")),
+
+            // PowerShell 的等价物。Remove-Item 别名极多：ri / rm / rmdir / del / erase / rd
+            new DenyRule("禁止 PowerShell 递归强删盘符根或用户目录",
+                    Pattern.compile("(?i)\\bremove-item\\b[^\\n]*?"
+                            + "([a-z]:[\\\\/]?(\\*|['\"]|\\s|$)|\\$env:userprofile|\\$home)")),
+
+            // 拆两条而不是一个 alternation:`format C:` 以 `:` 收尾,
+            // 后面接空格时尾部 `\b` 不成立(两侧都是非词字符),整条规则会静默失效。
+            new DenyRule("禁止格式化磁盘",
+                    Pattern.compile("(?i)\\bformat\\s+[a-z]:")),
+            new DenyRule("禁止格式化磁盘 / 操作分区",
+                    Pattern.compile("(?i)\\b(diskpart|format-volume)\\b")),
+
+            new DenyRule("禁止删除注册表项",
+                    Pattern.compile("(?i)\\breg\\s+delete\\b|\\bremove-item(property)?\\b[^\\n]*\\bhk(lm|cu|cr|u|cc):")),
+
+            new DenyRule("禁止夺取所有权 / 批量改 ACL",
+                    Pattern.compile("(?i)\\btakeown\\b[^\\n]*\\s/f\\b|"
+                            + "\\bicacls\\b[^\\n]*\\s/(grant|deny|setowner)\\b[^\\n]*\\s/t\\b")),
+
+            new DenyRule("禁止删除卷影副本",
+                    Pattern.compile("(?i)\\bvssadmin\\b[^\\n]*\\bdelete\\b[^\\n]*\\bshadows?\\b|"
+                            + "\\bwmic\\b[^\\n]*\\bshadowcopy\\b[^\\n]*\\bdelete\\b")),
+
+            new DenyRule("禁止修改引导配置",
+                    Pattern.compile("(?i)\\bbcdedit\\b")),
+
+            new DenyRule("禁止 PowerShell 关机 / 重启",
+                    Pattern.compile("(?i)\\b(stop|restart)-computer\\b")),
+
+            // Windows 上 curl / wget 常是 Invoke-WebRequest 的别名，
+            // 上面那条 `curl|sh` 的 POSIX 规则匹配不到 `curl x | iex`。
+            new DenyRule("禁止下载后直接执行远端脚本",
+                    Pattern.compile("(?i)\\b(iwr|irm|curl|wget|invoke-webrequest|invoke-restmethod)\\b"
+                            + "[^|\\n]*\\|\\s*(iex|invoke-expression)\\b")),
+
+            new DenyRule("禁止直接执行远端脚本内容",
+                    Pattern.compile("(?i)\\b(iex|invoke-expression)\\b[^\\n]*"
+                            + "\\b(downloadstring|iwr|irm|invoke-webrequest|invoke-restmethod)\\b"))
     );
 
     private CommandGuard() {
