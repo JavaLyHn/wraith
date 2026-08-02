@@ -92,22 +92,22 @@ describe('对话里的任务完成药丸', () => {
     const { default: TaskDonePill } = await import('../src/renderer/components/TaskDonePill')
     const onOpen = vi.fn()
     render(
-      <WelcomeEmptyState examples={['示例一']} onPickExample={vi.fn()}
+      <WelcomeEmptyState categories={[{ label: '了解这个项目', prompts: ['梳理这个目录的结构', '这个项目是做什么的'] }]} onPickExample={vi.fn()}
         notices={<TaskDonePill text="后台任务完成:数 md 文件 · 3s" ok onOpen={onOpen} />}>
         <div>composer</div>
       </WelcomeEmptyState>,
     )
     expect(screen.getByTestId('welcome-notices')).toBeTruthy()
     expect(screen.getByTestId('task-done-pill').textContent).toContain('数 md 文件')
-    // 示例卡不能因为一条后台通知就消失 —— 空态的主职责还是"开始一段新对话"
-    expect(screen.getByText('示例一')).toBeTruthy()
+    // 示例入口不能因为一条后台通知就消失 —— 空态的主职责还是"开始一段新对话"
+    expect(screen.getByText('了解这个项目')).toBeTruthy()
     fireEvent.click(screen.getByTestId('task-done-pill'))
     expect(onOpen).toHaveBeenCalled()
   })
 
   it('没有通知时空态不多出一个空容器', async () => {
     const { default: WelcomeEmptyState } = await import('../src/renderer/components/WelcomeEmptyState')
-    render(<WelcomeEmptyState examples={[]} onPickExample={vi.fn()}><div>composer</div></WelcomeEmptyState>)
+    render(<WelcomeEmptyState categories={[]} onPickExample={vi.fn()}><div>composer</div></WelcomeEmptyState>)
     expect(screen.queryByTestId('welcome-notices')).toBeNull()
   })
 

@@ -36,7 +36,7 @@ import { imBoundEventText } from './lib/gatewayLabels'
 import { useSystemEventQueue } from './lib/useSystemEventQueue'
 import { useBackgroundTasks } from './lib/useBackgroundTasks'
 import { taskDoneLabel } from '../shared/taskWatch'
-import { EXAMPLE_PROMPTS, pickExamplePrompts } from './lib/welcomePrompts'
+import { PROMPT_CATEGORIES } from './lib/welcomePrompts'
 import { lastUserMessage } from './lib/resend'
 import { resolveWorkspacePath } from './lib/paths'
 import { sessionDisplayName } from './lib/sessionView'
@@ -188,7 +188,7 @@ export default function App(): JSX.Element {
   const { prefs: appPrefs } = useSettings()
   const [updateNotice, setUpdateNotice] = useState<{ latest: string; url: string } | null>(null)
   const [pendingMode, setPendingMode] = useState<RunMode>('react')
-  const [examplePrompts] = useState(() => pickExamplePrompts(EXAMPLE_PROMPTS, 4))
+  // 类别是固定四组、不随机 —— 随机会让同一个人每次打开看到不同入口,反而记不住有什么能做
   const [composerFocus, setComposerFocus] = useState(0)
   const [terminalOpen, setTerminalOpen] = useState(false)
   const [rightDockOpen, setRightDockOpen] = useState(false)
@@ -1157,7 +1157,7 @@ export default function App(): JSX.Element {
                     {/* 空态也要能显后台任务完成:从面板提交任务后回到新会话时,
                         Transcript 不渲染(showWelcome),通知否则就丢了。 */}
                     <WelcomeEmptyState
-                      examples={examplePrompts}
+                      categories={PROMPT_CATEGORIES}
                       onPickExample={(t) => { setInputValue(t); setComposerFocus(n => n + 1) }}
                       notices={taskDoneNotices.length > 0 ? taskDoneNotices.map((n) => (
                         <TaskDonePill key={n.taskId} text={n.text} ok={n.ok} onOpen={() => setView('tasks')} />
