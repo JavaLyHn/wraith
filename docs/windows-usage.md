@@ -390,6 +390,7 @@ npm run dev
 | 发消息报没有 API Key | 配了但没生效 | 回第 2 节 ①；若卡片上有**设默认**就点一下 |
 | 设了环境变量但 App 不认 | 环境变量是进程启动时读的 | 重启 App；或直接改用图形界面配 |
 | `npm install` ERESOLVE 失败 | react peer 冲突 | 必须带 `--legacy-peer-deps` |
+| 加 MCP server 报 `Cannot run program "npx"` / `CreateProcess error=2` | Windows 上 npx 实际是 **`npx.cmd`**，而 `CreateProcess` 不做 `PATHEXT` 补全（Linux/macOS 的 `execvp` 会） | 已修复，拉代码后**重跑 `wraith-install`**；不想更新就把命令填成 `where.exe npx` 查到的 `.cmd` 完整路径。见下方「加 MCP server 报 …」 |
 | `npm install` 报错末尾有「**Log files were not written** ... `_logs`」 | **npm 缓存目录不可用**，与项目无关。连日志都落不下就是这个病的指纹，不管上面报 `EPERM` 还是 `ENOENT` | 见下方「npm 缓存目录不可用」——先 `npm config get cache` |
 | `EPERM ... mkdir '<某盘>\...\_cacache\...'` | 缓存目录**存在但不可写**。常见于把 npm 缓存搬到 Node 安装盘（如 `E:\nodejs\node_cache`），该目录归 Administrators | 同上，把 cache 改到 `%LOCALAPPDATA%` |
 | `ENOENT ... mkdir '<项目路径>\$env:...\_cacache\tmp'` | 缓存路径**不存在**，且被拼在了项目目录后 → 存进 `.npmrc` 的是个相对路径 | 在 cmd 里跑了 PowerShell 写法 `"$env:LOCALAPPDATA\..."`。改用 `"%LOCALAPPDATA%\..."`，并删掉误建的怪目录 |
@@ -466,6 +467,45 @@ rmdir /s /q node_modules
 
 npm install --legacy-peer-deps
 ```
+
+### 加 MCP server 报 `Cannot run program "npx"`
+
+典型报错：
+
+```
+连接失败: Cannot run program "npx" (in directory "C:\Users\你"):
+CreateProcess error=2, 系统找不到指定的文件。
+```
+
+**Node 装了、`npx` 在终端里也能敲**，但后端就是起不来。原因是 Windows 与 Linux/macOS 的一个根本差异：
+
+| | Linux / macOS | Windows |
+|---|---|---|
+| npx 实际是什么 | `npx`（带 shebang 的脚本） | **`npx.cmd`**（批处理） |
+| 谁负责补扩展名 | `execvp` 查 PATH，名字就叫 `npx` | 由 **shell** 按 `PATHEXT` 补；`CreateProcess` **不管** |
+
+Java 用 `CreateProcess` 直接拉起进程，中间没有 shell —— 于是「找 `npx`」在 Windows 上必然落空。注意错误码是 **`error=2`（文件未找到）**，不是格式错误，这正说明卡在**找不到**而不是跑不动。
+
+**已修复**：后端现在会按 `PATH` × `PATHEXT` 把 `npx` 解析成 `npx.cmd` 的完整路径再启动。拉最新代码并**重跑 `wraith-install`**（或 `dev-win.ps1`）即可 —— 改的是 Java，只 `git pull` 不生效，见第 5 节。
+
+**手动绕过**（不想更新、或者用的是旧包）：把「命令(stdio)」直接填成完整路径。
+
+```powershell
+where.exe npx        # 找出真身,通常有 npx 和 npx.cmd 两行
+```
+
+把输出里 **`.cmd` 结尾的那一行**整条粘进「命令(stdio)」，参数不变：
+
+```
+命令(stdio)    C:\Program Files\nodejs\npx.cmd
+参数           -y
+               chrome-devtools-mcp@latest
+               --isolated=true
+```
+
+> 同类问题也会出现在别的 npm 系命令上（`pnpm`、`yarn`、`bunx`…）—— 它们在 Windows 上一律是 `.cmd`。修复对它们同样生效。
+
+---
 
 ### Electron 二进制下载失败（证书 / 网络）
 

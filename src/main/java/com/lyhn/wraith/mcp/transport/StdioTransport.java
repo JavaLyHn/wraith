@@ -30,11 +30,10 @@ public class StdioTransport implements McpTransport {
     private volatile boolean closed;
 
     public StdioTransport(String command, List<String> args, Map<String, String> env, Path workingDir) throws IOException {
-        List<String> commandLine = new ArrayList<>();
-        commandLine.add(command);
-        if (args != null) {
-            commandLine.addAll(args);
-        }
+        // Windows 上 npx/pnpm 等实际是 npx.cmd,而 CreateProcess 不做 PATHEXT 补全 ——
+        // 按裸名 spawn 必然 `CreateProcess error=2`。StdioCommand 负责解析成完整路径;
+        // 非 Windows 原样透传(execvp 本就查 PATH)。
+        List<String> commandLine = StdioCommand.build(command, args);
         ProcessBuilder builder = new ProcessBuilder(commandLine);
         if (workingDir != null) {
             builder.directory(workingDir.toFile());
