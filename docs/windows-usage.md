@@ -283,57 +283,91 @@ mac 那种半透明磨砂侧栏在 Windows 上是**实色**，这是有意设计
 | 发消息报没有 API Key | 没配 provider，或配了但没「设默认」 | 回第 2 节 ①，注意最后要点**设默认** |
 | 设了环境变量但 App 不认 | 环境变量是进程启动时读的 | 重启 App；或直接改用图形界面配 |
 | `npm install` ERESOLVE 失败 | react peer 冲突 | 必须带 `--legacy-peer-deps` |
-| `npm install` 报 `EPERM: operation not permitted, mkdir '<某盘>\...\_cacache\...'`，且提示「Log files were not written」 | **npm 写不进自己的缓存目录**，与项目无关。常见于把 npm 全局/缓存目录搬到 Node 安装盘（如 `E:\nodejs\node_cache`）——那目录通常归 Administrators，普通终端只能读 | 见下方「npm 缓存目录没有写权限」 |
-| `npm install` 结尾一堆 `npm warn cleanup ... EPERM ... rmdir 'node_modules\...'` | 这是**善后失败**不是病因 —— 安装中途挂了，npm 想回滚删半成品但删不动（有进程占用或杀软扫描） | 先解决真正的报错（看 `npm error` 那几行，不是 `npm warn`），再删干净 `node_modules` 重装 |
+| `npm install` 报错末尾有「**Log files were not written** ... `_logs`」 | **npm 缓存目录不可用**，与项目无关。连日志都落不下就是这个病的指纹，不管上面报 `EPERM` 还是 `ENOENT` | 见下方「npm 缓存目录不可用」——先 `npm config get cache` |
+| `EPERM ... mkdir '<某盘>\...\_cacache\...'` | 缓存目录**存在但不可写**。常见于把 npm 缓存搬到 Node 安装盘（如 `E:\nodejs\node_cache`），该目录归 Administrators | 同上，把 cache 改到 `%LOCALAPPDATA%` |
+| `ENOENT ... mkdir '<项目路径>\$env:...\_cacache\tmp'` | 缓存路径**不存在**，且被拼在了项目目录后 → 存进 `.npmrc` 的是个相对路径 | 在 cmd 里跑了 PowerShell 写法 `"$env:LOCALAPPDATA\..."`。改用 `"%LOCALAPPDATA%\..."`，并删掉误建的怪目录 |
+| `npm warn cleanup ... rmdir 'node_modules\...'` / `npm warn tar TAR_ENTRY_ERROR ...` | 都是**次生现象**不是病因 —— 安装中途挂了，回滚删不掉半成品 / 解压到一半断了 | 别对着它排查。看 `npm error` 那几行的 `path`，解决后删干净 `node_modules` 重装 |
 | 「用应用打开」找不到编辑器 | 只按已知安装路径探测 | 见下方已知限制 |
 | 文件操作偶发 `AccessDeniedException` | 杀软 / 索引器短暂占用目标文件 | 已内置 5 次有界重试（20/40/60/80ms）。**若仍失败请记下报错栈** —— 那说明占用超过 200ms，是需要调大退避的真实信号，不要当 flake 重跑了事 |
 
 ---
 
-### npm 缓存目录没有写权限（EPERM）
+### npm 缓存目录不可用（EPERM / ENOENT）
 
-症状是 `npm install` 报 `EPERM ... mkdir` 指向某个 `_cacache` 路径，往往还跟着一句「Log files were not written」——**连日志都落不下，说明是整个缓存目录不可写**。
+**一句话指纹**：报错末尾出现
 
-先看清楚病因在哪：`npm warn cleanup ... rmdir node_modules` 那一大坨是 npm 装到一半、回滚删不掉半成品留下的**次生现象**，别对着它排查。真正的死因在 `npm error` 那几行的 `path`。
+```
+npm error Log files were not written due to an error writing to the directory: <某路径>\_logs
+```
+
+**连日志都落不下**，说明整个缓存目录用不了。不管上面报的是 `EPERM` 还是 `ENOENT`，都是同一类病，直接查 `npm config get cache`。
+
+两种变体：
+
+| 报错 | 含义 | 典型成因 |
+|---|---|---|
+| `EPERM ... mkdir '<某盘>\...\_cacache\...'` | 目录**存在但不可写** | 把 npm 缓存搬到了 Node 安装盘（如 `E:\nodejs\node_cache`），该目录归 Administrators，普通终端只能读 |
+| `ENOENT ... mkdir '<项目路径>\$env:...\_cacache\tmp'` | 缓存路径**根本不存在** —— 注意它被拼在了项目目录后面，说明存进去的是个**相对路径** | 在 **cmd** 里执行了 PowerShell 写法 `npm config set cache "$env:LOCALAPPDATA\npm-cache"`。cmd 不展开 `$env:`，字面量被原样写进 `.npmrc` |
+
+**别对着这两类噪音排查**，它们都是安装中断后的次生现象：
+
+- `npm warn cleanup ... EPERM ... rmdir node_modules\...` —— npm 想回滚删半成品，删不动
+- `npm warn tar TAR_ENTRY_ERROR ENOENT ...` —— 解压到一半断了
+
+真正的死因永远在 **`npm error`** 那几行的 `path`。
+
+#### 修复（PowerShell）
 
 ```powershell
 # ① 看缓存指向哪
 npm config get cache
-# 若指向 Node 安装盘(如 E:\nodejs\node_cache),那多半就是元凶
 
-# ② 改到用户目录(必定有写权限,写入 %USERPROFILE%\.npmrc,不需要管理员)
+# ② 改到用户目录(必定有写权限;写入 %USERPROFILE%\.npmrc,不需要管理员)
 npm config set cache "$env:LOCALAPPDATA\npm-cache"
-npm config get cache        # 期望 C:\Users\<你>\AppData\Local\npm-cache
 
-# ③ 清掉不一致的半成品,否则后面会出各种怪事
+# ③ ⚠ 必须验证 —— 输出要是以盘符开头的绝对路径
+npm config get cache
+#   ✅ C:\Users\<你>\AppData\Local\npm-cache
+#   ❌ 含 $env: 或 %...%,或不以盘符开头 → 别往下走,回 ② 用对应 shell 的写法
+
+# ④ 若之前误建过怪目录,删掉(它就在项目里,名字真的叫 $env:LOCALAPPDATA)
 cd D:\wraith\desktop
+Remove-Item -Recurse -Force '$env:LOCALAPPDATA' -ErrorAction SilentlyContinue
+
+# ⑤ 清掉不一致的半成品
 Remove-Item -Recurse -Force node_modules
 
-# ④ 重装
+# ⑥ 重装
 npm install --legacy-peer-deps
 ```
 
-第 ③ 步删不动，一般是有进程占着——关掉编辑器、关掉 cwd 在里面的终端。仍然删不掉就用这招（对付海量小文件和超长路径最快）：
+> ④ 里的单引号不能少 —— PowerShell 双引号会把 `$env:LOCALAPPDATA` 展开，单引号才取字面量。
+
+#### 修复（cmd）
+
+提示符是 `D:\...>` 而非 `PS D:\...>` 就用这套。**注意 ② 用的是 `%...%` 不是 `$env:`**：
+
+```cmd
+npm config get cache
+npm config set cache "%LOCALAPPDATA%\npm-cache"
+npm config get cache
+
+cd /d D:\wraith\desktop
+rmdir /s /q "$env:LOCALAPPDATA"
+rmdir /s /q node_modules
+
+npm install --legacy-peer-deps
+```
+
+#### node_modules 删不动
+
+一般是有进程占着——关掉编辑器、关掉 cwd 在里面的终端。仍然删不掉就用 robocopy 镜像一个空目录（对付海量小文件和超长路径最快）：
 
 ```powershell
 mkdir empty_tmp
 robocopy empty_tmp node_modules /MIR
 Remove-Item -Recurse -Force node_modules, empty_tmp
 ```
-
-**如果你在 cmd 而不是 PowerShell**（提示符是 `D:\...>` 而非 `PS D:\...>`），同一套操作的 cmd 写法：
-
-```cmd
-npm config get cache
-npm config set cache "%LOCALAPPDATA%\npm-cache"
-
-cd /d D:\wraith\desktop
-rmdir /s /q node_modules
-
-npm install --legacy-peer-deps
-```
-
-删不动时的兜底：
 
 ```cmd
 mkdir empty_tmp
