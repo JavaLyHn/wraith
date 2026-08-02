@@ -311,11 +311,32 @@ cmd.exe 里则是 `set GLM_API_KEY=你的key`（当前窗口）／`setx GLM_API_
 
 「后台任务」在跑的时候，右边会显示**正在运行的条数**；工具组收起时这个数字会冒到「工具」标题上，不会因为收起就看不见。
 
+面板里每条记录行尾的按钮按状态给：
+
+| 状态 | 有什么键 |
+|---|---|
+| 运行中 / 排队中 | **✕ 取消**（此时不给删 —— worker 还在改你的文件，删了行它照样在跑，只是你看不见了） |
+| 失败 / 已取消 | **⟲ 重试** + **🗑 删除** |
+| 已完成 | **🗑 删除** |
+
+**重试 = 用同样的指令新建一条，并把原来那条删掉**，列表里只留最新的。
+（反过来说，如果重试提交本身失败了，原记录会原地不动 —— 否则你的指令就跟着一起没了。）
+
 ### 顶栏那个盾牌
 
-右上角有个小盾，正常态是浅墨的，悬停显示 **「沙箱: AppContainer」**——agent 执行的命令被关在 Windows 自带的 AppContainer 里，断网 + 写围栏。
+右上角有个小盾，它同时表达两件事：**有没有沙箱**、以及**网络出口开没开**。三态：
 
-盾**变红**写着「沙箱未启用」就是要处理的异常了：说明 AppContainer 没起来。点盾牌进「安全」面板会显示具体缺哪一项，或者命令行跑 `wraith sandbox doctor` 逐项体检。详见 [6.5 命令沙箱](#65-命令沙箱appcontainer)。
+| 图标 | 墨色 | 悬停文案 | 含义 |
+|---|---|---|---|
+| 打勾盾 | 浅墨 | 沙箱: AppContainer · 已断网 | 正常态。命令关在 AppContainer 里，断网 + 写围栏 |
+| **半盾** | **橙** | 沙箱: AppContainer · 已放行网络 | 你在安全面板打开了「命令沙箱联网」。文件系统仍被关着，只是网络出口开了 |
+| 警告盾 | **红** | 沙箱未启用 | AppContainer 没起来 —— 要处理的异常 |
+
+盾会**跟着面板里的开关实时变**：拨「命令沙箱联网」，松手就能看见打勾盾变成橙色半盾。
+（这在 2026-08-02 之前是坏的：盾只在开机时读过一次状态，且压根不看联网位，
+所以拨开关顶栏纹丝不动。用户报的「不管有没有开启沙箱护盾始终不变」就是它。）
+
+红盾时点盾牌进「安全」面板会显示具体缺哪一项，或者命令行跑 `wraith sandbox doctor` 逐项体检。详见 [6.5 命令沙箱](#65-命令沙箱appcontainer)。
 
 > 沙箱没起来时命令照常执行（仍受命令黑名单和 HITL 审批保护），只是没有围栏——不会把你卡住。
 
@@ -634,7 +655,7 @@ where.exe npx        # 找出真身,通常有 npx 和 npx.cmd 两行
 
 #### 情况 C：npx 能解析了，MCP server 还是起不来
 
-以 `chrome-devtools` 为例（它是默认自动创建的那个）。**原生 Windows 是官方支持的**
+以 `chrome-devtools` 为例（它是**内建**的那个，不需要你配就在）。**原生 Windows 是官方支持的**
 （[官方 troubleshooting](https://github.com/ChromeDevTools/chrome-devtools-mcp/blob/main/docs/troubleshooting.md) 明确说 WSL 下 Chrome 反而起不来，建议用原生 Windows / PowerShell），
 所以起不来一定有具体原因。三个常见的：
 
@@ -668,6 +689,49 @@ npx -y chrome-devtools-mcp@latest --version
 **工具数量对不对得上？** 工具列表是 server 启动后自己报的（`tools/list`），
 所以**要么全有、要么一个没有**，不存在少几个。两台机器数量不同只有一种可能：
 `@latest` 解析到了不同版本（各自 npx 缓存不同）。想完全对齐就把 `@latest` 换成固定版本号。
+
+---
+
+#### 情况 D：能起来，但**每次开机都要等很久**
+
+这是最常被当成 bug 的一类，其实全部时间都花在 wraith 之外。一次冷启动依次是：
+
+```
+npx 解析 npx.cmd 绝对路径     ← wraith 做的,毫秒级
+  → npm 去 registry 问 chrome-devtools-mcp 的 latest 是哪个版本   ← 网络
+  → 缓存里没有就下整个包(含 puppeteer-core,几十 MB)              ← 网络
+  → 起 Node 进程 + 拉起一个全新的 Chrome(--isolated=true 每次新 profile)  ← 磁盘/CPU
+  → MCP initialize 握手 + tools/list
+```
+
+**`@latest` 意味着即使包已经在缓存里，npm 每次仍要去 registry 问一次「最新是谁」。**
+国内直连 registry.npmjs.org 的话，这一问经常就是十几秒起步。
+
+按收益从大到小：
+
+| 做法 | 命令 | 说明 |
+|---|---|---|
+| ① 换 npm 镜像 | `npm config set registry https://registry.npmmirror.com` | 国内收益最大，且对所有 npx 系 server 都生效 |
+| ② 钉死版本 | 在 `~\.wraith\mcp.json` 写同名条目，args 用 `chrome-devtools-mcp@0.23.0` | 跳过 dist-tag 解析；顺带解决两台机器工具数不一致 |
+| ③ 复用已开的 Chrome | args 换成 `--browser-url=http://127.0.0.1:9222` 或 `--autoConnect` | 省掉「每次拉一个全新 Chrome」；代价是 Agent 会驱动你**真实登录态**的浏览器 |
+| ④ 不需要浏览器就关掉 | `WRAITH_MCP_BUILTIN_BROWSER=off` | 启动瞬间干净 |
+
+②③ 的写法（用户级 `mcp.json` 里的同名条目会**完全覆盖**内建项）：
+
+```json
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@0.23.0", "--browser-url=http://127.0.0.1:9222"]
+    }
+  }
+}
+```
+
+> **启动慢不阻塞对话。** MCP server 在后台线程并行启动（最多 8 个并发），
+> 每个 server 各自就绪、各自注册工具 —— 慢的那个只是自己慢，
+> 不会拖住聊天、也不会拖住别的 server。面板上它停在「启动中」，好了自己会变。
 
 ---
 
@@ -852,9 +916,10 @@ profile 本身留在系统里不占资源，也不影响别的程序；真要删
 
 不装桌面 App 也能用，CLI 与桌面共用同一套 Java 内核。**只需要 JDK 17 + Maven**，不需要 Node：
 
-> ⚠️ 一个例外：**CLI 首次启动会自动创建一份用 `npx` 的默认 MCP 配置**（chrome-devtools）。
+> ⚠️ 一个例外：**内建的 `chrome-devtools` MCP server 用 `npx` 启动**。
 > 没装 Node 的话，启动时会看到 `Cannot run program "npx"` —— 这不影响 CLI 本身和 38 个内置工具，
-> 关掉那个 server 即可，见第 6 节「加 MCP server 报 `Cannot run program "npx"`」。
+> 关掉即可：环境变量 `WRAITH_MCP_BUILTIN_BROWSER=off`（永久），或 `/mcp disable chrome-devtools`（本次会话）。
+> 详见第 6 节「加 MCP server 报 `Cannot run program "npx"`」。
 
 ```powershell
 git clone https://github.com/JavaLyHn/wraith.git

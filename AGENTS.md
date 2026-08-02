@@ -203,7 +203,11 @@ src/main/java/com/lyhn/wraith/
 
 改沙箱另需连带：`sandbox.get/set` RPC 回包 + `initialize` 的 `capabilities.sandbox` + 桌面 `topBar.ts:sandboxChipView` / `sandboxPanel.ts` / `shared/types.ts:SandboxKindWire` + `docs/windows-usage.md` §6.5 + `docs/windows-dev.md` §5.1 验收项。
 
+> 顶栏那枚盾的**唯一真相源是 App 的 `state.sandbox` + `state.sandboxNet`**，由 `App.refreshSandbox()`（startSession 之后）与 `PolicyPanel` 的 `onSandboxChange` 回填。面板**不许**自己持有一份沙箱状态 —— 分叉的那一半正好是用户看得见的那半（2026-08-02 修的就是这个）。E2E mock 里 `sandbox.get/set` 也要跟着实现，否则前端走的是 -32601 的 catch 分支，测不到真实路径。
+
 ### 5.5 改 MCP → `mcp/` + ToolRegistry + HITL + AuditLog + 提示词 + 文档 + 测试
+
+> **内建 server 写在 `McpConfigLoader.load()` 里**（`step_search` 看 key 有无、`chrome-devtools` 恒补），不是「启动时往 `~/.wraith/mcp.json` 写模板」。写文件那条路只挂得住一个入口 —— 它原先只在交互式 CLI 上，于是桌面 / gateway / automation 三个入口的用户永远没有浏览器能力。加内建项时三条铁律：**用户/项目配置同名即整段让位**（含 `disabled: true`）、**绝不改用户文件**、**给一个持久的退订开关**（内建项在插件面板里 scope=builtin，那一档没有删除键，面板上的「停用」又只在内存里）。
 
 ### 6. 不提交 `.env` / 真实 API Key / `target/` 产物
 

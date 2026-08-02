@@ -153,7 +153,7 @@ mvn test -DskipTests=false
 - 被动处理 `notifications/tools/list_changed`、`notifications/resources/list_changed`、`notifications/resources/updated`
 - 运行中输入 `/cancel` 并回车可请求取消当前 Agent run
 - CLI 命令：`/mcp`、`/mcp restart <name>`、`/mcp logs <name>`、`/mcp disable <name>`、`/mcp enable <name>`、`/mcp resources <name>`、`/mcp prompts <name>`
-- `~/.wraith/mcp.json` 不存在时会自动创建默认 chrome-devtools 配置；项目级 `.wraith/mcp.json` 仍可按 server 名覆盖
+- `chrome-devtools` 是**内建 server**，不需要任何配置文件即可用；用户级 `~/.wraith/mcp.json` 与项目级 `.wraith/mcp.json` 都可以按 server 名覆盖它（含 `"disabled": true`）
 
 ### 第十二期：长上下文工程
 
@@ -169,7 +169,7 @@ mvn test -DskipTests=false
 ### 第十三期：Chrome DevTools MCP
 
 - 默认接入 Google 官方 `chrome-devtools-mcp@latest`，注册为 `mcp__chrome-devtools__navigate_page`、`take_snapshot`、`click`、`fill_form` 等浏览器工具
-- `~/.wraith/mcp.json` 不存在时启动自动创建模板，默认使用 `--isolated=true` 临时浏览器 profile
+- 内建默认 `npx -y chrome-devtools-mcp@latest --isolated=true`（临时浏览器 profile）；**不写用户文件**，CLI / 桌面 / IM 网关 / 定时任务四个入口一致
 - 用于处理 SPA / JS 渲染 / 防爬墙 / 表单交互页面；微信公众号文章、知乎专栏、推特、小红书等 `web_fetch` 失败站点会引导走浏览器 MCP
 - HITL 的“全部放行”支持 MCP server 维度，连续浏览器操作可对 `chrome-devtools` 一次确认
 - `image` 类型结果会作为图片输入附加到下一轮；文本 fallback 仍保留，用于日志、人类可读摘要和 API 不接受图片时的上下文
@@ -572,7 +572,7 @@ WRAITH_LOG_TOTAL_SIZE_CAP=100MB
 
 ### 2. 可选：配置 MCP server
 
-MCP 子系统默认开启。`~/.wraith/mcp.json` 不存在时，Wraith 会自动创建默认 chrome-devtools 配置：
+MCP 子系统默认开启，且**不需要任何配置文件就有浏览器能力** —— `chrome-devtools` 是内建 server，等价于这段配置：
 
 ```json
 {
@@ -584,6 +584,16 @@ MCP 子系统默认开启。`~/.wraith/mcp.json` 不存在时，Wraith 会自动
   }
 }
 ```
+
+它只存在于内存，Wraith 不会往你的 `mcp.json` 里写任何东西。三条改法：
+
+| 想做什么 | 怎么做 |
+|---|---|
+| 改参数（钉版本、复用已开的 Chrome） | 在 `~/.wraith/mcp.json` 里写同名条目，你的完全覆盖内建的 |
+| 本次会话临时关掉 | `/mcp disable chrome-devtools`（重启后回来） |
+| 永久关掉 | `WRAITH_MCP_BUILTIN_BROWSER=off`，或 `-Dwraith.mcp.builtin.browser=off` |
+
+> 前提仍是机器上有 `npx`（Node 18+）。没有 Node 时这个 server 会显示 ERROR，**不影响 CLI 本身和内置工具**。
 
 需要继续接入其他 server 时，可编辑 `~/.wraith/mcp.json` 或项目内 `.wraith/mcp.json`：
 
