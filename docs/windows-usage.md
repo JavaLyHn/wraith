@@ -287,6 +287,7 @@ mac 那种半透明磨砂侧栏在 Windows 上是**实色**，这是有意设计
 | `EPERM ... mkdir '<某盘>\...\_cacache\...'` | 缓存目录**存在但不可写**。常见于把 npm 缓存搬到 Node 安装盘（如 `E:\nodejs\node_cache`），该目录归 Administrators | 同上，把 cache 改到 `%LOCALAPPDATA%` |
 | `ENOENT ... mkdir '<项目路径>\$env:...\_cacache\tmp'` | 缓存路径**不存在**，且被拼在了项目目录后 → 存进 `.npmrc` 的是个相对路径 | 在 cmd 里跑了 PowerShell 写法 `"$env:LOCALAPPDATA\..."`。改用 `"%LOCALAPPDATA%\..."`，并删掉误建的怪目录 |
 | `npm warn cleanup ... rmdir 'node_modules\...'` / `npm warn tar TAR_ENTRY_ERROR ...` | 都是**次生现象**不是病因 —— 安装中途挂了，回滚删不掉半成品 / 解压到一半断了 | 别对着它排查。看 `npm error` 那几行的 `path`，解决后删干净 `node_modules` 重装 |
+| `npm error path ...\node_modules\electron` + `RequestError: unable to verify the first certificate` | npm 包已下完，卡在 **electron postinstall 下载 Electron 二进制**（约 100MB，不走 registry，直连 GitHub Releases）。TLS 证书链验证失败，通常是杀软/企业网关拆 HTTPS | 见下方「Electron 二进制下载失败」——先设 `ELECTRON_MIRROR` |
 | 「用应用打开」找不到编辑器 | 只按已知安装路径探测 | 见下方已知限制 |
 | 文件操作偶发 `AccessDeniedException` | 杀软 / 索引器短暂占用目标文件 | 已内置 5 次有界重试（20/40/60/80ms）。**若仍失败请记下报错栈** —— 那说明占用超过 200ms，是需要调大退避的真实信号，不要当 flake 重跑了事 |
 
@@ -358,6 +359,71 @@ rmdir /s /q node_modules
 
 npm install --legacy-peer-deps
 ```
+
+### Electron 二进制下载失败（证书 / 网络）
+
+典型报错：
+
+```
+npm error path D:\wraith\desktop\node_modules\electron
+npm error command ... node install.js
+npm error RequestError: unable to verify the first certificate
+```
+
+**注意这跟缓存那类病无关**：npm 包其实已经下完了，卡的是 `electron` 的 postinstall —— 它要去下 Electron 运行时二进制（约 100MB），**不走 npm registry，直连 GitHub Releases**。所以 registry 通不代表这一步能通。
+
+`unable to verify the first certificate` = TLS 证书链验不过，通常是杀软或企业网关在中间拆 HTTPS 塞了自己的根证书，而 Node 不认它。
+
+#### ① 换镜像（首选，国内还快得多）
+
+```cmd
+set ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/
+npm install --legacy-peer-deps
+```
+
+`set` 只对当前窗口有效；要永久生效用 `setx`（**需新开窗口**）：
+
+```cmd
+setx ELECTRON_MIRROR "https://npmmirror.com/mirrors/electron/"
+```
+
+PowerShell 对应写法：`$env:ELECTRON_MIRROR = "https://npmmirror.com/mirrors/electron/"`
+
+#### ② 让 Node 认那张根证书（换镜像仍报同样错时）
+
+说明拦截覆盖所有 HTTPS。先确认是谁在拦：
+
+```cmd
+npm config get proxy
+npm config get https-proxy
+npm config get strict-ssl
+```
+
+拿到根证书（企业 IT 提供，或从浏览器证书管理器导出为 .pem）后：
+
+```cmd
+set NODE_EXTRA_CA_CERTS=C:\path\to\root-ca.pem
+npm install --legacy-peer-deps
+```
+
+#### ③ 关闭 TLS 校验（最后手段，不推荐）
+
+```cmd
+npm config set strict-ssl false
+set NODE_TLS_REJECT_UNAUTHORIZED=0
+```
+
+> ⚠️ 这等于对所有下载不设防，装完请立刻 `npm config set strict-ssl true` 改回来。
+
+#### 顺带：出安装包时还会撞一次
+
+`npm run dist:win` 阶段 `electron-builder` 要下 `winCodeSign` / `nsis` 等二进制，同样直连 GitHub，同样会被拦。建议现在一起设了：
+
+```cmd
+setx ELECTRON_BUILDER_BINARIES_MIRROR "https://npmmirror.com/mirrors/electron-builder-binaries/"
+```
+
+---
 
 #### node_modules 删不动
 
