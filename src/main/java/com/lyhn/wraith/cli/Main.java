@@ -140,16 +140,6 @@ public class Main {
     private static final Pattern SENSITIVE_ASSIGNMENT = Pattern.compile(
             "(?i)((?:api[_-]?key|authorization|password|passwd|secret|token)\\s*[=:]\\s*)(\\S+)");
     private static final int CTRL_O = 15;
-    private static final String DEFAULT_CHROME_DEVTOOLS_MCP_JSON = """
-            {
-              "mcpServers": {
-                "chrome-devtools": {
-                  "command": "npx",
-                  "args": ["-y", "chrome-devtools-mcp@latest", "--isolated=true"]
-                }
-              }
-            }
-            """;
 
     enum EscapeSequenceType {
         STANDALONE_ESC,
@@ -317,10 +307,10 @@ public class Main {
 
             String startupNote = "";
             try {
-                McpConfigBootstrapResult bootstrapResult = ensureDefaultMcpConfig(Path.of(System.getProperty("user.home")));
-                if (!bootstrapResult.message().isBlank()) {
-                    startupNote = bootstrapResult.message();
-                }
+                // chrome-devtools 现在是 McpConfigLoader 里的内建项(缺位才补,用户配置优先)。
+                // 此前这里会往 ~/.wraith/mcp.json 写一份默认模板 —— 那条路只挂在交互式 CLI 上,
+                // 桌面 / gateway / automation 三个入口都不经过,于是「只用桌面的人永远没有浏览器工具」。
+                // 内建项四个入口自动一致,也不再动用户的文件。
                 mcpServerManager.loadConfiguredServers();
                 mcpServerManager.startAll(ui, mcpStartupWait());
                 Runtime.getRuntime().addShutdownHook(new Thread(mcpServerManager::close, "wraith-mcp-shutdown"));
@@ -4555,23 +4545,6 @@ public class Main {
         return lines;
     }
 
-    static McpConfigBootstrapResult ensureDefaultMcpConfig(Path userHome) throws IOException {
-        Path configFile = userHome.resolve(".wraith").resolve("mcp.json");
-        if (Files.notExists(configFile)) {
-            Files.createDirectories(configFile.getParent());
-            Files.writeString(configFile, DEFAULT_CHROME_DEVTOOLS_MCP_JSON);
-            return new McpConfigBootstrapResult(true,
-                    "✅ 已创建默认 MCP 配置: " + configFile
-                            + "\n   默认启用 chrome-devtools（isolated 模式）。");
-        }
-        String content = Files.readString(configFile);
-        if (!content.contains("\"chrome-devtools\"")) {
-            return new McpConfigBootstrapResult(false,
-                    "ℹ️ 检测到 ~/.wraith/mcp.json 未配置 chrome-devtools，建议参考 README 添加浏览器 MCP server。");
-        }
-        return new McpConfigBootstrapResult(false, "");
-    }
-
     private static MemorySaveRequest parseMemorySave(String raw) {
         String value = raw == null ? "" : raw.trim();
         if (value.regionMatches(true, 0, "--global ", 0, 9)) {
@@ -4642,8 +4615,6 @@ public class Main {
         }
     }
 
-    record McpConfigBootstrapResult(boolean created, String message) {
-    }
 
     record ModelSelection(String provider, String model, boolean explicitModel) {
     }

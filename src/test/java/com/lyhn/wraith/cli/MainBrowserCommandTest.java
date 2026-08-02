@@ -59,14 +59,40 @@ class MainBrowserCommandTest {
     }
 
     @Test
+    void browserDisconnectRestartsIsolated(@TempDir Path tempDir) {
+        // chrome-devtools 现在是 McpConfigLoader 的内建项 —— 空 mcp.json 也照样有这个 server。
+        // 此前这条用例断言的是「未配置」,那正是本次修掉的 bug(桌面用户永远等不到浏览器能力)。
+        // 用 FakeMcpServerManager 而不是真 manager:真 manager 会去 restart,
+        // 也就是真的 spawn 一次 npx —— 单测里不该有这种东西。
+        BrowserSession session = new BrowserSession();
+        HitlToolRegistry registry = new HitlToolRegistry(new TerminalHitlHandler(false));
+        FakeMcpServerManager manager = new FakeMcpServerManager(registry, tempDir);
+        session.switchToShared("http://127.0.0.1:9222");
+
+        String result = Main.handleBrowserCommand("disconnect", session, new CountingConnectivityCheck(),
+                manager, registry, new TerminalHitlHandler(false));
+
+        assertTrue(result.contains("isolated"), result);
+        assertEquals(BrowserMode.ISOLATED, session.mode());
+        assertEquals(List.of("-y", "chrome-devtools-mcp@latest", "--isolated=true"), manager.lastArgs);
+    }
+
+    @Test
     void browserDisconnectWithoutServerClearsSession(@TempDir Path tempDir) throws IOException {
-        Harness h = new Harness(tempDir);
-        h.session.switchToShared("http://127.0.0.1:9222");
+        // 「真的没有这个 server」现在只剩一条路:用户显式退订内建项。
+        // 这条分支仍然要活着 —— 退订的人做 /browser disconnect 不该崩,该被告知并清干净本地状态。
+        System.setProperty("wraith.mcp.builtin.browser", "off");
+        try {
+            Harness h = new Harness(tempDir);
+            h.session.switchToShared("http://127.0.0.1:9222");
 
-        String result = Main.handleBrowserCommand("disconnect", h.session, h.connectivity, h.manager, h.registry, h.handler);
+            String result = Main.handleBrowserCommand("disconnect", h.session, h.connectivity, h.manager, h.registry, h.handler);
 
-        assertTrue(result.contains("未配置"));
-        assertEquals(BrowserMode.ISOLATED, h.session.mode());
+            assertTrue(result.contains("未配置"), result);
+            assertEquals(BrowserMode.ISOLATED, h.session.mode());
+        } finally {
+            System.clearProperty("wraith.mcp.builtin.browser");
+        }
     }
 
     @Test

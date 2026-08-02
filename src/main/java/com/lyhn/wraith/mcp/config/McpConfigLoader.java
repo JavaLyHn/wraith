@@ -20,6 +20,15 @@ public class McpConfigLoader {
     private static final String STEP_SEARCH_SERVER = "step_search";
     private static final String STEP_SEARCH_URL = "https://api.stepfun.com/step_plan/v1/mcp/web_search/mcp";
 
+    /** 内建浏览器 server 的名字（对外可见，插件面板按它判 scope=builtin）。 */
+    public static final String BROWSER_SERVER = "chrome-devtools";
+    private static final String BROWSER_COMMAND = "npx";
+    private static final List<String> BROWSER_ARGS =
+            List.of("-y", "chrome-devtools-mcp@latest", "--isolated=true");
+    /** 退订开关：系统属性优先，其次同名大写环境变量。 */
+    private static final String BROWSER_OPT_OUT_PROPERTY = "wraith.mcp.builtin.browser";
+    private static final String BROWSER_OPT_OUT_ENV = "WRAITH_MCP_BUILTIN_BROWSER";
+
     private final Path userConfig;
     private final Path projectConfig;
     private final Path projectDir;
@@ -51,6 +60,7 @@ public class McpConfigLoader {
             merged.putAll(read(projectConfig));
         }
         addBuiltInStepSearchIfAvailable(merged);
+        addBuiltInBrowserIfAbsent(merged);
         return merged;
     }
 
@@ -80,6 +90,46 @@ public class McpConfigLoader {
         config.setUrl(STEP_SEARCH_URL);
         config.setHeaders(Map.of("Authorization", "Bearer " + apiKey.trim()));
         merged.put(STEP_SEARCH_SERVER, config);
+    }
+
+    /**
+     * 缺位时补上内建的 chrome-devtools（浏览器能力）。
+     *
+     * <p><b>为什么是内建项而不是「启动时往 mcp.json 里写一段」</b>：写文件那条路
+     * （{@code Main.ensureDefaultMcpConfig}）只挂在交互式 CLI 上，桌面走的是 app-server，
+     * gateway / automation 又是另外两条 —— 每加一个入口就得记得挂一次，漏一个就是
+     * 「我在 Windows 桌面上根本没有浏览器工具」。而且它会去改用户的文件。
+     * 内建项在内存里合并，四个入口自动一致，用户的 mcp.json 一个字节都不动。
+     *
+     * <p><b>用户配置永远优先</b>：只要 user/project 里出现过这个名字就整段让位 ——
+     * 包括写着 {@code "disabled": true} 的那种。停用也是一种配置，
+     * 被兜底逻辑复活的话，用户会发现自己关不掉。
+     *
+     * <p>退订用 {@link #BROWSER_OPT_OUT_PROPERTY}：内建项在插件面板里 scope=builtin，
+     * 那一档没有「删除」按钮，面板上的「停用」又只在内存里生效（重启就回来）。
+     * 不给一个持久的关法，不想要它的人会被锁死。
+     */
+    private void addBuiltInBrowserIfAbsent(Map<String, McpServerConfig> merged) {
+        if (merged.containsKey(BROWSER_SERVER) || !builtInBrowserEnabled()) {
+            return;
+        }
+        McpServerConfig config = new McpServerConfig();
+        config.setCommand(BROWSER_COMMAND);
+        config.setArgs(new ArrayList<>(BROWSER_ARGS));
+        merged.put(BROWSER_SERVER, config);
+    }
+
+    /** 只认明确表示「关」的几个词；其余（含空串、拼错的）一律当没说，保持默认开。 */
+    static boolean builtInBrowserEnabled() {
+        String raw = System.getProperty(BROWSER_OPT_OUT_PROPERTY);
+        if (raw == null || raw.isBlank()) {
+            raw = System.getenv(BROWSER_OPT_OUT_ENV);
+        }
+        if (raw == null || raw.isBlank()) {
+            return true;
+        }
+        String v = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        return !(v.equals("off") || v.equals("false") || v.equals("0") || v.equals("no"));
     }
 
     private void expand(McpServerConfig config) {
