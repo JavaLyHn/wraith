@@ -153,6 +153,30 @@ public class DurableTaskManager implements Closeable {
         return true;
     }
 
+    /**
+     * 删除一条<b>终态</b>任务记录。
+     *
+     * @return 真的删掉了才 true；不存在、或还没跑完 → false
+     *
+     * <p><b>非终态一律拒绝</b>：worker 线程还握着这个 id。删了行之后它跑完会去
+     * {@code markTerminal} 一个不存在的行 —— SQL 层面 UPDATE 影响 0 行，静悄悄地过去，
+     * 于是「任务从面板上消失了，但它确实改了你的文件」。这种状态没法向用户解释，
+     * 也没法从界面上恢复。要删就先 {@link #cancel(String)}，两步各有明确语义。
+     */
+    public synchronized boolean delete(String id) {
+        Optional<DurableTask> current = find(id);
+        if (current.isEmpty() || !current.get().terminal()) {
+            return false;
+        }
+        try (PreparedStatement ps = connection.prepareStatement(
+                "DELETE FROM runtime_tasks WHERE id = ?")) {
+            ps.setString(1, id.trim());
+            return ps.executeUpdate() > 0;
+        } catch (SQLException e) {
+            throw new IllegalStateException("删除后台任务失败: " + e.getMessage(), e);
+        }
+    }
+
     public Path dbPath() {
         return dbPath;
     }

@@ -11,7 +11,16 @@ import { taskCanRetry } from '../src/renderer/lib/taskView'
  * 修好之后用户发现——**已经失败的记录不会自愈**，而面板上只有「取消」，
  * 想重跑只能把 prompt 手打一遍。
  *
- * 语义：重试 = 用同样的 prompt **新建一条**，原失败记录保留（失败发生过，别抹掉）。
+ * <b>语义(用户明确改过一次)</b>：重试 = 用同样的 prompt 新建一条，
+ * <b>并把原来那条删掉</b>，列表里只留最新的。
+ *
+ * 落地时我按「失败发生过，审计上不该抹掉」保留了原记录，用户看完直接否了：
+ * 「点击重试以后之前的就不要了，就保留重试的最新的」。他是对的——
+ * 这是任务队列面板不是审计日志（真审计在 `~/.wraith/audit/`），
+ * 反复重试三次就有三条僵尸失败记录压在上面，把在跑的那条挤没了。
+ *
+ * <b>顺序是 add 再 delete，不能反</b>：先删的话，一旦 add 失败，
+ * 用户的 prompt 就随着那条记录一起没了，连重打一遍的依据都不剩。
  */
 
 const failed = { id: 't1', status: 'failed', prompt: '把 utils 重构并补测试', durationMs: 5, error: 'boom' }
@@ -21,10 +30,11 @@ const running = { id: 't4', status: 'running', prompt: '跑着呢', durationMs: 
 
 function stub(tasks: unknown[], taskAdd = vi.fn().mockResolvedValue({ ok: true })) {
   const taskList = vi.fn().mockResolvedValue({ enabled: true, tasks })
+  const taskDelete = vi.fn().mockResolvedValue({ ok: true })
   ;(window as unknown as { wraith: unknown }).wraith = {
-    taskList, taskAdd, taskCancel: vi.fn().mockResolvedValue({}), taskGet: vi.fn(),
+    taskList, taskAdd, taskDelete, taskCancel: vi.fn().mockResolvedValue({}), taskGet: vi.fn(),
   }
-  return { taskList, taskAdd }
+  return { taskList, taskAdd, taskDelete }
 }
 
 describe('taskCanRetry（纯判据）', () => {
@@ -88,15 +98,37 @@ describe('TaskPanel 重试按钮', () => {
     expect(taskList.mock.calls.length).toBeGreaterThan(before)   // 提交后要刷新,否则看不到新任务
   })
 
-  it('重试走的是 taskAdd（新建一条），不是某个「复活」接口 —— 原记录必须留着', async () => {
-    const { taskAdd } = stub([failed])
+  it('重试走的是 taskAdd（新建一条）+ taskDelete（顶替原记录）', async () => {
+    const { taskAdd, taskDelete } = stub([failed])
     await act(async () => { render(<TaskPanel onBack={() => {}} />) })
     await act(async () => { fireEvent.click(screen.getByTestId('task-retry')) })
 
     expect(taskAdd).toHaveBeenCalledTimes(1)
-    // 没有任何「删掉/改写原任务」的调用：失败发生过,审计上不该被抹掉
+    expect(taskDelete).toHaveBeenCalledWith('t1')   // 「之前的就不要了」
+    // 不走 cancel:原记录已经是终态,cancel 对它是 no-op,用它来"删"是名不副实
     const w = (window as unknown as { wraith: Record<string, unknown> }).wraith
     expect(w.taskCancel).not.toHaveBeenCalled()
+  })
+
+  it('add 失败时**不删**原记录 —— 否则 prompt 跟着一起没了', async () => {
+    const { taskDelete } = stub([failed], vi.fn().mockResolvedValue({ ok: false, message: '队列满了' }))
+    await act(async () => { render(<TaskPanel onBack={() => {}} />) })
+    await act(async () => { fireEvent.click(screen.getByTestId('task-retry')) })
+
+    expect(taskDelete).not.toHaveBeenCalled()
+    expect(screen.getByText(/队列满了/)).toBeTruthy()
+  })
+
+  it('add 成功但 delete 失败:新任务已经在跑,如实说一声,不谎报重试失败', async () => {
+    const { taskAdd } = stub([failed])
+    const w = (window as unknown as { wraith: Record<string, unknown> }).wraith
+    w.taskDelete = vi.fn().mockResolvedValue({ ok: false, message: '任务不存在(可能已被删除)' })
+
+    await act(async () => { render(<TaskPanel onBack={() => {}} />) })
+    await act(async () => { fireEvent.click(screen.getByTestId('task-retry')) })
+
+    expect(taskAdd).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(/可能已被删除/)).toBeTruthy()
   })
 
   it('后端拒绝时把原因显示出来,而不是静默什么都没发生', async () => {

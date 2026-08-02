@@ -1087,6 +1087,10 @@ ipcMain.handle('wraith:taskCancel', async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('task.cancel', { id })
 })
+ipcMain.handle('wraith:taskDelete', async (_e, id: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('task.delete', { id })
+})
 
 // 安全策略状态 + 危险工具审计(只读,转发 AppServer policy.status / audit.list)
 ipcMain.handle('wraith:policyStatus', async () => {

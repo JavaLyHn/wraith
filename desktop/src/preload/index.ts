@@ -158,6 +158,8 @@ export interface WraithApi {
   taskAdd(prompt: string): Promise<{ ok: boolean; id?: string; message?: string }>
   taskGet(id: string): Promise<DurableTaskView>
   taskCancel(id: string): Promise<{ ok: boolean }>
+  /** 删除一条终态任务。运行中/排队中会被后端拒绝并给出原因。 */
+  taskDelete(id: string): Promise<{ ok: boolean; message?: string }>
   ptyCreate(opts?: { cwd?: string; cols?: number; rows?: number; theme?: 'light' | 'dark' }): Promise<{ id: string }>
   ptyInput(id: string, data: string): Promise<void>
   ptyResize(id: string, cols: number, rows: number): Promise<void>
@@ -643,6 +645,9 @@ const wraith: WraithApi = {
   },
   taskGet(id) {
     return ipcRenderer.invoke('wraith:taskGet', id) as Promise<DurableTaskView>
+  },
+  taskDelete(id) {
+    return ipcRenderer.invoke('wraith:taskDelete', id) as Promise<{ ok: boolean; message?: string }>
   },
   taskCancel(id) {
     return ipcRenderer.invoke('wraith:taskCancel', id) as Promise<{ ok: boolean }>

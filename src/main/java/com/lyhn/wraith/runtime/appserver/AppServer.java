@@ -231,6 +231,10 @@ public final class AppServer {
         default java.util.Map<String, Object> taskCancel(String id) {
             throw new UnsupportedOperationException("taskCancel not implemented");
         }
+        /** 删除一条终态后台任务,返回 {ok,message}。运行中/排队中拒绝。默认抛出。 */
+        default java.util.Map<String, Object> taskDelete(String id) {
+            throw new UnsupportedOperationException("taskDelete not implemented");
+        }
         /** 安全策略状态(项目根/审计目录/危险工具集)。默认抛出。 */
         default java.util.Map<String, Object> policyStatus() {
             throw new UnsupportedOperationException("policyStatus not implemented");
@@ -463,6 +467,13 @@ public final class AppServer {
                 String id = textParam(msg.params(), "id");
                 if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
                 try { writer.result(msg.id(), session.taskCancel(id)); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "task.delete" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                String id = textParam(msg.params(), "id");
+                if (id == null || id.isBlank()) { writer.error(msg.id(), -32602, "缺 id"); return true; }
+                try { writer.result(msg.id(), session.taskDelete(id)); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
             case "config.setDefaultProvider" -> {

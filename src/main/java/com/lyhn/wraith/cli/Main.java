@@ -1756,6 +1756,18 @@ public class Main {
                         try { return java.util.Map.of("ok", taskManager.cancel(id)); }
                         catch (Exception e) { return java.util.Map.of("ok", false, "error", e.getClass().getSimpleName()); }
                     }
+                    public java.util.Map<String, Object> taskDelete(String id) {
+                        if (taskManager == null) return java.util.Map.of("ok", false, "message", "后台任务不可用");
+                        try {
+                            if (taskManager.delete(id)) return java.util.Map.of("ok", true);
+                            // 拒绝的原因只有两种,分开说 —— 「删除失败」四个字让人不知道下一步该干嘛。
+                            return taskManager.find(id).isPresent()
+                                    ? java.util.Map.of("ok", false, "message", "任务还在运行,请先取消再删除")
+                                    : java.util.Map.of("ok", false, "message", "任务不存在(可能已被删除)");
+                        } catch (Exception e) {
+                            return java.util.Map.of("ok", false, "message", "删除失败: " + e.getClass().getSimpleName());
+                        }
+                    }
                     public java.util.Map<String, Object> snapshotRestoreCommit(String commitId) {
                         com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
                         if (svc == null) return java.util.Map.of("ok", false, "message", "快照功能不可用");

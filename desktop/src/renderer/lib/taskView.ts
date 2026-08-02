@@ -38,11 +38,27 @@ export function taskIsTerminal(status: string): boolean {
  * `completed` 不给：重跑一个已经成功的任务是另一回事（「再跑一遍」而不是「重试」），
  * 而且后台任务会改文件、执行命令，误点的代价不小。真想再跑，输入框还在。
  *
- * <p>重试的语义是**新建一条**，不是原地复活：原来那条失败记录留着。
- * 审计上说得通（失败发生过），也让人看得见「第一次为什么失败」。
+ * <p><b>重试 = 新建一条 + 删掉原来那条</b>，列表里只留最新的。
+ * 最初落地时我保留了失败记录（理由是「失败发生过，审计上不该抹掉」），用户否了：
+ * 这是任务队列面板不是审计日志（真审计在 `~/.wraith/audit/`），
+ * 连试三次就有三条僵尸记录压在上面，把在跑的那条挤没了。
  */
 export function taskCanRetry(status: string): boolean {
   return status === 'failed' || status === 'canceled'
+}
+
+/**
+ * 是否给「删除」入口。
+ *
+ * <p>只给终态。运行中/排队中的任务 worker 线程还握着它，删了行它照样在改文件，
+ * 而面板上它已经消失 —— 这种状态没法向用户解释。要删就先取消。
+ * 后端 {@code DurableTaskManager.delete} 同样硬拒；两层不是重复，
+ * 后端那层防的是别的调用方（终端 `/task`、IM 网关）。
+ *
+ * <p>白名单而非「非运行即可删」：认不出的状态一律不给，宁可少一个按钮。
+ */
+export function taskCanDelete(status: string): boolean {
+  return taskIsTerminal(status)
 }
 
 /** 时长毫秒 → 紧凑可读:850ms / 42s / 3m / 3m20s;0/无效 → 空串。 */

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ListTodo, RefreshCw, Send, X, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ListTodo, RefreshCw, Send, X, RotateCcw, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import type { DurableTaskView } from '../../shared/types'
-import { taskStatusLabel, taskStatusTone, taskIsTerminal, taskCanRetry, formatDuration, taskPromptSummary, type TaskTone } from '../lib/taskView'
+import { taskStatusLabel, taskStatusTone, taskIsTerminal, taskCanRetry, taskCanDelete, formatDuration, taskPromptSummary, type TaskTone } from '../lib/taskView'
 
 const toneClass = (tone: TaskTone): string =>
   tone === 'running' ? 'bg-accent/12 text-accent'
@@ -55,15 +55,30 @@ export default function TaskPanel({ onBack }: { onBack: () => void }): JSX.Eleme
     finally { setBusy(false) }
   }, [load])
 
-  // 重试 = 用同样的 prompt **新建一条**,不动原来那条失败记录。
-  // 走的是和手动提交完全相同的 taskAdd 路径,不另开一条后端接口 ——
-  // 少一条路径就少一处会分叉的地方。
-  const retry = useCallback(async (prompt: string): Promise<void> => {
+  const remove = useCallback(async (id: string): Promise<void> => {
+    setBusy(true); setError(null)
+    try {
+      const r = await window.wraith.taskDelete(id)
+      // 先 load 再报错:load 内部会 setError(null) 清场,顺序反了错误提示会被自己刷掉。
+      await load()
+      if (!r.ok) setError(r.message || '删除失败')
+    } catch (err) { setError((err as Error).message) }
+    finally { setBusy(false) }
+  }, [load])
+
+  // 重试 = 用同样的 prompt 新建一条,**并删掉原来那条**,列表里只留最新的。
+  //
+  // 先 add 再 delete,顺序不能反:先删的话一旦 add 失败,用户的 prompt 就随那条记录
+  // 一起没了,连重打一遍的依据都不剩。所以 add 失败时原记录原地不动。
+  // 反过来 delete 失败时不谎报「重试失败」—— 新任务确实已经进队列了,只是旧的没扫干净。
+  const retry = useCallback(async (id: string, prompt: string): Promise<void> => {
     setBusy(true); setError(null)
     try {
       const r = await window.wraith.taskAdd(prompt)
-      if (r.ok) await load()
-      else setError(r.message || '重试提交失败')
+      if (!r.ok) { setError(r.message || '重试提交失败'); return }
+      const d = await window.wraith.taskDelete(id)
+      await load()   // 同上:load 会清 error,报错必须在它之后
+      if (!d.ok) setError(d.message || '原记录未能删除')
     } catch (err) { setError((err as Error).message) }
     finally { setBusy(false) }
   }, [load])
@@ -144,10 +159,17 @@ export default function TaskPanel({ onBack }: { onBack: () => void }): JSX.Eleme
                       </button>
                     )}
                     {taskCanRetry(t.status) && (
-                      <button data-testid="task-retry" onClick={() => void retry(t.prompt)} disabled={busy}
-                        title="用同样的指令再跑一次(原记录保留)"
+                      <button data-testid="task-retry" onClick={() => void retry(t.id, t.prompt)} disabled={busy}
+                        title="用同样的指令再跑一次(这条记录会被新的顶替)"
                         className="shrink-0 rounded p-1 text-fg-subtle hover:text-accent disabled:opacity-40">
                         <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      </button>
+                    )}
+                    {taskCanDelete(t.status) && (
+                      <button data-testid="task-delete" onClick={() => void remove(t.id)} disabled={busy}
+                        title="删除这条记录"
+                        className="shrink-0 rounded p-1 text-fg-subtle hover:text-danger disabled:opacity-40">
+                        <Trash2 className="h-3.5 w-3.5" strokeWidth={1.5} />
                       </button>
                     )}
                   </div>
