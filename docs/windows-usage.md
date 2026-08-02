@@ -262,8 +262,47 @@ mac 那种半透明磨砂侧栏在 Windows 上是**实色**，这是有意设计
 | 发消息报没有 API Key | 没配 provider，或配了但没「设默认」 | 回第 2 节 ①，注意最后要点**设默认** |
 | 设了环境变量但 App 不认 | 环境变量是进程启动时读的 | 重启 App；或直接改用图形界面配 |
 | `npm install` ERESOLVE 失败 | react peer 冲突 | 必须带 `--legacy-peer-deps` |
+| `npm install` 报 `EPERM: operation not permitted, mkdir '<某盘>\...\_cacache\...'`，且提示「Log files were not written」 | **npm 写不进自己的缓存目录**，与项目无关。常见于把 npm 全局/缓存目录搬到 Node 安装盘（如 `E:\nodejs\node_cache`）——那目录通常归 Administrators，普通终端只能读 | 见下方「npm 缓存目录没有写权限」 |
+| `npm install` 结尾一堆 `npm warn cleanup ... EPERM ... rmdir 'node_modules\...'` | 这是**善后失败**不是病因 —— 安装中途挂了，npm 想回滚删半成品但删不动（有进程占用或杀软扫描） | 先解决真正的报错（看 `npm error` 那几行，不是 `npm warn`），再删干净 `node_modules` 重装 |
 | 「用应用打开」找不到编辑器 | 只按已知安装路径探测 | 见下方已知限制 |
 | 文件操作偶发 `AccessDeniedException` | 杀软 / 索引器短暂占用目标文件 | 已内置 5 次有界重试（20/40/60/80ms）。**若仍失败请记下报错栈** —— 那说明占用超过 200ms，是需要调大退避的真实信号，不要当 flake 重跑了事 |
+
+---
+
+### npm 缓存目录没有写权限（EPERM）
+
+症状是 `npm install` 报 `EPERM ... mkdir` 指向某个 `_cacache` 路径，往往还跟着一句「Log files were not written」——**连日志都落不下，说明是整个缓存目录不可写**。
+
+先看清楚病因在哪：`npm warn cleanup ... rmdir node_modules` 那一大坨是 npm 装到一半、回滚删不掉半成品留下的**次生现象**，别对着它排查。真正的死因在 `npm error` 那几行的 `path`。
+
+```powershell
+# ① 看缓存指向哪
+npm config get cache
+# 若指向 Node 安装盘(如 E:\nodejs\node_cache),那多半就是元凶
+
+# ② 改到用户目录(必定有写权限,写入 %USERPROFILE%\.npmrc,不需要管理员)
+npm config set cache "$env:LOCALAPPDATA\npm-cache"
+npm config get cache        # 期望 C:\Users\<你>\AppData\Local\npm-cache
+
+# ③ 清掉不一致的半成品,否则后面会出各种怪事
+cd D:\wraith\desktop
+Remove-Item -Recurse -Force node_modules
+
+# ④ 重装
+npm install --legacy-peer-deps
+```
+
+第 ③ 步删不动，一般是有进程占着——关掉编辑器、关掉 cwd 在里面的终端。仍然删不掉就用这招（对付海量小文件和超长路径最快）：
+
+```powershell
+mkdir empty_tmp
+robocopy empty_tmp node_modules /MIR
+Remove-Item -Recurse -Force node_modules, empty_tmp
+```
+
+**建议把仓库目录加进 Windows Defender 排除项**（设置 → 隐私和安全性 → Windows 安全中心 → 病毒和威胁防护 → 管理设置 → 排除项）。`node_modules` 是几万个小文件，实时扫描既让安装慢好几倍，也是那些 `EPERM rmdir` 的常见元凶。
+
+> ⚠️ **不要用「以管理员身份运行」来绕过。** 那会在项目里留下一批 Administrator 所有的文件，之后普通身份的 `npm install` / 删除会持续撞同样的 EPERM，坑更深。
 
 ---
 
