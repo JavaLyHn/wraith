@@ -939,7 +939,7 @@ src/main/java/com/lyhn/wraith
 - **必须 `git checkout feat/windows-parity-block1`。** 桌面端不用说（`main` 上零个 Windows 专属文件）；**CLI 端同样要切** —— Java 内核虽然跨平台，但 `AtomicFileMove`（tmp→target 原子改名的有界重试，应对 Windows 上目标文件被杀软/索引器占用时抛的 `AccessDeniedException`）只在这个分支，而会话落盘 / 技能库 / QQ 待发三处都走它。
 - Windows 上没有 mac 那种 `wraith` / `wraith -d` 短命令（那是本机 shell 包装脚本、不随仓库分发），CLI 直接 `java -jar target\wraith-1.0-SNAPSHOT.jar`。
 
-**验证状态（重要）**：以上五块均已**实现**，Java 与桌面测试在 macOS 上全绿（Java 1661 用例 0F/0E、桌面 1174 用例 / 137 文件、tsc 0 错误），但**尚未在真 Windows 机器上运行过**。mac 全绿不等于 Windows 能跑——两边真正分岔的地方是窗口 chrome、终端 shell、编辑器打开、spawn `java.exe`、桌宠 FFI、打包，以及文件系统语义（Windows 上目标文件被占用时 rename 会抛 `AccessDeniedException`，已加有界重试）。
+**验证状态（重要）**：以上五块均已**实现**，Java 与桌面测试在 macOS 上全绿（Java 1736 用例 0F/0E、桌面 1174 用例 / 137 文件、tsc 0 错误），但**尚未在真 Windows 机器上运行过**。mac 全绿不等于 Windows 能跑——两边真正分岔的地方是窗口 chrome、终端 shell、编辑器打开、spawn `java.exe`、桌宠 FFI、打包，以及文件系统语义（Windows 上目标文件被占用时 rename 会抛 `AccessDeniedException`，已加有界重试）。
 
 **会话栏与左侧工具栏本身没有平台分支**：`Sidebar.tsx` / `Composer.tsx` 里 `platform` 出现 0 次，`Transcript.tsx` 里唯一一处是 IM 平台（qq/weixin）而非操作系统——两端渲染的是同一份 React 代码。平台差异只在窗口外壳这一层：Windows 无边框 + 自绘三键，mac 交通灯 + vibrancy；皮肤上 mac 有 `html.is-mac` 的半透明侧栏，Windows 走实色（有意设计，非缺样式）。
 

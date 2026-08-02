@@ -105,7 +105,7 @@ public class StreamableHttpTransport implements McpTransport {
                 .header("Mcp-Session-Id", sessionId)
                 .delete();
         headers.forEach(builder::header);
-        // close 是 best-effort：server 已经关停 / 网络不通时不应该让 Wraith CLI 退出卡住。
+        // close 是 best-effort：server 已经关停 / 网络不通时不应该让 Wraith 退出卡住。
         // 主 client 的 callTimeout 是 60s，这里用 5s 短超时单独发请求。
         OkHttpClient closeClient = client.newBuilder()
                 .callTimeout(5, TimeUnit.SECONDS)

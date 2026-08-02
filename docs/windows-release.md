@@ -87,7 +87,7 @@ mvn clean package -DskipTests
 mvn -DskipTests=false test
 ```
 
-- [ ] 全绿。mac 基线 **1661 tests / 0 failures / 0 errors**
+- [ ] 全绿。mac 基线 **1736 tests / 0 failures / 0 errors**
 
 > 本仓库测试**默认跳过**，必须显式 `-DskipTests=false`。
 > 最可能在 Windows 上露馅的是文件系统语义：`AtomicFileMoveTest`、`AutomationStoreConcurrencyTest`（48 线程压 `writeAtomic`）。目标文件被杀软/索引器占用会抛 `AccessDeniedException`，已内置 5 次有界重试（20/40/60/80ms）。**若仍失败请留栈**——那是要调大退避的真实信号，别当 flake 重跑。
@@ -110,7 +110,7 @@ npm test
 npx tsc --noEmit -p tsconfig.json
 ```
 
-- [ ] mac 基线 **1160 passed / 136 files**，tsc **0**
+- [ ] mac 基线 **1174 passed / 137 files**，tsc **0**
 
 ### 4.5 出包
 

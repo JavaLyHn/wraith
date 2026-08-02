@@ -71,7 +71,7 @@ final class WraithCompleter implements Completer {
             candidates.add(new Candidate(
                     value,
                     hint.display(),
-                    "Wraith CLI 命令",
+                    "Wraith 命令",
                     hint.description(),
                     null,
                     null,

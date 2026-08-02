@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class SideGitManager {
-    private static final PersonIdent SNAPSHOT_IDENT = new PersonIdent("Wraith CLI Snapshot", "snapshot@wraith.local");
+    private static final PersonIdent SNAPSHOT_IDENT = new PersonIdent("Wraith Snapshot", "snapshot@wraith.local");
 
     private final Path projectRoot;
     private final SnapshotConfig config;
@@ -236,7 +236,7 @@ public class SideGitManager {
     private void writeExcludeFile() throws IOException {
         Path info = gitDir.resolve("info");
         Files.createDirectories(info);
-        StringBuilder sb = new StringBuilder("# Managed by Wraith CLI side-history snapshots\n");
+        StringBuilder sb = new StringBuilder("# Managed by Wraith side-history snapshots\n");
         for (String exclude : config.excludes()) {
             sb.append(exclude).append('\n');
         }

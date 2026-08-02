@@ -104,14 +104,14 @@ class TerminalMarkdownRendererTest {
         String markdown = """
                 | 目录名 | 说明 |
                 | --- | --- |
-                | src/main/java/com/lyhn/wraith | 这里存放 Wraith CLI 的主要 Java 源码实现与相关模块 |
+                | src/main/java/com/lyhn/wraith | 这里存放 Wraith 的主要 Java 源码实现与相关模块 |
                 """;
 
         String rendered = TerminalMarkdownRenderer.render(markdown);
 
         assertTrue(rendered.contains("目录名 / 说明"));
         assertTrue(rendered.contains("- src/main/java/com/lyhn/wraith"));
-        assertTrue(rendered.contains("这里存放 Wraith CLI 的主要 Java 源码实现与相关模块"));
+        assertTrue(rendered.contains("这里存放 Wraith 的主要 Java 源码实现与相关模块"));
     }
 
     @Test

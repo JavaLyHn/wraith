@@ -1,6 +1,6 @@
 # Code Search Golden Set
 
-Wraith CLI 的代码理解默认走 `glob_files -> grep_code -> read_file`，`search_code` 只作为语义辅助。这个 golden set 用来固定确定性搜索链路的最低质量线：给定一个真实代码问题，`grep_code` 必须在预算内定位到预期文件和行号，随后 `read_file offset/limit` 必须能读取到目标上下文。
+Wraith 的代码理解默认走 `glob_files -> grep_code -> read_file`，`search_code` 只作为语义辅助。这个 golden set 用来固定确定性搜索链路的最低质量线：给定一个真实代码问题，`grep_code` 必须在预算内定位到预期文件和行号，随后 `read_file offset/limit` 必须能读取到目标上下文。
 
 ## 运行命令
 

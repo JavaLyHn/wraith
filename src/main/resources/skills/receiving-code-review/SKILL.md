@@ -4,7 +4,7 @@ description: |
   收到代码评审意见、动手实现建议之前使用——尤其当意见含糊或技术上存疑时:要技术严谨与核实,不要表演式附和或盲目照做。
   触发场景:收到 code review 反馈、准备落实评审建议时。先 load_skill。
 version: "1.0.0"
-author: Wraith CLI
+author: Wraith
 tags: [process, review, quality]
 ---
 

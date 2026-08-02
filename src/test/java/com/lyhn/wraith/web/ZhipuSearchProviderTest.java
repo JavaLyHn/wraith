@@ -71,7 +71,7 @@ class ZhipuSearchProviderTest {
                               "publish_date": "2026-01-01"
                             },
                             {
-                              "title": "Wraith CLI 教程",
+                              "title": "Wraith 教程",
                               "link": "https://paicoding.com/article/wraith-cli",
                               "content": "从零打造 Java Agent CLI"
                             }

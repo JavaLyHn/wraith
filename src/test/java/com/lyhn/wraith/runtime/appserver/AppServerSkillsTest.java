@@ -17,7 +17,7 @@ class AppServerSkillsTest {
             public Map<String,Object> skillsList() {
                 return Map.of("skills", List.of(Map.of(
                     "name", "web-access", "description", "联网手册", "version", "1.0.0",
-                    "author", "Wraith CLI", "tags", List.of("web", "browser"),
+                    "author", "Wraith", "tags", List.of("web", "browser"),
                     "source", "builtin", "enabled", true)));
             }
             public Map<String,Object> skillsSetEnabled(String name, boolean enabled) {

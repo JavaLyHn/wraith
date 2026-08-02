@@ -13,7 +13,7 @@ import java.util.Locale;
  * 压缩 ReAct 主循环里的 {@code conversationHistory}（即 {@code List<LlmClient.Message>}）。
  *
  * 与 {@link ContextCompressor} 的区别：
- * - {@code ContextCompressor} 压的是 {@link ConversationMemory}（Wraith CLI 的短期记忆条目）
+ * - {@code ContextCompressor} 压的是 {@link ConversationMemory}（Wraith 的短期记忆条目）
  * - 本类压的是 Agent 实际发给 LLM 的消息列表
  *
  * 第 3 期 Memory 设计假设"LLM 调用从 shortTermMemory 重建消息"，但实际 Agent 直接维护

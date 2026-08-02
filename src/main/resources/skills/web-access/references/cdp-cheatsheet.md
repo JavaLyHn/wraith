@@ -1,6 +1,6 @@
 # Chrome DevTools MCP / CDP 速查
 
-Wraith CLI 第 13 期接入 Google 官方 `chrome-devtools-mcp@latest`（28 个工具），第 14 期加 `/browser connect` 切 shared 模式。
+Wraith 第 13 期接入 Google 官方 `chrome-devtools-mcp@latest`（28 个工具），第 14 期加 `/browser connect` 切 shared 模式。
 
 ## 模式切换
 
@@ -35,9 +35,9 @@ google-chrome --remote-debugging-port=9222
 
 ### 导航（6）
 - `navigate_page` — 在已开 tab 中跳转新 URL
-- `new_page` — 开新 tab（Wraith CLI 记录为 agent-opened，可被 close_page 关）
+- `new_page` — 开新 tab（Wraith 记录为 agent-opened，可被 close_page 关）
 - `select_page` — 切换激活 tab
-- `close_page` — 关 tab（**只能关 Wraith CLI 自己 new_page 出来的**）
+- `close_page` — 关 tab（**只能关 Wraith 自己 new_page 出来的**）
 - `list_pages` — 列出所有 tab
 - `wait_for` — 等待选择器或文本出现（最常用：等 SPA 关键容器加载）
 

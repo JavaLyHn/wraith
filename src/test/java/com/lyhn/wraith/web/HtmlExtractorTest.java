@@ -18,7 +18,7 @@ class HtmlExtractorTest {
                   <nav><a href="/">首页</a></nav>
                   <article>
                     <h1>第 9 期 · 联网能力</h1>
-                    <p>本文介绍 Wraith CLI 的 web_search 与 web_fetch 工具实现。</p>
+                    <p>本文介绍 Wraith 的 web_search 与 web_fetch 工具实现。</p>
                     <p>核心是把搜索抽象成 SearchProvider 接口，正文抽取走 Jsoup。</p>
                   </article>
                   <footer>© 2026</footer>

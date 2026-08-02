@@ -42,7 +42,7 @@ public class AtMentionExpander {
                     ? "text/plain"
                     : result.mimeType();
             String suffix = truncated
-                    ? "\n[resource truncated by Wraith CLI at " + MAX_INLINE_RESOURCE_CHARS + " chars]"
+                    ? "\n[resource truncated by Wraith at " + MAX_INLINE_RESOURCE_CHARS + " chars]"
                     : "";
             return "<resource server=\"" + escapeXml(token.serverName()) +
                     "\" uri=\"" + escapeXml(token.uri()) +

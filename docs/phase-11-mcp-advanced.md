@@ -64,7 +64,7 @@ src/main/java/com/lyhn/wraith/mcp/
 
 ### resources 工具层
 
-如果 MCP server 在 `initialize` 返回的 capabilities 中声明 `resources`，Wraith CLI 会：
+如果 MCP server 在 `initialize` 返回的 capabilities 中声明 `resources`，Wraith 会：
 
 1. 调一次 `resources/list` 建立候选缓存
 2. 注册两个虚拟工具：
@@ -112,7 +112,7 @@ Plan / Team 的 raw-mode 单键交互不接 autocomplete，避免干扰 `ESC` / 
 运行中可输入 /cancel 并回车取消当前任务。
 ```
 
-用户输入 `/cancel` 后，Wraith CLI 会设置当前运行的 `CancellationToken`，并中断后台 runner。ReAct、Plan-and-Execute、Multi-Agent 编排、工具批量执行以及 `execute_command` 会在边界处检查取消信号；如果底层 LLM HTTP 流式调用无法立即响应 Java interrupt，取消属于 best-effort，但后续工具执行不会继续推进。
+用户输入 `/cancel` 后，Wraith 会设置当前运行的 `CancellationToken`，并中断后台 runner。ReAct、Plan-and-Execute、Multi-Agent 编排、工具批量执行以及 `execute_command` 会在边界处检查取消信号；如果底层 LLM HTTP 流式调用无法立即响应 Java interrupt，取消属于 best-effort，但后续工具执行不会继续推进。
 
 ## 5. 测试证据
 

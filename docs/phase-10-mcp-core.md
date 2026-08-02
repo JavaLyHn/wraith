@@ -17,7 +17,7 @@
 
 ## 1. 目标与产出物
 
-让 Wraith CLI 接入 MCP 生态：stdio 子进程 server 与 Streamable HTTP 远程 server 都能用，工具自动注册到 `ToolRegistry`，与 HITL / AuditLog 协同。**默认开启**。
+让 Wraith 接入 MCP 生态：stdio 子进程 server 与 Streamable HTTP 远程 server 都能用，工具自动注册到 `ToolRegistry`，与 HITL / AuditLog 协同。**默认开启**。
 
 最终交付：
 
@@ -240,7 +240,7 @@ audit 写入前对 args 做脱敏，避免 token / 凭证泄漏：
 | `/mcp disable <name>` | 运行时禁用，从 ToolRegistry 移除工具 | name |
 | `/mcp enable <name>` | 运行时启用 | name |
 
-**不**实现 `/mcp add` / `/mcp remove`：配置编辑通过文件 + 重启 Wraith CLI。
+**不**实现 `/mcp add` / `/mcp remove`：配置编辑通过文件 + 重启 Wraith。
 
 `CliCommandParser.CommandType` 新增：`MCP_LIST` / `MCP_RESTART` / `MCP_LOGS` / `MCP_DISABLE` / `MCP_ENABLE`。
 
@@ -260,7 +260,7 @@ audit 写入前对 args 做脱敏，避免 token / 凭证泄漏：
 ### 6.2 已决策（不要再讨论）
 
 - 环境变量缺失 → **报错**，不静默保留
-- server 启动失败 → **不阻塞** Wraith CLI 启动，标 ERROR 跳过
+- server 启动失败 → **不阻塞** Wraith 启动，标 ERROR 跳过
 - 工具描述截断长度：1000 字符
 - MCP 工具调用日志：写到 `~/.wraith/logs/mcp/<server>.log`（按天滚动，复用 logback 风格但用单独 logger）
 

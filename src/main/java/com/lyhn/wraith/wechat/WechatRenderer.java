@@ -48,7 +48,7 @@ public class WechatRenderer implements Renderer {
 
     @Override
     public void appendToolCalls(List<LlmClient.ToolCall> toolCalls) {
-        // 微信侧只发最终结果；工具调用进度留在 Wraith CLI 进程日志 / 本地终端。
+        // 微信侧只发最终结果；工具调用进度留在 Wraith 进程日志 / 本地终端。
     }
 
     @Override

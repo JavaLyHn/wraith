@@ -15,7 +15,7 @@ class SearchProviderFactoryTest {
 
     @Test
     void autoSelectsZhipuWhenGlmKeyPresent() {
-        // GLM_API_KEY 优先级最高 —— Wraith CLI 主流场景就是 GLM 用户
+        // GLM_API_KEY 优先级最高 —— Wraith 主流场景就是 GLM 用户
         assertEquals("zhipu", SearchProviderFactory.pickProvider(null, "glm-key", null, null));
         assertEquals("zhipu", SearchProviderFactory.pickProvider(null, "glm-key", "serp-key", "http://localhost"));
     }

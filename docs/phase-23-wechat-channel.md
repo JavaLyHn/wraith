@@ -4,9 +4,9 @@
 
 ## Summary
 
-- 新增 Wraith CLI 内置 WeChat Channel，默认关闭；只有显式执行 `wraith wechat ...` 才启动 iLink。
+- 新增 Wraith 内置 WeChat Channel，默认关闭；只有显式执行 `wraith wechat ...` 才启动 iLink。
 - 不做 Skill、不走 Runtime API；微信接收用 iLink `getupdates` long-poll，回复流式体验靠 `sendmessage` 分块。
-- iLink 协议层出站回复仍是 `text_item.text` 文本消息，没有显式 Markdown parse mode；Wraith CLI 保留 ClawBot 稳定支持的 Markdown 子集，并对标题、表格和非代码 fenced block 做移动端友好的归一化。
+- iLink 协议层出站回复仍是 `text_item.text` 文本消息，没有显式 Markdown parse mode；Wraith 保留 ClawBot 稳定支持的 Markdown 子集，并对标题、表格和非代码 fenced block 做移动端友好的归一化。
 - 微信通道**不是关闭 HITL，而是用「非交互式默认拒绝策略」替代交互式审批**：远程入口不能弹窗等人，所以危险操作默认拒绝而非默认放行；PathGuard / CommandGuard / 绑定用户校验 / 审计日志 / 工作区边界全部保留并强化。
 - v1 支持私聊、单绑定用户、单并发 turn、文字/图片/文件输入、文本回复和显式文件推送。
 
@@ -69,7 +69,7 @@ getupdates → [鉴权: boundUserId?] → [分类]
 ## Key Changes
 
 - 新增 top-level 入口，必须在 LLM/API Key/JLine/MCP 初始化前分发：
-  - `/wechat`：在 Wraith CLI 主交互内扫码确认绑定并在当前进程后台启动 long-poll；已绑定时直接启动。
+  - `/wechat`：在 Wraith 主交互内扫码确认绑定并在当前进程后台启动 long-poll；已绑定时直接启动。
   - `/wechat setup`：重新扫码绑定并启动。
   - `/wechat status` / `/wechat stop`：查看或关闭当前进程内通道。
   - `wraith wechat setup`：进程级扫码确认绑定，保存 token/baseUrl/botId/boundUserId/workspace/策略配置，不启动轮询。
@@ -80,7 +80,7 @@ getupdates → [鉴权: boundUserId?] → [分类]
   - `WechatAccountStore`：`~/.wraith/wechat/` 下保存账号、session、sync buf、media、logs；敏感字段脱敏，文件权限 `600`。
   - `WechatMessageLoop`：long-poll、cursor、去重、退避、登录过期、限流重试、启动停止通知；**鉴权 + 控制命令旁路在此层完成**。
   - `WechatPolicyDecider`：非交互式危险工具裁决（见安全模型 §1），接入现有 AuditLog。
-  - `WechatAgentSession`：无 JLine 初始化，复用 Wraith CLI config、LLM、MCP、Skill、Memory、ToolRegistry；注入 `WechatPolicyDecider` 替代交互式 HITL handler。
+  - `WechatAgentSession`：无 JLine 初始化，复用 Wraith config、LLM、MCP、Skill、Memory、ToolRegistry；注入 `WechatPolicyDecider` 替代交互式 HITL handler。
 - 新增微信专用交互层：
   - `WechatCommandParser` 只支持 `/help /clear /compact /model /cwd /status /send /pause /resume /stop`；控制命令子集（`/stop /pause /resume /status`）标记为旁路队列。
   - `WechatRenderer` 分块发送正文，保留 ClawBot 稳定支持的 Markdown 子集（列表、引用、粗体、行内代码、真实代码块），把标题转成粗体标题、表格转成键值/列表，并清理 ANSI / 终端专用标记、图片 Markdown、H5-H6、中文斜体等兼容性差的标记；reasoning、完整工具参数和 diff 细节默认只写日志。
@@ -111,7 +111,7 @@ getupdates → [鉴权: boundUserId?] → [分类]
   - `mvn test -Dtest=Wechat*Test,CliCommandParserTest,ImageReferenceParserTest`
   - `mvn test -Pquick`
 - 手工验收：
-  - 默认启动 Wraith CLI 不触发任何微信请求。
+  - 默认启动 Wraith 不触发任何微信请求。
   - `wechat setup` 只扫码确认并保存，不轮询。
   - 非绑定用户发消息 → 被 drop + 审计可见。
   - `wechat start` 后文字/图片/文件进入 Agent；`execute_command` 默认被策略拒绝并回执。
@@ -121,7 +121,7 @@ getupdates → [鉴权: boundUserId?] → [分类]
 ## Assumptions
 
 - v1 不做群聊、语音、视频。
-- 微信通道**不启用交互式 HITL，改用非交互式默认拒绝策略**；不代表绕过 Wraith CLI 策略层（PathGuard / CommandGuard / 审计 / 工作区边界全部保留）。
+- 微信通道**不启用交互式 HITL，改用非交互式默认拒绝策略**；不代表绕过 Wraith 策略层（PathGuard / CommandGuard / 审计 / 工作区边界全部保留）。
 - `/cwd` 只允许切到 setup workspace root 内的目录。
 - 文件推送只来自显式 `/send` 或工具产物登记表；不做「路径出现即上传」。
 - iLink 客户端依赖**锁定具体版本号**（非 `@latest`），且知悉「本体运行时下载」；绑定建议使用微信小号，知悉封号风险。

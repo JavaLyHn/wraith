@@ -4,7 +4,7 @@ description: |
   当你拿到一份 spec 或多步骤任务的需求、动代码之前使用:把任务拆成「假设执行者对本代码库零上下文」也能照做的、有序、可测试的小步计划。
   触发场景:有了 spec/需求,准备实现一个多步骤任务时。先 load_skill。
 version: "1.0.0"
-author: Wraith CLI
+author: Wraith
 tags: [process, planning, spec]
 ---
 

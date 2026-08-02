@@ -63,7 +63,7 @@ public class StepClient extends AbstractOpenAiCompatibleClient {
     @Override
     protected void customizeRequestBody(ObjectNode requestBody) {
         // StepFun 默认 reasoning_format=general，会返回 `reasoning` 字段；
-        // deepseek-style 让它返回 Wraith CLI/DeepSeek 兼容的 `reasoning_content`。
+        // deepseek-style 让它返回 Wraith/DeepSeek 兼容的 `reasoning_content`。
         requestBody.put("reasoning_format", "deepseek-style");
         if (model != null && model.contains("2603")) {
             requestBody.put("reasoning_effort", "high");

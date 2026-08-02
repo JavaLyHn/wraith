@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>对国内 GLM 用户来说这是最自然的选择：
  * <ul>
- *   <li>独立 search API，不绑定模型调用：与 Wraith CLI 多模型架构兼容</li>
+ *   <li>独立 search API，不绑定模型调用：与 Wraith 多模型架构兼容</li>
  *   <li>API Key 与 GLM 推理共用 {@code GLM_API_KEY}，零额外配置</li>
  *   <li>中文搜索效果优于 Google（可选 search_pro_sogou / search_pro_quark）</li>
  *   <li>价格 0.01–0.05 元/次，比 SerpAPI 便宜 5–10 倍</li>

@@ -80,7 +80,7 @@ public final class WechatCommandMain {
         WechatAccountStore store = WechatAccountStore.createDefault();
         WechatAccount account = store.loadLatest()
                 .orElseThrow(() -> new IllegalStateException("未找到微信账号，请先执行 wraith wechat setup"));
-        System.out.println("Wraith CLI 微信通道启动中，账号: " + account.accountId());
+        System.out.println("Wraith 微信通道启动中，账号: " + account.accountId());
         new WechatMessageLoop(new IlinkClient(), store, account).run();
         return 0;
     }
@@ -213,7 +213,7 @@ public final class WechatCommandMain {
 
     private static void printHelp() {
         System.out.println("""
-                Wraith CLI 微信通道：
+                Wraith 微信通道：
                   wraith wechat setup
                   wraith wechat start
                   wraith wechat status

@@ -67,7 +67,7 @@ public record McpCallToolResult(List<McpContent> content, boolean isError) {
             if (metadataText != null) {
                 fallback.append(", ").append(metadataText);
             }
-            fallback.append("。Wraith CLI 会在下一轮把图片作为图片附件附加；"
+            fallback.append("。Wraith 会在下一轮把图片作为图片附件附加；"
                     + "如果模型无法稳定识别该图片，请优先调用 take_snapshot 获取 DOM 文本快照。]");
         }
         return fallback.toString();

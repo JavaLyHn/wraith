@@ -4,7 +4,7 @@
 
 ## 目标
 
-让 Wraith CLI 能把图片作为真正的 LLM 输入，而不是只把 MCP 工具返回的 image content 格式化成占位文字。
+让 Wraith 能把图片作为真正的 LLM 输入，而不是只把 MCP 工具返回的 image content 格式化成占位文字。
 
 ## 已交付
 
@@ -49,7 +49,7 @@
 - 不做 TUI sixel 图片预览
 - 不把图片 OCR 成文本；图片统一以 image block 附加，provider API 负责最终能力校验
 - 对图片输入 token 成本只做粗略估算，真实计费仍以 provider usage 为准
-- 不按模型名在 Wraith CLI 输入层拦截图片；如果 provider 不接受某个模型 / endpoint 的图片输入，应暴露 provider 的真实错误或走 provider 内部图片请求路由
+- 不按模型名在 Wraith 输入层拦截图片；如果 provider 不接受某个模型 / endpoint 的图片输入，应暴露 provider 的真实错误或走 provider 内部图片请求路由
 
 ## 验证
 

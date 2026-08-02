@@ -10,7 +10,7 @@
     <version>1.0-SNAPSHOT</version>
     <packaging>jar</packaging>
 
-    <name>Wraith CLI</name>
+    <name>Wraith</name>
     <description>A simple Java Agent CLI like Claude Code</description>
 
     <properties>

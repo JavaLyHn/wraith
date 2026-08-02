@@ -14,12 +14,12 @@ class MarkdownLiteTest {
 
     @Test
     void boldRunAcrossStarStarAndUnderscore() {
-        for (String md : new String[]{"我是 **Wraith CLI** 呀", "我是 __Wraith CLI__ 呀"}) {
+        for (String md : new String[]{"我是 **Wraith** 呀", "我是 __Wraith__ 呀"}) {
             List<Run> runs = onlyLine(MarkdownLite.parse(md));
             assertEquals(3, runs.size(), md);
             assertEquals("我是 ", runs.get(0).text());
             assertFalse(runs.get(0).bold());
-            assertEquals("Wraith CLI", runs.get(1).text());
+            assertEquals("Wraith", runs.get(1).text());
             assertTrue(runs.get(1).bold(), "中段应加粗: " + md);
             assertEquals(" 呀", runs.get(2).text());
         }
@@ -133,8 +133,8 @@ class MarkdownLiteTest {
 
     @Test
     void plainTextStripsEmphasisMarks() {
-        assertEquals("我是 Wraith CLI,对标 Claude Code。",
-                MarkdownLite.toPlainText("我是 **Wraith CLI**,对标 `Claude Code`。"));
+        assertEquals("我是 Wraith,对标 Claude Code。",
+                MarkdownLite.toPlainText("我是 **Wraith**,对标 `Claude Code`。"));
     }
 
     @Test

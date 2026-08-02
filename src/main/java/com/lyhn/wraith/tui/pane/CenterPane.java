@@ -70,7 +70,7 @@ public class CenterPane extends Panel {
         if (output == null || output.isBlank()) {
             return;
         }
-        chatArea.setText(chatArea.getText() + "\n🤖 Wraith CLI:\n" + output.trim() + "\n");
+        chatArea.setText(chatArea.getText() + "\n🤖 Wraith:\n" + output.trim() + "\n");
         scrollToBottom();
     }
 

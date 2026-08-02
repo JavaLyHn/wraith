@@ -90,7 +90,7 @@ final class LocalPathMentionExpander {
                     "\" binary=\"true\">binary content omitted</file>";
         }
         String content = new String(bytes, 0, length, StandardCharsets.UTF_8);
-        String suffix = truncated ? "\n[file truncated by Wraith CLI at " + MAX_FILE_BYTES + " bytes]" : "";
+        String suffix = truncated ? "\n[file truncated by Wraith at " + MAX_FILE_BYTES + " bytes]" : "";
         return "@<" + displayPath(path) + ">\n<file path=\"" + escapeXml(displayPath(path)) + "\">\n" +
                 content + suffix + "\n</file>";
     }
@@ -115,7 +115,7 @@ final class LocalPathMentionExpander {
             out.append('\n');
         }
         if (children.size() > MAX_DIR_ENTRIES) {
-            out.append("[directory truncated by Wraith CLI at ").append(MAX_DIR_ENTRIES).append(" entries]\n");
+            out.append("[directory truncated by Wraith at ").append(MAX_DIR_ENTRIES).append(" entries]\n");
         }
         return out.append("</directory>").toString();
     }

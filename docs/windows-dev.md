@@ -4,7 +4,7 @@
 > 如果你只是想在 Windows 上**把 wraith 用起来**(装包 / 配模型 / 界面导览 / 出问题怎么查),
 > 请看 [`windows-usage.md`](windows-usage.md)。
 
-> **当前状态(诚实版)**:Java 内核与渲染层本就跨平台,平台专属代码只集中在少数几处(窗口 chrome / 终端 shell / 编辑器打开 / spawn java / 桌宠 FFI / 打包)。Windows 对等块 1–5 均已**实现**,但 **截至本文档更新为止,以上全部内容从未在真 Windows 机器上运行过一次** —— mac 侧全绿(Java 1661 用例 0F/0E、桌面 1022 用例、tsc 0)不等于 Windows 能跑。本清单就是用来还这笔验证债的。
+> **当前状态(诚实版)**:Java 内核与渲染层本就跨平台,平台专属代码只集中在少数几处(窗口 chrome / 终端 shell / 编辑器打开 / spawn java / 桌宠 FFI / 打包)。Windows 对等块 1–5 均已**实现**,但 **截至本文档更新为止,以上全部内容从未在真 Windows 机器上运行过一次** —— mac 侧全绿(Java 1736 用例 0F/0E、桌面 1174 用例 / 137 文件、tsc 0)不等于 Windows 能跑。本清单就是用来还这笔验证债的。
 >
 > 逐条打勾即可;每条给了**预期**和**翻车时最可能的原因**,便于你现场判断是环境问题还是真 bug。
 
@@ -32,7 +32,7 @@ mvn -DskipTests=false test        # ⚠ 本仓库测试默认跳过,必须显式
 ```
 
 - [ ] `mvn clean package -DskipTests` 成功,产出 `target\wraith-1.0-SNAPSHOT.jar`
-- [ ] `mvn -DskipTests=false test` 全绿(mac 基线:**1661 tests / 0 failures / 0 errors**)
+- [ ] `mvn -DskipTests=false test` 全绿(mac 基线:**1736 tests / 0 failures / 0 errors**)
 
 **重点关注这几个类**(它们最可能暴露 Windows 与 POSIX 的语义差异):
 

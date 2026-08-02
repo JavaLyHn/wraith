@@ -58,7 +58,7 @@ public class NotificationRouter implements Consumer<JsonNode>, AutoCloseable {
                 }
             });
         } catch (Exception ignored) {
-            // executor 已关停（Wraith CLI 退出中），忽略
+            // executor 已关停（Wraith 退出中），忽略
         }
     }
 

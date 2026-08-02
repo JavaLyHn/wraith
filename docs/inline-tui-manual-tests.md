@@ -27,7 +27,7 @@ java -jar target/wraith-1.0-SNAPSHOT.jar
 ```
 
 **预期**：
-- Banner 显示简洁的 `Wraith CLI v16.1.0` 开屏，不带右侧盒线边框
+- Banner 显示简洁的 `Wraith v16.1.0` 开屏，不带右侧盒线边框
 - 进入 JLine REPL，输入行由 LineReader 停在当前 transcript 位置，提示 `* `
 - **不进 alternate screen**（退出后 banner、对话历史还留在 terminal scrollback 里）
 - 输入行下方留 1 行间距后显示两行 inline 状态区：反色状态栏 + 操作提示行（用例 15 详细验证）
@@ -306,7 +306,7 @@ TERM=dumb java -jar target/wraith-1.0-SNAPSHOT.jar
 **预期**：等待输入时，LineReader 输入行下方留 1 行间距，然后紧跟两行 inline status，中间不能出现大段空白：
 ```
 *
- Wraith CLI  idle  glm-5.1  ctx 0/200.0k  HITL OFF  MCP 4/4  Skill 2/2
+ Wraith  idle  glm-5.1  ctx 0/200.0k  HITL OFF  MCP 4/4  Skill 2/2
  Auto Model · / commands · @path/@image · Ctrl+O fold · ESC clear
 ```
 
@@ -339,7 +339,7 @@ TERM=dumb java -jar target/wraith-1.0-SNAPSHOT.jar
 
 **输入**：
 ```
-把 ROADMAP.md 第一行改成 "# Wraith CLI 路线图（v16.1 测试）"
+把 ROADMAP.md 第一行改成 "# Wraith 路线图（v16.1 测试）"
 ```
 
 HITL 按 `y` 通过。**预期**对话流里出现：
@@ -347,8 +347,8 @@ HITL 按 `y` 通过。**预期**对话流里出现：
 ```
 📝 ROADMAP.md
 @@ -1,N +1,N @@
-- # Wraith CLI ROADMAP（原标题）
-+ # Wraith CLI 路线图（v16.1 测试）
+- # Wraith ROADMAP（原标题）
++ # Wraith 路线图（v16.1 测试）
   ...（上下文行）
 ```
 

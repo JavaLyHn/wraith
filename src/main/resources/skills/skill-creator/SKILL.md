@@ -4,7 +4,7 @@ description: |
   创建新技能、修改改进已有技能、衡量技能表现。当用户想从零创建技能、编辑/优化已有技能、跑评测测试技能、做带方差分析的基准、或优化技能 description 以提升触发准确度时使用。务必在用户提到「做个技能/写 SKILL.md/优化技能触发」时使用。
   触发场景:用户想新建/编辑/优化一个 skill 时。先 load_skill。
 version: "1.0.0"
-author: Wraith CLI
+author: Wraith
 tags: [meta, skill, authoring]
 ---
 

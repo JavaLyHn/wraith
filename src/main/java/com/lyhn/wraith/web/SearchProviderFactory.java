@@ -59,7 +59,7 @@ public final class SearchProviderFactory {
         if (searxngUrl != null && !searxngUrl.isBlank()) {
             return "searxng";
         }
-        return "zhipu"; // 默认占位（Wraith CLI 主要面向 GLM 用户），isReady() 会为 false
+        return "zhipu"; // 默认占位（Wraith 主要面向 GLM 用户），isReady() 会为 false
     }
 
     private static String readEnv(String key) {

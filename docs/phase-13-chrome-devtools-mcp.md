@@ -9,13 +9,13 @@
 > 4. `src/main/java/com/lyhn/wraith/mcp/` 整套现有代码 —— 你只是在这套基础上增量配置 + 适配
 > 5. `src/main/java/com/lyhn/wraith/hitl/HitlToolRegistry.java`、`TerminalHitlHandler.java` —— HITL「server 维度全部放行」要改这两处
 >
-> **核心原则**：第 10/11 期已经做完 MCP 框架，本期**不写浏览器自动化逻辑**——直接接 Google 官方 `chrome-devtools-mcp` server，Wraith CLI 这边只做"接入配置 + 适配层 + UX 优化"。
+> **核心原则**：第 10/11 期已经做完 MCP 框架，本期**不写浏览器自动化逻辑**——直接接 Google 官方 `chrome-devtools-mcp` server，Wraith 这边只做"接入配置 + 适配层 + UX 优化"。
 
 ---
 
 ## 1. 目标与产出物
 
-让 Wraith CLI 能操控浏览器：处理 SPA / JS 渲染 / 防爬墙 / 表单交互 / 登录后页面。**直接接 Google 官方 `chrome-devtools-mcp@latest`**（v0.23.0+，2026 年 4 月仍在活跃维护，37k stars，28 个工具）。
+让 Wraith 能操控浏览器：处理 SPA / JS 渲染 / 防爬墙 / 表单交互 / 登录后页面。**直接接 Google 官方 `chrome-devtools-mcp@latest`**（v0.23.0+，2026 年 4 月仍在活跃维护，37k stars，28 个工具）。
 
 最终交付：
 
@@ -59,7 +59,7 @@
 内存(1)：take_memory_snapshot
 ```
 
-注册到 Wraith CLI 后命名为 `mcp__chrome-devtools__navigate_page` 等。
+注册到 Wraith 后命名为 `mcp__chrome-devtools__navigate_page` 等。
 
 ---
 
@@ -158,7 +158,7 @@ chrome-devtools server 首次启动可能 30s+（npx 拉包 + Chrome 冷启）�
 - 微信公众号文章 (mp.weixin.qq.com)、知乎专栏、推特、小红书等 → 浏览器 MCP（这些站点 web_fetch 拿不到正文）
 - web_fetch 返回空正文（提示 SPA / 防爬墙）→ **自动 fallback 到浏览器 MCP**，不要重复 web_fetch
 - 已知 URL → 直接 web_fetch 试一次，失败再上浏览器
-- 用户要看页面长什么样、UI 验收 → take_screenshot（截图无法直接给 LLM 看，由 Wraith CLI 附给用户）
+- 用户要看页面长什么样、UI 验收 → take_screenshot（截图无法直接给 LLM 看，由 Wraith 附给用户）
 
 工具选择 — 浏览器操作：
 - 优先 mcp__chrome-devtools__take_snapshot（结构化 DOM 文本，LLM 能直接理解）
@@ -175,7 +175,7 @@ chrome-devtools server 首次启动可能 30s+（npx 拉包 + Chrome 冷启）�
 
 ### 4.1 默认 `mcp.json` 模板
 
-Wraith CLI 启动时如果 `~/.wraith/mcp.json` 不存在，**自动创建**含 chrome-devtools 的最小模板。如果存在但缺 chrome-devtools 条目，启动时打印一行提示「检测到未配置 chrome-devtools，建议参考 README 添加」（不自动改用户文件）。
+Wraith 启动时如果 `~/.wraith/mcp.json` 不存在，**自动创建**含 chrome-devtools 的最小模板。如果存在但缺 chrome-devtools 条目，启动时打印一行提示「检测到未配置 chrome-devtools，建议参考 README 添加」（不自动改用户文件）。
 
 模板：
 
@@ -323,7 +323,7 @@ react.dev 是 React 官网，重 JS 渲染，web_fetch 拿到的内容稀少。�
 帮我用 chrome-devtools 截一张 https://www.google.com 的图
 ```
 
-LLM 应该调 take_screenshot，但 Wraith CLI 把 image fallback 给 LLM 后，LLM 应该输出"已为您截图，但当前模型无法直接查看图片，请向我描述要从图中找什么信息"或类似友好提示。
+LLM 应该调 take_screenshot，但 Wraith 把 image fallback 给 LLM 后，LLM 应该输出"已为您截图，但当前模型无法直接查看图片，请向我描述要从图中找什么信息"或类似友好提示。
 
 ### 7.5 启动流程稳健性
 
@@ -430,7 +430,7 @@ LLM 应该调 take_screenshot，但 Wraith CLI 把 image fallback 给 LLM 后，
 
 **手测清单**（必跑，结果写到 commit description）：
 
-1. ✅ 启动 Wraith CLI，看到 chrome-devtools 启动进度提示，最终 ready
+1. ✅ 启动 Wraith，看到 chrome-devtools 启动进度提示，最终 ready
 2. ✅ 跑 §7.1 微信文章场景：web_fetch 失败 → fallback 浏览器 → take_snapshot 拿正文 → 总结
 3. ✅ 跑 §7.2 SPA 页面（react.dev）
 4. ✅ 跑 §7.3 表单填充（fill_form）

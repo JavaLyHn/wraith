@@ -29,13 +29,13 @@ class FeishuPostTest {
 
     @Test
     void boldRunGetsBoldStyle() throws Exception {
-        // 行[0] 的段里应有一个 text 段 style 含 bold,text=Wraith CLI
-        JsonNode line0 = content("我是 **Wraith CLI** 呀").get(0);
+        // 行[0] 的段里应有一个 text 段 style 含 bold,text=Wraith
+        JsonNode line0 = content("我是 **Wraith** 呀").get(0);
         JsonNode boldSeg = null;
         for (JsonNode seg : line0) {
-            if ("Wraith CLI".equals(seg.path("text").asText())) boldSeg = seg;
+            if ("Wraith".equals(seg.path("text").asText())) boldSeg = seg;
         }
-        assertNotNull(boldSeg, "应有 text=Wraith CLI 的段");
+        assertNotNull(boldSeg, "应有 text=Wraith 的段");
         assertEquals("text", boldSeg.path("tag").asText());
         assertTrue(styleContains(boldSeg, "bold"), "该段 style 应含 bold");
     }

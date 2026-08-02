@@ -4,7 +4,7 @@ description: |
   实现任何功能或修 bug、写实现代码之前使用:先写测试、看它失败、再写最少代码让它通过。
   触发场景:准备实现功能/修 bug、动实现代码之前。先 load_skill。
 version: "1.0.0"
-author: Wraith CLI
+author: Wraith
 tags: [process, testing, tdd]
 ---
 

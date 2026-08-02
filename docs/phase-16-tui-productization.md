@@ -23,13 +23,13 @@
 
 ## 1. 目标与产出物
 
-让 Wraith CLI 从"纯 CLI"升级为"终端 GUI"（TUI），具备文件树浏览、代码高亮、对话历史可视化、配置管理等产品级体验，**不牺牲任何现有 Agent 能力**。
+让 Wraith 从"纯 CLI"升级为"终端 GUI"（TUI），具备文件树浏览、代码高亮、对话历史可视化、配置管理等产品级体验，**不牺牲任何现有 Agent 能力**。
 
 **为什么做 TUI 而不是继续纯 CLI**：
 
-- Wraith CLI 当前已内置 9 个工具 + MCP 60+ 个工具，用户记忆成本高
+- Wraith 当前已内置 9 个工具 + MCP 60+ 个工具，用户记忆成本高
 - 文件树 / 代码高亮 / 对话历史回滚这些"展示型"需求，纯 CLI 手工渲染成本高且体验差
-- Claude Code、Cursor、Aider 等竞品都有 TUI，Wraith CLI 需要产品化竞争力
+- Claude Code、Cursor、Aider 等竞品都有 TUI，Wraith 需要产品化竞争力
 - Skill 系统（第 15 期）的 TUI 可视化是天然配套
 
 最终交付：
@@ -156,7 +156,7 @@ if (shouldUseTui()) {
 
 ### 2.5 代码高亮设计
 
-**高亮引擎**：**不使用第三方高亮库**（如 Pygments / highlight.js 的 Java 移植版），而是用 Wraith CLI 自己第 4 期 `CodeChunker` 和 `CodeAnalyzer` 的能力做**轻量级语法着色**。
+**高亮引擎**：**不使用第三方高亮库**（如 Pygments / highlight.js 的 Java 移植版），而是用 Wraith 自己第 4 期 `CodeChunker` 和 `CodeAnalyzer` 的能力做**轻量级语法着色**。
 
 实现路径：
 1. 从 `CodeChunker` 拿代码块的 `language` 字段
@@ -164,7 +164,7 @@ if (shouldUseTui()) {
 3. 输出 ANSI 256 色字符串，直接交给 Lanterna `TextArea` 渲染
 
 **为什么不用第三方库**：
-- Wraith CLI 已有 AST 解析能力（第 4 期 JavaParser），Java 代码着色可以复用
+- Wraith 已有 AST 解析能力（第 4 期 JavaParser），Java 代码着色可以复用
 - 其他语言用正则表达式着色足够（`CodeChunker` 已能识别语言）
 - 避免引入 highlight.js / Pygments 等 1MB+ 的依赖
 
@@ -561,7 +561,7 @@ public String highlight(String code, String language) {
 ```
 │ 📄 README.md（前 50 行）                          │
 │ ┌─────────────────────────────────────────────┐  │
-│ │ # Wraith CLI                                     │  │
+│ │ # Wraith                                     │  │
 │ │ 一个 Java Agent CLI...                       │  │
 │ └─────────────────────────────────────────────┘  │
 ```

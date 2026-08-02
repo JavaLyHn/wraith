@@ -43,7 +43,7 @@
 ## 4. 静态 banner 字标白化(C)
 
 - 新增 `AnsiStyle.wordmark(text)` = 粗体 + 亮白(`ESC[1;97m`)。
-- banner 的 6 行字标 + `Wraith CLI` 文案由原来的 `AnsiStyle.section`(绿)改为 `AnsiStyle.wordmark`(白)。
+- banner 的 6 行字标 + `Wraith` 文案由原来的 `AnsiStyle.section`(绿)改为 `AnsiStyle.wordmark`(白)。
 - 信息行(model / MCP / 能力)仍为青色高亮(`AnsiStyle.heading`)。
 - 与开场动画的白色保持一致。
 

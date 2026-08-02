@@ -191,7 +191,7 @@ class McpClientTest {
 
     @Test
     void closeIsBestEffortAndDoesNotBlockOnServerSilence() throws Exception {
-        // close 不再发 shutdown notification（server 卡死时会让 Wraith CLI 退出阻塞）。
+        // close 不再发 shutdown notification（server 卡死时会让 Wraith 退出阻塞）。
         // 关闭语义改由 transport 层承担：stdio = stdin EOF + destroy；HTTP = DELETE session。
         // 这里验证 close 不会因为 server 不响应 shutdown 而 throw / hang。
         InMemoryTransport transport = new InMemoryTransport()

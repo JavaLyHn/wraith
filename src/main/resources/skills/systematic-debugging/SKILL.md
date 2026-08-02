@@ -4,7 +4,7 @@ description: |
   遇到任何 bug、测试失败或非预期行为、在提出修复之前使用:先找根因,再动手。随机修改浪费时间、制造新 bug;快速打补丁掩盖根本问题。
   触发场景:出现报错/测试失败/行为不符预期/性能问题/构建失败/集成问题时。先 load_skill。
 version: "1.0.0"
-author: Wraith CLI
+author: Wraith
 tags: [process, debugging]
 ---
 

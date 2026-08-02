@@ -36,7 +36,7 @@ return { text, author };
 ### 需要个人时间线 / 私信 / 列表 / 关注关系
 
 必须 `/browser connect` 切 shared 模式（用户已登录）。**注意 X 是敏感页面**：
-- `/i/communities/*` / `/messages` / `/settings/*` 命中 Wraith CLI 默认敏感规则 → 操作要单步审批
+- `/i/communities/*` / `/messages` / `/settings/*` 命中 Wraith 默认敏感规则 → 操作要单步审批
 - 即使用户全放行也无法批量操作敏感页面
 
 ## 已知陷阱

@@ -5,7 +5,7 @@ import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * 当前 Wraith CLI 浏览器会话状态。
+ * 当前 Wraith 浏览器会话状态。
  *
  * 由 Main 持有并注入 ToolRegistry，避免做全局单例污染测试与多会话运行。
  */

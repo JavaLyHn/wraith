@@ -60,7 +60,7 @@ mcp__chrome-devtools__navigate_page("https://github.com/<your-org>/<private-repo
 ```
 
 **敏感页面提醒**：
-- `/settings/*` 路径命中 Wraith CLI 默认敏感规则 → 改写型操作单步审批
+- `/settings/*` 路径命中 Wraith 默认敏感规则 → 改写型操作单步审批
 - `/security/*` / `/billing/*` / `/admin/*` 同上
 
 ### 搜索代码

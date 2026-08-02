@@ -462,7 +462,7 @@ public final class LanternaRenderer implements Renderer {
 - 文档联动：phase-16 注废弃说明、AGENTS / README / ROADMAP / .env.example 更新
 - Lanterna 启动失败 → 自动回退 inline 验证
 - `mvn clean package` 验证 fat jar 仍可执行
-- Banner 微调："Wraith CLI v16.1.0"（小版本号区分形态修正）
+- Banner 微调："Wraith v16.1.0"（小版本号区分形态修正）
 
 ---
 
@@ -470,7 +470,7 @@ public final class LanternaRenderer implements Renderer {
 
 每条用例在 `WRAITH_RENDERER=inline`（默认）和 `WRAITH_RENDERER=lanterna` 各跑一遍：
 
-1. ✅ 启动 Wraith CLI，状态栏/状态面板显示模型 + token
+1. ✅ 启动 Wraith，状态栏/状态面板显示模型 + token
 2. ✅ `read_file ROADMAP.md`：inline 看到折叠块 + Ctrl+O 展开；lanterna 看到 `CenterPane` 内联工具结果
 3. ✅ `write_file` 修改文件：inline 行内 diff；lanterna 文本对话流显示 diff（不要求颜色一致）
 4. ✅ `/hitl on` + 危险命令：inline 单行提示 `[y/n/a/s/m]`；lanterna 模态框

@@ -4,7 +4,7 @@ description: |
   构建高质量 MCP(Model Context Protocol)服务的指南:通过设计良好的工具,让 LLM 与外部服务交互。构建 MCP 服务、集成外部 API 时使用(Python FastMCP 或 Node/TypeScript SDK)。
   触发场景:用户想「建一个 MCP 服务 / 把某 API 接成 MCP / 给 agent 加外部能力」时。先 load_skill。
 version: "1.0.0"
-author: Wraith CLI
+author: Wraith
 tags: [mcp, integration, tools]
 ---
 

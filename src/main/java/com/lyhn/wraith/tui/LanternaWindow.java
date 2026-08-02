@@ -57,7 +57,9 @@ public final class LanternaWindow {
 
         // 创建根面板（三栏布局）
         this.rootPane = new RootPane(config, llmClient);
-        this.mainWindow = new BasicWindow("Wraith CLI v16.0.0");
+        // ⚠ 版本号与 Main.VERSION 是两份独立字面量,此前一直停在 16.0.0(实际 16.1.0)。
+        //    Main.VERSION 是 private 且在 cli 包,tui 直接引用会造成包间环,故暂各写各的 —— 改版本记得两处都改。
+        this.mainWindow = new BasicWindow("Wraith v16.1.0");
         mainWindow.setComponent(rootPane);
         gui.addWindow(mainWindow);
 

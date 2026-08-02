@@ -72,13 +72,13 @@ class SkillFrontmatterWriterTest {
     }
 
     @Test void roundTripsAllFields() {
-        var r = roundTrip("web-access", "联网访问手册", "1.0.0", "Wraith CLI",
+        var r = roundTrip("web-access", "联网访问手册", "1.0.0", "Wraith",
                 List.of("web", "browser"), "# 正文\n步骤一\n");
         Map<String, Object> fm = r.frontmatter();
         assertEquals("web-access", fm.get("name"));
         assertEquals("联网访问手册", fm.get("description"));
         assertEquals("1.0.0", fm.get("version"));
-        assertEquals("Wraith CLI", fm.get("author"));
+        assertEquals("Wraith", fm.get("author"));
         assertEquals(List.of("web", "browser"), fm.get("tags"));
         assertEquals("# 正文\n步骤一\n", r.body());
         assertTrue(r.warnings().isEmpty());

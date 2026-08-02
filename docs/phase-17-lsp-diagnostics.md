@@ -49,7 +49,7 @@ WRAITH_LSP_MAX_DIAGNOSTICS=20
 
 - 只做 Java 语法级诊断，不做完整 Maven 编译。
 - 不启动 JDT LS / rust-analyzer / pyright / gopls。
-- 不解析 `execute_command` 里的手写补丁，也不支持 `edit_file` / `apply_patch` 工具，因为当前 Wraith CLI 内置工具里还没有这两个工具。
+- 不解析 `execute_command` 里的手写补丁，也不支持 `edit_file` / `apply_patch` 工具，因为当前 Wraith 内置工具里还没有这两个工具。
 - 多 Agent 并发时 pending diagnostics 挂在共享 `ToolRegistry` 上，下一条进入 LLM 请求的执行链会消费诊断。
 
 ## 后续增强

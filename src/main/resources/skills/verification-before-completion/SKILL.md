@@ -4,7 +4,7 @@ description: |
   在你即将声称「完成/修好/通过」之前必须使用:提交、建 PR、宣告成功前,先跑验证命令并确认输出,再下任何成功结论。证据先于断言,永远。
   触发场景:准备说「已完成/已修复/应该可以了/通过了」或表达满意之前。先 load_skill。
 version: "1.0.0"
-author: Wraith CLI
+author: Wraith
 tags: [process, quality, verification]
 ---
 

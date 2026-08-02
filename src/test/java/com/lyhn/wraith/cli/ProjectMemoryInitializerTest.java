@@ -16,8 +16,8 @@ class ProjectMemoryInitializerTest {
 
     @Test
     void generatesConciseWraithProjectMemory() throws Exception {
-        Files.writeString(tempDir.resolve("README.md"), "# Wraith CLI\n\nJava Agent CLI");
-        Files.writeString(tempDir.resolve("AGENTS.md"), "项目名：Wraith CLI\n改命令入口要联动");
+        Files.writeString(tempDir.resolve("README.md"), "# Wraith\n\nJava Agent CLI");
+        Files.writeString(tempDir.resolve("AGENTS.md"), "项目名：Wraith\n改命令入口要联动");
         Files.writeString(tempDir.resolve("pom.xml"), "<project></project>");
 
         ProjectMemoryInitializer.InitResult result = ProjectMemoryInitializer.initialize(tempDir, false);
@@ -25,7 +25,7 @@ class ProjectMemoryInitializerTest {
         String content = Files.readString(tempDir.resolve("WRAITH.md"));
         assertTrue(result.written());
         assertTrue(content.contains("# WRAITH.md"));
-        assertTrue(content.contains("Wraith CLI 是面向商业使用的 Java Agent CLI 产品"));
+        assertTrue(content.contains("Wraith 是面向商业使用的 Java Agent 产品(CLI / 桌面 / IM 三种形态)"));
         assertTrue(content.contains("mvn test -Pquick"));
         assertTrue(content.contains("不要为某个模式创建孤立能力"));
         assertTrue(content.lines().count() < 45, content);
@@ -43,7 +43,7 @@ class ProjectMemoryInitializerTest {
 
     @Test
     void forceOverwritesExistingFile() throws Exception {
-        Files.writeString(tempDir.resolve("README.md"), "# Wraith CLI\n");
+        Files.writeString(tempDir.resolve("README.md"), "# Wraith\n");
         Files.writeString(tempDir.resolve("WRAITH.md"), "existing");
 
         ProjectMemoryInitializer.InitResult result = ProjectMemoryInitializer.initialize(tempDir, true);

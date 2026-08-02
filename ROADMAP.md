@@ -1,4 +1,4 @@
-# Wraith CLI 迭代路线图（21 期）
+# Wraith 迭代路线图（21 期）
 
 从零开始，逐步构建生产级 Java Agent CLI
 
@@ -125,7 +125,7 @@
 
 **为什么不叫沙箱**：
 - 真正的沙箱是隔离的执行环境（Docker / microVM / chroot），本地 Agent CLI（参考 Claude Code / Cursor / Aider）默认都不做沙箱——沙箱削弱 Agent 能力、给虚假安全感、体验更差
-- Wraith CLI 的安全模型是 **HITL + 路径校验 + 命令快速拒绝 + 审计**，不是隔离
+- Wraith 的安全模型是 **HITL + 路径校验 + 命令快速拒绝 + 审计**，不是隔离
 - 想做容器隔离的请参考 Pro 升级版本章节，或自行实现 `SandboxDriver` 接口
 
 **核心知识点**：
@@ -210,7 +210,7 @@
 
 **已完成**
 
-**目标**：把 Wraith CLI 接入 MCP 生态。stdio 子进程 server 与 Streamable HTTP 远程 server 都能用，工具自动注册到 ToolRegistry，与 HITL / AuditLog 协同。
+**目标**：把 Wraith 接入 MCP 生态。stdio 子进程 server 与 Streamable HTTP 远程 server 都能用，工具自动注册到 ToolRegistry，与 HITL / AuditLog 协同。
 
 **功能迭代**：
 - 手写 `JsonRpcClient`：JSON-RPC 2.0 客户端，请求-响应配对、通知、错误码、超时
@@ -370,7 +370,7 @@
 
 **前置依赖**：第 9 期 web 工具、第 13 期 Chrome DevTools MCP、第 14 期 CDP 会话复用全部就绪
 
-**目标**：做出 Wraith CLI 自己的 Skill 加载机制，把零散的工具与决策指引打包成可复用单元，并以 web-access 作为首个落地 Skill
+**目标**：做出 Wraith 自己的 Skill 加载机制，把零散的工具与决策指引打包成可复用单元，并以 web-access 作为首个落地 Skill
 
 **功能迭代**（详细开发任务见 `docs/phase-15-skill-system.md`）：
 - Skill 加载机制：三层目录扫描（jar 内置 / 用户级 `~/.wraith/skills/` / 项目级 `<project>/.wraith/skills/`），按 name 整体覆盖，frontmatter 走手写 YAML 子集解析（不引 SnakeYAML）
@@ -440,7 +440,7 @@
 - TUI 展示：inline 模式下诊断块以红色/黄色 ANSI 渲染，用户可以直观看到 Agent 引入的编译问题
 - 优雅降级：LSP server 启动失败或超时时只打 trace 日志，不阻塞 Agent 主流程；没有对应 LSP server 的语言跳过
 
-**设计参考**：DeepSeek TUI `crates/tui/src/lsp/`——`LspManager`（惰性 transport pool）+ `lsp_hooks.rs`（post-edit 挂钩）+ `diagnostics.rs`（诊断类型与渲染）。Wraith CLI 的 Java 生态可以用 Eclipse JDT LS（`org.eclipse.jdt.ls`）或直接复用已有的 `CodeAnalyzer` 做轻量版。
+**设计参考**：DeepSeek TUI `crates/tui/src/lsp/`——`LspManager`（惰性 transport pool）+ `lsp_hooks.rs`（post-edit 挂钩）+ `diagnostics.rs`（诊断类型与渲染）。Wraith 的 Java 生态可以用 Eclipse JDT LS（`org.eclipse.jdt.ls`）或直接复用已有的 `CodeAnalyzer` 做轻量版。
 
 **核心知识点**：
 - LSP（Language Server Protocol）的 JSON-RPC 子集
@@ -516,7 +516,7 @@
 
 **前置依赖**：第 13 期 Chrome DevTools MCP 已能产出截图等 image content；第 12 期长上下文工程已就绪。
 
-**目标**：用户可以在 TUI 里提交后台任务（如"重构整个模块"），关掉终端走人，回来查看结果。同时暴露 HTTP/SSE Runtime API，让 Wraith CLI 可以嵌入 CI/CD、IDE 插件、Web 面板。
+**目标**：用户可以在 TUI 里提交后台任务（如"重构整个模块"），关掉终端走人，回来查看结果。同时暴露 HTTP/SSE Runtime API，让 Wraith 可以嵌入 CI/CD、IDE 插件、Web 面板。
 
 **功能迭代**：
 
@@ -565,7 +565,7 @@
 
 **前置依赖**：第 13 期 Chrome DevTools MCP 已能产出截图等 image content；第 12 期长上下文工程已就绪；第 17–20 期安全网与架构已就绪。
 
-**目标**：让 Wraith CLI 真正"看见"图片——浏览器截图、用户粘贴的图片、文档中的图表，都能直接喂给 LLM 让它理解，而不是 fallback 成"[此工具返回了 image]"占位。此期排在安全网（LSP + 快照）和架构重构（Prompt + Task）之后，确保模型生态成熟时再做。
+**目标**：让 Wraith 真正"看见"图片——浏览器截图、用户粘贴的图片、文档中的图表，都能直接喂给 LLM 让它理解，而不是 fallback 成"[此工具返回了 image]"占位。此期排在安全网（LSP + 快照）和架构重构（Prompt + Task）之后，确保模型生态成熟时再做。
 
 **功能迭代**：
 
@@ -588,7 +588,7 @@
 
 **不做**：
 - 视频 / 音频输入（再独立期）
-- 图像生成（Wraith CLI 是 Agent 不是绘图工具）
+- 图像生成（Wraith 是 Agent 不是绘图工具）
 - TUI sixel 协议显示截图（依赖第 16 期 TUI 是否实现，留作扩展）
 
 **核心知识点**：

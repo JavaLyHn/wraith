@@ -47,7 +47,7 @@ public class BrowserGuard {
                 && session.mode() == BrowserMode.SHARED
                 && !session.isAgentOpenedTab(pageId(args))) {
             return BrowserCheckResult.block(
-                    "shared 浏览器模式下拒绝关闭非 Wraith CLI 创建的标签页，请手动关闭该 Chrome 标签页",
+                    "shared 浏览器模式下拒绝关闭非 Wraith 创建的标签页，请手动关闭该 Chrome 标签页",
                     metadata);
         }
 

@@ -176,7 +176,7 @@ emulate 视口为 7680x4320，打开 https://www.apple.com，take_screenshot
 
 ### Case 18 — Ctrl+V 注入
 
-光标停在 Wraith CLI 输入框，先复制好图（同 Case 17），然后按 **Ctrl+V**（不是 Cmd+V，Cmd+V 会被终端拦截成本地粘贴文本）。
+光标停在 Wraith 输入框，先复制好图（同 Case 17），然后按 **Ctrl+V**（不是 Cmd+V，Cmd+V 会被终端拦截成本地粘贴文本）。
 
 预期：
 - 输入行末尾自动追加 `@image:</Users/.../clip-<ts>.png> `
@@ -192,7 +192,7 @@ emulate 视口为 7680x4320，打开 https://www.apple.com，take_screenshot
 
 ### Case 20 — headless 环境（如 ssh / docker）
 
-通过 `ssh user@host` 进入远程主机，启动 Wraith CLI，然后：
+通过 `ssh user@host` 进入远程主机，启动 Wraith，然后：
 
 ```
 @clipboard

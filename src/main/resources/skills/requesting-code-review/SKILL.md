@@ -4,7 +4,7 @@ description: |
   完成任务、实现重大功能、或合并前使用:派一个代码评审子 agent,在问题扩散前抓住它,核实工作是否满足要求。
   触发场景:做完一个任务/功能、准备合并前想让人(子 agent)过一遍代码时。先 load_skill。
 version: "1.0.0"
-author: Wraith CLI
+author: Wraith
 tags: [process, review, quality]
 ---
 

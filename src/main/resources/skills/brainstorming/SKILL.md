@@ -4,7 +4,7 @@ description: |
   在任何「创造性工作」之前**必须**先用的技能:新建功能、搭建组件、增加能力、修改行为——动手实现前,先探索用户意图、需求与设计。
   触发场景:用户说「我想做 X / 帮我加个 Y / 怎么设计 Z / 有什么思路」等需要先想清楚「做什么、怎么设计」的时刻。先 load_skill,拿出设计并获用户批准后再实现。
 version: "1.0.0"
-author: Wraith CLI
+author: Wraith
 tags: [process, design, planning]
 ---
 
