@@ -8,6 +8,7 @@ import {
 import {
   Plus, Search, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
   Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown, ListTodo, Shield, User,
+  type LucideIcon,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
 import Logo from './Logo'
@@ -94,6 +95,49 @@ function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDe
     </div>
   )
 }
+
+type ToolNav = 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills'
+  | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks'
+
+/**
+ * 工具项分组。依据是**什么时候会点它**,不是功能相似:
+ *   配置 — 装好一次,几周不动;改完就走,不看结果
+ *   运行 — 有东西在后台跑着,想看它怎么样了;有状态、会变、可能带红点
+ *   观察 — 出事了回头查;只读为主,查完就关
+ * 附带的好处:红点只可能出现在「运行」组,眼睛知道往哪儿扫。
+ *
+ * 11 项平铺时扫一遍要过 11 行。这里只加小标题、不做逐组折叠 —— 分段是为了扫得快,
+ * 不是为了藏起来;「工具」本身已能整体折叠,再套一层只会给每次点击多加一步。
+ */
+const TOOL_GROUPS: { label: string; items: { nav: ToolNav; testId: string; label: string; Icon: LucideIcon }[] }[] = [
+  {
+    label: '配置',
+    items: [
+      { nav: 'plugins', testId: 'nav-plugins', label: 'MCP', Icon: Blocks },
+      { nav: 'providers', testId: 'nav-providers', label: 'Provider 配置', Icon: Plug },
+      { nav: 'skills', testId: 'nav-skills', label: '技能', Icon: BookOpen },
+    ],
+  },
+  {
+    label: '运行',
+    items: [
+      { nav: 'automations', testId: 'nav-automations', label: '自动化', Icon: Clock },
+      { nav: 'im-gateway', testId: 'nav-im-gateway', label: 'IM 网关', Icon: MessageSquare },
+      { nav: 'tasks', testId: 'nav-tasks', label: '后台任务', Icon: ListTodo },
+    ],
+  },
+  {
+    label: '观察',
+    items: [
+      { nav: 'memory', testId: 'nav-memory', label: '记忆', Icon: Brain },
+      { nav: 'snapshots', testId: 'nav-snapshots', label: '快照', Icon: History },
+      // 中性盾:状态语义(ok/未启用)由顶栏那个盾承担,这里只是分类图标,别用带勾的
+      { nav: 'policy', testId: 'nav-policy', label: '安全', Icon: Shield },
+      { nav: 'browser', testId: 'nav-browser', label: '浏览器', Icon: Globe },
+      { nav: 'rag', testId: 'nav-rag', label: '代码检索', Icon: ScanSearch },
+    ],
+  },
+]
 
 interface SidebarProps {
   workspace: string
@@ -184,6 +228,20 @@ export default function Sidebar({
   const displayName = profile.name.trim() || '我'
   // 默认状态(name='我' + 无 avatar)下字形与昵称同字,会渲染成「我 我」——那时头像让位给通用图标
   const glyphRedundant = accountGlyphDuplicatesName(profile, displayName)
+  // TOOL_GROUPS 只描述"有哪些项、怎么分组",回调仍由 props 逐个传入 —— 这张表把两者对上
+  const handlers: Record<ToolNav, () => void> = {
+    plugins: onOpenPlugins,
+    automations: onOpenAutomations,
+    'im-gateway': onOpenImGateway,
+    providers: onOpenProviders,
+    skills: onOpenSkills,
+    memory: onOpenMemory,
+    snapshots: onOpenSnapshots,
+    policy: onOpenPolicy,
+    browser: onOpenBrowser,
+    rag: onOpenRag,
+    tasks: onOpenTasks,
+  }
   const toggleGroupMode = (): void => setGroupMode(m => {
     const next = m === 'time' ? 'recent' : 'time'
     try { localStorage.setItem('wraith.sidebar.sessionGroupMode', next) } catch { /* ignore */ }
@@ -261,118 +319,32 @@ export default function Sidebar({
           </button>
           {showTools && (
           <div className="flex flex-col gap-0.5 pl-2">
-          {/* plugins — enabled */}
-          <button
-            data-testid="nav-plugins"
-            onClick={onOpenPlugins}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'plugins' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            <span className="flex items-center gap-2"><Blocks className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />MCP</span>
-          </button>
-
-          {/* automations — enabled */}
-          <button
-            data-testid="nav-automations"
-            onClick={onOpenAutomations}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'automations' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            <span className="flex items-center gap-2">
-              <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />自动化
-              {automationBadge && (
-                <span data-testid="nav-automations-badge" className="relative ml-auto flex h-2 w-2 shrink-0">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75 motion-reduce:hidden" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-danger" />
-                </span>
-              )}
-            </span>
-          </button>
-
-          {/* IM 网关 — enabled */}
-          <button
-            data-testid="nav-im-gateway"
-            onClick={onOpenImGateway}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'im-gateway' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            <span className="flex items-center gap-2"><MessageSquare className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />IM 网关</span>
-          </button>
-
-          {/* Provider 配置 — enabled */}
-          <button
-            data-testid="nav-providers"
-            onClick={onOpenProviders}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'providers' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            <span className="flex items-center gap-2"><Plug className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />Provider 配置</span>
-          </button>
-
-          {/* skills — enabled */}
-          <button
-            data-testid="nav-skills"
-            onClick={onOpenSkills}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'skills' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            <span className="flex items-center gap-2"><BookOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />技能</span>
-          </button>
-          {/* memory */}
-          <button
-            data-testid="nav-memory"
-            onClick={onOpenMemory}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'memory' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            <span className="flex items-center gap-2"><Brain className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />记忆</span>
-          </button>
-          {/* snapshots */}
-          <button
-            data-testid="nav-snapshots"
-            onClick={onOpenSnapshots}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'snapshots' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            <span className="flex items-center gap-2"><History className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />快照</span>
-          </button>
-          {/* background tasks */}
-          <button
-            data-testid="nav-tasks"
-            onClick={onOpenTasks}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'tasks' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            <span className="flex items-center gap-2"><ListTodo className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />后台任务</span>
-          </button>
-          {/* policy + audit */}
-          <button
-            data-testid="nav-policy"
-            onClick={onOpenPolicy}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'policy' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            {/* 中性盾:状态语义(ok/未启用)由顶栏那个盾承担,这里只是分类图标,别用带勾的 */}
-            <span className="flex items-center gap-2"><Shield className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />安全</span>
-          </button>
-          {/* browser */}
-          <button
-            data-testid="nav-browser"
-            onClick={onOpenBrowser}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'browser' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            <span className="flex items-center gap-2"><Globe className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />浏览器</span>
-          </button>
-          {/* rag / code search */}
-          <button
-            data-testid="nav-rag"
-            onClick={onOpenRag}
-            className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
-              (activeNav === 'rag' ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg' : 'text-fg-muted hover:bg-fg/5')}
-          >
-            <span className="flex items-center gap-2"><ScanSearch className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />代码检索</span>
-          </button>
+          {TOOL_GROUPS.map((group) => (
+            <div key={group.label} className="flex flex-col gap-0.5">
+              <div className="mt-1.5 px-3 pb-0.5 text-3xs uppercase tracking-wider text-fg-subtle">{group.label}</div>
+              {group.items.map((item) => (
+                <button
+                  key={item.nav}
+                  data-testid={item.testId}
+                  onClick={handlers[item.nav]}
+                  className={'rounded-lg px-3 py-1.5 text-left text-xs ' +
+                    (activeNav === item.nav
+                      ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent text-fg'
+                      : 'text-fg-muted hover:bg-fg/5')}
+                >
+                  <span className="flex items-center gap-2">
+                    <item.Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{item.label}
+                    {item.nav === 'automations' && automationBadge && (
+                      <span data-testid="nav-automations-badge" className="relative ml-auto flex h-2 w-2 shrink-0">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75 motion-reduce:hidden" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-danger" />
+                      </span>
+                    )}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ))}
           </div>
           )}
         </nav>
