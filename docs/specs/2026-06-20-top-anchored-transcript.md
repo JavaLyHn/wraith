@@ -11,11 +11,18 @@
 > | `src/main/java/com/lyhn/wraith/render/inline/InlineRenderer.java` | +129 行，顶部对齐画法主体 |
 > | `src/main/java/com/lyhn/wraith/cli/Main.java` | +20 行，`WRAITH_TOP_ANCHOR` 开关（默认关） |
 >
-> **为什么不把代码也留着**：`InlineRenderer` 在这之后被重写过，那 129 行已经贴不回去，
+> **为什么不把代码也搬进 main**：`InlineRenderer` 在这之后被重写过，那 129 行已经贴不回去，
 > 真要做这个特性等于按本文档重新实现一遍。文档（设计推理 + 已澄清的评审结论）才是有价值的部分。
 >
-> 上面那个 SHA 在 git 对象库里还能捞一阵子（reflog 默认保留 90 天），
-> 过了就真没了。若后来决定要捡回代码，趁早 `git show <sha>`。
+> **但代码没丢** —— 已打 tag `shelved/top-anchor` 永久钉住那个 commit（annotated tag，
+> 与 `v*` 发版 tag 用前缀分开）。随时可查：
+>
+> ```bash
+> git show shelved/top-anchor                      # 完整 149 行改动
+> git show shelved/top-anchor -- src/main/java/com/lyhn/wraith/render/inline/InlineRenderer.java
+> ```
+>
+> 留它是为了那份「当时怎么想的」的实现细节，**不是为了直接 cherry-pick**（贴不回去）。
 >
 > 以下为原文，未作改动。
 
