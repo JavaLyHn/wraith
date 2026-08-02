@@ -1,6 +1,7 @@
 package com.lyhn.wraith.gateway.bind;
 
 import com.lyhn.wraith.config.WraithConfig;
+import com.lyhn.wraith.wechat.TerminalQrRenderer;
 import com.lyhn.wraith.gateway.GatewayDaemon;
 import com.lyhn.wraith.gateway.qq.QqApiClient;
 import okhttp3.OkHttpClient;
@@ -42,6 +43,11 @@ public final class BindCommand {
         }
     }
 
+    /** openclaw 扫码授权页 URL。抽成方法便于测试断言,也避免 URL 在多处硬编码漂移。 */
+    static String connectUrl(String taskId) {
+        return "https://q.qq.com/qqbot/openclaw/connect.html?task_id=" + taskId + "&_wv=2&source=wraith";
+    }
+
     /**
      * 扫码绑定流程（EYE-VERIFY）。生成本地 AES key，提交换 task_id，引导用户扫码，
      * 轮询到 COMPLETED 后解密并落盘。
@@ -57,8 +63,17 @@ public final class BindCommand {
 
         try {
             String taskId = openclaw.createBindTask(base64Key);
+            String connectUrl = connectUrl(taskId);
             System.out.println("请用手机 QQ 扫码完成绑定：");
-            System.out.println("  https://q.qq.com/qqbot/openclaw/connect.html?task_id=" + taskId + "&_wv=2&source=wraith");
+            System.out.println("  " + connectUrl);
+            // 把 connect URL 本身渲染成二维码。TerminalQrRenderer.print 自带分支:
+            // TTY → ANSI 二维码(CLI 用户直接扫);管道 → `WRAITH_QR_PNG <base64>`(桌面渲染成 <img>)。
+            // 微信走的就是这条通道,QQ 复用,不引入新依赖也不新增协议。
+            //
+            // ⚠ 这条 URL 原本是给**桌面浏览器**打开的(QQ 页面再渲染真正的扫码图)。
+            // 直接扫它是否可行取决于 QQ 页面对移动端的处理(URL 带 _wv=2,对 webview 有感知)。
+            // 因此桌面端**同时保留**「打开授权页」按钮 —— 扫得通省一跳,扫不通原路可走。
+            TerminalQrRenderer.print(System.out, connectUrl);
             System.out.println("（等待扫码授权，最长约 " + (MAX_POLLS * POLL_INTERVAL_MS / 1000) + " 秒）...");
 
             String[] result = null;

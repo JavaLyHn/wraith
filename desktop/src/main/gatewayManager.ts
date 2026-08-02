@@ -279,11 +279,20 @@ export class GatewayManager {
     let cancelled = false
 
     const handleLine = (l: string): void => {
+      // 机读二维码标记:QQ 现在也把 connect URL 渲染成二维码(复用微信那条通道)。
+      // 不落日志 —— base64 太长会刷屏日志区。
+      const qr = parseQrPngMarker(l)
+      if (qr) {
+        this.onEvent({ kind: 'bind', phase: 'scanning', qr })
+        return
+      }
       this.pushLog(l)
       const url = parseConnectUrl(l)
       if (url) {
+        // **仍然开浏览器**:那条 URL 本是给桌面浏览器的,内联二维码能不能直接扫通未经证实。
+        // 两条路并存 —— 扫得通省一跳,扫不通浏览器这条原样可用。
         this.openExternal(url)
-        this.onEvent({ kind: 'bind', phase: 'scanning' })
+        this.onEvent({ kind: 'bind', phase: 'scanning', url })
       }
       const phase = classifyBindLine(l)
       if (phase) resolvedPhase = phase

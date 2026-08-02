@@ -107,8 +107,26 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel, onBoun
         >{p === 'weixin' ? '扫码绑定微信' : '打开 QQ 授权页'}</button>
       )}
 
+      {/* QQ:内联二维码与浏览器授权页**并存**。那条 connect URL 原本是给桌面浏览器的
+          (QQ 页面再渲染真正的扫码图),把它本身编码成二维码能不能直接扫通尚未证实 ——
+          所以浏览器那条路原样保留,扫得通只是省一跳。 */}
       {scanning && p === 'qq' && (
-        <div className="text-xs text-fg-muted">已在系统浏览器打开 QQ 扫码授权页,请在浏览器完成授权;完成后此处会显示结果。</div>
+        <div className="flex flex-col items-center gap-2 rounded-lg border border-border bg-surface/40 p-3">
+          <div className="text-xs text-fg-muted">用手机 QQ 扫码授权</div>
+          {bind?.qr ? (
+            <img data-testid="im-connect-qr" src={bind.qr} alt="QQ 授权二维码" className="h-44 w-44 rounded-md bg-white p-2" />
+          ) : (
+            <div className="flex h-44 w-44 items-center justify-center rounded-md border border-dashed border-border text-2xs text-fg-subtle">二维码生成中…</div>
+          )}
+          <div className="text-2xs text-fg-subtle">扫不出也没关系 —— 授权页已在浏览器打开,在那边完成同样有效</div>
+          {bind?.url && (
+            <button
+              data-testid="im-connect-open-url"
+              className="text-2xs text-accent hover:underline"
+              onClick={() => void window.wraith.openExternal(bind.url!)}
+            >重新打开授权页</button>
+          )}
+        </div>
       )}
 
       {scanning && p === 'weixin' && (
