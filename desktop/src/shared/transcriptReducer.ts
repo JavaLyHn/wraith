@@ -138,6 +138,8 @@ export type Item =
   | { type: 'im-bind'; platform: string }
   /** UI 侧代提的系统事件(如「绑定成功」);后端历史里是带前缀的 user 消息,见 shared/systemEvent。 */
   | { type: 'system-event'; text: string }
+  /** 后台任务跑完的静默药丸;点它去后台任务面板看结果。纯 UI 态,不进后端历史。 */
+  | { type: 'task-done'; taskId: string; text: string; ok: boolean }
   | PlanItem
   | PlanReviewItem
   | TeamItem
@@ -891,6 +893,18 @@ export function addUserItem(state: TranscriptState, text: string, attachments?: 
     ? { type: 'user', text, attachments }
     : { type: 'user', text }
   return { ...state, items: [...state.items, item], _messageOpen: false }
+}
+
+/**
+ * 追加一条「后台任务已完成」药丸。与 system-event 分开是因为语义不同:
+ * system-event 会作为带前缀的 user 消息回到后端历史(可能引出一轮回复),
+ * 而任务完成只是通知,不该进历史、也不该让 agent 说话 —— 它只需要可点开看结果。
+ */
+export function addTaskDoneItem(
+  state: TranscriptState, taskId: string, text: string, ok: boolean,
+): TranscriptState {
+  if (state.items.some((i) => i.type === 'task-done' && i.taskId === taskId)) return state // 幂等:轮询重入不重复插
+  return { ...state, items: [...state.items, { type: 'task-done', taskId, text, ok }], _messageOpen: false }
 }
 
 /** 追加一条系统事件气泡(封口当前 message),与 addUserItem 对称。 */

@@ -21,6 +21,7 @@ import {
   setSandbox,
   addUserItem,
   addSystemEventItem,
+  addTaskDoneItem,
   truncateAtUserOrdinal,
   markPlanReviewResolved,
   type TranscriptState,
@@ -33,6 +34,8 @@ import type { GatewayState } from '../shared/gateway'
 import { makeSystemEvent } from '../shared/systemEvent'
 import { imBoundEventText } from './lib/gatewayLabels'
 import { useSystemEventQueue } from './lib/useSystemEventQueue'
+import { useBackgroundTasks } from './lib/useBackgroundTasks'
+import { taskDoneLabel } from '../shared/taskWatch'
 import { EXAMPLE_PROMPTS, pickExamplePrompts } from './lib/welcomePrompts'
 import { lastUserMessage } from './lib/resend'
 import { resolveWorkspacePath } from './lib/paths'
@@ -85,6 +88,7 @@ type LocalAction =
   | { type: 'resetSession'; ws: string }
   | { type: 'addUserItem'; text: string; attachments?: AttachmentRef[] }
   | { type: 'addSystemEvent'; text: string }
+  | { type: 'addTaskDone'; taskId: string; text: string; ok: boolean }
   | { type: 'loadHistory'; items: Item[] }
   | { type: 'setSessionId'; sessionId: string }
   | { type: 'setSandbox'; sandbox: 'macos-seatbelt' | 'none' | 'unknown' }
@@ -124,6 +128,9 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   }
   if ('type' in action && action.type === 'addSystemEvent') {
     return addSystemEventItem(state, action.text)
+  }
+  if ('type' in action && action.type === 'addTaskDone') {
+    return addTaskDoneItem(state, action.taskId, action.text, action.ok)
   }
   if ('type' in action && action.type === 'loadHistory') {
     return loadHistory(state, action.items)
@@ -691,6 +698,16 @@ export default function App(): JSX.Element {
     enqueueSystemEvent(imBoundEventText(platform, gatewayState))
   }, [enqueueSystemEvent])
 
+  // 后台任务:队列是全局的(与终端 /task 共享),不属于任何会话 —— 这里只回答两件事:
+  // 「现在有几个在跑」(侧栏计数)和「刚才那个跑完了」(对话里的静默药丸,点开看结果)。
+  // 后端不推送任务事件,只能轮询;首轮静默播种,免得开机把历史完成项灌进对话(见 taskWatch)。
+  const listTasks = useCallback((limit: number) => window.wraith.taskList(limit), [])
+  const taskActiveCount = useBackgroundTasks(listTasks, useCallback((finished) => {
+    for (const t of finished) {
+      dispatch({ type: 'addTaskDone', taskId: t.id, text: taskDoneLabel(t), ok: t.status === 'completed' })
+    }
+  }, []))
+
   const handleEditMessage = useCallback(
     (ordinal: number, newText: string) => { void rewindAndResubmit(ordinal, newText) },
     [rewindAndResubmit],
@@ -965,6 +982,7 @@ export default function App(): JSX.Element {
           onRemoveProject={handleRemoveProject}
           onRenameProject={handleRenameProject}
           profile={appPrefs.profile}
+          taskActiveCount={taskActiveCount}
           activeNav={view === 'chat' ? null : view}
           onOpenPlugins={() => setView('plugins')}
           onOpenAutomations={() => setView('automations')}

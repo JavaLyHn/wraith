@@ -173,6 +173,8 @@ interface SidebarProps {
   onOpenRag: () => void
   onOpenSettings: () => void
   automationBadge: boolean
+  /** 后台任务活跃数(running + enqueued);0 = 不显示。全局队列,不区分会话。 */
+  taskActiveCount: number
   /** 打开命令面板(搜索)。 */
   onOpenSearch: () => void
 }
@@ -209,6 +211,7 @@ export default function Sidebar({
   onOpenRag,
   onOpenSettings,
   automationBadge,
+  taskActiveCount,
   onOpenSearch,
 }: SidebarProps): JSX.Element {
   // 进入某工具页时自动展开一次(让高亮的活动项可见);此后由用户折叠意图决定,可手动收起并保持。
@@ -309,6 +312,11 @@ export default function Sidebar({
             className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-fg/5"
           >
             <Wrench className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />工具
+            {/* 折叠态:自动化红点(需处理)与后台任务计数(仅告知)都要冒上来,否则收起就看不见了。
+                两者语义不同 —— 红 = 等你处理,accent = 正在跑,所以不合并成一个点。 */}
+            {!showTools && taskActiveCount > 0 && (
+              <span data-testid="nav-tools-task-count" className="ml-1 shrink-0 text-3xs text-accent">{taskActiveCount}</span>
+            )}
             {!showTools && automationBadge && (
               <span data-testid="nav-tools-badge" className="relative ml-1 flex h-2 w-2 shrink-0">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75 motion-reduce:hidden" />
@@ -334,6 +342,16 @@ export default function Sidebar({
                 >
                   <span className="flex items-center gap-2">
                     <item.Icon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{item.label}
+                    {item.nav === 'tasks' && taskActiveCount > 0 && (
+                      <span data-testid="nav-tasks-count"
+                        className="ml-auto flex shrink-0 items-center gap-1 text-3xs text-accent">
+                        <span className="relative flex h-1.5 w-1.5">
+                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-75 motion-reduce:hidden" />
+                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+                        </span>
+                        {taskActiveCount}
+                      </span>
+                    )}
                     {item.nav === 'automations' && automationBadge && (
                       <span data-testid="nav-automations-badge" className="relative ml-auto flex h-2 w-2 shrink-0">
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75 motion-reduce:hidden" />

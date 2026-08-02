@@ -24,7 +24,7 @@ function props(over: Partial<SidebarProps> = {}): SidebarProps {
     onNewConversation: vi.fn(), onSelectSession: vi.fn(), onToggleStar: vi.fn(),
     onRenameSession: vi.fn(), onDeleteSession: vi.fn(),
     onActivateProject: vi.fn(), onAddProject: vi.fn(), onRemoveProject: vi.fn(), onRenameProject: vi.fn(),
-    profile: { name: 'Haonan', avatar: '🦊' },
+    profile: { name: 'Haonan', avatar: '🦊' }, taskActiveCount: 0,
     activeNav: 'plugins',   // 非 null → 工具组默认展开
     ...toolHandlers(),
     onOpenSettings: vi.fn(), automationBadge: false, onOpenSearch: vi.fn(),
