@@ -66,12 +66,14 @@ export default function ProvidersPanel({ onBack, onSaved }: { onBack: () => void
       else setTest({ status: 'fail', msg: r.error || '连接失败' })
     } catch (err) { setTest({ status: 'fail', msg: (err as Error).message }) }
   }
+  // remove / setDefault 同样会改变「当前有没有可用模型」,一并回报 ——
+  // 否则外层那条引导条会停在旧判断上。
   const remove = async (id: string): Promise<void> => {
-    try { await window.wraith.removeProvider(id); setEditing(null); void refresh() }
+    try { await window.wraith.removeProvider(id); setEditing(null); void refresh(); onSaved?.() }
     catch (err) { setError((err as Error).message) }
   }
   const setDefault = async (id: string): Promise<void> => {
-    try { await window.wraith.setDefaultProvider(id); void refresh() }
+    try { await window.wraith.setDefaultProvider(id); void refresh(); onSaved?.() }
     catch (err) { setError((err as Error).message) }
   }
 

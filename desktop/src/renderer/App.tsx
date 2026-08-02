@@ -54,7 +54,7 @@ import SubmitErrorBanner from './components/SubmitErrorBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import TaskDonePill from './components/TaskDonePill'
 import NoModelNotice from './components/NoModelNotice'
-import { needsModelSetup } from './lib/modelReady'
+import { needsModelSetup, showNoModelNotice } from './lib/modelReady'
 import Sidebar from './components/Sidebar'
 import SidebarDock from './components/SidebarDock'
 import TopBar from './components/TopBar'
@@ -911,6 +911,12 @@ export default function App(): JSX.Element {
     ? state.items.filter((i): i is Extract<Item, { type: 'task-done' }> => i.type === 'task-done')
     : []
 
+  // 引导条不能只看 noModel 那个**快照** —— 它只在 initialize 和「存完 provider 回查」
+  // 两处采样。重启后从 config 读到模型、在别处设默认、切模型、后端热装,都不经过采样点,
+  // 快照就一直停在「没有模型」,于是出现「composer 上明明显示着模型,条子还挂在上面」。
+  // 与活信号 state.model 取交集:任何一处拿到了模型,条子立刻消失。
+  const showNoModel = showNoModelNotice(noModel, state.model)
+
   // 折叠态下导航目标变化(切会话/切视图)→ 自动收浮层
   useEffect(() => {
     if (sidebarCollapsed) setSidebarPeek(false)
@@ -1181,9 +1187,9 @@ export default function App(): JSX.Element {
                     <WelcomeEmptyState
                       categories={PROMPT_CATEGORIES}
                       onPickExample={(t) => { setInputValue(t); setComposerFocus(n => n + 1) }}
-                      notices={(noModel || taskDoneNotices.length > 0) ? (
+                      notices={(showNoModel || taskDoneNotices.length > 0) ? (
                         <>
-                          {noModel && <NoModelNotice onConfigure={() => setView('providers')} />}
+                          {showNoModel && <NoModelNotice onConfigure={() => setView('providers')} />}
                           {taskDoneNotices.map((n) => (
                             <TaskDonePill key={n.taskId} text={n.text} ok={n.ok} onOpen={() => setView('tasks')} />
                           ))}

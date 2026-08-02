@@ -30,3 +30,18 @@ export function needsModelSetup(s: ModelReadySignals): boolean {
   // modelConfigured 缺失(旧后端):只有在明确拿到空 provider 时才敢判定
   return s.currentProvider !== undefined && s.currentProvider.trim() === ''
 }
+
+/**
+ * 引导条最终显不显示。
+ *
+ * `needsModelSetup` 的结果是**某一刻的快照**（initialize 时、或存完 provider 回查时）。
+ * 只靠它会漂：重启后从 config 读到模型、在别处「设默认」、切模型、后端热装 ——
+ * 这些路径都不经过那两个采样点，快照就一直停在「没有模型」，
+ * 于是出现「模型明明在 composer 上显示着，引导条还挂在上面」。
+ *
+ * 所以再与一个**活信号**取交集：当前是否真的有模型名。
+ * 两个都说没有才显示 —— 任何一处拿到了模型，条子立刻消失。
+ */
+export function showNoModelNotice(backendSaysNoModel: boolean, currentModel: string | undefined): boolean {
+  return backendSaysNoModel && (currentModel ?? '').trim() === ''
+}

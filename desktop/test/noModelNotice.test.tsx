@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import NoModelNotice from '../src/renderer/components/NoModelNotice'
 import WelcomeEmptyState from '../src/renderer/components/WelcomeEmptyState'
-import { needsModelSetup } from '../src/renderer/lib/modelReady'
+import { needsModelSetup, showNoModelNotice } from '../src/renderer/lib/modelReady'
 
 afterEach(cleanup)
 
@@ -37,6 +37,31 @@ describe('needsModelSetup', () => {
     // 误报一次,用户就再也不信这条提示了。宁可不提示,也不要对一个其实配好了的
     // 旧版本天天弹「你还没配模型」。
     expect(needsModelSetup({})).toBe(false)
+  })
+})
+
+/**
+ * 用户实测撞到的:模型明明已经配上(composer 显示 claude-haiku-4-5-...),
+ * 引导条还挂在首页。
+ *
+ * 根因是 `needsModelSetup` 的结果是**快照** —— 只在 initialize 与「存完 provider 回查」
+ * 两处采样。重启后从 config 读到模型、在别处设默认、切模型、后端热装,都不经过采样点,
+ * 快照就一直停在「没有模型」。所以最终显示还要与活信号 state.model 取交集。
+ */
+describe('showNoModelNotice：与活信号取交集', () => {
+  it('快照说没有 + 确实没有模型名 → 显示', () => {
+    expect(showNoModelNotice(true, '')).toBe(true)
+    expect(showNoModelNotice(true, undefined)).toBe(true)
+    expect(showNoModelNotice(true, '   ')).toBe(true)
+  })
+
+  it('**快照说没有,但已经有模型名 → 不显示**(就是用户撞到的那一幕)', () => {
+    expect(showNoModelNotice(true, 'claude-haiku-4-5-20251001')).toBe(false)
+  })
+
+  it('快照说有 → 一律不显示', () => {
+    expect(showNoModelNotice(false, '')).toBe(false)
+    expect(showNoModelNotice(false, 'gpt-5.4')).toBe(false)
   })
 })
 
