@@ -408,9 +408,8 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
     case 'approval.requested': {
       const approvalId = typeof p['approvalId'] === 'string' ? p['approvalId'] : ''
       // 后台定时任务的审批也打进这条流,但它归自动化面板的内联批准处理,不该在主会话弹
-      // 全屏阻塞模态(判据与理由见 approvalScope.ts)。认不出的形状一律照弹。
-      const evtSession = typeof p['sessionId'] === 'string' ? p['sessionId'] : ''
-      if (!shouldPopChatApproval(approvalId, evtSession, state.sessionId)) {
+      // 全屏阻塞模态(判据与理由见 approvalScope.ts —— 只看 id 形状,别加 sessionId)。
+      if (!shouldPopChatApproval(approvalId)) {
         return state
       }
       const toolName = typeof p['toolName'] === 'string' ? p['toolName'] : ''

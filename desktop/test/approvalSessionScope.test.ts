@@ -48,33 +48,36 @@ describe('approval.requested 的归属:自动化 vs 交互式', () => {
   })
 })
 
-describe('approval.requested 的会话归属(次级判据)', () => {
-  it('同会话:照常置 pendingApproval(交互式审批不能被误杀)', () => {
-    const s0 = setSessionId(initialState, 'sess-chat')
-    const s = reduce(s0, approval({ sessionId: 'sess-chat' }))
-    expect(s.pendingApproval?.approvalId).toBe('ap1')
+/**
+ * 回归钉子 —— 我第一版加了 sessionId 次级判据(「两边都有且不同才忽略」,自以为很保守),
+ * 当场把交互式审批打死了:
+ *   AppServer.sessionId 在首次 turn.completed 换成持久化 id,此后 turn.started 带新 id;
+ *   而 EventStreamRenderer.sessionId 是 private final,approval.requested 里一直是旧的 sess_…。
+ * 从第二轮起两者必然不等 → 审批被吞 → 弹窗不出现 → 工具卡停在 running、轮次永远等下去。
+ * 症状极隐蔽:第一轮完全正常,第二轮才挂。
+ */
+describe('sessionId 不得参与判定(交互式审批不能被吞)', () => {
+  it('sessionId 与本地记录不一致时,仍然要弹', () => {
+    const s0 = setSessionId(initialState, '20260803T091500-abc')   // 首轮后换成的持久化 id
+    const s = reduce(s0, approval({ approvalId: 'appr_2', sessionId: 'sess_9f3c' })) // 渲染器里定死的旧 id
+    expect(s.pendingApproval?.approvalId).toBe('appr_2')
   })
 
-  it('别的会话(后台自动化 run):不弹主会话模态', () => {
+  it('同会话照常弹', () => {
     const s0 = setSessionId(initialState, 'sess-chat')
-    const s = reduce(s0, approval({ sessionId: 'auto-run-7', approvalId: 'task-1#1' }))
-    expect(s.pendingApproval).toBeNull()
+    expect(reduce(s0, approval({ sessionId: 'sess-chat' })).pendingApproval?.approvalId).toBe('ap1')
   })
 
-  it('别的会话不改动其它任何状态(纯忽略,不是清空)', () => {
+  it('自动化 id 即便 sessionId 与本地一致也不弹(形状说了算)', () => {
+    const s0 = setSessionId(initialState, 'sess-chat')
+    expect(reduce(s0, approval({ approvalId: 'run_3#1', sessionId: 'sess-chat' })).pendingApproval).toBeNull()
+  })
+
+  it('后台那条不该顶掉已有的待审批(纯忽略,不是清空)', () => {
     let s = setSessionId(initialState, 'sess-chat')
-    s = reduce(s, approval({ sessionId: 'sess-chat' }))       // 先有一个本会话的待审批
+    s = reduce(s, approval({ approvalId: 'appr_1' }))
     const before = s.pendingApproval
-    s = reduce(s, approval({ sessionId: 'auto-run-7', approvalId: 'task-1#1' }))
-    expect(s.pendingApproval).toBe(before)                     // 不该被后台那条顶掉
-  })
-
-  it('事件不带 sessionId:照旧弹(后端某些路径可能不带,宁可多弹不可漏)', () => {
-    const s0 = setSessionId(initialState, 'sess-chat')
-    expect(reduce(s0, approval()).pendingApproval?.approvalId).toBe('ap1')
-  })
-
-  it('本地还没落桩 sessionId(新会话首轮前):照旧弹', () => {
-    expect(reduce(initialState, approval({ sessionId: 'whatever' })).pendingApproval?.approvalId).toBe('ap1')
+    s = reduce(s, approval({ approvalId: 'run_3#1' }))
+    expect(s.pendingApproval).toBe(before)
   })
 })

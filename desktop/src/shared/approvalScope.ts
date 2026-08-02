@@ -19,17 +19,18 @@ export function isAutomationApprovalId(approvalId: string): boolean {
 }
 
 /**
- * @param approvalId        事件里的 approvalId
- * @param eventSessionId    事件里的 sessionId(可能没有)
- * @param currentSessionId  本地记录的当前会话(新会话首轮前为空)
+ * ⚠ **绝对不要在这里加 sessionId 判据**,哪怕只当次级、哪怕写成"两边都有才生效"。
+ *
+ * 试过一次,当场把交互式审批打死了:
+ *   - AppServer.sessionId 在第一次 turn.completed 时被换成持久化 id(sess_… → 20260703T…),
+ *     此后 turn.started 带的是新 id;
+ *   - 但 EventStreamRenderer.sessionId 是 `private final`,构造时定死永不更新,
+ *     approval.requested 里带的一直是那个旧的 sess_…。
+ * 于是从**第二轮**起两者必然不等 → 审批被吞 → 弹窗不出现 → 工具卡停在 running、轮次永远等下去。
+ * (notificationFilter.ts 里记了一整段的就是这个雷,MULTI_SESSION_FILTER_ENABLED 至今为 false。)
+ *
+ * 只用 id 形状。它不依赖任何会话状态,也就踩不到换号问题。
  */
-export function shouldPopChatApproval(
-  approvalId: string,
-  eventSessionId: string,
-  currentSessionId: string,
-): boolean {
-  if (isAutomationApprovalId(approvalId)) return false
-  // 次级判据:两边都有会话 id 且不同 → 不是这个会话的事。任一为空就放行(fail-open)。
-  if (eventSessionId && currentSessionId && eventSessionId !== currentSessionId) return false
-  return true
+export function shouldPopChatApproval(approvalId: string): boolean {
+  return !isAutomationApprovalId(approvalId)
 }
