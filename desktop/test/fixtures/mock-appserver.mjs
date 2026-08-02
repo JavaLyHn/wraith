@@ -65,6 +65,9 @@ let modelState = {
   default: 'openai',
 }
 
+// 沙箱联网位:默认断网(与真后端 buildAppServerSandbox 一致),sandbox.set 之后要记住。
+let mockSandboxNet = process.env['MOCK_SANDBOX_NET'] === '1'
+
 const mockMcp = (() => {
   try { return process.env['MOCK_MCP'] ? JSON.parse(process.env['MOCK_MCP']) : null } catch { return null }
 })()
@@ -246,6 +249,23 @@ async function handleRequest(req) {
   debugLog('RECV', method)
 
   switch (method) {
+    // 顶栏那枚盾现在同时看「种类」和「联网位」,而联网位只有 sandbox.get 才给得出来
+    // (initialize.capabilities 里没有)。真后端把 get/set 收敛到同一个回包函数,
+    // 这里照做:少一处会分叉的地方。不实现的话前端走的是 -32601 的 catch 分支,
+    // e2e 就永远测不到真实路径。
+    case 'sandbox.get':
+    case 'sandbox.set': {
+      if (method === 'sandbox.set') mockSandboxNet = params?.networkAllowed === true
+      const kind = process.env['MOCK_SANDBOX'] || 'macos-seatbelt'
+      reply(id, {
+        available: kind !== 'none',
+        kind,
+        networkAllowed: mockSandboxNet,
+        degradedReason: kind === 'none' ? '当前平台不支持 Seatbelt 沙箱，命令未沙箱化裸跑' : null
+      })
+      break
+    }
+
     case 'initialize': {
       reply(id, {
         serverInfo: 'mock',

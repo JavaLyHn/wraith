@@ -9,7 +9,7 @@ export function shouldShowWindowControls(platform: string): boolean {
 }
 
 export type SandboxState = 'macos-seatbelt' | 'windows-appcontainer' | 'none' | 'unknown'
-export type SandboxChipKind = 'ok' | 'off' | 'unsupported' | 'unknown'
+export type SandboxChipKind = 'ok' | 'ok-net' | 'off' | 'unsupported' | 'unknown'
 
 /**
  * 顶栏沙箱盾的呈现口径(纯函数)。
@@ -30,8 +30,17 @@ export type SandboxChipKind = 'ok' | 'off' | 'unsupported' | 'unknown'
  *
  * 分工:**颜色只表达紧急度,图标表达状态**。所以 unsupported 与 ok 同为 muted 墨,
  * 靠图标(plain Shield vs ShieldCheck)和 tooltip 区分,只有真异常才配 danger。
+ *
+ * **`networkAllowed` 为什么必须进来**:面板里用户唯一能拨的沙箱控件就是
+ * 「命令沙箱联网」,而它<b>不改 kind</b>。此前这个函数只吃 kind,于是拨开关
+ * 顶栏毫无反应 —— 用户报的「不管有没有开启沙箱,护盾始终不变」就是这件事,
+ * 跟 Windows 无关,只是他在 Windows 上先撞上。
+ *
+ * 联网放行是**弱化**不是**故障**:文件系统仍然被关着,只是网络出口开了。
+ * 所以给 warn 不给 danger,给半盾不给警告盾 —— 把它画成红色等同于说
+ * 「你没有沙箱」,那是假话;画成和全关一样又等于说「拨了没用」,也是假话。
  */
-export function sandboxChipView(sandbox: SandboxState, platform: string): {
+export function sandboxChipView(sandbox: SandboxState, platform: string, networkAllowed = false): {
   kind: SandboxChipKind
   /** 无障碍名 + tooltip 文案。「未启用」三个字是异常态的判定词,别改。 */
   label: string
@@ -41,19 +50,9 @@ export function sandboxChipView(sandbox: SandboxState, platform: string): {
 } {
   switch (sandbox) {
     case 'macos-seatbelt':
-      return {
-        kind: 'ok',
-        label: '沙箱: Seatbelt',
-        title: '命令在 Seatbelt 沙箱内执行 · 点击查看安全设置',
-        tone: 'text-fg-muted hover:text-fg',
-      }
+      return sandboxed('Seatbelt', networkAllowed)
     case 'windows-appcontainer':
-      return {
-        kind: 'ok',
-        label: '沙箱: AppContainer',
-        title: '命令在 AppContainer 沙箱内执行 · 点击查看安全设置',
-        tone: 'text-fg-muted hover:text-fg',
-      }
+      return sandboxed('AppContainer', networkAllowed)
     case 'none':
       // mac 与 Windows 都**有**沙箱实现,回 none 意味着它本该在却没起来 —— 可行动,该红。
       // Linux 没有对应实现,红盾常亮属于告警疲劳,而且是在说假话(暗示有一处可修的错配)。
@@ -78,4 +77,27 @@ export function sandboxChipView(sandbox: SandboxState, platform: string): {
         tone: 'text-fg-subtle hover:text-fg',
       }
   }
+}
+
+/** 有沙箱的两态:全关着 vs 放行了网络。文案里点名具体沙箱,免得「有沙箱」听起来像句空话。 */
+function sandboxed(name: string, networkAllowed: boolean): {
+  kind: SandboxChipKind
+  label: string
+  title: string
+  tone: string
+} {
+  return networkAllowed
+    ? {
+      kind: 'ok-net',
+      label: `沙箱: ${name} · 已放行网络`,
+      title: `命令在 ${name} 沙箱内执行,但已放行网络出口`
+        + ' · 文件系统仍限制在工作区内 · 点击查看安全设置',
+      tone: 'text-warn hover:text-warn',
+    }
+    : {
+      kind: 'ok',
+      label: `沙箱: ${name} · 已断网`,
+      title: `命令在 ${name} 沙箱内执行,网络出口已关闭 · 点击查看安全设置`,
+      tone: 'text-fg-muted hover:text-fg',
+    }
 }

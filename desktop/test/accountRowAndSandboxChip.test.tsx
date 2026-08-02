@@ -114,8 +114,10 @@ describe('侧栏账户行', () => {
 })
 
 describe('顶栏沙箱盾', () => {
+  // 标签后来长出了「· 已断网 / · 已放行网络」的后缀:盾此前只看 kind,
+  // 于是用户拨面板里唯一那个沙箱开关(联网)时它一动不动。详见 sandboxShieldLive.test.tsx。
   it('三种状态各有自己的无障碍名,「未启用」是异常态的判定词', () => {
-    expect(sandboxChipView('macos-seatbelt', 'darwin').label).toBe('沙箱: Seatbelt')
+    expect(sandboxChipView('macos-seatbelt', 'darwin').label).toBe('沙箱: Seatbelt · 已断网')
     expect(sandboxChipView('none', 'darwin').label).toBe('沙箱未启用')
     expect(sandboxChipView('unknown', 'darwin').label).toBe('沙箱状态未知')
   })
@@ -181,7 +183,7 @@ describe('沙箱盾在各平台', () => {
   it('win32 + appcontainer:正常态,浅墨不喊', () => {
     const v = sandboxChipView('windows-appcontainer', 'win32')
     expect(v.kind).toBe('ok')
-    expect(v.label).toBe('沙箱: AppContainer')
+    expect(v.label).toBe('沙箱: AppContainer · 已断网')
     expect(v.tone).not.toContain('danger')
   })
 
@@ -218,7 +220,7 @@ describe('沙箱盾在各平台', () => {
     stubWindowControls()
     render(<TopBar {...topBarProps} platform="win32" sandbox="windows-appcontainer" />)
     const badge = screen.getByTestId('sandbox-badge')
-    expect(badge.getAttribute('aria-label')).toBe('沙箱: AppContainer')
+    expect(badge.getAttribute('aria-label')).toBe('沙箱: AppContainer · 已断网')
     expect(badge.className).not.toContain('danger')
   })
 

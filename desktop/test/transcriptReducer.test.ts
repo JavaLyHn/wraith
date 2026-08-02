@@ -351,7 +351,10 @@ describe('phase-B state additions', () => {
   })
   it('setSessionId / setSandbox', () => {
     expect(setSessionId(initialState, 'abc').sessionId).toBe('abc')
-    expect(setSandbox(initialState, 'none').sandbox).toBe('none')
+    expect(setSandbox(initialState, 'none', false).sandbox).toBe('none')
+    // 联网位是第三个必传参:给默认值的话,initialize 那条播种路径会在后端其实
+    // 开着网络时悄悄写成 false —— 盾报「已断网」而命令正在联网跑。
+    expect(setSandbox(initialState, 'macos-seatbelt', true).sandboxNet).toBe(true)
   })
   it('addUserItem appends a user item', () => {
     const s = addUserItem(initialState, 'hello')

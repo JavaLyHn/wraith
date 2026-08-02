@@ -1,6 +1,6 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
-import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire } from '../shared/types'
+import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire } from '../shared/types'
 import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
 import type { EditorApp } from '../shared/editors'
 import type { McpFormValue } from './components/McpServerForm'
@@ -94,7 +94,7 @@ type LocalAction =
   | { type: 'addTaskDone'; taskId: string; text: string; ok: boolean }
   | { type: 'loadHistory'; items: Item[] }
   | { type: 'setSessionId'; sessionId: string }
-  | { type: 'setSandbox'; sandbox: SandboxKindWire }
+  | { type: 'setSandbox'; sandbox: SandboxKindWire; networkAllowed: boolean }
   | { type: 'truncateAtUser'; ordinal: number }
   | { type: 'markPlanReviewResolved'; reviewId: string }
 
@@ -142,7 +142,7 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
     return setSessionId(state, action.sessionId)
   }
   if ('type' in action && action.type === 'setSandbox') {
-    return setSandbox(state, action.sandbox)
+    return setSandbox(state, action.sandbox, action.networkAllowed)
   }
   if ('type' in action && action.type === 'truncateAtUser') {
     return truncateAtUserOrdinal(state, action.ordinal)
@@ -413,6 +413,25 @@ export default function App(): JSX.Element {
     if (pv && pv.kind === 'session' && pv.sessionId === id) setPreview(null)
   }, [fetchSessions, state.sessionId, handleNewConversation])
 
+  // ── 沙箱状态:App 是唯一真相源 ────────────────────────────────────────────
+  // 此前顶栏那枚盾只在 initialize 时被写过一次,面板里 sandbox.set 的结果只落在
+  // PolicyPanel 的局部 state —— 用户拨了开关,盾纹丝不动。把状态提到这里,
+  // 面板变成一个「上报 + 展示」的哑组件,两边就不可能再分叉。
+  const applySandbox = useCallback((s: SandboxStateWire | null | undefined): void => {
+    if (!s) return
+    dispatch({
+      type: 'setSandbox',
+      sandbox: normalizeSandbox(s.kind),
+      networkAllowed: s.networkAllowed === true,
+    })
+  }, [])
+
+  // sandbox.get 挂在 SessionRunner 上,会话建立前一律 "no session" —— 只在 startSession 之后调。
+  // 失败时**保留现有值**:把已知状态打回 unknown 等于用灰盾盖掉真相。
+  const refreshSandbox = useCallback(async (): Promise<void> => {
+    try { applySandbox(await window.wraith.sandboxGet()) } catch { /* 见上 */ }
+  }, [applySandbox])
+
   // ── startup flow (runs once) ───────────────────────────────────────────────
   useEffect(() => {
     if (startedRef.current) return
@@ -427,7 +446,12 @@ export default function App(): JSX.Element {
         if (initObj.model) {
           dispatch({ type: 'setModel', model: initObj.model })
         }
-        dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(initObj.capabilities?.sandbox) })
+        // 先用 initialize 播种种类(免得盾先闪一下「未知」);联网位要等会话起来后问 sandbox.get。
+        dispatch({
+          type: 'setSandbox',
+          sandbox: normalizeSandbox(initObj.capabilities?.sandbox),
+          networkAllowed: false,
+        })
         // 全新装机:后端以「无模型」状态起来了(能配置、发不出对话)。这个状态在界面上
         // 必须有出口 —— 否则用户只看到一个打字没反应的空壳,那句 `未找到可用 API Key`
         // 只在控制台里,他看不到。
@@ -438,6 +462,7 @@ export default function App(): JSX.Element {
           dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
           dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
         } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
+        void refreshSandbox()
         void fetchSessions()
         void fetchProjects()
         void fetchMcp()
@@ -446,7 +471,7 @@ export default function App(): JSX.Element {
         console.error('[wraith] startup error:', err)
       }
     })()
-  }, [fetchSessions, fetchProjects, fetchMcp, fetchMcpResources])
+  }, [fetchSessions, fetchProjects, fetchMcp, fetchMcpResources, refreshSandbox])
 
   useEffect(() => {
     if (!appPrefs.update.autoCheck) return
@@ -471,8 +496,9 @@ export default function App(): JSX.Element {
         const ws = state.workspace || null
         const init = await window.wraith.initialize(ws)
         const sb = (init as { capabilities?: { sandbox?: string } }).capabilities?.sandbox
-        dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(sb) })
+        dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(sb), networkAllowed: false })
         await window.wraith.startSession(ws)
+        void refreshSandbox()   // 重连后后端是全新进程,联网位回到默认值,必须重新问
         if (activeId) {
           const { messages, model, cards } = await window.wraith.resumeSession(activeId)
           dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
@@ -490,7 +516,7 @@ export default function App(): JSX.Element {
         console.error('[wraith] reconnect error:', err)
       }
     })()
-  }, [state.connection, state.workspace, fetchSessions])
+  }, [state.connection, state.workspace, fetchSessions, refreshSandbox])
 
   // ── refresh session list when a turn completes ────────────
   const prevTurnRef = useRef(state.turn)
@@ -986,6 +1012,7 @@ export default function App(): JSX.Element {
         rightDockOpen={rightDockOpen}
         onToggleRightDock={() => setRightDockOpen(v => !v)}
         sandbox={state.sandbox}
+        sandboxNet={state.sandboxNet}
         onOpenPolicy={() => setView('policy')}
       />
       <div className="flex min-h-0 flex-1 overflow-hidden">
@@ -1099,7 +1126,7 @@ export default function App(): JSX.Element {
         ) : view === 'tasks' ? (
           <TaskPanel onBack={() => setView('chat')} />
         ) : view === 'policy' ? (
-          <PolicyPanel onBack={() => setView('chat')} />
+          <PolicyPanel onBack={() => setView('chat')} onSandboxChange={applySandbox} />
         ) : view === 'browser' ? (
           <BrowserPanel onBack={() => setView('chat')} />
         ) : view === 'rag' ? (

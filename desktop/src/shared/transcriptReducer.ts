@@ -166,8 +166,16 @@ export interface TranscriptState {
   workspace: string
   /** 当前活跃会话 id(turn.completed / resume 更新)。 */
   sessionId: string
-  /** 沙箱状态(来自 initialize.capabilities.sandbox)。 */
+  /** 沙箱状态(initialize.capabilities.sandbox 播种,之后由 sandbox.get/set 持续刷新)。 */
   sandbox: SandboxKindWire
+  /**
+   * 沙箱是否放行了网络出口。
+   *
+   * <p>跟 {@link TranscriptState.sandbox} 分开存是因为它们的来源与变化频率都不同:
+   * kind 由环境决定(基本不变),联网位由用户在安全面板上现拨。顶栏那枚盾要同时看这两样 ——
+   * 只看 kind 的话,用户拨了唯一能拨的开关却什么也没发生。
+   */
+  sandboxNet: boolean
   /** token 状态(status 事件,resetSession 清空)。 */
   status: StatusData | null
   /** 上下文治理可观测(Phase C;watermark/compaction 事件 + snapshot 合成事件三源合并,resetSession 显式清零)。 */
@@ -191,6 +199,7 @@ export const initialState: TranscriptState = {
   workspace: '',
   sessionId: '',
   sandbox: 'unknown',
+  sandboxNet: false,
   status: null,
   context: CONTEXT_INITIAL,
   _messageOpen: false,
@@ -830,9 +839,17 @@ export function setSessionId(state: TranscriptState, sessionId: string): Transcr
   return { ...state, sessionId }
 }
 
-/** 设置沙箱状态。 */
-export function setSandbox(state: TranscriptState, sandbox: SandboxKindWire): TranscriptState {
-  return { ...state, sandbox }
+/**
+ * 设置沙箱状态(种类 + 联网位)。
+ *
+ * <p>联网位显式必传:给它一个默认值的话,`initialize` 那条播种路径会在
+ * 后端其实开着 `-Dwraith.sandbox.network=on` 时悄悄写成 false ——
+ * 顶栏于是理直气壮地报「已断网」,而命令正在联网跑。宁可让调用点去问一次。
+ */
+export function setSandbox(
+  state: TranscriptState, sandbox: SandboxKindWire, networkAllowed: boolean,
+): TranscriptState {
+  return { ...state, sandbox, sandboxNet: networkAllowed }
 }
 
 /**

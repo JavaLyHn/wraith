@@ -61,7 +61,18 @@ function AuditArgs({ args }: { args: string }): JSX.Element | null {
   )
 }
 
-export default function PolicyPanel({ onBack }: { onBack: () => void }): JSX.Element {
+export default function PolicyPanel({ onBack, onSandboxChange }: {
+  onBack: () => void
+  /**
+   * 把最新沙箱状态交回 App。
+   *
+   * <p>面板不再是沙箱状态的第二个主人 —— 顶栏那枚盾读的是 App 的 state,
+   * 面板自己 setState 的话两边必然分叉(而且分叉的那一半正好是用户看得见的那半)。
+   * 加载完与拨完开关都要上报:后者是用户的动作,前者能顺带修正开机后环境变化
+   * (比如把 PowerShell 装回来了)造成的陈旧种类。
+   */
+  onSandboxChange?: (s: SandboxState) => void
+}): JSX.Element {
   const [policy, setPolicy] = useState<PolicyStatusView | null>(null)
   const [entries, setEntries] = useState<AuditEntryView[]>([])
   const [sandbox, setSandbox] = useState<SandboxState | null>(null)
@@ -74,15 +85,19 @@ export default function PolicyPanel({ onBack }: { onBack: () => void }): JSX.Ele
     try {
       const [p, a, s] = await Promise.all([window.wraith.policyStatus(), window.wraith.auditList(n), window.wraith.sandboxGet()])
       setPolicy(p); setEntries(a.entries); setSandbox(s); setError(null)
+      onSandboxChange?.(s)
     } catch (err) { setError((err as Error).message) }
     finally { setBusy(false) }
-  }, [])
+  }, [onSandboxChange])
 
   const toggleSandbox = useCallback(async (): Promise<void> => {
     if (!sandbox) return
-    try { setSandbox(await window.wraith.sandboxSet(!sandbox.networkAllowed)) }
-    catch (err) { setError((err as Error).message) }
-  }, [sandbox])
+    try {
+      const next = await window.wraith.sandboxSet(!sandbox.networkAllowed)
+      setSandbox(next)
+      onSandboxChange?.(next)
+    } catch (err) { setError((err as Error).message) }
+  }, [sandbox, onSandboxChange])
 
   useEffect(() => { void load(limit) }, [load, limit])
 
