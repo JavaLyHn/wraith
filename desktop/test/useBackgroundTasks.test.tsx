@@ -10,11 +10,14 @@ function task(id: string, status: string): DurableTaskView {
   return { id, status, prompt: 'p-' + id, createdAtMs: 0, durationMs: 1000 }
 }
 
+/** 轮询间隔压到 10ms —— 否则每条用例都要真等 15s,单文件就把整套从 10s 拖到 54s。 */
+const FAST = (): number => 10
+
 function Probe({ list, onFinished }: {
-  list: (n: number) => Promise<{ tasks: DurableTaskView[] }>
+  list: (n: number) => Promise<{ tasks?: DurableTaskView[]; enabled?: boolean }>
   onFinished: (t: DurableTaskView[]) => void
 }): JSX.Element {
-  const n = useBackgroundTasks(list, onFinished)
+  const n = useBackgroundTasks(list, onFinished, FAST)
   return <span data-testid="n">{n}</span>
 }
 
@@ -35,11 +38,11 @@ describe('useBackgroundTasks', () => {
 
     render(<Probe list={list} onFinished={onFinished} />)
 
-    await waitFor(() => expect(list.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 20_000 })
+    await waitFor(() => expect(list.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 2_000 })
     // 第二次(成功)那次才是播种 —— 历史完成项一条都不该播
     await new Promise((r) => setTimeout(r, 50))
     expect(onFinished).not.toHaveBeenCalled()
-  }, 30_000)
+  })
 
   it('enabled:false(会话未建立)与失败同等对待,同样不播种', async () => {
     // main 把后端的 "no session" 翻译成 enabled:false 以免每次轮询刷一屏错误栈;
@@ -54,10 +57,10 @@ describe('useBackgroundTasks', () => {
 
     render(<Probe list={list} onFinished={onFinished} />)
 
-    await waitFor(() => expect(list.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 20_000 })
+    await waitFor(() => expect(list.mock.calls.length).toBeGreaterThanOrEqual(2), { timeout: 2_000 })
     await new Promise((r) => setTimeout(r, 50))
     expect(onFinished).not.toHaveBeenCalled()
-  }, 30_000)
+  })
 
   it('播种之后新完成的任务才回调', async () => {
     const onFinished = vi.fn()
@@ -70,8 +73,8 @@ describe('useBackgroundTasks', () => {
 
     render(<Probe list={list} onFinished={onFinished} />)
 
-    await waitFor(() => expect(onFinished).toHaveBeenCalled(), { timeout: 25_000 })
+    await waitFor(() => expect(onFinished).toHaveBeenCalled(), { timeout: 2_000 })
     const reported = onFinished.mock.calls[0]![0] as DurableTaskView[]
     expect(reported.map((t) => t.id)).toEqual(['fresh'])
-  }, 30_000)
+  })
 })

@@ -15,6 +15,8 @@ import { initialWatchState, pollIntervalMs, stepWatch, type WatchState } from '.
 export function useBackgroundTasks(
   list: (limit: number) => Promise<{ tasks?: DurableTaskView[]; enabled?: boolean }>,
   onFinished: (tasks: DurableTaskView[]) => void,
+  /** 轮询间隔(毫秒),按活跃数决定。仅测试覆写 —— 否则每条用例都要真等 15s。 */
+  intervalFor: (active: number) => number = pollIntervalMs,
 ): number {
   const [active, setActive] = useState(0)
   const watchRef = useRef<WatchState>(initialWatchState())
@@ -40,19 +42,19 @@ export function useBackgroundTasks(
         // 拉取失败**不能**当成"目前没有任务":那会把 seeded 置位并把 settled 播种成空,
         // 下一次成功拉取时所有历史完成项都成了"新完成",一次性灌满对话。
         // 什么都不改,等下一拍重试(此时 active 也维持原值,不闪回 0)。
-        timer = setTimeout(() => void tick(), pollIntervalMs(0))
+        timer = setTimeout(() => void tick(), intervalFor(0))
         return
       }
       const step = stepWatch(watchRef.current, tasks)
       watchRef.current = step.next
       setActive(step.active)
       if (step.finished.length > 0) finishedRef.current(step.finished)
-      timer = setTimeout(() => void tick(), pollIntervalMs(step.active))
+      timer = setTimeout(() => void tick(), intervalFor(step.active))
     }
 
     void tick()
     return () => { stopped = true; if (timer) clearTimeout(timer) }
-  }, [list])
+  }, [list, intervalFor])
 
   return active
 }
