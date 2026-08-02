@@ -12,6 +12,7 @@
  */
 
 import type { BackendEvent, StatusData, PlanStepView } from './types'
+import { shouldPopChatApproval } from './approvalScope'
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -406,6 +407,12 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
     // ── approval ────────────────────────────────────────────────────────────
     case 'approval.requested': {
       const approvalId = typeof p['approvalId'] === 'string' ? p['approvalId'] : ''
+      // 后台定时任务的审批也打进这条流,但它归自动化面板的内联批准处理,不该在主会话弹
+      // 全屏阻塞模态(判据与理由见 approvalScope.ts)。认不出的形状一律照弹。
+      const evtSession = typeof p['sessionId'] === 'string' ? p['sessionId'] : ''
+      if (!shouldPopChatApproval(approvalId, evtSession, state.sessionId)) {
+        return state
+      }
       const toolName = typeof p['toolName'] === 'string' ? p['toolName'] : ''
       const argsJson = typeof p['argsJson'] === 'string' ? p['argsJson'] : ''
       const dangerLevel = typeof p['dangerLevel'] === 'string' ? p['dangerLevel'] : ''
