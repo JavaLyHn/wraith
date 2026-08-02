@@ -12,7 +12,9 @@
 
 > ⚠️ 本版本未签名/未公证，下载后被 Gatekeeper 隔离会误报「已损坏，无法打开」（右键「打开」对此无效）。解决：把 `Wraith.app` 拖到 `/应用程序`，在「终端」执行 `sudo xattr -cr /Applications/Wraith.app`（会提示输入登录密码；必须加 `sudo`，因内置 JRE 含只读文件），再双击打开。
 
-**Windows**：暂未在 Releases 上架预编译安装包；在 Windows 机器上从源码构建未签名 NSIS 安装包,步骤见 [`docs/windows-dev.md`](docs/windows-dev.md)（`mvn -q clean package -DskipTests` → `cd desktop && npm install --legacy-peer-deps` → `npm run dist:win`,产物在 `desktop/release/*.exe`）。首次运行 SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」（未签名,同 macOS 的 xattr 姿态）。也可先 `npm run dev` 直接跑开发态验证。
+**Windows**：暂未在 Releases 上架预编译安装包；在 Windows 机器上从源码构建未签名 NSIS 安装包（`mvn -q clean package -DskipTests` → `cd desktop && npm install --legacy-peer-deps` → `npm run dist:win`,产物在 `desktop/release/*.exe`）。首次运行 SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」（未签名,同 macOS 的 xattr 姿态）。装好的 App **捆绑了 JRE,不需要系统装 Java**（上面那套 JDK/Maven/Node 只是出包时要的）；也可先 `npm run dev` 直接跑开发态验证。
+
+> **从装完到用起来的完整教程见 [`docs/windows-usage.md`](docs/windows-usage.md)**（配模型的三条路 / 界面导览 / 故障对照表 / 已知不可用）。[`docs/windows-dev.md`](docs/windows-dev.md) 是另一回事——它是逐条**验收清单**,给验证这个端口的人用的,不是使用说明。
 
 当前进度：已完成第 16.1 期 inline 流式 TUI 形态修正、第 17 期 `LSP 诊断注入` MVP、第 18 期 `Git Side-History 快照与回滚` MVP、第 19 期 `Prompt 分层架构` MVP、第 20 期 `异步后台任务 + Runtime API` MVP、第 21 期 `图片复制粘贴输入` MVP、第 23 期 `微信 iLink 通道` 文本 MVP、第 24 期 `IM 网关`（QQ / 飞书 / 企业微信 / 微信 + 桌面配置面板 + 定时任务投递）、第 25 期 `安全策略层`、第 26 期 `自我认知 + 聊天↔面板能力对等`（能力目录 / 一键动作卡 / 聊天内接入 IM / 三模式贯通 / 15 个面板能力工具）、长期记忆的 `自动记忆提取（候选待批）`，以及桌面 App 的 `Windows 对等`（可跑 dev / 无边框自绘窗控 / 编辑器探测 / NSIS 打包 / 桌宠点击不抢焦——**代码完成，待真机验收**）。
 
@@ -405,7 +407,7 @@ cp .env.example .env
 # 编辑 .env 文件，填入你的 API Key
 ```
 
-或者在环境变量中设置：
+或者在环境变量中设置（macOS / Linux，bash / zsh）：
 
 ```bash
 export GLM_API_KEY=your_api_key_here
@@ -421,7 +423,17 @@ export FREELLMAPI_BASE_URL=http://localhost:5173/v1
 export FREELLMAPI_MODEL=auto
 ```
 
-也可以在 Wraith CLI 内用命令写入 `~/.wraith/config.json`，不会覆盖 Kimi 配置：
+**Windows（PowerShell）**——`export` 是 bash 语法，在 PowerShell / cmd 里都不存在，照抄会失败：
+
+```powershell
+$env:GLM_API_KEY = "your_api_key_here"                                          # 仅当前会话
+[Environment]::SetEnvironmentVariable('GLM_API_KEY','your_api_key_here','User') # 永久（新进程才读得到）
+```
+
+> Windows 上 `.env` 也可以放 `%USERPROFILE%\.env`（后端按「当前工作目录 → 用户目录」两级查找）——从开始菜单启动的桌面 App 工作目录是安装目录而非仓库，仓库里的 `.env` 它看不见。
+> **桌面 App 用户更推荐直接在图形界面里配**：左侧栏「配置 → Provider 配置」填 API Key / 模型 / Base URL，可「测试连接」再保存，改完即时生效、不牵扯进程环境。完整步骤见 [`docs/windows-usage.md`](docs/windows-usage.md)。
+
+也可以在 Wraith CLI 内用命令写入 `~/.wraith/config.json`（Windows 为 `%USERPROFILE%\.wraith\config.json`），不会覆盖 Kimi 配置：
 
 ```text
 /config provider freellmapi --base-url http://localhost:5173/v1 --api-key <key> --model auto
