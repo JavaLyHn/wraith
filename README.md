@@ -311,7 +311,13 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 - `write_file` 单文件 5MB 上限；`execute_command` 60 秒超时（超时连同**子孙进程整棵杀掉**）
 - CLI 命令：`/policy` 查看安全策略状态、`/audit [N]` 看最近 N 条审计、`wraith sandbox doctor` 体检沙箱
 
-**关于「沙箱」这个词的边界**：Wraith 用的是**操作系统进程级沙箱**（Seatbelt / AppContainer），不是容器或 VM。生产级 Agent 沙箱是 microVM-level（Devin / Modal / Anthropic Computer Use 用 Firecracker / gVisor），那一层本项目没有、也不打算做——本地编程 Agent 一旦换进容器就拿不到用户的真实工具链，得不偿失。所以这里的定位是：**HITL 审批为主防线，进程沙箱 + 路径校验 + 命令黑名单 + 审计为纵深**，每层都假设上一层会失守，但都不声称能挡住有意的越狱。
+**关于「沙箱」这个词的边界**：Wraith 用的是**操作系统进程级沙箱**（Seatbelt / AppContainer），不是容器或 VM。
+
+多租户、跑不可信代码的场景里，业界的下限是 **microVM 级**隔离（[E2B / Fly.io 用 Firecracker，Modal 用 gVisor](https://modal.com/resources/best-code-execution-sandboxes-coding-agents)）。那一层本项目没有、也不打算做——本地编程 Agent 一旦换进容器就拿不到用户的真实工具链，得不偿失。**威胁模型不同**：本地单用户 Agent 防的是「模型误操作」，多租户平台防的是「恶意用户」，后者才需要 VM 边界。
+
+所以这里的定位是：**HITL 审批为主防线，进程沙箱 + 路径校验 + 命令黑名单 + 审计为纵深**，每层都假设上一层会失守，但都不声称能挡住有意的越狱。
+
+> **与 Claude Code 的对照**（据其[官方沙箱文档](https://code.claude.com/docs/en/sandboxing)，2026-08-02 核）：macOS 同样用 Seatbelt；Linux/WSL2 用 bubblewrap，而 Wraith 在 Linux 上**没有实现**。反过来它**明确不支持原生 Windows**（要求跑在 WSL2 里，且沙箱内跑不了 `cmd.exe` 等 Windows 二进制），Wraith 的 AppContainer 是原生方案。网络围栏两边路子不同：它是本地代理 + 域名白名单（**默认不解 TLS，官方已注明可被 domain fronting 绕过**），粒度细但有缝；Wraith 是 AppContainer 能力位（**内核级拒绝 socket**，无缝但**只有全开/全关，没有域名粒度**）。两边**默认都是 fail-open**。
 
 ### 第二十六期：自我认知 + 聊天↔面板能力对等
 

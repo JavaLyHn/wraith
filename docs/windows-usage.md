@@ -51,9 +51,16 @@
                                     配一个模型(第 2 节)
                                               ↓
                                         发第一条消息
+                                              ↓
+                              wraith sandbox doctor  ← 建议早跑(第 6.5 节)
+                              四条探针,确认沙箱真在拦
 ```
 
 只想跑起来看看 → **路线 A**。想要一个能给别人的安装包 → **路线 B**。
+
+> **为什么建议早跑 doctor**：沙箱起不来时 wraith 是 **fail-open** 的 ——
+> 命令照常执行、不会报错，只是没有围栏。也就是说**你不主动查，是不会知道的**。
+> 顶栏盾会变红，但那容易被忽略。
 
 ---
 
@@ -820,6 +827,14 @@ java -jar target\wraith-1.0-SNAPSHOT.jar
 
 > **CLI 也要切分支。** Java 内核确实跨平台，但有一处 Windows 专属修复只在这个分支上：`AtomicFileMove` 给 tmp→target 的原子改名加了有界重试（20/40/60/80ms），应对 Windows 上目标文件被杀软/索引器短暂占用时抛的 `AccessDeniedException`。**会话落盘、技能库、QQ 待发**三处都走它。停在 `main` 上，这些写入在 Windows 会偶发失败。
 >
-> Windows 上没有 mac 那种 `wraith` / `wraith -d` 短命令（那是本机 shell 包装脚本，不随仓库分发），直接 `java -jar`。
+> Windows **也有** `wraith` / `wraith -d` / `wraith-install` 短命令，装一次即可（见 §1 的 A4）。不装就直接 `java -jar`。
+
+CLI 还有几个不进对话的子命令：
+
+```powershell
+wraith sandbox doctor        # 沙箱体检(四条探针,见 §6.5)
+wraith gateway bind <平台>   # 绑定 IM 账号
+wraith app-server            # 桌面端用的 JSON-RPC 后端(一般不用手敲)
+```
 
 CLI 里可以用 `/config` 写配置、`/model` 切模型，配置同样落 `%USERPROFILE%\.wraith\config.json`，与桌面 App **共享同一份**——在哪边配好，另一边都认。
