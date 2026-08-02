@@ -1,43 +1,147 @@
 # Windows 使用教程
 
-> 这份文档从**装完之后**写起，目标是让你在 Windows 上真正用起来 wraith。
+> 从 **`git clone` 一路到能对话**的完整步骤。每步都给了**预期产出**，不对就停下看第 5 节。
 >
 > 仓库里另有两份 Windows 文档，分工不同，**别拿错**：
 >
 > | 文档 | 是什么 | 什么时候看 |
 > |---|---|---|
-> | 本文 `windows-usage.md` | **使用教程** | 你要用 wraith |
-> | [`windows-dev.md`](windows-dev.md) | 开发、打包与**逐条验收清单**（87 勾） | 你要验证这个端口有没有做对 |
-> | README「Windows 桌面对等」 | 五块平台专属改动的技术说明 | 你想知道 Windows 与 mac 差在哪 |
+> | 本文 `windows-usage.md` | **从零到跑起来 + 怎么用** | 你要用 wraith |
+> | [`windows-release.md`](windows-release.md) | 出包与发布 runbook | 你要出一个可分发的安装包 |
+> | [`windows-dev.md`](windows-dev.md) | 逐条**验收清单**（102 勾） | 你要验证这个端口有没有做对 |
 >
 > **诚实声明**：Windows 端代码已完成，但**尚未在真 Windows 机器上跑过一次**。本文按代码实际行为编写，若你遇到与本文不符的情况，那大概率是真 bug，欢迎照第 5 节的排查方向记录下来。
 
 ---
 
-## 1. 装
+## 0. 全程一眼
 
-Releases 目前**只上架了 macOS 版**。Windows 需要自己从源码出一个安装包（一次性，之后就用装好的 App）：
-
-```powershell
-# 仓库根。前置：JDK 17 / Maven / Node ≥ 18 都在 PATH
-mvn clean package -DskipTests
-cd desktop
-npm install --legacy-peer-deps      # --legacy-peer-deps 是必须的，见下
-npm run dist:win                    # 产物：desktop\release\*.exe
+```
+前置(JDK17/Maven/Node)  →  git clone  →  ⚠ 切到 feat/windows-parity-block1
+                                              │
+                        ┌─────────────────────┴─────────────────────┐
+                   路线 A 开发态                              路线 B 装包
+                   (最快跑起来)                              (要一个能分发的 exe)
+                   dev-win.ps1                               mvn package
+                   npm install                               npm install
+                   npm run dev                               npm run dist:win → 装
+                        └─────────────────────┬─────────────────────┘
+                                              ↓
+                                    配一个模型(第 2 节)
+                                              ↓
+                                        发第一条消息
 ```
 
-> `--legacy-peer-deps` 不能省：`@lobehub/icons` → `@lobehub/ui` 有 react 18 vs 19 的 peer 冲突，干净 checkout 上普通 `npm install` 会 ERESOLVE 直接失败。
+只想跑起来看看 → **路线 A**。想要一个能给别人的安装包 → **路线 B**。
 
-双击 `desktop\release\*.exe`：
+---
 
-- SmartScreen 会拦一下，报**「Windows 已保护你的电脑 / 未知发布者」** —— 因为安装包**未签名**（根治需要 Authenticode 证书）。点**「更多信息」→「仍要运行」**。
-- 向导式安装，可以改安装目录，会建**桌面快捷方式**和**开始菜单快捷方式**。
+## 1. 从零到跑起来
 
-### 装完之后不需要再装 Java
+### 1.1 前置
 
-安装包里**捆绑了 JRE**（`resources\runtime\bin\java.exe`）和后端 jar。用桌面 App 的人**不需要**系统里有 JDK —— 上面那套 JDK/Maven/Node 只是**出包**时要的。
+```powershell
+java -version    # 期望 17.x
+mvn -v           # 能输出版本
+node -v          # v18+
+git --version
+```
 
-（仅当你走开发态 `npm run dev` 时，才需要系统 `java` 在 PATH，见第 5 节。）
+四项都要在 PATH 里。缺 JDK 17 就先装 JDK 17 —— 仓库按 Java 17 编译。
+
+> 只走**路线 B 装完之后**用 App 的人不需要 Java（安装包捆绑了 JRE）。但**构建**这一步需要。
+
+### 1.2 拉代码 —— ⚠ 必须切分支
+
+```powershell
+git clone git@github.com:JavaLyHn/wraith.git
+cd wraith
+git checkout feat/windows-parity-block1
+```
+
+**这一步不能省。** Windows 的活还没合进 `main` —— `main` 上**一个 Windows 专属文件都没有**（没有自绘窗控、没有 `dev-win.ps1`、没有 NSIS 打包配置）。停在 `main` 上你能把项目构建出来，但拿到的是一个没有任何 Windows 对等的东西，而且不会有任何报错提示你走错了。
+
+确认一下：
+
+```powershell
+git branch --show-current      # 期望 feat/windows-parity-block1
+dir desktop\scripts\dev-win.ps1   # 这个文件在，就说明分支对了
+```
+
+---
+
+### 路线 A：开发态跑起来（最快）
+
+#### A1. 备后端 jar
+
+```powershell
+powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1
+```
+
+它做两件事：在仓库根跑 `mvn -q clean package -DskipTests`，然后把产物拷到 `%USERPROFILE%\.wraith\wraith.jar`（桌面 dev 态就是从这个固定位置起后端的）。
+
+- [ ] 结尾打印 `dev-win: 已安装 -> C:\Users\<你>\.wraith\wraith.jar`，并列出文件大小与时间戳
+
+> `-ExecutionPolicy Bypass` 是必须的，否则默认策略会拒绝执行未签名的 .ps1。
+> 脚本取的是 `target\wraith-*.jar` 里**最大**的那个（shade 后的可执行包，`original-*` 不匹配这个通配）。
+
+#### A2. 装前端依赖
+
+```powershell
+cd desktop
+npm install --legacy-peer-deps
+```
+
+- [ ] 装完无 ERESOLVE 报错
+
+> `--legacy-peer-deps` **不能省**：`@lobehub/icons` → `@lobehub/ui` 有 react 18 vs 19 的 peer 冲突，干净 checkout 上普通 `npm install` 会直接失败。
+
+#### A3. 起
+
+```powershell
+npm run dev
+```
+
+- [ ] 主窗出现，**无系统标题栏**，右上角是自绘的 最小/最大/关闭 三键
+- [ ] 界面不报「后端未连接」
+
+> **报后端未连接**：dev 态主进程跑的是 `spawn('java', ['-jar', '%USERPROFILE%\.wraith\wraith.jar', 'app-server'])`，走**系统 PATH** 找 `java`。GUI 应用不继承登录 shell 的 PATH —— 这是 Windows 上的经典坑。确认 `java` 在系统级 PATH 里，改完**重启终端再 `npm run dev`**。
+
+改完 Java 代码要重跑 A1（dev 态起的是 `%USERPROFILE%\.wraith\wraith.jar`，不是 `target\` 里那个）。改前端代码则热更新，不用管。
+
+**跳到第 2 节配模型。**
+
+---
+
+### 路线 B：出安装包并安装
+
+```powershell
+# 仓库根
+mvn clean package -DskipTests       # 产出 target\wraith-1.0-SNAPSHOT.jar
+cd desktop
+npm install --legacy-peer-deps
+npm run dist:win                    # 产物：desktop\release\Wraith Setup <版本>.exe
+```
+
+出包后**立刻验一件事**：
+
+```powershell
+desktop\resources\runtime\bin\java.exe -version
+```
+
+- [ ] 能跑，输出 17.x。报「不是有效的 Win32 应用程序」或文件不存在 = 打进去的是别的平台的 JRE，包是废的
+
+> 必须在 **Windows 机器**上出 Windows 包。捆绑 JRE 由宿主 `jlink` 产出、`node-pty` 是原生模块，都不能交叉。在 mac 上跑 `npm run dist:win` 会被脚本硬拦下（退出码 1）。
+
+双击 `desktop\release\Wraith Setup <版本>.exe`：
+
+- SmartScreen 拦一下，报**「Windows 已保护你的电脑 / 未知发布者」**——安装包**未签名**（根治需 Authenticode 证书）。点**「更多信息」→「仍要运行」**。
+- 向导式安装，可改安装目录，会建**桌面**和**开始菜单**快捷方式。
+- 从开始菜单启动。
+
+#### 装完之后不需要再装 Java
+
+安装包**捆绑了 JRE**（`resources\runtime\bin\java.exe`）和后端 jar。用装好的 App 的人**不需要**系统里有 JDK —— 前面那套 JDK/Maven/Node 只是**构建**时要的。也因此路线 B 装完后不会遇到路线 A 那个 PATH 坑。
 
 ---
 
@@ -164,11 +268,18 @@ mac 那种半透明磨砂侧栏在 Windows 上是**实色**，这是有意设计
 
 ## 7. 只想用命令行
 
-不装桌面 App 也能用，CLI 与桌面共用同一套 Java 内核：
+不装桌面 App 也能用，CLI 与桌面共用同一套 Java 内核。**只需要 JDK 17 + Maven**，不需要 Node：
 
 ```powershell
+git clone git@github.com:JavaLyHn/wraith.git
+cd wraith
+git checkout feat/windows-parity-block1      # 仍然要切,理由见下
 mvn clean package -DskipTests
 java -jar target\wraith-1.0-SNAPSHOT.jar
 ```
 
-CLI 里可以用 `/config` 写配置、`/model` 切模型，配置同样落 `%USERPROFILE%\.wraith\config.json`，与桌面 App **共享同一份**。
+> **CLI 也要切分支。** Java 内核确实跨平台，但有一处 Windows 专属修复只在这个分支上：`AtomicFileMove` 给 tmp→target 的原子改名加了有界重试（20/40/60/80ms），应对 Windows 上目标文件被杀软/索引器短暂占用时抛的 `AccessDeniedException`。**会话落盘、技能库、QQ 待发**三处都走它。停在 `main` 上，这些写入在 Windows 会偶发失败。
+>
+> Windows 上没有 mac 那种 `wraith` / `wraith -d` 短命令（那是本机 shell 包装脚本，不随仓库分发），直接 `java -jar`。
+
+CLI 里可以用 `/config` 写配置、`/model` 切模型，配置同样落 `%USERPROFILE%\.wraith\config.json`，与桌面 App **共享同一份**——在哪边配好，另一边都认。
