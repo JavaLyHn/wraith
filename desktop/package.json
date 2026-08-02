@@ -15,8 +15,8 @@
     "gen:icon": "node scripts/gen-icon.mjs",
     "gen:jre": "node scripts/gen-jre.mjs",
     "prepare:resources": "node scripts/prepare-resources.mjs",
-    "dist:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-vite build && npm run prepare:resources && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
-    "dist:win": "electron-vite build && npm run prepare:resources && electron-builder --win"
+    "dist:mac": "CSC_IDENTITY_AUTO_DISCOVERY=false electron-vite build && npm run prepare:resources -- --target mac && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac",
+    "dist:win": "electron-vite build && npm run prepare:resources -- --target win && electron-builder --win"
   },
   "dependencies": {
     "@lobehub/icons": "~5.10.1",

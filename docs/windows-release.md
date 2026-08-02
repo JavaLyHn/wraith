@@ -15,7 +15,16 @@
 
 另外 mac 上出 NSIS 还需要 wine。
 
-> ⚠️ **已知 footgun（尚未修）**：`scripts/prepare-resources.mjs` 用 **宿主** 平台判断已有 JRE 是否可用（`existsSync(.../java)`），不看**构建目标**。在装了 wine 的 mac 上先 `dist:mac` 再 `dist:win`，它会跳过 jlink、把 macOS 的 JRE 打进 Windows 包，**且不报错**。在 Windows 上做则宿主＝目标，不会触发。
+**脚本现在会自己拦住这件事。** `dist:mac` / `dist:win` 各自把目标平台显式传给 `prepare:resources`，目标≠宿主直接硬失败：
+
+```
+✖ 不能交叉出包:目标 = win,宿主 = mac。
+  ...
+  请在 win 机器上构建。Windows 步骤见 docs/windows-release.md。
+```
+
+> 这条拦截是补上一个真实的坑：此前脚本用**宿主**平台判断已有 JRE 够不够用，不看构建目标。在 mac 上跑 `--target win` 会**退出码 0**、日志写着「resources 就绪(target=win)」，而备好的是 `Mach-O arm64`、`java.exe` 根本不存在。
+> 更麻烦的是「检测到不匹配就重新生成」也救不了——`gen-jre.mjs` 没有目标概念，在宿主上重跑一遍产的还是宿主平台的 JRE。所以只能拒绝。
 
 ---
 
