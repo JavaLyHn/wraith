@@ -16,7 +16,15 @@ import java.util.Map;
 /** 把 Renderer 语义调用序列化成 JSON-RPC 通知。stdout 纯净：正文走 message.delta，stream() 丢弃。 */
 public final class EventStreamRenderer implements Renderer {
     private final JsonRpcWriter writer;
-    private final String sessionId;
+    /**
+     * 会话 id。**不能是 final** —— 会话 id 在生命周期内会换号:session.start 给的是 wire id
+     * (sess_…),而新会话在首个 turn 的 beginTurn 就落桩、换成 SessionStore 的持久化 id
+     * (20260802-…)。这个字段若定死,本渲染器发的 thinking / message / approval.requested
+     * 会一直带着旧 id,同一条流上两种 id 并存 —— 那让 sessionId 变成不可依赖的字段
+     * (desktop 的 notificationFilter 因此常关;还有人据此过滤 approval,把审批全吞了)。
+     * 由 AppServer 在换号处调 {@link #setSessionId} 同步。
+     */
+    private volatile String sessionId;
 
     // ---- 卡片事件录制（null = 关闭；非 null = 录制中）----
     private volatile java.util.List<Map<String, Object>> cardRecording; // null=关闭；volatile for cross-thread visibility
@@ -38,6 +46,11 @@ public final class EventStreamRenderer implements Renderer {
     public EventStreamRenderer(JsonRpcWriter writer, String sessionId) {
         this.writer = writer;
         this.sessionId = sessionId;
+    }
+
+    /** 会话落桩换号后由 AppServer 同步过来;空值忽略(没落桩就继续用 wire id,别编造)。 */
+    public void setSessionId(String sessionId) {
+        if (sessionId != null && !sessionId.isBlank()) this.sessionId = sessionId;
     }
 
     public void setCurrentTurnId(String turnId) { this.currentTurnId = turnId; this.assistantContentEmitted = false; }

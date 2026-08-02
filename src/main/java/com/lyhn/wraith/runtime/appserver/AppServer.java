@@ -1108,6 +1108,9 @@ public final class AppServer {
         String beginId = session.beginTurn(input);
         if (beginId != null && !beginId.isBlank()) {
             sessionId = beginId;
+            // 渲染器必须一起换,否则它发的 thinking / message / approval.requested 仍带旧 wire id,
+            // 同一条流上两种 sessionId 并存 —— 下游任何按会话过滤的逻辑都会误伤。
+            session.renderer().setSessionId(sessionId);
         }
         writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
         writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
@@ -1127,7 +1130,10 @@ public final class AppServer {
                 }
                 String persisted = session.persistTurn();
                 String reported = (persisted != null) ? persisted : sessionId;
-                if (persisted != null) sessionId = persisted;
+                if (persisted != null) {
+                    sessionId = persisted;
+                    session.renderer().setSessionId(sessionId); // 同上:两处换号点都要同步渲染器
+                }
                 writer.notify("turn.completed", Map.of("sessionId", reported, "turnId", turnId, "status", "completed"));
             } catch (Exception e) {
                 writer.notify("turn.failed", Map.of("sessionId", sessionId, "turnId", turnId, "error", e.toString()));

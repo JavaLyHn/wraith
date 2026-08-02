@@ -23,6 +23,12 @@
  *   b. wraith:resumeSession 恢复时将 currentSessionId 同步为持久化 id。
  * 以上工作属于未来多会话设计,不属于本波次(债务清扫波 2)范围。
  *
+ * ⚠ 2026-08-02 更新:后端侧已修成「同一会话所有事件报同一个 sessionId」——
+ * EventStreamRenderer.sessionId 原为 final,只有它还带着旧 wire id(见 SessionIdConsistencyTest)。
+ * 但这**没有**满足上面的前提 a:后端是"全体一起换成持久化 id",不是"保持稳定 wire id",
+ * 而 main 的 currentSessionId 仍停在 session.start 给的 sess_…(index.ts 里只赋值那一处)。
+ * 所以现在若打开门控,**所有**带 sessionId 的通知都会被丢弃,比修之前更糟。启用仍须先做 a + b。
+ *
  * ──────────────────────────────────────────────────────────────────────────
  * 过滤规则(仅 multiSessionEnabled === true 时生效,fail-open):
  *   1. params.sessionId 缺失/undefined → 放行(兼容:许多通知不带 sessionId)。
