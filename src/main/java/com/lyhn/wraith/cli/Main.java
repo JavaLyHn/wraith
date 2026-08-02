@@ -1187,8 +1187,13 @@ public class Main {
         com.lyhn.wraith.config.WraithConfig config = com.lyhn.wraith.config.WraithConfig.load();
         com.lyhn.wraith.llm.LlmClient client = com.lyhn.wraith.llm.LlmClientFactory.createFromConfig(config);
         if (client == null) {
-            System.err.println("app-server: 未找到可用 API Key");
-            System.exit(1);
+            // **不退出。** 此前这里 System.exit(1),造成首次运行死锁:
+            // 桌面端「Provider 配置」面板是走 config.setProvider RPC 存密钥的,后端一死,
+            // 面板就存不了 → 想配 key 必须先有 key,全新装机在应用内无路可走。
+            // 现在无模型也照常起,配置类 RPC 全部可用;发起对话时才报错;
+            // 配好 provider 后由 ensureClient() 就地热装,不需要重启。
+            System.err.println("app-server: 尚未配置任何模型,已以「无模型」状态启动 "
+                    + "—— 配置类 RPC 可用,发起对话会被拒绝。请在桌面端「Provider 配置」里填一个 API Key。");
         }
 
         // 后台任务管理器:与 CLI 复用同一 ~/.wraith/tasks/tasks.db(互通);
@@ -1243,7 +1248,7 @@ public class Main {
                 });
                 registry.setTaskManager(taskManager); // ← 新增:后台任务工具与面板共用同一 DurableTaskManager
 
-                // 可变 client 持有(会话级 provider 切换用)
+                // 可变 client 持有(会话级 provider 切换用)。**允许为 null** —— 见 startAppServer 顶部说明。
                 com.lyhn.wraith.llm.LlmClient[] currentClient = { client };
 
                 com.lyhn.wraith.agent.Agent agent = new com.lyhn.wraith.agent.Agent(currentClient[0], registry);
@@ -1276,7 +1281,9 @@ public class Main {
                 com.lyhn.wraith.session.SessionStore sessionStore =
                         com.lyhn.wraith.session.SessionStore.open(
                                 java.nio.file.Path.of(System.getProperty("user.home")),
-                                root, currentClient[0].getProviderName(), currentClient[0].getModelName());
+                                root,
+                                currentClient[0] == null ? "" : currentClient[0].getProviderName(),
+                                currentClient[0] == null ? "" : currentClient[0].getModelName());
                 sessionStore.startNew();
                 // 会话治理落地(修:app-server 工厂此前漏接这两行,交互 CLI 在 setup 处已接)。
                 // 缺 curationSink → CurationStats.appendMetrics 走 NOOP → 会话 -artifacts/context-metrics.jsonl
@@ -1284,6 +1291,36 @@ public class Main {
                 // 缺 pricingTable → usage 行/快照无 cost。桌面后端与 CLI 至此对齐。
                 agent.setCurationSink(new com.lyhn.wraith.session.SessionCurationSink(sessionStore));
                 agent.setPricingTable(new com.lyhn.wraith.context.PricingTable(config.getPricing()));
+
+                // ── 无模型启动的两个把手 ─────────────────────────────────────────────
+                // ensureClient:currentClient 为空时,按**当前**配置就地热装一个 client。
+                //   用户在 GUI 里配好第一个 provider 后立刻可用,不需要重启后端。
+                //   createFromConfig 本身会在 defaultProvider 拿不到时遍历六家兜底,所以
+                //   只要任意一家有 key 就能装上。
+                // requireClient:需要真实模型的路径(发起对话/plan/team)用它,拿不到就抛出
+                //   一句人能看懂的话 —— 而不是 NPE,也不是让整个后端不启动。
+                final java.util.function.Supplier<com.lyhn.wraith.llm.LlmClient> ensureClient = () -> {
+                    if (currentClient[0] != null) return currentClient[0];
+                    com.lyhn.wraith.llm.LlmClient fresh =
+                            com.lyhn.wraith.llm.LlmClientFactory.createFromConfig(config);
+                    if (fresh != null) {
+                        currentClient[0] = fresh;
+                        agent.setLlmClient(fresh);
+                        sessionStore.setProviderModel(fresh.getProviderName(), fresh.getModelName());
+                        System.err.println("app-server: 已装载模型 "
+                                + fresh.getProviderName() + " / " + fresh.getModelName());
+                    }
+                    return fresh;
+                };
+                final java.util.function.Supplier<com.lyhn.wraith.llm.LlmClient> requireClient = () -> {
+                    com.lyhn.wraith.llm.LlmClient c = ensureClient.get();
+                    if (c == null) {
+                        throw new IllegalStateException(
+                                "尚未配置任何模型。请打开左侧「配置 → Provider 配置」，"
+                                + "填入一个 API Key 并保存后重试。");
+                    }
+                    return c;
+                };
 
                 com.lyhn.wraith.hitl.RendererHitlHandler rendererHitl =
                         new com.lyhn.wraith.hitl.RendererHitlHandler(renderer, hitl.isEnabled());
@@ -1309,6 +1346,7 @@ public class Main {
                 return new com.lyhn.wraith.runtime.appserver.AppServer.SessionRunner() {
                     public com.lyhn.wraith.runtime.appserver.EventStreamRenderer renderer() { return renderer; }
                     public String runTurn(String input) throws Exception {
+                        requireClient.get();   // 无模型时给一句人话,不是 NPE
                         String expanded = input;
                         com.lyhn.wraith.mcp.McpServerManager m = appServerMcp.manager();
                         if (m != null) {
@@ -1319,6 +1357,7 @@ public class Main {
                     }
                     public String runTurn(String input, java.util.List<com.lyhn.wraith.llm.LlmClient.ContentPart> imageParts,
                                          java.util.List<String> imageNames) throws Exception {
+                        requireClient.get();
                         String expanded = input;
                         com.lyhn.wraith.mcp.McpServerManager m = appServerMcp.manager();
                         if (m != null) expanded = new com.lyhn.wraith.mcp.mention.AtMentionExpander(m).expand(input);
@@ -1391,10 +1430,13 @@ public class Main {
                         return true;
                     }
                     public java.util.Map<String, Object> modelList() {
+                        // 无模型时照常回目录(空 current)——面板要能列出可配的 provider,
+                        // 否则用户连「去哪配」都看不到。
+                        com.lyhn.wraith.llm.LlmClient c = currentClient[0];
                         return com.lyhn.wraith.runtime.appserver.ModelCatalog.result(
                                 config,
-                                currentClient[0].getProviderName(),
-                                currentClient[0].getModelName(),
+                                c == null ? "" : c.getProviderName(),
+                                c == null ? "" : c.getModelName(),
                                 resumeFallback[0]);
                     }
                     public java.util.Map<String, Object> sessionSetModel(String provider) {
@@ -1418,6 +1460,7 @@ public class Main {
                         }
                         config.setDefaultProvider(provider);
                         config.save();
+                        ensureClient.get();   // 无模型状态下「设默认」同样应立刻生效
                         return java.util.Map.of("ok", true);
                     }
                     public java.util.Map<String, Object> configSetProvider(String id, String apiKey, String model, String baseUrl, String protocol, String label) {
@@ -1430,6 +1473,9 @@ public class Main {
                         if (label != null) pc.setLabel(label);
                         config.getProviders().put(id, pc);
                         config.save();
+                        // 首个 provider 落地后就地热装 —— 这是打破「想配 key 得先有 key」死锁的一环:
+                        // 存完立刻可用,不需要重启后端,也不需要用户再去点一次「设默认」。
+                        ensureClient.get();
                         return java.util.Map.of("ok", true);
                     }
                     public java.util.Map<String, Object> configRemoveProvider(String id) {
@@ -2010,7 +2056,7 @@ public class Main {
                             // 用量观测:包住 client,子 agent(含计划生成)每次真实用量 → 主 curator(峰值发水位+计入成本)
                             agent.beginExternalUsageTracking();
                             com.lyhn.wraith.llm.LlmClient teamClient = new com.lyhn.wraith.llm.UsageObservingLlmClient(
-                                    currentClient[0],
+                                    requireClient.get(),
                                     resp -> agent.recordExternalUsage(resp.inputTokens(), resp.outputTokens(), resp.cachedInputTokens()));
 
                             // 装配 AgentOrchestrator（与 CLI createTeamAgent + CLI team 路径完全对齐）
@@ -2110,7 +2156,7 @@ public class Main {
                         // 用量观测:包住 client,计划生成 + 执行每次真实用量 → 主 curator(峰值发水位+计入成本)
                         agent.beginExternalUsageTracking();
                         com.lyhn.wraith.llm.LlmClient planClient = new com.lyhn.wraith.llm.UsageObservingLlmClient(
-                                currentClient[0],
+                                requireClient.get(),
                                 resp -> agent.recordExternalUsage(resp.inputTokens(), resp.outputTokens(), resp.cachedInputTokens()));
 
                         // 装配 PlanExecuteAgent（7 参公开构造，planner=null 则内部 new Planner(llmClient)）
@@ -2182,7 +2228,8 @@ public class Main {
                         return result;
                     }
                 };
-            }, buildInitializeResult(client.getModelName(), com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
+            }, buildInitializeResult(client == null ? null : client.getModelName(),
+                    com.lyhn.wraith.policy.sandbox.CommandSandbox.available()));
 
         try {
             server.serve();
@@ -2231,6 +2278,9 @@ public class Main {
         caps.put("toolOutputStreaming", true);
         caps.put("diff", true);
         caps.put("sandbox", sandboxAvailable ? "macos-seatbelt" : "none");
+        // 后端现在允许「无模型」启动(否则首次运行会死锁,见 startAppServer)。
+        // 空 model 就是那个状态 —— 显式回一个布尔,免得前端去猜空串的含义。
+        caps.put("modelConfigured", model != null && !model.isBlank());
         java.util.Map<String, Object> res = new java.util.LinkedHashMap<>();
         res.put("serverInfo", "wraith-app-server");
         res.put("protocol", "1");

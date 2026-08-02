@@ -9,7 +9,8 @@ import type { ModelListResult, ProviderView } from '../../shared/types'
 
 type TestState = { status: 'idle' | 'testing' | 'ok' | 'fail'; msg?: string }
 
-export default function ProvidersPanel({ onBack }: { onBack: () => void }): JSX.Element {
+/** onSaved:存/删 provider 后回报一次,供外层重新判定「还没配模型」的引导条是否该收起。 */
+export default function ProvidersPanel({ onBack, onSaved }: { onBack: () => void; onSaved?: () => void }): JSX.Element {
   const [data, setData] = useState<ModelListResult | null>(null)
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState<string | null>(null)   // 正在编辑的实例 id(可能是新铸造的)
@@ -52,7 +53,7 @@ export default function ProvidersPanel({ onBack }: { onBack: () => void }): JSX.
     if (!editing) return
     try {
       await window.wraith.setProvider({ id: editing, apiKey: form.apiKey, model: form.model, baseUrl: form.baseUrl, protocol: form.protocol, label: form.label })
-      setEditing(null); void refresh()
+      setEditing(null); void refresh(); onSaved?.()
     } catch (err) { setError((err as Error).message) }
   }
   const runTest = async (): Promise<void> => {

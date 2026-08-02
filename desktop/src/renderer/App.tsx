@@ -53,6 +53,8 @@ import ModelFallbackBanner from './components/ModelFallbackBanner'
 import SubmitErrorBanner from './components/SubmitErrorBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import TaskDonePill from './components/TaskDonePill'
+import NoModelNotice from './components/NoModelNotice'
+import { needsModelSetup } from './lib/modelReady'
 import Sidebar from './components/Sidebar'
 import SidebarDock from './components/SidebarDock'
 import TopBar from './components/TopBar'
@@ -215,6 +217,8 @@ export default function App(): JSX.Element {
   const [editors, setEditors] = useState<EditorApp[]>([])
   useEffect(() => { void window.wraith.listEditors().then(setEditors).catch(() => {}) }, [])
   const [paletteOpen, setPaletteOpen] = useState(false)
+  /** 后端起来了但一个模型都没配 —— 全新装机的常态,需要在空态给出引导。 */
+  const [noModel, setNoModel] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('wraith.sidebar.collapsed') === '1' } catch { return false }
   })
@@ -414,11 +418,15 @@ export default function App(): JSX.Element {
         const ws = await window.wraith.getInitialWorkspace()
         dispatch({ type: 'setWorkspace', ws: ws ?? '' })
         const init = await window.wraith.initialize(ws)
-        const initObj = init as { model?: string; capabilities?: { sandbox?: string } }
+        const initObj = init as { model?: string; capabilities?: { sandbox?: string; modelConfigured?: boolean } }
         if (initObj.model) {
           dispatch({ type: 'setModel', model: initObj.model })
         }
         dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(initObj.capabilities?.sandbox) })
+        // 全新装机:后端以「无模型」状态起来了(能配置、发不出对话)。这个状态在界面上
+        // 必须有出口 —— 否则用户只看到一个打字没反应的空壳,那句 `未找到可用 API Key`
+        // 只在控制台里,他看不到。
+        setNoModel(needsModelSetup({ modelConfigured: initObj.capabilities?.modelConfigured }))
         await window.wraith.startSession(ws)
         try {
           const snap = await window.wraith.contextState()
@@ -1056,7 +1064,21 @@ export default function App(): JSX.Element {
         ) : view === 'im-gateway' ? (
           <ImGatewayPanel onBack={() => setView('chat')} />
         ) : view === 'providers' ? (
-          <ProvidersPanel onBack={() => setView('chat')} />
+          <ProvidersPanel
+            onBack={() => setView('chat')}
+            onSaved={() => {
+              // 存完不能盲目认为「配好了」—— 后端要真的热装上 client 才算。
+              // 回问一次 model.list:current.provider 非空才收起引导条。
+              void (async () => {
+                try {
+                  const m = await window.wraith.modelList()
+                  const cur = (m as { current?: { provider?: string; model?: string } }).current
+                  setNoModel(needsModelSetup({ currentProvider: cur?.provider ?? '' }))
+                  if (cur?.model) dispatch({ type: 'setModel', model: cur.model })
+                } catch { /* 拿不到就维持原状,不擅自收起 */ }
+              })()
+            }}
+          />
         ) : view === 'skills' ? (
           <SkillsPanel onBack={() => setView('chat')} />
         ) : view === 'memory' ? (
@@ -1159,9 +1181,14 @@ export default function App(): JSX.Element {
                     <WelcomeEmptyState
                       categories={PROMPT_CATEGORIES}
                       onPickExample={(t) => { setInputValue(t); setComposerFocus(n => n + 1) }}
-                      notices={taskDoneNotices.length > 0 ? taskDoneNotices.map((n) => (
-                        <TaskDonePill key={n.taskId} text={n.text} ok={n.ok} onOpen={() => setView('tasks')} />
-                      )) : undefined}
+                      notices={(noModel || taskDoneNotices.length > 0) ? (
+                        <>
+                          {noModel && <NoModelNotice onConfigure={() => setView('providers')} />}
+                          {taskDoneNotices.map((n) => (
+                            <TaskDonePill key={n.taskId} text={n.text} ok={n.ok} onOpen={() => setView('tasks')} />
+                          ))}
+                        </>
+                      ) : undefined}
                     >{composer}</WelcomeEmptyState>
                   </div>
                 )}

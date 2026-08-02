@@ -88,7 +88,12 @@ public class Agent {
                 (method, payload) -> renderer().contextEvent(method, payload));
         this.curator.setNoticeOut(msg -> renderer().stream().println(msg));
         this.toolRegistry.setContextProfile(memoryManager.getContextProfile());
-        this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
+        // llmClient 允许为 null:app-server 在「一个 provider 都没配」时也要能起来,
+        // 否则用户无法通过 GUI 配第一个 key(配置 RPC 本身要经过后端)——那是个死锁。
+        // curator 的三个 supplier(上面)本就防了 null,这里补齐最后一处解引用。
+        this.toolRegistry.setCurrentModel(
+                llmClient == null ? null : llmClient.getProviderName(),
+                llmClient == null ? null : llmClient.getModelName());
         this.memoryManager.setProjectPath(this.toolRegistry.getProjectPath());
         this.toolRegistry.setScopedMemorySaver(memoryManager::storeFact);
         this.toolRegistry.setMemoryManager(this.memoryManager);
@@ -100,7 +105,9 @@ public class Agent {
         this.memoryManager.setLlmClient(llmClient);
         this.historyCompactor.setLlmClient(llmClient);
         this.toolRegistry.setContextProfile(memoryManager.getContextProfile());
-        this.toolRegistry.setCurrentModel(llmClient.getProviderName(), llmClient.getModelName());
+        this.toolRegistry.setCurrentModel(
+                llmClient == null ? null : llmClient.getProviderName(),
+                llmClient == null ? null : llmClient.getModelName());
         // 换模型立即推一帧状态(修"换模型不刷新"):
         // - 仅非回合期推:turn 运行中 history 正被写,无锁读有 CME 风险(与 contextStateCore 同一守卫);
         //   且运行中的 turn 下一次 pushStatus 本就会带上新模型,无需此帧。
