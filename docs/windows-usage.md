@@ -1,6 +1,6 @@
 # Windows 使用教程
 
-> 从 **`git clone` 一路到能对话**的完整步骤。每步都给了**预期产出**，不对就停下看第 5 节。
+> 从 **`git clone` 一路到能对话**的完整步骤。每步都给了**预期产出**，不对就停下看第 6 节。
 >
 > 仓库里另有两份 Windows 文档，分工不同，**别拿错**：
 >
@@ -10,7 +10,7 @@
 > | [`windows-release.md`](windows-release.md) | 出包与发布 runbook | 你要出一个可分发的安装包 |
 > | [`windows-dev.md`](windows-dev.md) | 逐条**验收清单**（102 勾） | 你要验证这个端口有没有做对 |
 >
-> **诚实声明**：Windows 端代码已完成，但**尚未在真 Windows 机器上跑过一次**。本文按代码实际行为编写，若你遇到与本文不符的情况，那大概率是真 bug，欢迎照第 5 节的排查方向记录下来。
+> **诚实声明**：Windows 端代码已完成，但**尚未在真 Windows 机器上跑过一次**。本文按代码实际行为编写，若你遇到与本文不符的情况，那大概率是真 bug，欢迎照第 6 节的排查方向记录下来。
 
 > ### ⚠️ 先确认你在 PowerShell 里，不是 cmd
 >
@@ -142,7 +142,7 @@ npm run dev
 
 > **报后端未连接**：dev 态主进程跑的是 `spawn('java', ['-jar', '%USERPROFILE%\.wraith\wraith.jar', 'app-server'])`，走**系统 PATH** 找 `java`。GUI 应用不继承登录 shell 的 PATH —— 这是 Windows 上的经典坑。确认 `java` 在系统级 PATH 里，改完**重启终端再 `npm run dev`**。
 
-改完 Java 代码要重跑 A1（dev 态起的是 `%USERPROFILE%\.wraith\wraith.jar`，不是 `target\` 里那个）。改前端代码则热更新，不用管。
+改完 Java 代码要重跑 A1（dev 态起的是 `%USERPROFILE%\.wraith\wraith.jar`，不是 `target\` 里那个）。改前端代码则热更新，不用管。**完整的「改了什么 → 重跑到哪一步」对照表见第 5 节。**
 
 **跳到第 2 节配模型。**
 
@@ -184,28 +184,13 @@ desktop\resources\runtime\bin\java.exe -version
 
 启动后 wraith 还不能对话 —— 它不知道用哪个模型、拿什么密钥。
 
-> ## ⚠️ 全新装机必须先在应用外面配好第一个 key
->
-> **当前版本存在一个首次运行的死锁，请先读完这段再动手。**
->
-> 后端在没有任何 API Key 时会**直接退出**（`Main.java` 的 app-server / CLI / serve 三个入口都是 `System.exit(1)`）。而桌面端的「Provider 配置」面板是通过后端 RPC 写配置的（`config.setProvider`）—— 后端不在，面板也存不了。**想配 key 得先有 key。**
->
-> 症状是启动后控制台狂刷：
->
-> ```
-> app-server: 未找到可用 API Key
-> Error occurred in handler for 'wraith:initialize': Error: Backend not connected
-> Error occurred in handler for 'wraith:modelList': Error: Backend not connected
-> ...
-> ```
->
-> 第一行才是病因，后面全是后端已死的连带反应。界面上目前**不会**告诉你缺 key。
->
-> **破局办法：先用下面的 ② 或 ③ 配好第一个 key，重启应用。** 之后后端能起来了，① 图形界面就正常可用（换模型、加第二家 provider、改 Base URL 都走 GUI）。
->
-> 这不是 Windows 特有的，mac 全新装机同样会撞。
+**全新装机直接在应用里配就行**：首页会显示一条「还没有配置模型 · 去配置」，点它直达 Provider 面板；填完保存即可用，**不需要重启**。
 
-### ① 图形界面配（后端起来之后用这个）
+> **历史说明（已修复）**：更早的版本存在一个首次运行死锁 —— 后端在没有任何 API Key 时 `System.exit(1)`，而「Provider 配置」面板又要通过后端 RPC 写配置，于是「想配 key 得先有 key」，全新装机在应用内无路可走，控制台狂刷 `app-server: 未找到可用 API Key` + 满屏 `Backend not connected`。
+>
+> 现在后端**无模型也照常启动**：配置类 RPC 全部可用，发起对话才会被拒绝并给出提示；配好 provider 后就地热装。若你仍看到上面那串报错，说明**跑的是旧 jar** —— 见第 5 节「代码更新后怎么重新跑」。
+
+### ① 图形界面配（推荐）
 
 1. 左侧栏找到 **配置 → Provider 配置**
 2. 搜索或在列表里挑一个 provider（GLM / DeepSeek / Kimi / StepFun / 讯飞星辰 …），点 **＋配置**
@@ -216,7 +201,7 @@ desktop\resources\runtime\bin\java.exe -version
 
 配置落到 `%USERPROFILE%\.wraith\config.json`。**密钥不会出现在日志或任何回包里**，界面回读时只告诉你「已配置」，不回明文。
 
-### ② 放一个 `.env` 到用户目录（全新装机走这条）
+### ② 放一个 `.env` 到用户目录（不想开界面时用）
 
 后端找 `.env` 的顺序是**当前工作目录**，然后是**用户目录**：
 
@@ -247,7 +232,7 @@ type "%USERPROFILE%\.env"
 
 > `>` **前面不要留空格** —— cmd 会把空格一起写进值里。写完 `type` 一下确认。
 
-配好后重启 `npm run dev`，控制台不再出现「未找到可用 API Key」就说明后端起来了。
+配好后重启 `npm run dev`。控制台不再出现「尚未配置任何模型」、首页也不再显示引导条，就说明装上了。
 
 ### ③ PowerShell 环境变量
 
@@ -307,15 +292,79 @@ mac 那种半透明磨砂侧栏在 Windows 上是**实色**，这是有意设计
 
 ---
 
-## 5. 出问题时
+## 5. 代码更新后怎么重新跑
+
+```powershell
+git pull
+```
+
+**然后按「改了什么」决定重跑到哪一步** —— 不是每次都要全套。最容易踩的是第一行：
+
+| 改动落在 | 要做什么 | 不做会怎样 |
+|---|---|---|
+| **Java 后端**（`src/main/java/**`、`src/main/resources/**`） | 重跑 `dev-win.ps1` + **重启 App** | ⚠️ **改动完全不生效，且没有任何报错**。dev 态起的是 `%USERPROFILE%\.wraith\wraith.jar`，不是 `target\` 里那个 —— 光跑 `mvn package` 等于没改 |
+| **渲染层**（`desktop/src/renderer/**`） | 什么都不用做 | — 热更新，存盘即刷新 |
+| **主进程 / preload**（`desktop/src/main/**`、`desktop/src/preload/**`） | **完全重启 App**（Ctrl+C 后重跑 `npm run dev`） | 报 `window.wraith.X is not a function` —— preload **不热更新**，这是陈旧进程，不是代码 bug |
+| **`desktop/package.json` 依赖变动** | `npm install --legacy-peer-deps` | 起不来或缺模块 |
+| **已装的安装包**（路线 B） | 重新 `npm run dist:win` 再装一次 | 装好的 App 用的是打包时的 jar，`git pull` 对它没有任何影响 |
+
+拿不准改了哪些，看一眼：
+
+```powershell
+git log --oneline -10
+git diff --stat HEAD@{1} HEAD      # 上一次 pull 到现在动了哪些文件
+```
+
+### 最常用的一条（改了 Java 之后）
+
+```powershell
+# 仓库根
+git pull
+powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1
+# 然后到跑着 npm run dev 的窗口 Ctrl+C，重新 npm run dev
+cd desktop
+npm run dev
+```
+
+确认新 jar 真的装上了 —— 时间戳应该是刚才：
+
+```powershell
+dir "%USERPROFILE%\.wraith\wraith.jar"
+```
+
+> **这个坑值得单独记住**：`dev-win.ps1` 干的事是「`mvn package` + 把产物拷到 `%USERPROFILE%\.wraith\wraith.jar`」。桌面 dev 态的主进程固定从那个位置 `spawn('java', ['-jar', ...])`。所以只跑 `mvn package` 不拷贝，App 会继续用旧 jar —— 表现是你明明改了后端却毫无变化，或者调用新加的 RPC 报「method not found」。
+
+### 全部推倒重来
+
+改动很多、或者状态混乱到说不清时：
+
+```powershell
+git pull
+cd desktop
+rmdir /s /q node_modules            # cmd；PowerShell 用 Remove-Item -Recurse -Force node_modules
+npm install --legacy-peer-deps
+cd ..
+powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1
+cd desktop
+npm run dev
+```
+
+> 配置和会话都在 `%USERPROFILE%\.wraith\` 里，**不会**被上面这套清掉。真想连配置一起重置才动那个目录。
+
+---
+
+## 6. 出问题时
 
 | 症状 | 最可能的原因 | 怎么办 |
 |---|---|---|
 | `git clone` 报 `ssh: connect to host github.com port 22: Connection refused` | 用了 SSH 形式（`git@github.com:`），而 **22 端口被网络挡了**（公司网/校园网/部分 ISP 常见）；且全新机器也还没配 SSH 密钥 | 本仓库是**公开**的，直接用 HTTPS：`git clone https://github.com/JavaLyHn/wraith.git`，零认证配置。非要用 SSH 就走 443 通道，见下 |
 | 装的时候被 SmartScreen 拦 | 安装包未签名 | 「更多信息」→「仍要运行」 |
 | App 起来了但显示**后端未连接** | 走的是**开发态**（`npm run dev`），主进程 `spawn('java', …)` 找不到 java | 确认 `java` 在 **GUI 进程**的 PATH 里 —— GUI 应用不继承登录 shell 的 PATH，这是 Windows 上的经典坑。装好的 App 用捆绑 JRE，不该出这个问题 |
-| 控制台刷 `app-server: 未找到可用 API Key` + 满屏 `Backend not connected` | **后端因为没有任何 API Key 直接退出了**，后面每个 IPC 都是连带反应。而 GUI 配 provider 也要经过后端 → 死锁 | 先在应用外配好第一个 key（第 2 节 ② 或 ③），重启。**界面上不会提示缺 key，只能看控制台第一行** |
-| 发消息报没有 API Key | 后端起来了但没设默认 provider | 回第 2 节 ①，注意最后要点**设默认** |
+| 控制台刷 `app-server: 未找到可用 API Key` + 满屏 `Backend not connected` | **跑的是旧 jar。** 这是已修复的首次运行死锁 —— 旧版后端没 key 就 `System.exit(1)`，后面每个 IPC 都是连带反应 | 重跑 `dev-win.ps1` 再重启 App（第 5 节）。新版会打「尚未配置任何模型,已以「无模型」状态启动」并**照常服务** |
+| 改了 Java 却毫无变化 / 调新 RPC 报 method not found | 只跑了 `mvn package`，没把 jar 拷到 `%USERPROFILE%\.wraith\wraith.jar` | 重跑 `dev-win.ps1` 再重启 App —— 见第 5 节，这是本项目最容易踩的一个坑 |
+| `window.wraith.X is not a function` | preload **不热更新**，这是陈旧进程 | 完全重启 App（Ctrl+C 后重跑 `npm run dev`），不是代码 bug |
+| 首页显示「还没有配置模型」 | 正常的全新状态 | 点「去配置」填一个 API Key，保存即可用，**不用重启** |
+| 发消息报没有 API Key | 配了但没生效 | 回第 2 节 ①；若卡片上有**设默认**就点一下 |
 | 设了环境变量但 App 不认 | 环境变量是进程启动时读的 | 重启 App；或直接改用图形界面配 |
 | `npm install` ERESOLVE 失败 | react peer 冲突 | 必须带 `--legacy-peer-deps` |
 | `npm install` 报错末尾有「**Log files were not written** ... `_logs`」 | **npm 缓存目录不可用**，与项目无关。连日志都落不下就是这个病的指纹，不管上面报 `EPERM` 还是 `ENOENT` | 见下方「npm 缓存目录不可用」——先 `npm config get cache` |
@@ -483,7 +532,7 @@ rmdir /s /q empty_tmp
 
 ---
 
-## 6. 已知不可用 / 降级
+## 7. 已知不可用 / 降级
 
 这些是**当前明确不支持**的，不用浪费时间排查：
 
@@ -497,7 +546,7 @@ rmdir /s /q empty_tmp
 
 ---
 
-## 7. 只想用命令行
+## 8. 只想用命令行
 
 不装桌面 App 也能用，CLI 与桌面共用同一套 Java 内核。**只需要 JDK 17 + Maven**，不需要 Node：
 

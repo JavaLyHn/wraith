@@ -32,6 +32,8 @@ cd desktop && npm install --legacy-peer-deps && npm run dist:win       # 产物�
 
 首次运行 SmartScreen 报「未知发布者」→「更多信息 → 仍要运行」（未签名，同 macOS 的 xattr 姿态）。装好的 App **捆绑了 JRE，不需要系统装 Java**（上面那套 JDK/Maven/Node 只是构建时要的）。`npm run dist:win` 必须在 Windows 上跑——捆绑 JRE 由宿主 `jlink` 产出、`node-pty` 是原生模块，交叉出包会被构建脚本硬拦下。
 
+> **代码更新后怎么重新跑**：`git pull` 之后按改动决定重跑到哪一步 —— 改 **Java 后端**必须重跑 `dev-win.ps1` 并重启 App（dev 态起的是 `%USERPROFILE%\.wraith\wraith.jar` 而非 `target\`，只跑 `mvn package` **等于没改且不报错**）；改**渲染层**热更新不用管；改 **preload/主进程**要完全重启（否则报 `window.wraith.X is not a function`）。对照表见 [`docs/windows-usage.md`](docs/windows-usage.md) 第 5 节。
+
 > 三份 Windows 文档分工不同，别拿错：
 > **[`docs/windows-usage.md`](docs/windows-usage.md)** —— 从 `git clone` 到能对话的完整步骤 + 配模型三条路 + 界面导览 + 故障对照表（**想用就看这份**）；
 > [`docs/windows-release.md`](docs/windows-release.md) —— 出包与发布 runbook；
