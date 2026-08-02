@@ -15,7 +15,7 @@
 **Windows**：暂未在 Releases 上架预编译安装包，需在 Windows 机器上从源码构建（前置 JDK 17 / Maven / Node ≥ 18 均在 PATH）：
 
 ```powershell
-git clone git@github.com:JavaLyHn/wraith.git
+git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
 git checkout feat/windows-parity-block1   # ⚠ 不能省,见下
 

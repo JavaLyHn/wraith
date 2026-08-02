@@ -57,7 +57,7 @@ git --version
 ## 3. 拉代码
 
 ```powershell
-git clone git@github.com:JavaLyHn/wraith.git
+git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
 git checkout feat/windows-parity-block1
 git log -1 --oneline        # 记下这个 commit，后面建 tag 要用

@@ -54,12 +54,26 @@ git --version
 ### 1.2 拉代码 —— ⚠ 必须切分支
 
 ```powershell
-git clone git@github.com:JavaLyHn/wraith.git
+git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
 git checkout feat/windows-parity-block1
 ```
 
 **这一步不能省。** Windows 的活还没合进 `main` —— `main` 上**一个 Windows 专属文件都没有**（没有自绘窗控、没有 `dev-win.ps1`、没有 NSIS 打包配置）。停在 `main` 上你能把项目构建出来，但拿到的是一个没有任何 Windows 对等的东西，而且不会有任何报错提示你走错了。
+
+> **这里用的是 HTTPS，不是 SSH。** 本仓库是公开的，HTTPS 拉取不需要任何认证配置。
+> 若你改用 `git@github.com:...` 而报 `ssh: connect to host github.com port 22: Connection refused`，
+> 那是 22 端口被网络挡了（公司网/校园网/部分 ISP 常见）。要么换回 HTTPS，要么让 SSH 走 443：
+>
+> ```
+> # %USERPROFILE%\.ssh\config
+> Host github.com
+>   HostName ssh.github.com
+>   Port 443
+>   User git
+> ```
+>
+> 之后若要 **push**，HTTPS 配合 Git for Windows 自带的 Credential Manager 最省事 —— 首次推送会弹浏览器授权，之后自动记住。
 
 确认一下：
 
@@ -242,6 +256,7 @@ mac 那种半透明磨砂侧栏在 Windows 上是**实色**，这是有意设计
 
 | 症状 | 最可能的原因 | 怎么办 |
 |---|---|---|
+| `git clone` 报 `ssh: connect to host github.com port 22: Connection refused` | 用了 SSH 形式（`git@github.com:`），而 **22 端口被网络挡了**（公司网/校园网/部分 ISP 常见）；且全新机器也还没配 SSH 密钥 | 本仓库是**公开**的，直接用 HTTPS：`git clone https://github.com/JavaLyHn/wraith.git`，零认证配置。非要用 SSH 就走 443 通道，见下 |
 | 装的时候被 SmartScreen 拦 | 安装包未签名 | 「更多信息」→「仍要运行」 |
 | App 起来了但显示**后端未连接** | 走的是**开发态**（`npm run dev`），主进程 `spawn('java', …)` 找不到 java | 确认 `java` 在 **GUI 进程**的 PATH 里 —— GUI 应用不继承登录 shell 的 PATH，这是 Windows 上的经典坑。装好的 App 用捆绑 JRE，不该出这个问题 |
 | 发消息报没有 API Key | 没配 provider，或配了但没「设默认」 | 回第 2 节 ①，注意最后要点**设默认** |
@@ -271,7 +286,7 @@ mac 那种半透明磨砂侧栏在 Windows 上是**实色**，这是有意设计
 不装桌面 App 也能用，CLI 与桌面共用同一套 Java 内核。**只需要 JDK 17 + Maven**，不需要 Node：
 
 ```powershell
-git clone git@github.com:JavaLyHn/wraith.git
+git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
 git checkout feat/windows-parity-block1      # 仍然要切,理由见下
 mvn clean package -DskipTests
