@@ -967,7 +967,7 @@ profile 本身留在系统里不占资源，也不影响别的程序；真要删
 
 这些是**当前明确不支持**的，不用浪费时间排查：
 
-- **Petdex 桌宠在线安装不可用** —— `npxSearchDirs` 按 `:` 切 PATH（Windows 用 `;`）、只找 `${dir}/npx` 不找 `npx.cmd`。表现是点安装后明确报错。**导入本地图片 / 精灵包不受影响。**
+- ~~**Petdex 桌宠在线安装不可用**~~ —— **2026-08-02 已修**（PATH 按 `;` 切、认 `npx.cmd`、批处理经 `cmd.exe /c` 起）。仍需机器上装有 Node/npx；`where.exe npx` 找不到的话面板会明确告诉你去哪找过了。
 - **桌宠跨虚拟桌面常驻** —— Windows 没有官方 API。
 - **桌宠点击不抢焦仅 x64 精确** —— 走 koffi FFI 给窗口加 `WS_EX_NOACTIVATE`；ia32 上自动降级为 `focusable:false`，FFI 失败也会降级，不会崩。
 - **编辑器探测范围有限** —— 只按已知安装路径找 VS Code / VS Code Insiders / Cursor / Sublime Text / Notepad++；自定义安装目录、注册表安装不覆盖。

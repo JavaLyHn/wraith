@@ -172,8 +172,13 @@ test('宠物默认启用且有可用宠物时,启动后出现第二个透明置�
   }))
   expect(props.alwaysOnTop).toBe(true)
   expect(props.focusable).toBe(false)
-  expect(props.movable).toBe(false)
   expect(props.hasShadow).toBe(false)
+  // movable/resizable 都必须 true:Electron 把这两个标记同时当成**程序化 setBounds
+  // 的闸门**。resizable:false 吞尺寸变更(滚轮缩放失灵,早就修了);movable:false
+  // 在 Windows 上吞位置变更(WM_WINDOWPOSCHANGING 补 SWP_NOMOVE)——用户报的
+  // 「宠物完全无法拖动,右键菜单却正常」就是它。mac 不受影响,所以这半边一直没暴露。
+  // 桌宠没有任何 -webkit-app-region:drag,位置 100% 靠 setBounds,false 只挡自己人。
+  expect(props.movable).toBe(true)
   expect(props.resizable).toBe(true)
 
   await expect(win.locator('[data-testid="input"]')).toBeVisible()

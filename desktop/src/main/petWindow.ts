@@ -83,8 +83,11 @@ function createPetWindow(config: PetConfig): void {
     // 仅 darwin 有意义;其余平台不传该 type(避免落到未知窗口类型)。
     // frameless 无边框窗本就没有用户可拖拽的缩放手柄,这里的 resizable 只影响
     // Electron 是否接受程序化 setBounds 改尺寸——resizable:false 会让 setBounds
-    // 的尺寸变更被静默 no-op(Task 9 滚轮缩放的已知坑),必须开 true 才能生效;
-    // movable 维持 false 不受影响(setBounds 移动窗口本就不受 movable 限制)。
+    // 的尺寸变更被静默 no-op(Task 9 滚轮缩放的已知坑),必须开 true 才能生效。
+    // ⚠ movable 同理,且这一点**此前写错了**:原注释说"setBounds 移动窗口本就不受
+    // movable 限制"——那只在 macOS 上成立。Windows 上 Electron 会给不可移动的窗口
+    // 在 WM_WINDOWPOSCHANGING 里补 SWP_NOMOVE,每次程序化移动都被静默吞掉,
+    // 表现就是"桌宠完全拖不动、右键菜单却正常"。两个都得是 true。
     // 选项字面量已抽成纯函数 petWindowOptions(见该文件注释),便于按平台单测。
     win = new BrowserWindow(petWindowOptions(process.platform, b, deps.preloadPath))
     petWindow = win
@@ -180,12 +183,32 @@ export function getPetWindow(): BrowserWindow | null {
  * `screen.getDisplayMatching(当前 bounds)`,允许拖跨屏时夹到指针实际所在的那块屏,
  * 而不是永远夹在窗口拖动前所在的屏。窗口不存在(已被关闭/尚未建好)时静默 no-op。
  */
+/**
+ * 移动窗口被平台静默吞掉时,只报一次(拖动期间每帧都在调,报多了等于没报)。
+ * 这条存在的理由:Windows 上 `movable:false` 让 setBounds 的位置变更被
+ * SWP_NOMOVE 吞掉,**不抛不报**,表现是"桌宠完全拖不动"——没有任何线索。
+ * 已修(movable 现为 true),但同一类闸门以后还可能从别处冒出来
+ * (kiosk/全屏/被别的窗口管理器接管),留一条可诊断的信号比再猜一轮划算。
+ */
+let moveNoOpWarned = false
+
 export function petWindowMoveTo(x: number, y: number): void {
   if (!petWindow) return
   const b = petWindow.getBounds()
   const wa = screen.getDisplayMatching(b).workArea
   const c = clampToDisplay({ x, y, width: b.width, height: b.height }, wa)
   petWindow.setBounds(c)
+  if (!moveNoOpWarned) {
+    const after = petWindow.getBounds()
+    // 只在"确实要求移动、却纹丝不动"时报。相等本身是常态(clamp 到边界、同一像素重复调)。
+    if ((c.x !== b.x || c.y !== b.y) && after.x === b.x && after.y === b.y) {
+      moveNoOpWarned = true
+      console.warn(
+        `[pet] setBounds 未生效:请求移到 (${c.x},${c.y}),窗口仍在 (${after.x},${after.y})。`
+        + ' 平台把程序化移动吞掉了 —— 检查 BrowserWindow 的 movable 是否为 true。',
+      )
+    }
+  }
 }
 
 /**

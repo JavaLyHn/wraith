@@ -12,7 +12,7 @@ import { spawn } from 'node:child_process'
 import type { SpawnOptions, ChildProcess } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
-import { isValidPetName, npxSearchDirs, resolveNpx } from '../shared/petInstall'
+import { isValidPetName, npxSearchDirs, npxSpawnArgs, resolveNpx } from '../shared/petInstall'
 import type { PetInstallResult } from '../shared/pets'
 
 /** petdex 安装超时:下载 + 解包一般远小于此;仅用于防子进程挂死。 */
@@ -51,18 +51,33 @@ export function runPetdexInstall(name: string, deps: PetdexInstallDeps): Promise
   }
   const npx = deps.npxPath !== undefined ? deps.npxPath : resolveNpxDefault()
   if (!npx) {
-    return Promise.resolve({ ok: false, error: '未找到 Node/npx。请先安装 Node.js,或改用手动命令在终端执行。' })
+    // 文案要说清"去哪找过了"——此前只说「未找到 Node/npx」,用户明明装着 Node
+    // (还正用 npm run dev 跑着本应用),看到这句只会认为是误报,无从下手。
+    return Promise.resolve({
+      ok: false,
+      error: process.platform === 'win32'
+        ? '未找到 npx.cmd。已在 PATH 与常见 Node 目录(Program Files\\nodejs、'
+          + 'AppData\\Roaming\\npm、Volta、scoop)里找过。请确认 Node.js 已安装且 npx 在 PATH 里'
+          + '(终端跑 `where.exe npx` 验证),或改用手动命令在终端执行。'
+        : '未找到 Node/npx。请先安装 Node.js,或改用手动命令在终端执行。',
+    })
   }
   const spawnFn: SpawnFn = deps.spawnFn ?? spawn
   return new Promise<PetInstallResult>((resolve) => {
     let settled = false
     const done = (r: PetInstallResult): void => { if (!settled) { settled = true; resolve(r) } }
     try {
-      const child = spawnFn(npx, ['petdex@latest', 'install', name], {
+      // Windows 上解析出来的多半是 npx.cmd,而 Node 18.20+/20.12+ 起 shell:false
+      // 直接 spawn 批处理会抛 EINVAL —— npxSpawnArgs 负责在这种情况下套 cmd.exe /c
+      // (仍是数组传参、仍 shell:false)。非 Windows / .exe 原样直起。
+      const cmd = npxSpawnArgs(npx, ['petdex@latest', 'install', name])
+      const child = spawnFn(cmd.command, cmd.args, {
         shell: false,
         cwd: deps.cwd,
         timeout: INSTALL_TIMEOUT_MS,
         env: process.env,
+        // 默认 false —— 不设的话 cmd.exe 会在 Windows 上闪一个黑框控制台窗。
+        windowsHide: true,
       })
       child.stdout?.on('data', (d: Buffer) => deps.onOutput(d.toString()))
       child.stderr?.on('data', (d: Buffer) => deps.onOutput(d.toString()))

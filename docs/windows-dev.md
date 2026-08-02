@@ -287,7 +287,22 @@ wraith sandbox doctor
 ## 9. 桌宠
 
 - [ ] 开启桌宠后 App 不崩,宠物出现在桌面
+- [ ] **按住左键能把宠物拖着走**(2026-08-02 修:`movable:false` 让 Windows 静默吞掉
+      每一次 `setBounds` 移动 —— 症状是"完全拖不动、右键菜单却正常"。mac 不受此闸门影响)
+- [ ] 拖动时宠物朝拖动方向"奔跑",松手回到原朝向
+- [ ] 松手后位置**记住**(重启 App 还在那儿)
+- [ ] 拖到屏幕边缘被夹住,不会掉出工作区
+- [ ] 若仍拖不动:看主进程控制台有没有 `[pet] setBounds 未生效` —— 有就是平台仍在吞移动,
+      把那行原文带回来(它会打印请求坐标与实际坐标),别再靠猜
 - [ ] 单击/拖动桌宠**不打断**你在其它应用里的操作(`WS_EX_NOACTIVATE` via koffi FFI)
+
+**Petdex 在线安装**(2026-08-02 修,此前在 Windows 上恒失败)
+
+- [ ] 设置 → 宠物 → 宠物库,输入 `npx petdex@latest install boba`(整条命令可直接粘,会自动取名)
+- [ ] 点「从 Petdex 安装」**不再**报「未找到 Node/npx」
+- [ ] 安装过程有流式日志;**不闪黑框控制台**(`windowsHide:true`)
+- [ ] 装完宠物出现在列表里且可选中
+- [ ] 真把 npx 从 PATH 里摘掉时,报错**说清去哪找过了**(Program Files\nodejs、AppData\Roaming\npm、Volta、scoop)
 - [ ] 拖动、滚轮缩放、右键菜单正常
 - [ ] 透明区域点击能穿透到桌面
 - [ ] 关闭桌宠后 App 不崩
@@ -315,7 +330,7 @@ npm run dist:win                        # 产物:desktop\release\*.exe
 
 ## 11. 已知限制 / **预期失败**(勾上表示"确认是这个已知情况",不是 bug)
 
-- [ ] **Petdex 桌宠安装在 Windows 不可用** —— `npxSearchDirs` 按 `:` 切 PATH(Windows 是 `;`)、只找 `${dir}/npx` 不找 `npx.cmd`(代码注释已写明「本项目 macOS-only,不处理 .cmd」)。表现:点安装后**明确报错**(不是静默失败)。导入本地图片/精灵包不受影响。
+- [x] ~~**Petdex 桌宠安装在 Windows 不可用**~~ —— **2026-08-02 已修**,见 §9 的验收项。此前 `npxSearchDirs` 按 `:` 切 PATH、只找 `${dir}/npx`;现按平台切 `;`、找 `npx.exe/.cmd/.bat`,并对批处理套 `cmd.exe /c`(Node 18.20+ 起 `shell:false` 直起 `.cmd` 会 EINVAL)。
 - [ ] 桌宠**跨虚拟桌面**常驻做不到(Windows 无官方 API)
 - [ ] `WS_EX_NOACTIVATE` 仅 **x64** 精确;ia32 自动降级为 `focusable:false`
 - [ ] 编辑器探测不覆盖**自定义安装目录 / 注册表安装**
