@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ListTodo, RefreshCw, Send, X, ChevronDown, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ListTodo, RefreshCw, Send, X, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react'
 import type { DurableTaskView } from '../../shared/types'
-import { taskStatusLabel, taskStatusTone, taskIsTerminal, formatDuration, taskPromptSummary, type TaskTone } from '../lib/taskView'
+import { taskStatusLabel, taskStatusTone, taskIsTerminal, taskCanRetry, formatDuration, taskPromptSummary, type TaskTone } from '../lib/taskView'
 
 const toneClass = (tone: TaskTone): string =>
   tone === 'running' ? 'bg-accent/12 text-accent'
@@ -52,6 +52,19 @@ export default function TaskPanel({ onBack }: { onBack: () => void }): JSX.Eleme
     setBusy(true)
     try { await window.wraith.taskCancel(id); await load() }
     catch (err) { setError((err as Error).message) }
+    finally { setBusy(false) }
+  }, [load])
+
+  // 重试 = 用同样的 prompt **新建一条**,不动原来那条失败记录。
+  // 走的是和手动提交完全相同的 taskAdd 路径,不另开一条后端接口 ——
+  // 少一条路径就少一处会分叉的地方。
+  const retry = useCallback(async (prompt: string): Promise<void> => {
+    setBusy(true); setError(null)
+    try {
+      const r = await window.wraith.taskAdd(prompt)
+      if (r.ok) await load()
+      else setError(r.message || '重试提交失败')
+    } catch (err) { setError((err as Error).message) }
     finally { setBusy(false) }
   }, [load])
 
@@ -128,6 +141,13 @@ export default function TaskPanel({ onBack }: { onBack: () => void }): JSX.Eleme
                       <button data-testid="task-cancel" onClick={() => void cancel(t.id)} disabled={busy} title="取消任务"
                         className="shrink-0 rounded p-1 text-fg-subtle hover:text-danger disabled:opacity-40">
                         <X className="h-3.5 w-3.5" strokeWidth={1.5} />
+                      </button>
+                    )}
+                    {taskCanRetry(t.status) && (
+                      <button data-testid="task-retry" onClick={() => void retry(t.prompt)} disabled={busy}
+                        title="用同样的指令再跑一次(原记录保留)"
+                        className="shrink-0 rounded p-1 text-fg-subtle hover:text-accent disabled:opacity-40">
+                        <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.5} />
                       </button>
                     )}
                   </div>

@@ -31,6 +31,20 @@ export function taskIsTerminal(status: string): boolean {
   return status === 'completed' || status === 'failed' || status === 'canceled'
 }
 
+/**
+ * 是否给「重试」入口。
+ *
+ * <p>只给 failed / canceled —— 这两种是**没拿到结果**的，用户多半想再跑一次。
+ * `completed` 不给：重跑一个已经成功的任务是另一回事（「再跑一遍」而不是「重试」），
+ * 而且后台任务会改文件、执行命令，误点的代价不小。真想再跑，输入框还在。
+ *
+ * <p>重试的语义是**新建一条**，不是原地复活：原来那条失败记录留着。
+ * 审计上说得通（失败发生过），也让人看得见「第一次为什么失败」。
+ */
+export function taskCanRetry(status: string): boolean {
+  return status === 'failed' || status === 'canceled'
+}
+
 /** 时长毫秒 → 紧凑可读:850ms / 42s / 3m / 3m20s;0/无效 → 空串。 */
 export function formatDuration(ms: number): string {
   if (!ms || ms < 0 || !Number.isFinite(ms)) return ''
