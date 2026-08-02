@@ -6,6 +6,10 @@
 
 一个成熟的 Java Agent 产品：从第一期的 `ReAct` 单代理循环，演进到第十六期的 `TUI 产品化`，再到桌面 App（macOS + Windows）与常驻 IM 网关（QQ / 飞书 / 企业微信 / 微信）。核心引擎（ReAct / Plan / Multi-Agent / RAG / MCP / Skill / HITL）在 CLI、桌面、IM 三种形态间复用同一套 Java 内核。桌面 App 的 Windows 对等**代码已完成、尚未在真机验证**（上手见 [`docs/windows-usage.md`](docs/windows-usage.md)，验收清单见 [`docs/windows-dev.md`](docs/windows-dev.md)）。
 
+![Wraith 桌面端：一轮完整对话](docs/images/chat.png)
+
+<sub>截图取自真实桌面 App（macOS）；为不消耗 API 额度、也不暴露任何个人数据，对话内容由脚本化的演示后端驱动。</sub>
+
 ## 下载
 
 桌面版（macOS · Apple Silicon）：前往 **[Releases](https://github.com/JavaLyHn/wraith/releases/latest)** 下载 `Wraith-<version>-arm64.dmg`。自包含内置 JRE，无需系统 Java。
@@ -320,9 +324,23 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 - **三模式贯通**（修 bug）：动作卡原先只在 ReAct 出现。Plan / Team 的执行器只把工具调用 `printToolCalls` 到一个 `nullOutputStream`，于是「工具真的跑了、模型照工具返回串说『已为你呈现入口』、而屏幕上什么都没有」。改为给两个执行器加**默认 no-op 的工具调用观察者**（CLI 输出字节不变），桌面接线时**只放行这两个 UI 意图工具**——普通工具在该路径没有 `tool.result`，放行会让工具卡永久停在「运行中」
 - **三件套工具**：`task_*`（4）/ `memory_*`（6）/ `automation_*`（5）共 15 个，直调面板同一批 Java 服务；高后果写进 HITL + 全部写操作进审计；自动化目录解析统一到 `AutomationStore.openDefault()`，杜绝「agent 写了、面板读不到」
 
-## 启动界面
+## 界面一览
 
-### 当前启动界面
+### 桌面端
+
+![首页空态与左侧工具栏](docs/images/overview.png)
+
+左侧工具栏按 **配置 / 运行 / 观察** 分三组，共 11 个面板；最底下是账户行，点进去是完整设置。首页空态给四组入口，点开是**完整可执行**的建议，不用自己想怎么开口。
+
+![危险操作审批与 Provider 配置](docs/images/safety-providers.png)
+
+高危工具调用会停下来等你点头：命令可以当场改、网络按次放行、危险级别与执行理由都摆在明面上，也可以对某个工具「本会话放行」。模型服务多家可选，填 Key 即用、能测连接，**密钥只落本地且不回显**。
+
+![内置工具与 MCP](docs/images/tools-mcp.png)
+
+文件读写、代码搜索、执行命令、网页抓取、浏览器接管、长期记忆等自带能力无需配置；常用 MCP server 在列表里点「添加」即可，命令与路径自动预填。
+
+### 终端启动界面
 
 当前启动输出以命令行实际产物为准：
 
