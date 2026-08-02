@@ -307,6 +307,14 @@ public class PlanExecuteAgent {
                     result = finalOut;
                 }
             }
+        } catch (com.lyhn.wraith.plan.NoPlanException e) {
+            // 「模型没给计划」不是故障,是模式选错了(在 Plan 模式下问了个问题)。
+            // message 已经是给用户看的完整指引 —— 原样透出,别再套技术前缀。
+            // 此前它走下面的通用分支,用户看到的是 Jackson 的
+            // `Unrecognized token '根据对话历史': was expecting (JSON String, …)`。
+            log.info("Planner returned prose instead of a plan");
+            result = e.getMessage();
+            memoryManager.addAssistantMessage(result);
         } catch (Exception e) {
             log.error("Plan run failed", e);
             result = "❌ 执行失败: " + e.getMessage();

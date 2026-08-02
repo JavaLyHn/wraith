@@ -120,10 +120,15 @@ public class Planner {
      * 解析LLM生成的计划JSON
      */
     private ExecutionPlan parsePlan(String goal, String planJson) throws IOException {
-        // 清理可能的markdown代码块
-        String cleaned = planJson.replaceAll("```json\\s*", "")
-                .replaceAll("```\\s*", "")
-                .trim();
+        // 此前这里是「删掉围栏标记后原样 readTree」——模型只要不是纯 JSON 就炸,
+        // 而且炸出来的是 Jackson 的内部话(`Unrecognized token '根据对话历史': …`),
+        // 直接糊到用户脸上。改走 PlanJson:能抠出来就抠(围栏 / 前后寒暄 / 嵌套都认),
+        // 抠不出来说明模型压根没给计划 —— 那是另一回事,给人话,并把它的原话带上
+        // (Plan 模式下被问问题时,那段"跑题"的自然语言往往正是用户要的答案)。
+        String cleaned = PlanJson.extract(planJson);
+        if (cleaned == null) {
+            throw new NoPlanException(PlanJson.noPlanMessage(planJson));
+        }
 
         JsonNode root = mapper.readTree(cleaned);
         String summary = root.path("summary").asText();

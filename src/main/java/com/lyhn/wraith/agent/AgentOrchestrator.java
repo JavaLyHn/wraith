@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lyhn.wraith.llm.LlmClient;
 import com.lyhn.wraith.memory.MemoryManager;
+import com.lyhn.wraith.plan.PlanJson;
 import com.lyhn.wraith.runtime.CancellationContext;
 import com.lyhn.wraith.tool.ToolRegistry;
 import com.lyhn.wraith.util.AnsiStyle;
@@ -221,7 +222,13 @@ public class AgentOrchestrator {
         List<ExecutionStep> steps = parsePlan(planResult.content());
         if (steps.isEmpty()) {
             progressListener.finished("failed");
-            return "❌ 规划失败：无法解析执行计划\n原始输出:\n" + planResult.content();
+            // 「模型压根没给 JSON」与「给了但里面没有 steps」是两回事,分开说。
+            // 前者多半是模式选错(在 Team 模式下问了个问题),给指引;后者才是真的解析不了。
+            // 此前两种都回「无法解析执行计划 + 原始输出」,用户看完不知道下一步做什么。
+            return PlanJson.extract(planResult.content()) == null
+                    ? PlanJson.noPlanMessage(planResult.content())
+                    : "❌ 规划失败：模型给出了 JSON,但里面没有可执行的 steps / tasks。\n原始输出:\n"
+                            + planResult.content();
         }
         progressListener.planParsed(steps.stream()
             .map(s -> new TeamProgressListener.StepInfo(s.id(), s.description(), s.type(), s.dependencies()))
@@ -289,16 +296,12 @@ public class AgentOrchestrator {
      */
     List<ExecutionStep> parsePlan(String planJson) {
         try {
-            String cleaned = planJson.replaceAll("```json\\s*", "")
-                    .replaceAll("```\\s*", "")
-                    .trim();
-
-            // 剥离 JSON 前后的自然语言(planner 有时输出「好的，计划如下：{...}」这类前言),
-            // 取第一个 { 到最后一个 } 之间的子串;取不到则原样交给 readTree 抛错。
-            int lb = cleaned.indexOf('{');
-            int rb = cleaned.lastIndexOf('}');
-            if (lb >= 0 && rb > lb) {
-                cleaned = cleaned.substring(lb, rb + 1);
+            // 抠 JSON 的活儿收敛到 PlanJson(Plan 模式的 Planner 用同一份)。
+            // 此前这里是本地实现的「第一个 { 到最后一个 }」——会被结尾散文里的花括号骗到
+            // (「计划如下：{...} 祝顺利 :}」),而 Planner 那边连这段都没有。
+            String cleaned = PlanJson.extract(planJson);
+            if (cleaned == null) {
+                return List.of();   // 模型压根没给 JSON,调用方据此给人话(见 runTeam)
             }
 
             JsonNode root = mapper.readTree(cleaned);
