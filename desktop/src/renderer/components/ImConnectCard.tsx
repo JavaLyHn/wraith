@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { bindDoneHint, bindPhaseLabel, IM_SHORT_LABEL as LABELS } from '../lib/gatewayLabels'
 import { applyBindEvent, type BindState } from '../lib/imBind'
+import { consoleLink } from '../lib/imConsoleLinks'
 import type { PanelId } from '../lib/panelActions'
 import type { GatewayEvent, GatewayState } from '../../shared/gateway'
 
@@ -66,16 +67,28 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel, onBoun
     return () => { alive = false }
   }, [bind?.phase, p])
 
-  // feishu / wecom:无扫码,退化到开面板填密钥。
+  // feishu / wecom:**没有扫码这回事** —— 它们要的是开发者后台建应用后拿到的凭证
+  // (两个 provider 包里扫码相关关键词零命中)。所以这里不是「二维码没做」,是不存在。
+  // 但也不能只甩一句「去面板填密钥」就完 —— 用户下一个问题必然是「去哪拿」。
+  // 给出直达后台的链接 + 说清要拿什么回来。
   if (p === 'feishu' || p === 'wecom') {
+    const link = consoleLink(p)
     return (
       <div data-testid="im-connect-card" className="self-start flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg">
-        <span>接入 {LABELS[p]} 需要在面板填写密钥(App ID / Secret)。</span>
-        <button
-          data-testid="im-connect-open-panel"
-          onClick={() => onOpenPanel('im-gateway')}
-          className="self-start rounded-lg border border-border px-2.5 py-1 text-xs hover:border-accent hover:text-accent"
-        >🧭 打开 IM 网关面板</button>
+        <span>接入 {LABELS[p]} 不用扫码,填一组开发者后台的凭证即可。</span>
+        <span data-testid="im-connect-what" className="text-2xs text-fg-subtle">{link.what}</span>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            data-testid="im-connect-console"
+            onClick={() => void window.wraith.openExternal(link.url)}
+            className="rounded-lg border border-accent px-2.5 py-1 text-xs text-accent hover:bg-accent/10"
+          >{link.label}</button>
+          <button
+            data-testid="im-connect-open-panel"
+            onClick={() => onOpenPanel('im-gateway')}
+            className="rounded-lg border border-border px-2.5 py-1 text-xs hover:border-accent hover:text-accent"
+          >🧭 打开 IM 网关面板</button>
+        </div>
       </div>
     )
   }

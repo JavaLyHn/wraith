@@ -6,6 +6,7 @@ import { IM_PLATFORMS } from '../lib/imPlatforms'
 import { PlatformIcon } from '../lib/imPlatformIcons'
 import { feishuConfigPayload } from '../lib/feishuConfigPayload'
 import { wecomConfigPayload } from '../lib/wecomConfigPayload'
+import { consoleLink } from '../lib/imConsoleLinks'
 import { applyBindEvent } from '../lib/imBind'
 
 interface ImGatewayPanelProps {
@@ -344,6 +345,13 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
             <div className="text-2xs text-fg-subtle">
               在 飞书开放平台 建自建应用(开长连接 + im:message 权限 + 订阅 im.message.receive_v1),把 App ID / App Secret 填这里。
             </div>
+            {/* 「飞书开放平台」原来是纯文字,用户得自己去搜。链接跟着上面选的区域走 ——
+                国内号点进 Lark 国际站是登不进去的。 */}
+            <button
+              data-testid="im-fs-console"
+              onClick={() => void window.wraith.openExternal(consoleLink('feishu', fsRegion === 'lark' ? 'lark' : 'feishu').url)}
+              className="mt-1 text-2xs text-accent hover:underline"
+            >{consoleLink('feishu', fsRegion === 'lark' ? 'lark' : 'feishu').label}</button>
             <label className="mt-2 block text-xs text-fg-muted">
               App ID
               <input data-testid="im-fs-appid" value={fsAppId} onChange={e => setFsAppId(e.target.value)}
@@ -389,6 +397,11 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
             <div className="text-2xs text-fg-subtle">
               在 企业微信管理后台 建智能机器人,API 接收模式选「长连接」,把 BotID / Secret 填这里(与回调模式的 Token/AESKey 不同)。
             </div>
+            <button
+              data-testid="im-wc-console"
+              onClick={() => void window.wraith.openExternal(consoleLink('wecom').url)}
+              className="mt-1 text-2xs text-accent hover:underline"
+            >{consoleLink('wecom').label}</button>
             <label className="mt-2 block text-xs text-fg-muted">
               BotID
               <input data-testid="im-wc-botid" value={wcBotId} onChange={e => setWcBotId(e.target.value)}
