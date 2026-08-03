@@ -657,15 +657,20 @@ public class Main {
                         String selection = command.payload();
                         if (selection == null || selection.isEmpty()) {
                             ui.println("🤖 当前模型: " + llmClient.getModelName() + " (" + llmClient.getProviderName() + ")");
-                            ui.println("   GLM 明确模型：");
-                            ui.println("   /model glm-5.1       - 切换到 GLM-5.1");
-                            ui.println("   /model glm-5v-turbo  - 切换到 GLM-5V-Turbo 多模态");
-                            ui.println("   其它 provider 使用你配置里的具体模型：");
-                            ui.println("   /model deepseek      - 切换到 DeepSeek（读取配置模型）");
-                            ui.println("   /model step          - 切换到 StepFun（读取配置模型）");
-                            ui.println("   /model kimi          - 切换到 Kimi（读取配置模型）");
-                            ui.println("   /model freellmapi    - 切换到本地 FreeLLMAPI（读取配置模型）");
-                            ui.println("   /model xfyun         - 切换到讯飞星辰 MaaS（读取配置模型）\n");
+                            java.util.List<String> configuredIds =
+                                    new java.util.ArrayList<>(config.getProviders().keySet());
+                            if (configuredIds.isEmpty()) {
+                                ui.println("   还没有配置任何 provider。");
+                                ui.println("   添加: /config provider <name> --api-key <key>\n");
+                            } else {
+                                ui.println("   已配置的 provider（/model <name> 切换）：");
+                                for (String id : configuredIds) {
+                                    String m = config.getModel(id);
+                                    ui.println("   /model " + id
+                                            + (m == null || m.isBlank() ? "" : "   →  " + m));
+                                }
+                                ui.println("");
+                            }
                         } else {
                             ModelSelection target = resolveModelSelection(selection);
                             if (target.explicitModel()) {
@@ -3330,9 +3335,6 @@ public class Main {
         }
 
         String provider = normalizeProviderName(args.get(1));
-        if (!isSupportedProvider(provider)) {
-            return ProviderConfigUpdate.error("暂不支持 provider: " + args.get(1));
-        }
 
         String apiKey = null;
         String baseUrl = null;
@@ -3442,19 +3444,10 @@ public class Main {
         };
     }
 
+    /** 委托 {@link com.lyhn.wraith.config.ProviderNames}——别名表只存一份。 */
     private static String normalizeProviderName(String raw) {
-        String provider = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
-        return switch (provider) {
-            case "stepfun", "step-fun" -> "step";
-            case "moonshot", "moonshotai", "moonshot-ai" -> "kimi";
-            case "free-llm-api", "free_llm_api", "freellm", "free-llm" -> "freellmapi";
-            case "xfyun-maas", "xfyun_maas", "iflytek", "iflytek-maas", "iflytek_maas", "maas" -> "xfyun";
-            default -> provider;
-        };
-    }
-
-    private static boolean isSupportedProvider(String provider) {
-        return List.of("glm", "deepseek", "step", "kimi", "freellmapi", "xfyun").contains(provider);
+        String normalized = com.lyhn.wraith.config.ProviderNames.normalize(raw);
+        return normalized == null ? "" : normalized;
     }
 
     private static String maskSecret(String value) {
@@ -4403,15 +4396,17 @@ public class Main {
     static ModelSelection resolveModelSelection(String raw) {
         String value = raw == null ? "" : raw.trim();
         String normalized = value.toLowerCase(Locale.ROOT);
-        return switch (normalized) {
-            case "glm" -> new ModelSelection("glm", "glm-5.1", true);
-            case "deepseek" -> new ModelSelection("deepseek", null, false);
-            case "step", "stepfun", "step-fun" -> new ModelSelection("step", null, false);
-            case "kimi", "moonshot", "moonshotai", "moonshot-ai" -> new ModelSelection("kimi", null, false);
-            case "freellmapi", "free-llm-api", "free_llm_api", "freellm", "free-llm" ->
-                    new ModelSelection("freellmapi", null, false);
-            case "xfyun", "xfyun-maas", "xfyun_maas", "iflytek", "iflytek-maas", "iflytek_maas", "maas" ->
-                    new ModelSelection("xfyun", null, false);
+        // 先过别名表(单一来源),case 标签只留规范名 —— 此前这里把 14 个别名又抄了一遍。
+        String canonical = com.lyhn.wraith.config.ProviderNames.normalize(normalized);
+        if (canonical == null) {
+            canonical = "";
+        }
+        return switch (canonical) {
+            // glm 此前是 new ModelSelection("glm", "glm-5.1", true) —— 唯一被强制指定模型的
+            // provider,其它都是 null(读各自 config)。拉平:GLMClient 自己的默认模型本来就是
+            // glm-5.1,所以行为不变,但不再有「只有 GLM 才有的特例」。
+            case "glm", "deepseek", "step", "kimi", "freellmapi", "xfyun" ->
+                    new ModelSelection(canonical, null, false);
             default -> {
                 if (normalized.startsWith("glm-")) {
                     yield new ModelSelection("glm", value, true);
@@ -4425,7 +4420,7 @@ public class Main {
                 if (normalized.startsWith("kimi-") || normalized.startsWith("moonshot-")) {
                     yield new ModelSelection("kimi", value, true);
                 }
-                yield new ModelSelection(normalized, null, false);
+                yield new ModelSelection(canonical, null, false);
             }
         };
     }

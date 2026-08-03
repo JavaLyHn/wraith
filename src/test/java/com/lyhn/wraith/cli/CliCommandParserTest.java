@@ -1,5 +1,6 @@
 package com.lyhn.wraith.cli;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -65,8 +66,8 @@ class CliCommandParserTest {
 
         Main.ModelSelection defaultGlm = Main.resolveModelSelection("glm");
         assertEquals("glm", defaultGlm.provider());
-        assertEquals("glm-5.1", defaultGlm.model());
-        assertEquals(true, defaultGlm.explicitModel());
+        assertNull(defaultGlm.model());
+        assertEquals(false, defaultGlm.explicitModel());
 
         Main.ModelSelection explicitGlm = Main.resolveModelSelection("glm-5.1");
         assertEquals("glm", explicitGlm.provider());
@@ -464,5 +465,72 @@ class CliCommandParserTest {
         CliCommandParser.ParsedCommand reject = CliCommandParser.parse("/memory reject cand-abc123");
         assertEquals(CliCommandParser.CommandType.MEMORY_REJECT, reject.type());
         assertEquals("cand-abc123", reject.payload());
+    }
+
+    // ── provider 白名单不该存在(Task 5c) ─────────────────────────────────────
+    //
+    // /config provider anthropic 此前被 isSupportedProvider 硬拒:「暂不支持 provider: anthropic」。
+    // 桌面走 config.setProvider RPC 没有这道闸,所以桌面能配、CLI 不能 —— 同一个产品两套能力。
+    // 这条闸此前没有任何测试覆盖(全仓 rg '暂不支持' 只命中生产代码一处)。
+
+    @Test
+    @DisplayName("/config provider anthropic 必须被接受 —— 白名单外的 provider 不该被 CLI 拒绝")
+    void acceptsAnthropicProvider() {
+        Main.ProviderConfigUpdate u =
+                Main.parseProviderConfigUpdate("provider anthropic --api-key sk-test");
+
+        assertNull(u.error(), "实际错误: " + u.error());
+        assertEquals("anthropic", u.provider());
+    }
+
+    @Test
+    @DisplayName("其它白名单外 provider 同样接受(siliconflow / openrouter / 多实例 id)")
+    void acceptsOtherUnlistedProviders() {
+        for (String id : java.util.List.of("siliconflow", "openrouter", "freellmapi-5", "my-gateway")) {
+            Main.ProviderConfigUpdate u =
+                    Main.parseProviderConfigUpdate("provider " + id + " --api-key sk-test");
+            assertNull(u.error(), id + " 被拒了: " + u.error());
+            assertEquals(id, u.provider(), "provider 名不该被改写");
+        }
+    }
+
+    @Test
+    @DisplayName("别名仍然归一,且归一只有一份实现(ProviderNames)")
+    void aliasesStillNormalize() {
+        assertEquals("kimi",
+                Main.parseProviderConfigUpdate("provider moonshot --api-key k").provider());
+        assertEquals("xfyun",
+                Main.parseProviderConfigUpdate("provider iflytek --api-key k").provider());
+        assertEquals("step",
+                Main.parseProviderConfigUpdate("provider stepfun --api-key k").provider());
+    }
+
+    @Test
+    @DisplayName("裸 /model glm 与其它 provider 一样读配置里的模型 —— 不再是唯一被强制指定的那个")
+    void bareGlmSelectionNoLongerForcesAModel() {
+        Main.ModelSelection glm = Main.resolveModelSelection("glm");
+        Main.ModelSelection ds = Main.resolveModelSelection("deepseek");
+
+        assertNull(glm.model(), "裸 /model glm 不该硬塞 glm-5.1");
+        assertNull(ds.model());
+        assertEquals("glm", glm.provider());
+    }
+
+    @Test
+    @DisplayName("显式模型名仍然生效(/model glm-5v-turbo)")
+    void explicitModelNameStillWorks() {
+        Main.ModelSelection s = Main.resolveModelSelection("glm-5v-turbo");
+
+        assertEquals("glm", s.provider());
+        assertEquals("glm-5v-turbo", s.model());
+    }
+
+    @Test
+    @DisplayName("白名单外的 provider 也能被 /model 选中")
+    void unlistedProviderCanBeSelected() {
+        Main.ModelSelection s = Main.resolveModelSelection("anthropic");
+
+        assertEquals("anthropic", s.provider());
+        assertNull(s.model());
     }
 }
