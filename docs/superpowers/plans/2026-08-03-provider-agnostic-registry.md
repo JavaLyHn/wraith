@@ -1514,7 +1514,64 @@ EOF
 - Produces: `WraithCompleter(Supplier<List<McpResourceDescriptor>>, Supplier<List<Skill>>, Supplier<WraithConfig>)`
   三参构造器；原有一参 / 二参构造器保留并委托（12 处现有调用不动）
 
-- [ ] **Step 1: 写失败的测试**
+- [ ] **Step 1a: 改写三条在断言旧硬编码契约的老测试**
+
+⚠️ 这三条老测试**必须改**，否则本任务无法完成——它们用一参构造器（没有 config）却断言仍能补全出硬编码的 provider，而本任务恰恰是要删掉那份硬编码：
+
+| 测试 | 当前断言 | 为什么必须改 |
+|---|---|---|
+| `completesModelProviderNames`（:53-60） | `/model st` → `"step"` | `step` 来自被删的硬编码列表 |
+| `completesConfigProviderCommand`（:63-70） | `/config provider fr` → `"freellmapi "` | 同上 |
+| `completesXfyunProviderCommand`（:73-80） | `/config provider xf` → `"xfyun "` | 同上 |
+
+它们与 Task 3 那条 `providersListContainsAllKnownProviders` 是同一类——**在断言 bug**。
+
+**改写而非删除**，因为它们覆盖了新测试没覆盖的一件事：**前缀匹配**（新测试用的是空前缀 `"/model "`）。把数据源从硬编码换成 config，测试意图原样保留：
+
+```java
+    @Test
+    void completesModelProviderNames() {
+        // 数据源从硬编码列表换成 config —— 本任务删掉了那份硬编码。
+        // 这条与新增的 modelCompletionListsConfiguredProviders 的区别在于:它验的是**前缀匹配**
+        // (输入 "st" 只补出 step),那条验的是空前缀下的全量列出。
+        WraithCompleter completer = new WraithCompleter(
+                List::of, List::of, () -> cfgWith("step", "kimi"));
+        List<Candidate> candidates = new ArrayList<>();
+
+        completer.complete(null, parsed("/model st", "st"), candidates);
+
+        assertTrue(candidates.stream().anyMatch(c -> c.value().equals("step")));
+        assertFalse(candidates.stream().anyMatch(c -> c.value().equals("kimi")),
+                "前缀 st 不该匹配 kimi");
+    }
+
+    @Test
+    void completesConfigProviderCommand() {
+        WraithCompleter completer = new WraithCompleter(
+                List::of, List::of, () -> cfgWith("freellmapi"));
+        List<Candidate> candidates = new ArrayList<>();
+
+        completer.complete(null, parsed("/config provider fr", "fr"), candidates);
+
+        // 尾随空格是有意义的:它让补全直接推进到下一个参数位。
+        assertTrue(candidates.stream().anyMatch(c -> c.value().equals("freellmapi ")));
+    }
+
+    @Test
+    void completesXfyunProviderCommand() {
+        WraithCompleter completer = new WraithCompleter(
+                List::of, List::of, () -> cfgWith("xfyun"));
+        List<Candidate> candidates = new ArrayList<>();
+
+        completer.complete(null, parsed("/config provider xf", "xf"), candidates);
+
+        assertTrue(candidates.stream().anyMatch(c -> c.value().equals("xfyun ")));
+    }
+```
+
+其余 9 条老测试不涉 provider 补全，**保持不动**。
+
+- [ ] **Step 1b: 追加新测试**
 
 在 `src/test/java/com/lyhn/wraith/cli/WraithCompleterTest.java` 末尾（最后一个 `}` 之前）追加：
 
