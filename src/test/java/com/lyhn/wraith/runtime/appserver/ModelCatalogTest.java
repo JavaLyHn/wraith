@@ -2,6 +2,7 @@ package com.lyhn.wraith.runtime.appserver;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lyhn.wraith.config.WraithConfig;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -154,18 +155,75 @@ class ModelCatalogTest {
         assertFalse(entry.containsKey("apiKey"), "entry 绝不含 apiKey 字段");
     }
 
-    // ── Test: all KNOWN_PROVIDERS appear in providers list ───────────────────
+    // ── Test: providers 只报真有的,不再恒含 6 条空壳 ──────────────────────────
+    //
+    // 原测试断言 providers.size() == KNOWN_PROVIDERS.length —— 它在断言 bug。
+    // 那 6 条 hasKey:false 的空壳在 UI 里根本看不见(桌面每个消费者都按 hasKey 过滤:
+    // ProvidersPanel:30 doneInstances、:90 restCatalog、modelSwitcher:9
+    // configuredProviders),纯属每次 model.list 多发的死载荷。
+
+    // 这四条都走**注入重载**,不碰真实环境变量:若调 public 入口,它会扫 env,
+    // 于是「零配置报空表」在设了 ANTHROPIC_API_KEY 的开发机上失败、在干净 CI 上通过。
+
+    /** 一个只含指定 provider(都带 key)的 config。 */
+    private static WraithConfig cfg(String defaultProvider, String... ids) {
+        WraithConfig c = new WraithConfig();
+        c.setDefaultProvider(defaultProvider);
+        c.setProviders(new java.util.LinkedHashMap<>());
+        for (String id : ids) {
+            c.getProviders().put(id, new WraithConfig.ProviderConfig("sk-" + id, null, "m"));
+        }
+        return c;
+    }
 
     @Test
-    void providersListContainsAllKnownProviders() {
-        WraithConfig config = new WraithConfig();
-        List<Map<String, Object>> providers = ModelCatalog.providers(config);
+    @DisplayName("零配置 → providers 为空表,不再凭空报 6 家")
+    void emptyConfigReportsNoProviders() {
+        assertTrue(ModelCatalog.providers(cfg(null), List.of()).isEmpty(),
+                "一个 provider 都没配时不该报任何条目");
+    }
 
-        assertEquals(ModelCatalog.KNOWN_PROVIDERS.length, providers.size(),
-                "providers 数量应与 KNOWN_PROVIDERS 一致");
-        for (String name : ModelCatalog.KNOWN_PROVIDERS) {
-            boolean found = providers.stream().anyMatch(e -> name.equals(e.get("name")));
-            assertTrue(found, "providers 应包含 " + name);
-        }
+    @Test
+    @DisplayName("配了 N 个就报 N 个,一条不多")
+    void reportsExactlyWhatIsConfigured() {
+        WraithConfig config = cfg(null, "anthropic", "siliconflow");
+
+        List<Map<String, Object>> providers =
+                ModelCatalog.providers(config, List.of("anthropic", "siliconflow"));
+
+        assertEquals(2, providers.size(), "实际: " + providers);
+        assertEquals("anthropic", providers.get(0).get("name"), "保持插入序");
+        assertEquals("siliconflow", providers.get(1).get("name"));
+        assertEquals(true, providers.get(0).get("hasKey"));
+    }
+
+    @Test
+    @DisplayName("env 里发现的 provider 也报出来 —— 否则 env-only 用户看到空面板但对话能用")
+    void envDiscoveredProviderIsReported() {
+        WraithConfig config = cfg(null);          // config.json 里一个都没有
+        List<Map<String, Object>> providers = ModelCatalog.providers(config, List.of("anthropic"));
+
+        assertEquals(1, providers.size(), "实际: " + providers);
+        assertEquals("anthropic", providers.get(0).get("name"));
+    }
+
+    @Test
+    @DisplayName("default 报有效默认 —— stale \"glm\" 不能让面板一个「默认」标都不显示")
+    void resultReportsEffectiveDefault() {
+        // 老 config.json 里 defaultProvider 是落盘的硬编码 "glm",但 glm 没 key。
+        // 若照原样回报,ProvidersPanel:101 的 `defaultId === p.name` 匹配不上任何行。
+        WraithConfig config = cfg("glm", "anthropic");
+
+        Map<String, Object> result =
+                ModelCatalog.result(config, "anthropic", "m", false, List.of("anthropic"));
+
+        assertEquals("anthropic", result.get("default"),
+                "应报实际会被用上的那个,而不是 config 里的死字段");
+    }
+
+    @Test
+    @DisplayName("一个都没配时 default 是空串,不是 null(桌面直接读,不判 null)")
+    void effectiveDefaultIsEmptyStringWhenNothingConfigured() {
+        assertEquals("", ModelCatalog.result(cfg(null), "", "", false, List.of()).get("default"));
     }
 }
