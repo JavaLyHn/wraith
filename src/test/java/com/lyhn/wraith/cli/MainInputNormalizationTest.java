@@ -205,14 +205,16 @@ class MainInputNormalizationTest {
     void slashCommandChoicesAreRenderedDirectlyWithoutJLineConfirmationText() {
         String choices = Main.formatSlashCommandChoices(120);
 
-        assertTrue(choices.contains("/model glm-5.1"), choices);
-        assertTrue(choices.contains("/model glm-5v-turbo"), choices);
-        assertTrue(choices.contains("/model step"), choices);
-        assertTrue(choices.contains("/model kimi"), choices);
-        assertTrue(choices.contains("/model freellmapi"), choices);
-        assertTrue(choices.contains("/model xfyun"), choices);
+        // 断言换成与 provider 无关的命令:provider 名已不在这张静态表里,
+        // 它们由 config 驱动的 WraithCompleter.completeModel 提供(见 Task 5)。
+        // 这条测试的真实意图是「紧凑多列直接渲染、不带 JLine 确认文案」,
+        // 原先那 6 条 /model glm-5.1 之类的断言只是脚手架,且正是本任务要删的硬编码。
+        assertTrue(choices.contains("/model"), choices);
         assertTrue(choices.contains("/browser status"), choices);
+        assertTrue(choices.contains("/plan"), choices);
         assertFalse(choices.contains("do you wish"), choices);
+        assertFalse(choices.contains("glm-5.1"),
+                "provider/模型名不该再出现在静态提示表里: " + choices);
         assertTrue(choices.lines().count() < Main.slashCommandHints().size(),
                 "choices should be compact multi-column output");
     }

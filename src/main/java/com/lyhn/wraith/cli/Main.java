@@ -3023,18 +3023,24 @@ public class Main {
     record SlashCommandHint(String insertText, String display, String description) {
     }
 
+    /**
+     * 静态斜杠命令提示表。
+     *
+     * <p><b>刻意不含任何 provider / 模型名。</b> 这里曾硬编码 9 条
+     * （{@code /model glm-5.1}、{@code /model deepseek}…），于是只配了 anthropic 的用户
+     * 敲 {@code /} 会看到「切换到 GLM-5.1」。provider 名现在只有一个来源：
+     * config 驱动的 {@link WraithCompleter} 补全。
+     *
+     * <p>本表的四个消费者里有三个是无 config 参数的 static 方法
+     * （{@code printSlashCommandHelp} / {@code slashCommandTailTips} /
+     * {@code formatSlashCommandChoices}），所以这里选择「删掉 provider 专属项」
+     * 而不是「把 config 穿进来再生成」——后者要改三处签名，且会再造一份 provider 名单。
+     */
     static List<SlashCommandHint> slashCommandHints() {
         return List.of(
                 new SlashCommandHint("/model", "/model", "查看当前模型"),
-                new SlashCommandHint("/model glm-5.1", "/model glm-5.1", "切换到 GLM-5.1"),
-                new SlashCommandHint("/model glm-5v-turbo", "/model glm-5v-turbo", "切换到 GLM-5V-Turbo 多模态"),
-                new SlashCommandHint("/model deepseek", "/model deepseek", "切换到 DeepSeek（读取配置模型）"),
-                new SlashCommandHint("/model step", "/model step", "切换到 StepFun（读取配置模型）"),
-                new SlashCommandHint("/model kimi", "/model kimi", "切换到 Kimi（读取配置模型）"),
-                new SlashCommandHint("/model freellmapi", "/model freellmapi", "切换到本地 FreeLLMAPI（读取配置模型）"),
-                new SlashCommandHint("/model xfyun", "/model xfyun", "切换到讯飞星辰 MaaS（读取配置模型）"),
-                new SlashCommandHint("/config provider freellmapi ", "/config provider freellmapi <选项>", "配置本地 FreeLLMAPI provider"),
-                new SlashCommandHint("/config provider xfyun ", "/config provider xfyun <选项>", "配置讯飞星辰 MaaS provider"),
+                new SlashCommandHint("/model ", "/model <provider>", "切换 provider（按 Tab 从已配置的里选）"),
+                new SlashCommandHint("/config provider ", "/config provider <name>", "配置 provider（按 Tab 从已配置的里选）"),
                 new SlashCommandHint("/plan", "/plan", "下一条任务使用 Plan-and-Execute 模式"),
                 new SlashCommandHint("/plan ", "/plan <任务内容>", "直接用计划模式执行这条任务"),
                 new SlashCommandHint("/team", "/team", "下一条任务使用 Multi-Agent 协作模式"),
@@ -3264,7 +3270,8 @@ public class Main {
             return;
         }
         String hint = switch (selected) {
-            case 0, 1 -> "💡 GLM: /model glm-5.1 / /model glm-5v-turbo；其它: /model deepseek|step|kimi|freellmapi|xfyun 读取配置模型";
+            // 不点名具体 provider:用户可能一个 GLM 都没配。按 Tab 从已配置的里选。
+            case 0, 1 -> "💡 切换 provider: /model <name>（按 Tab 列出已配置的）；配置: /config provider <name>";
             case 2 -> "💡 切换 HITL: /hitl on / /hitl off";
             case 3 -> "💡 管理 Skill: /skill list / /skill on <name> / /skill off <name>";
             case 4 -> "💡 切换渲染器（重启后生效）: WRAITH_RENDERER=inline|lanterna|plain";
