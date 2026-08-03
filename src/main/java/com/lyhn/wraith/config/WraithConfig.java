@@ -35,7 +35,18 @@ public class WraithConfig {
         return configDir().resolve("config.json");
     }
 
-    private String defaultProvider = "glm";
+    /**
+     * 用户显式选定的 provider；未选过时为 null。
+     *
+     * <p><b>刻意不预设。</b> 这里曾硬编码 {@code "glm"}，而 {@link #save()} 整对象落盘 ——
+     * 于是全新安装第一次保存就把 {@code "glm"} 写进了 config.json，哪怕用户配的是别的。
+     * 之后 {@code createFromConfig} 先试这个无 key 的 glm，再遍历一份硬编码白名单，
+     * 返回 null，界面说「无可用模型」。
+     *
+     * <p>为 null 时由 {@code ProviderResolver} 现算有效默认；用户存 / 删 provider 时
+     * {@code ProviderDefaults.healDefault} 会把它填上。
+     */
+    private String defaultProvider = null;
     private Map<String, ProviderConfig> providers = new LinkedHashMap<>();
     private GatewayConfig gateway;
     private SttConfig stt;

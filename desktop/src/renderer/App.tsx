@@ -575,7 +575,9 @@ export default function App(): JSX.Element {
     if (!text || state.turn === 'running') return
     // 发送前预检:确定不支持图片的模型 + 带图 → 就地拦下报错,保留输入与附件供切模型后重发
     if (attachments.some(a => a.kind === 'image') && shouldBlockImageSend(state.model)) {
-      setSubmitError(`当前模型「${state.model}」不支持图片。请切到支持视觉的模型(如 glm-5v-turbo),或移除图片后再发。`)
+      // 不点名具体模型:这里曾硬写「如 glm-5v-turbo」,而用户可能根本没有 GLM。
+      // 哪些模型支持视觉由 shared/modelVision.ts 判定,与 provider 无关。
+      setSubmitError(`当前模型「${state.model}」不支持图片。请切到支持视觉的模型,或移除图片后再发。`)
       return
     }
     setInputValue('')
