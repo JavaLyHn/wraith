@@ -412,6 +412,20 @@ export interface EmbeddingConfigView {
   hasKey: boolean
 }
 
+/** 一条模型计价。seeded=内置种子（不可编辑）；价格单位是「每百万 token」。 */
+export interface PricingEntryView {
+  modelPrefix: string
+  cacheHitPerM: number
+  cacheMissPerM: number
+  outputPerM: number
+  currency: string
+  seeded?: boolean
+}
+
+export interface PricingListResult {
+  entries: PricingEntryView[]
+}
+
 export interface RagStatus {
   indexed: boolean
   chunkCount: number

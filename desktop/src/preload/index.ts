@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
@@ -114,6 +114,8 @@ export interface WraithApi {
   browserTabs(): Promise<BrowserCmdResult>
   configGetEmbedding(): Promise<EmbeddingConfigView>
   configSetEmbedding(cfg: { provider: string; model: string; baseUrl: string; apiKey: string }): Promise<{ ok: boolean }>
+  configGetPricing(): Promise<PricingListResult>
+  configSetPricing(entries: PricingEntryView[]): Promise<{ ok: boolean; error?: string }>
   ragStatus(): Promise<RagStatus>
   ragIndex(): Promise<RagIndexResult>
   ragSearch(query: string, topK?: number): Promise<RagSearchResult>
@@ -524,6 +526,12 @@ const wraith: WraithApi = {
   },
   configSetEmbedding(cfg) {
     return ipcRenderer.invoke('wraith:configSetEmbedding', cfg) as Promise<{ ok: boolean }>
+  },
+  configGetPricing() {
+    return ipcRenderer.invoke('wraith:configGetPricing') as Promise<PricingListResult>
+  },
+  configSetPricing(entries) {
+    return ipcRenderer.invoke('wraith:configSetPricing', entries) as Promise<{ ok: boolean; error?: string }>
   },
   ragStatus() {
     return ipcRenderer.invoke('wraith:ragStatus') as Promise<RagStatus>

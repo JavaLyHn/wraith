@@ -1137,6 +1137,15 @@ ipcMain.handle('wraith:configSetEmbedding', async (_e, cfg: { provider: string; 
   if (!client) throw new Error('Backend not connected')
   return client.request('config.setEmbedding', cfg)
 })
+// 模型计价(转发 config.getPricing / config.setPricing RPC)
+ipcMain.handle('wraith:configGetPricing', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.getPricing', {})
+})
+ipcMain.handle('wraith:configSetPricing', async (_e, entries: unknown[]) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.setPricing', { entries })
+})
 ipcMain.handle('wraith:ragStatus', async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('rag.status', {})
