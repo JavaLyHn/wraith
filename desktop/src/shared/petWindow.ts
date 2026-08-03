@@ -72,6 +72,28 @@ export function stepScale(current: number, deltaY: number, min = 0.5, max = 2.0,
   return clampScale(current + (deltaY < 0 ? step : -step), min, max)
 }
 
+/**
+ * 按下那一刻的抓取偏移：指针 − 窗口左上角。两者必须同一坐标系（screen/DIP）。
+ *
+ * <b>只能在主进程算</b>：窗口位置是主进程用 `setBounds` 改的，而渲染层的
+ * `window.screenX/screenY` 是 Chromium 自己那份认知 —— 它不保证在程序化 setBounds
+ * 之后同步更新。几次移动之后它就是陈旧的，于是下一次按下算出的 dy 偏大，
+ * `y = pointerY − dy` 变成负数，被 clampToDisplay 钳到 workArea.y（最顶端），
+ * 而且继续往下拖仍然是负 → 宠物卡死在屏幕顶部拖不下来（第七次 snapshot-vs-live：
+ * 渲染层持有一份只有主进程才权威知道的值）。
+ */
+export function grabOffset(pointer: { x: number; y: number }, bounds: Box): { dx: number; dy: number } {
+  return { dx: pointer.x - bounds.x, dy: pointer.y - bounds.y }
+}
+
+/** 按抓取偏移把指针位置换算成窗口左上角。 */
+export function originFromPointer(
+  pointer: { x: number; y: number },
+  grab: { dx: number; dy: number },
+): { x: number; y: number } {
+  return { x: pointer.x - grab.dx, y: pointer.y - grab.dy }
+}
+
 export function clampToDisplay(box: Box, workArea: Box): Box {
   const x = Math.min(Math.max(box.x, workArea.x), workArea.x + Math.max(0, workArea.width - box.width))
   const y = Math.min(Math.max(box.y, workArea.y), workArea.y + Math.max(0, workArea.height - box.height))

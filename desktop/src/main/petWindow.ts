@@ -13,7 +13,7 @@
 import { BrowserWindow, screen, app } from 'electron'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { shouldShowPet, defaultPetPosition, clampToDisplay, petBreathingMargin, type Box, type PetMenuItem } from '../shared/petWindow'
+import { shouldShowPet, defaultPetPosition, clampToDisplay, grabOffset, originFromPointer, petBreathingMargin, type Box, type PetMenuItem } from '../shared/petWindow'
 import { listPets } from './petStore'
 import { petWindowOptions } from './petWindowOptions'
 import { applyNoActivate } from './winPetStyle'
@@ -191,6 +191,35 @@ export function getPetWindow(): BrowserWindow | null {
  * (kiosk/全屏/被别的窗口管理器接管),留一条可诊断的信号比再猜一轮划算。
  */
 let moveNoOpWarned = false
+
+/**
+ * 拖动期间的抓取偏移。<b>由主进程持有</b>：窗口位置是这里用 setBounds 改的，只有这里
+ * 权威知道它在哪。渲染层的 window.screenX/screenY 是 Chromium 自己那份认知，不保证跟着
+ * 程序化 setBounds 更新 —— 用它算偏移，几次移动后就陈旧，dy 偏大导致 y 变负、被夹到
+ * 屏幕顶端且再也拖不下来（用户实测症状）。
+ */
+let petDragGrab: { dx: number; dy: number } | null = null
+
+/** 按下：用自己的 getBounds() 记下抓取偏移。 */
+export function petWindowDragStart(pointerX: number, pointerY: number): void {
+  if (!petWindow) return
+  petDragGrab = grabOffset({ x: pointerX, y: pointerY }, petWindow.getBounds())
+}
+
+/** 移动：收的是**指针**屏幕坐标，窗口原点由主进程按偏移换算。 */
+export function petWindowDragMove(pointerX: number, pointerY: number): void {
+  if (!petWindow || !petDragGrab) return
+  const o = originFromPointer({ x: pointerX, y: pointerY }, petDragGrab)
+  petWindowMoveTo(o.x, o.y)
+}
+
+/** 松手：清偏移并回报**实际落地**的位置，供落盘（不再由渲染层猜）。 */
+export function petWindowDragEnd(): { x: number; y: number } | null {
+  petDragGrab = null
+  if (!petWindow) return null
+  const b = petWindow.getBounds()
+  return { x: b.x, y: b.y }
+}
 
 export function petWindowMoveTo(x: number, y: number): void {
   if (!petWindow) return

@@ -78,10 +78,10 @@ export default function PetWindowApp(): JSX.Element {
 
   // 全身拖动(Task 9):draggingRef 是"当前是否在拖"的唯一真源,下面的点击穿透
   // mousemove 命中测试第一件事就读它——见本文件顶部注释里对这条协调关系的解释。
-  // grabRef 记按下那一刻"指针相对窗口左上角"的偏移(screen 坐标系),拖动全程复用,
-  // 不必每次 pointermove 重新计算(窗口左上角在拖动中一直变,不能拿它反推偏移)。
+  // 抓取偏移**不在这边算**:窗口位置是主进程用 setBounds 改的,渲染层的 window.screenX/Y
+  // 是 Chromium 自己那份认知,不保证跟着程序化 setBounds 更新 —— 陈旧后 dy 偏大会让宠物
+  // 被夹在屏幕顶端且再也拖不下来。偏移由主进程 petWindowDragStart 用 getBounds() 记。
   const draggingRef = useRef(false)
-  const grabRef = useRef({ dx: 0, dy: 0 })
   // 滚轮缩放节流:同一 rAF 内的重复 wheel 事件直接丢弃(而不是排队到下一帧才发),
   // 避免触控板连续触发的高频 wheel 把 IPC 刷爆。
   const wheelPendingRef = useRef(false)
@@ -272,7 +272,9 @@ export default function PetWindowApp(): JSX.Element {
     pointerActiveRef.current = true
     downXRef.current = e.screenX
     downYRef.current = e.screenY
-    grabRef.current = { dx: e.screenX - window.screenX, dy: e.screenY - window.screenY }
+    // 抓取偏移交主进程算 —— 渲染层的 window.screenX/Y 不保证跟着 setBounds 更新,
+    // 陈旧后 dy 偏大会让宠物被夹在屏幕顶端且再也拖不下来(见 shared/petWindow.ts:grabOffset)。
+    window.wraithPet.dragStart(e.screenX, e.screenY)
     e.currentTarget.setPointerCapture(e.pointerId)
   }, [])
 
@@ -300,7 +302,7 @@ export default function PetWindowApp(): JSX.Element {
         setDragFacing(dir)
       }
     }
-    window.wraithPet.moveTo(e.screenX - grabRef.current.dx, e.screenY - grabRef.current.dy)
+    window.wraithPet.dragMove(e.screenX, e.screenY)
   }, [])
 
   // 点击(非拖动)反应:随机 Waving/Jumping,播约一轮动画后自动回落到真实会话状态。
@@ -333,16 +335,17 @@ export default function PetWindowApp(): JSX.Element {
     try { e.currentTarget.releasePointerCapture(e.pointerId) } catch { /* 已丢失/已释放,无害 */ }
   }, [])
 
-  // 落盘用当前窗口屏幕原点(而非 pointerup 那一刻的指针坐标减 grab 偏移——理论上
-  // 该相等,但直接读 window.screenX/Y 更贴近"主进程 setBounds 之后实际落地的位置",
-  // 不受 moveTo IPC 异步/节流影响)。
+  // 落盘位置由主进程在 dragEnd 里用自己的 getBounds() 取 —— 这里不再读
+  // window.screenX/Y。原注释说它"更贴近主进程 setBounds 之后实际落地的位置",
+  // 那个前提是错的:Chromium 那份认知不保证跟着程序化 setBounds 更新,陈旧后不但
+  // 拖动会卡在屏幕顶端,存下来的位置也是错的(重启后宠物出现在别处)。
   const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const wasDragging = draggingRef.current
     const wasActive = pointerActiveRef.current
     if (!wasDragging && !wasActive) return
     resetDrag(e) // 统一收尾:清 draggingRef/pointerActiveRef、复位朝向、释放 capture
     if (wasDragging) {
-      void window.wraithPet.setConfig({ position: { x: window.screenX, y: window.screenY } })
+      window.wraithPet.dragEnd()   // 主进程清偏移 + 用实际 bounds 落盘
     } else {
       triggerClickReaction() // 未越过拖动阈值 → 视为点击,播随机 Waving/Jumping
     }

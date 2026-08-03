@@ -20,7 +20,11 @@ const api = {
     return () => ipcRenderer.removeListener('pet:signal', h)
   },
   setIgnoreMouse: (ignore: boolean) => ipcRenderer.send('pet:setIgnoreMouse', ignore),
-  moveTo: (x: number, y: number) => ipcRenderer.send('pet:moveTo', x, y),
+  // 传的是**指针**屏幕坐标,不是窗口原点 —— 窗口原点由主进程按它自己的 getBounds()
+  // 换算(渲染层的 window.screenX/Y 不保证跟着 setBounds 更新,用它算会让宠物卡在屏幕顶端)。
+  dragStart: (px: number, py: number) => ipcRenderer.send('pet:dragStart', px, py),
+  dragMove: (px: number, py: number) => ipcRenderer.send('pet:dragMove', px, py),
+  dragEnd: () => ipcRenderer.send('pet:dragEnd'),
   setScale: (scale: number) => ipcRenderer.send('pet:setScale', scale),
   contextMenu: () => ipcRenderer.send('pet:contextMenu'),
 }

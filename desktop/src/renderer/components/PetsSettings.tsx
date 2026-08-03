@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Switch } from './ui/switch'
+import PetSprite from './PetSprite'
 import { usePetConfig } from '../lib/usePetConfig'
 import { selectedPet } from '../lib/petMotion'
 import { isValidPetName, extractPetName, cleanInstallLog } from '../../shared/petInstall'
@@ -24,6 +25,19 @@ function sourceLabel(source: PetSource): string {
  * 不留第二份配置 state 影子,且与全局常驻宠物窗口共用同一份配置来源。
  * pets(库列表)与 error(本地导入错误文案)是纯 UI/IPC 派生状态,不是偏好。
  */
+/**
+ * 让一帧刚好装进 80×80 的预览框（`h-20 w-20`）。
+ *
+ * PetSprite 收的是 scale 而不是目标尺寸，所以这里按「较长边贴合」反算 ——
+ * 与 shared/petWindow.ts 的 containScale 同一个思路，但那个函数是给单图算像素上限的，
+ * 参数形状不同，这里不硬凑复用。
+ */
+const PREVIEW_BOX_PX = 80
+function previewScale(sprite: { frameWidth: number; frameHeight: number }): number {
+  const longest = Math.max(sprite.frameWidth, sprite.frameHeight)
+  return longest > 0 ? PREVIEW_BOX_PX / longest : 1
+}
+
 export default function PetsSettings(): JSX.Element {
   const { config, setConfig } = usePetConfig()
   const [pets, setLibrary] = useState<PetView[]>([])
@@ -145,9 +159,19 @@ export default function PetsSettings(): JSX.Element {
       <div>
         <div className={lbl}>当前预览</div>
         <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-border bg-surface">
+          {/*
+            精灵图必须走 PetSprite 而不是裸 <img>:<img> 会把**整张图**(所有帧)缩进这个
+            80×80 的框,于是预览里出现「一只完整的 + 下面多出来一截」——那截是下一帧/下一行。
+            PetSprite 用 backgroundPosition 只截第 0 帧,与桌宠窗里实际显示的是同一套算法。
+            静态单图没有帧的概念,仍走 <img>(它自己会带 draggable=false)。
+          */}
           {active
             ? previewUrl
-              ? <img src={previewUrl} alt={active.displayName} className="h-full w-full object-contain" />
+              ? active.sprite
+                ? <PetSprite previewUrl={previewUrl} sprite={active.sprite} state="idle"
+                    motion="static" scale={previewScale(active.sprite)} />
+                : <img src={previewUrl} alt={active.displayName} draggable={false}
+                    className="h-full w-full object-contain" />
               : <span className="text-2xs text-fg-subtle">加载中…</span>
             : <span className="text-2xs text-fg-subtle">未选择</span>}
         </div>

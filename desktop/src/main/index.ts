@@ -46,7 +46,7 @@ import { buildPetMenuTemplate } from '../shared/petWindow'
 import {
   initPetWindow, syncPetWindow, destroyPetWindow, getPetWindow,
   pushPetConfig, pushPetPreview, pushPetSignal, type PetPreviewPayload,
-  petWindowMoveTo, petWindowResizeToScale, petWindowResetPosition, toElectronMenu,
+  petWindowMoveTo, petWindowDragStart, petWindowDragMove, petWindowDragEnd, petWindowResizeToScale, petWindowResetPosition, toElectronMenu,
 } from './petWindow'
 import { runPetdexInstall } from './petInstall'
 import { detectEditors, detectWindowsEditors, uniqueDownloadName, performUndo, resolveOpenWithPlan } from './fileOpen'
@@ -695,7 +695,13 @@ ipcMain.handle('pet:setConfig', (_e, patch: Partial<PetConfig>) => {
 // 全身拖动(Task 9):renderer 按 grabDX/DY 算好目标屏幕原点后只发 x/y,真正的
 // "夹到目标屏工作区 + setBounds" 全部留给 petWindow.ts 的 petWindowMoveTo——
 // 拖动期间不落盘,落盘由 renderer pointerup 时另发一次 pet:setConfig({ position }) 完成。
-ipcMain.on('pet:moveTo', (_e, x: number, y: number) => petWindowMoveTo(x, y))
+// 拖动三段:偏移与落地位置都由主进程算(它才权威知道窗口在哪)。
+ipcMain.on('pet:dragStart', (_e, px: number, py: number) => petWindowDragStart(px, py))
+ipcMain.on('pet:dragMove', (_e, px: number, py: number) => petWindowDragMove(px, py))
+ipcMain.on('pet:dragEnd', () => {
+  const pos = petWindowDragEnd()
+  if (pos) applyConfigChange({ position: pos })   // 落盘用实际落地的位置,不用渲染层猜的
+})
 
 // 滚轮缩放(Task 9):与 pet:setConfig 的通用路径分开,因为还要立刻 resize 窗口本身
 // (setConfig 只管配置落盘 + 通知,不知道"缩放"还需要联动 setBounds)。
