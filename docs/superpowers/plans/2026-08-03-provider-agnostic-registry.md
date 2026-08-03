@@ -1848,6 +1848,162 @@ EOF
 
 ---
 
+## Task 5b: `slashCommandHints` 去硬编码（Task 5 评审新发现）
+
+**为什么计划里原本没有这一节**：调查阶段我断定硬编码是**四份**。Task 5 的评审全仓 grep 后证明是**六份**——漏掉的两处都在 `Main.java`，而且是**最显眼的**：`slashCommandHints()` 就是用户敲 `/` 时弹出的那张提示表。只配了 anthropic 的用户敲 `/`，看到的是「切换到 GLM-5.1」。
+
+**Files:**
+- Modify: `src/main/java/com/lyhn/wraith/cli/Main.java:3026-3037`（`slashCommandHints()` 里 9 条 provider 专属提示）、`:3267`（`handleConfigPalette` 的帮助文案）
+- Modify: `src/test/java/com/lyhn/wraith/cli/MainInputNormalizationTest.java:206-218`（**在断言旧契约**，必须改写）
+
+**Interfaces:**
+- Consumes: `WraithCompleter.configuredProviderIds()`（Task 5 已落地，config 驱动）
+- Produces: `Main.slashCommandHints()` 签名**不变**，返回内容少掉 9 条 provider 专属项
+
+**设计决定：删副本，不复制副本。**
+
+`slashCommandHints()` 有 4 个消费者：`WraithCompleter.java:82`（用户敲 `/` 的顶层补全）、`Main.java:3109` `printSlashCommandHelp`、`:3199` `slashCommandTailTips`、`:3216` `formatSlashCommandChoices`。后三个都是**无 config 参数的 static 方法**，把 config 穿进去要改三处签名及其调用链。
+
+不做那个。改为**把那 9 条 provider 专属提示整体删掉**，静态表里只留裸 `/model`（已有）和新增裸 `/config provider `。provider 名此后**只有一个来源**：Task 5 已经改成 config 驱动的 `WraithCompleter.completeModel` / `completeConfig`。
+
+这样零穿参、零新副本，而且是真正删掉一份重复，符合本次改动的主题。
+
+- [ ] **Step 1: 改写在断言旧契约的那条测试**
+
+`MainInputNormalizationTest.java:206-218` 的 `slashCommandChoicesAreRenderedDirectlyWithoutJLineConfirmationText` 现在断言 `choices.contains("/model glm-5.1")` 等 6 条 provider 项。它的**真实意图**是「选项以紧凑多列直接渲染、不带 JLine 的确认文案」——provider 断言只是当年顺手抓的脚手架。改写为：
+
+```java
+    @Test
+    void slashCommandChoicesAreRenderedDirectlyWithoutJLineConfirmationText() {
+        String choices = Main.formatSlashCommandChoices(120);
+
+        // 断言换成与 provider 无关的命令:provider 名已不在这张静态表里,
+        // 它们由 config 驱动的 WraithCompleter.completeModel 提供(见 Task 5)。
+        // 这条测试的真实意图是「紧凑多列直接渲染、不带 JLine 确认文案」,
+        // 原先那 6 条 /model glm-5.1 之类的断言只是脚手架,且正是本任务要删的硬编码。
+        assertTrue(choices.contains("/model"), choices);
+        assertTrue(choices.contains("/browser status"), choices);
+        assertTrue(choices.contains("/plan"), choices);
+        assertFalse(choices.contains("do you wish"), choices);
+        assertFalse(choices.contains("glm-5.1"), choices,
+                "provider/模型名不该再出现在静态提示表里");
+        assertTrue(choices.lines().count() < Main.slashCommandHints().size(),
+                "choices should be compact multi-column output");
+    }
+```
+
+- [ ] **Step 2: 跑测试确认它红**
+
+```bash
+mvn -q test -DskipTests=false -Dtest=MainInputNormalizationTest
+```
+
+Expected: FAIL —— `assertFalse(choices.contains("glm-5.1"))` 红（此刻 `glm-5.1` 确实还在表里）。**这一条是真红，不是编译失败**，因为它不依赖任何尚未存在的方法。
+
+- [ ] **Step 3: 删掉那 9 条 provider 专属提示**
+
+`Main.java:3026-3037`，把这 9 行删掉：
+
+```java
+                new SlashCommandHint("/model glm-5.1", "/model glm-5.1", "切换到 GLM-5.1"),
+                new SlashCommandHint("/model glm-5v-turbo", "/model glm-5v-turbo", "切换到 GLM-5V-Turbo 多模态"),
+                new SlashCommandHint("/model deepseek", "/model deepseek", "切换到 DeepSeek（读取配置模型）"),
+                new SlashCommandHint("/model step", "/model step", "切换到 StepFun（读取配置模型）"),
+                new SlashCommandHint("/model kimi", "/model kimi", "切换到 Kimi（读取配置模型）"),
+                new SlashCommandHint("/model freellmapi", "/model freellmapi", "切换到本地 FreeLLMAPI（读取配置模型）"),
+                new SlashCommandHint("/model xfyun", "/model xfyun", "切换到讯飞星辰 MaaS（读取配置模型）"),
+                new SlashCommandHint("/config provider freellmapi ", "/config provider freellmapi <选项>", "配置本地 FreeLLMAPI provider"),
+                new SlashCommandHint("/config provider xfyun ", "/config provider xfyun <选项>", "配置讯飞星辰 MaaS provider"),
+```
+
+保留已有的 `new SlashCommandHint("/model", "/model", "查看当前模型")`，并紧随其后新增一条通用的、不点名任何 provider 的：
+
+```java
+                new SlashCommandHint("/model ", "/model <provider>", "切换 provider（按 Tab 从已配置的里选）"),
+                new SlashCommandHint("/config provider ", "/config provider <name>", "配置 provider（按 Tab 从已配置的里选）"),
+```
+
+在 `slashCommandHints()` 上方加一句 Javadoc 说明这个边界：
+
+```java
+    /**
+     * 静态斜杠命令提示表。
+     *
+     * <p><b>刻意不含任何 provider / 模型名。</b> 这里曾硬编码 9 条
+     * （{@code /model glm-5.1}、{@code /model deepseek}…），于是只配了 anthropic 的用户
+     * 敲 {@code /} 会看到「切换到 GLM-5.1」。provider 名现在只有一个来源：
+     * config 驱动的 {@link WraithCompleter} 补全。
+     *
+     * <p>本表的四个消费者里有三个是无 config 参数的 static 方法
+     * （{@code printSlashCommandHelp} / {@code slashCommandTailTips} /
+     * {@code formatSlashCommandChoices}），所以这里选择「删掉 provider 专属项」
+     * 而不是「把 config 穿进来再生成」——后者要改三处签名，且会再造一份 provider 名单。
+     */
+```
+
+- [ ] **Step 4: 改 `:3267` 的帮助文案**
+
+```java
+            case 0, 1 -> "💡 GLM: /model glm-5.1 / /model glm-5v-turbo；其它: /model deepseek|step|kimi|freellmapi|xfyun 读取配置模型";
+```
+
+改为（不点名任何 provider）：
+
+```java
+            // 不点名具体 provider:用户可能一个 GLM 都没配。按 Tab 从已配置的里选。
+            case 0, 1 -> "💡 切换 provider: /model <name>（按 Tab 列出已配置的）；配置: /config provider <name>";
+```
+
+- [ ] **Step 5: 跑测试确认绿 + 无回归**
+
+```bash
+mvn -q test -DskipTests=false -Dtest=MainInputNormalizationTest,WraithCompleterTest
+mvn -q compile -DskipTests=false
+```
+
+Expected: 全 PASS。若 `slashCommandHintsIncludeRagSlashCommands`（:192-202）红了，检查你有没有误删非 provider 的条目——它只断言 `/index`/`/search`/`/graph`/`/compact` 存在，不该受影响。
+
+⚠️ 注意 `formatSlashCommandChoices` 那条的 `choices.lines().count() < slashCommandHints().size()` 是**相对**比较。删掉 9 条后表变短，紧凑多列的行数也会变——若这条红了，说明删完之后表太短、多列渲染的行数不再明显少于条目数。那不是回归，是这条断言在小表上失去意义；如遇到，报告给我，不要自己放宽阈值。
+
+- [ ] **Step 6: 提交**
+
+```bash
+git add src/main/java/com/lyhn/wraith/cli/Main.java \
+        src/test/java/com/lyhn/wraith/cli/MainInputNormalizationTest.java
+git commit -F - <<'EOF'
+fix(cli): 敲 / 不该再推荐 GLM——slashCommandHints 里那 9 条硬编码删掉
+
+Task 5 的评审全仓 grep 后发现:硬编码的 provider 名单是**六份**不是我调查时
+断定的四份,漏掉的两处都在 Main.java,而且是最显眼的 ——
+
+  slashCommandHints()(:3026-3037)有 9 条 provider 专属提示,含
+  /model glm-5.1 与 /model glm-5v-turbo。它有四个消费者,其中一个是
+  WraithCompleter:82 —— 也就是用户敲 / 时弹出的顶层提示表。于是 Task 5 把
+  completeModel/completeConfig 改成 config 驱动之后,只配了 anthropic 的用户
+  敲 / 依然看到「切换到 GLM-5.1」。
+
+  handleConfigPalette 的帮助文案(:3267)同样硬写「GLM: /model glm-5.1 …」。
+
+修法是**删副本,不复制副本**:那 9 条整体删掉,静态表只留裸 /model 与裸
+/config provider ,provider 名此后只有一个来源 —— Task 5 已改成 config 驱动的
+WraithCompleter 补全。
+
+为什么不把 config 穿进来生成:本表四个消费者里三个是无 config 参数的 static
+方法(printSlashCommandHelp / slashCommandTailTips / formatSlashCommandChoices),
+穿参要改三处签名及其调用链,而且会再造一份 provider 名单 —— 那正是本次要消灭的东西。
+
+MainInputNormalizationTest 那条 slashCommandChoices… 在断言旧契约(硬断言
+/model glm-5.1 等 6 条),已改写:它的真实意图是「紧凑多列直接渲染、不带 JLine
+确认文案」,provider 断言只是当年顺手抓的脚手架。改写后加了一条负向断言
+(glm-5.1 不该再出现),这条在改实现前是红的。
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0186i8XTzXVmK2TuYfAXXJAQ
+EOF
+```
+
+---
+
 ## Task 6: `defaultProvider` 初值改 null + 桌面文案去 GLM
 
 **Files:**
