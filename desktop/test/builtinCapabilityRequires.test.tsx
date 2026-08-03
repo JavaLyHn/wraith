@@ -43,10 +43,28 @@ describe('BUILTIN_CAPABILITIES 的前置条件标注', () => {
     }
   })
 
-  it('网页搜索要点名可用的三种 key,而不是只说「需要配置」', () => {
+  it('网页搜索要点名可用的 key,而不是只说「需要配置」', () => {
     const web = BUILTIN_CAPABILITIES.find(c => c.id === 'web')!
     expect(web.requires).toMatch(/GLM_API_KEY/)
     expect(web.requires).toMatch(/SERPAPI|SearXNG|SEARXNG/i)
+  })
+
+  // 这条文案原先是「搜索需三者之一:GLM_API_KEY(与 GLM 推理共用)/ SERPAPI_KEY /
+  // SEARXNG_URL(自托管,免费无需 key)」—— GLM 摆在第一位,读起来像推荐,而对纯中转站
+  // 用户(无任何官方 provider key)「与 GLM 推理共用」根本不是便利,是一句空话。
+  it('免费那条排在 GLM 前面,且不把任何搜索后端说成零配置', () => {
+    const requires = BUILTIN_CAPABILITIES.find(c => c.id === 'web')!.requires!
+    expect(requires.indexOf('SEARXNG')).toBeLessThan(requires.indexOf('GLM_API_KEY'))
+
+    // 只看搜索那半句。「抓取(web_fetch)零配置」是真话,不该被这条断言连坐 ——
+    // 要禁的是把某个**搜索后端**说成零配置(原文案对 GLM 写的是「零额外配置」,
+    // 而对没有官方 GLM key 的人那是假话)。
+    const searchHalf = requires.split('抓取')[0]
+    expect(searchHalf).not.toMatch(/零额外配置|零配置/)
+  })
+
+  it('提到 /config search 这个写入口(此前只有环境变量一条路)', () => {
+    expect(BUILTIN_CAPABILITIES.find(c => c.id === 'web')!.requires).toMatch(/\/config search/)
   })
 
   it('浏览器接管要点名 Node 与 Chrome', () => {

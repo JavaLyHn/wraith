@@ -23,7 +23,7 @@ tags: [web, browser, fetch]
 
 | 场景 | 首选 | 备选 / fallback |
 |---|---|---|
-| 搜索关键词、找入口 | `web_search` | — |
+| 搜索关键词、找入口 | `web_search` | web_search 报未配置时：`mcp__chrome-devtools__navigate_page` 开搜索引擎页 + `take_snapshot`（慢，但不需要任何 key） |
 | URL 已知，目标是正文（博客 / 官方文档 / GitHub README） | `web_fetch` | `r.jina.ai/<url>` 见 §Jina 兜底 |
 | URL 已知但 web_fetch 返回空正文 / SPA 提示 | `mcp__chrome-devtools__navigate_page` + `take_snapshot` | — |
 | 微信公众号 / 知乎专栏 / Twitter / 小红书 | 直接走 chrome-devtools MCP | 不要先 web_fetch（90% 失败） |

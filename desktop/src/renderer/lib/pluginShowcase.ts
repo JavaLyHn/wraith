@@ -43,12 +43,13 @@ export const BUILTIN_CAPABILITIES: BuiltinCapability[] = [
   { id: 'search', icon: '🔍', name: '代码搜索', desc: '按内容 / 文件名 / 目录检索代码', tools: ['grep_code', 'glob_files', 'search_code', 'list_dir'] },
   { id: 'exec', icon: '⌨️', name: '执行命令', desc: '在沙箱内运行 shell 命令', tools: ['execute_command'] },
   { id: 'project', icon: '📦', name: '新建项目', desc: '脚手架创建新项目', tools: ['create_project'] },
-  // web_search 需要一个搜索 provider 的 key;web_fetch 本身零配置(所以描述里点明"抓取可直接用")。
-  // key 的取值链:环境变量 / 系统属性 / .env / ~/.wraith/config.json(桌面 Provider 面板存的就是它)。
+  // web_search 需要一个搜索后端;web_fetch 本身零配置(所以描述里点明"抓取可直接用")。
+  // key 的取值链:环境变量 / 系统属性 / .env / ~/.wraith/config.json 的 search 节
+  // (桌面 Provider 面板存的是 providers.*;搜索后端目前只能用 CLI 的 /config search 写)。
   {
     id: 'web', icon: '🌐', name: '网页搜索与抓取', desc: '联网搜索并抓取网页内容',
     tools: ['web_search', 'web_fetch'],
-    requires: '搜索需三者之一:GLM_API_KEY(与 GLM 推理共用)/ SERPAPI_KEY / SEARXNG_URL(自托管,免费无需 key);抓取(web_fetch)零配置',
+    requires: '搜索需四者之一:SEARXNG(自托管,免费无需 key)/ SERPAPI_KEY / GLM_API_KEY(与 GLM 推理共用)/ duckduckgo(无需 key,但靠抓 HTML 会抖);可用 /config search 写进配置;抓取(web_fetch)零配置',
   },
   {
     id: 'browser', icon: '🖥️', name: '浏览器接管', desc: '连接并驱动本地浏览器',

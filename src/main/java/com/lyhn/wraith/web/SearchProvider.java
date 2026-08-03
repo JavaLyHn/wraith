@@ -7,8 +7,12 @@ import java.util.List;
  * 搜索引擎抽象。
  *
  * 当前实现：
+ * - {@link ZhipuSearchProvider}：智谱 Web Search，需 GLM_API_KEY（与 GLM 推理共用同一个 key）
  * - {@link SerpApiSearchProvider}：商业聚合 API，需 API Key，开箱即用
- * - {@link SearxngSearchProvider}：开源元搜索引擎，需要本地或可访问的 SearXNG 实例，免费
+ * - {@link SearxngSearchProvider}：开源元搜索引擎，需要本地或可访问的 SearXNG 实例，免费无需 key
+ * - {@link DuckDuckGoSearchProvider}：<b>显式可选</b>的零 key 应急后端，靠抓 HTML，
+ *   自动选择链永不返回它（理由见该类 Javadoc）
+ * - {@link UnconfiguredSearchProvider}：三条路都没配时的话术载体，{@code isReady()} 恒为 false
  *
  * 让用户根据成本 / 数据合规 / 离线需求自由切换 provider。
  * 后续如果新增 Brave / Tavily / Exa 等实现，只要继续实现这个接口，无需改动调用方。

@@ -199,6 +199,8 @@ src/main/java/com/lyhn/wraith/
 
 ### 5.2 改 Web/搜索 → `web/` 相关 + ToolRegistry + `.env.example` + 文档 + 测试
 
+> 改**搜索后端**另需连带：`WraithConfig.SearchConfig`（config.json 的 `search` 节）+ `UnconfiguredSearchProvider`（「未配置」话术的载体，**不是** Zhipu provider —— 占位 provider 曾是 zhipu，于是那句中立的三路指引由智谱代言，模型张口就说 GLM）+ `DuckDuckGoSearchProvider`（显式可选，**自动选择链永不返回它**，由 `SearchProviderAutoSelectionTest` 穷举 8 种组合守门）+ `SearchDetection`（docker/端口检测，纯函数入口注入，端口常量的家在这里）+ `/config search` 写入口 + `ToolRegistry.invalidateSearchProvider()`（不调则本次会话仍用旧 provider，第五次 snapshot-vs-live）+ `src/main/resources/skills/web-access/SKILL.md` 的工具选择表（搜索那行的 fallback 列不能是 `—`，否则 `web_search` 不可用时模型没有降级指令）+ 桌面 `pluginShowcase.ts` 的 `requires` 文案。
+
 ### 5.3 改 Memory → `MemoryManager` + `LongTermMemory` + `TokenBudget` + 测试 + 文档
 
 ### 5.4 改 HITL/策略 → `policy/` + ToolRegistry + HitlToolRegistry + 提示词 + `.env.example` + 文档 + 测试
