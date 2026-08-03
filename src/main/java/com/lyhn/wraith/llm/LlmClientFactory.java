@@ -1,5 +1,6 @@
 package com.lyhn.wraith.llm;
 
+import com.lyhn.wraith.config.ProviderResolver;
 import com.lyhn.wraith.config.WraithConfig;
 
 public class LlmClientFactory {
@@ -43,19 +44,35 @@ public class LlmClientFactory {
         };
     }
 
+    /**
+     * 按 {@link ProviderResolver} 的候选顺序装载第一个能用的 client；一个都不行返回 null。
+     *
+     * <p><b>此前这里是一个硬编码数组</b> {@code {glm,deepseek,step,kimi,freellmapi,xfyun}}，
+     * 于是只配了 anthropic / openai / siliconflow（乃至 freellmapi-2 这种多实例 id）的用户
+     * 拿不到 client——桌面里明明配好了，界面却说「无可用模型」。
+     * 现在的规则与 {@code Main.configRemoveProvider} 一致：谁有 key 谁就是候选。
+     */
     public static LlmClient createFromConfig(WraithConfig config) {
-        LlmClient client = create(config.getDefaultProvider(), config);
-        if (client != null) {
-            return client;
-        }
+        return createFrom(config, ProviderResolver.candidates(config));
+    }
 
-        for (String provider : new String[]{"glm", "deepseek", "step", "kimi", "freellmapi", "xfyun"}) {
-            client = create(provider, config);
+    /**
+     * 同上，但候选表由调用方给出。
+     *
+     * <p>存在的唯一理由是<b>测试确定性</b>：{@link ProviderResolver#candidates(WraithConfig)}
+     * 会扫真实环境变量，若测试走 public 入口，「什么都没配应返回 null」这类断言就会在设了
+     * {@code ANTHROPIC_API_KEY} 的开发机上失败、在干净 CI 上通过。
+     */
+    static LlmClient createFrom(WraithConfig config, java.util.List<String> candidates) {
+        if (candidates == null) {
+            return null;
+        }
+        for (String provider : candidates) {
+            LlmClient client = create(provider, config);
             if (client != null) {
                 return client;
             }
         }
-
         return null;
     }
 
