@@ -237,7 +237,11 @@ public class Main {
         LlmClient llmClient = LlmClientFactory.createFromConfig(config);
         if (llmClient == null) {
             System.err.println("❌ 错误: 未找到可用的 API Key");
-            System.err.println("请在 .env 文件中添加 GLM_API_KEY、DEEPSEEK_API_KEY、STEP_API_KEY、KIMI_API_KEY、FREELLMAPI_API_KEY 或 XFYUN_MAAS_API_KEY");
+            // 不点名具体 provider:此前这里列了六家(不含 ANTHROPIC_API_KEY),而这正是
+            // 只有 anthropic key 的用户最需要正确指引的时刻 —— 照旧文案做会去申请 GLM key。
+            System.err.println("请在 .env 或环境变量里设 <NAME>_API_KEY(小写 NAME 即 provider 名),");
+            System.err.println("例如 ANTHROPIC_API_KEY / OPENAI_API_KEY / GLM_API_KEY；");
+            System.err.println("自建服务或代理网关需同时设 <NAME>_BASE_URL。详见 .env.example。");
             System.exit(1);
         }
         AtomicReference<LlmClient> llmClientRef = new AtomicReference<>(llmClient);

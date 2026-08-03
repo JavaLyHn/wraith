@@ -193,7 +193,7 @@ src/main/java/com/lyhn/wraith/
 
 对应 Client + `LlmClientFactory.java` + `.env.example` + 文档
 
-- 改 provider 选择逻辑时连带：`ProviderResolver`（唯一的候选排序）+ `LlmClientFactory.createFromConfig` + `ModelCatalog.providers/result` + `ProviderDefaults.healDefault` + `WraithCompleter` 的两处补全 + `Main.slashCommandHints` + `Main.parseProviderConfigUpdate`（那道白名单闸已删，别加回去）+ `Main.resolveModelSelection` + `Main.normalizeProviderName`（已委托 `ProviderNames`）+ `/model` 空参的帮助文案。**不要新增第五份 provider 名单** —— 那 6 家曾被硬编码四遍且互不一致，其中一份是可达 bug（只配 anthropic 起不来），详见 `docs/superpowers/specs/2026-08-03-provider-agnostic-registry-design.md`。别名表的单一来源是 `config/ProviderNames.java`：`LlmClientFactory.normalizeProvider` 与 `Main.normalizeProviderName` 都是委托它，不是各自维护一份。`ProviderResolver.ENDPOINT_KNOWN` 是 env-only 发现的护栏表（记录哪个 client 类烧死了哪个端点），**不是**偏好白名单。
+- 改 provider 选择逻辑时连带：`ProviderResolver`（唯一的候选排序）+ `LlmClientFactory.createFromConfig` + `ModelCatalog.providers/result` + `ProviderDefaults.healDefault` + `WraithCompleter` 的两处补全 + `Main.slashCommandHints` + `Main.parseProviderConfigUpdate`（那道白名单闸已删，别加回去）+ `Main.resolveModelSelection` + `Main.normalizeProviderName`（已委托 `ProviderNames`）+ `/model` 空参的帮助文案 + `main()` 找不到可用 client 时的错误提示（`:238` 附近，不点名具体 provider）。**不要新增第十份 provider 名单** —— 那 6 家曾被硬编码九处且互不一致，其中一处是可达 bug（只配 anthropic 拿不到 client）、一处是功能性硬拒绝（`/config provider anthropic` 被 CLI 拒掉而桌面能配），详见 `docs/superpowers/specs/2026-08-03-provider-agnostic-registry-design.md`。别名表的单一来源是 `config/ProviderNames.java`：`LlmClientFactory.normalizeProvider` 与 `Main.normalizeProviderName` 都是委托它，不是各自维护一份。`ProviderResolver.ENDPOINT_KNOWN` 是 env-only 发现的护栏表（记录哪个 client 类烧死了哪个端点），**不是**偏好白名单。
 
 ### 5.1 改 Embedding → `EmbeddingClient` + `VectorStore` + `.env.example` + 文档
 
