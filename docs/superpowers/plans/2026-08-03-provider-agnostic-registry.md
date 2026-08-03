@@ -2005,6 +2005,282 @@ EOF
 
 ---
 
+## Task 5c: `Main.java` 剩余四处 —— 含一个功能性硬拒绝
+
+**为什么又多一节**：Task 5b 提交后我做了一次**系统性窗口聚类扫描**（不再零散 grep），把「任意 12 行内出现 ≥4 个六家 provider 名」的位置全部枚举出来。结论：硬编码不是 4 份、不是 6 份，而是**九份**，全部剩余项都在 `Main.java`。调查阶段的遗漏是本次计划最大的失误。
+
+先把**合法的**列清楚，免得后来人误删（这 6 处都不是缺陷）：
+
+| 位置 | 为什么合法 |
+|---|---|
+| `ProviderNames.java:30-33` | Task 1 抽出的别名表**单一来源**本身 |
+| `ProviderResolver.java:61-66` | `ENDPOINT_KNOWN` 端点护栏表，有 Javadoc 说明它与白名单作用相反 |
+| `LlmClientFactory.java:31-34` | client 派发 `switch`，每个 case 构造不同的类——不是名单，不可归并 |
+| `WraithConfig.java:266-269 / :301-313 / :347-359` | env 变量名映射，**都有 `default ->` 通用兜底**（`NAME_API_KEY` 等），存在只为处理不规则名（`XFYUN_MAAS_API_KEY`），不是偏好白名单 |
+
+**Files:**
+- Modify: `src/main/java/com/lyhn/wraith/cli/Main.java` —— 四处：`:658-668`、`:3333`+`:3456-3458`、`:3445-3454`、`:4403-4431`
+- Modify: `src/test/java/com/lyhn/wraith/cli/CliCommandParserTest.java`
+
+**Interfaces:**
+- Consumes: `com.lyhn.wraith.config.ProviderNames.normalize(String)`（Task 1 落地，别名表单一来源）
+- Produces: `Main.parseProviderConfigUpdate` 不再拒绝白名单外的 provider
+
+### 四处缺陷
+
+**[A] `:3333` + `:3456-3458` `isSupportedProvider` —— 本次最严重，功能性硬拒绝**
+
+```java
+    private static boolean isSupportedProvider(String provider) {
+        return List.of("glm", "deepseek", "step", "kimi", "freellmapi", "xfyun").contains(provider);
+    }
+```
+
+它拦在 `parseProviderConfigUpdate`（`:3333`）里：
+
+```
+/config provider anthropic --api-key sk-...
+→ 「暂不支持 provider: anthropic」
+```
+
+**在终端 REPL 里根本配不进白名单外的 provider。** 桌面走 `config.setProvider` RPC，**没有这道闸**，所以桌面能配、CLI 不能——同一个产品两套能力。这是用户诉求「不应出现只有 GLM 才能完成的事」最纯粹的形态，且是硬拒绝而非静默退化，严重度高于 Task 2 那个（那个是拿不到 client，这个是直接报错）。
+
+而且**它没有任何测试覆盖**（全仓 `rg '暂不支持'` 只命中生产代码一处）。
+
+修法：**删掉 `isSupportedProvider` 方法和 `:3333` 那个 `if` 分支。** 不需要替代校验——`splitArgs` 已保证 token 非空且无空格，而桌面路径从来没有校验也一直工作正常。
+
+**[B] `:3445-3454` `normalizeProviderName` —— 第五份别名表**
+
+与 `ProviderNames.normalize` 的 14 个别名逐字相同。Task 1 抽出单一来源的目标被这份漏网拷贝架空。
+
+修法：方法体改为委托，保留方法（`:3332` 还在调）：
+
+```java
+    /** 委托 {@link com.lyhn.wraith.config.ProviderNames}——别名表只存一份。 */
+    private static String normalizeProviderName(String raw) {
+        String normalized = com.lyhn.wraith.config.ProviderNames.normalize(raw);
+        return normalized == null ? "" : normalized;
+    }
+```
+
+⚠️ 注意原方法对 `null` 返回 `""`（`raw == null ? "" : ...`），而 `ProviderNames.normalize(null)` 返回 `null`。上面的包装保住了原语义——**别漏这层**，`:3332` 的下游按非 null 用。
+
+**[C] `:4403-4431` `resolveModelSelection` —— 第六份别名表 + 一个 GLM 特例**
+
+两个问题：
+
+1. `case "step", "stepfun", "step-fun" ->` 这些 case 标签又抄了一遍别名表。
+2. **`case "glm" -> new ModelSelection("glm", "glm-5.1", true)`** —— 只有 GLM 被强制指定模型名，其它 provider 都是 `new ModelSelection(id, null, false)`（读各自配置里的模型）。**这就是「只有 GLM 才有的待遇」。**
+
+修法：先归一再 switch，并把 GLM 拉平到和别人一样：
+
+```java
+    static ModelSelection resolveModelSelection(String raw) {
+        String value = raw == null ? "" : raw.trim();
+        String normalized = value.toLowerCase(Locale.ROOT);
+        // 先过别名表(单一来源),case 标签只留规范名 —— 此前这里把 14 个别名又抄了一遍。
+        String canonical = com.lyhn.wraith.config.ProviderNames.normalize(normalized);
+        if (canonical == null) {
+            canonical = "";
+        }
+        return switch (canonical) {
+            // glm 此前是 new ModelSelection("glm", "glm-5.1", true) —— 唯一被强制指定模型的
+            // provider,其它都是 null(读各自 config)。拉平:GLMClient 自己的默认模型本来就是
+            // glm-5.1,所以行为不变,但不再有「只有 GLM 才有的特例」。
+            case "glm", "deepseek", "step", "kimi", "freellmapi", "xfyun" ->
+                    new ModelSelection(canonical, null, false);
+            default -> {
+                if (normalized.startsWith("glm-")) {
+                    yield new ModelSelection("glm", value, true);
+                }
+                if (normalized.startsWith("deepseek")) {
+                    yield new ModelSelection("deepseek", value, true);
+                }
+                if (normalized.startsWith("step")) {
+                    yield new ModelSelection("step", value, true);
+                }
+                if (normalized.startsWith("kimi-") || normalized.startsWith("moonshot-")) {
+                    yield new ModelSelection("kimi", value, true);
+                }
+                yield new ModelSelection(canonical, null, false);
+            }
+        };
+    }
+```
+
+⚠️ `default` 分支里的前缀匹配用的是 `normalized`（原始小写值）而非 `canonical`——因为它匹配的是**模型名**前缀（`glm-5.1`、`deepseek-v4`），归一化会把它们原样返回，但语义上这里就该看原值。保持原样，别改成 `canonical`。
+
+⚠️ 那 6 个 case 标签**保留**是必要的：它们的作用不是「白名单」，而是「这些 provider 的裸名代表『读配置里的模型』」。白名单外的 provider 走 `default` 最后那行 `yield new ModelSelection(canonical, null, false)`，语义完全相同——所以 `/model anthropic` 本来就能用（**这一点已核实**，不是功能阻断）。合并这两条分支会让 diff 更小但语义不变，你可以合并。
+
+**[D] `:658-668` `/model` 空参时的帮助文案 —— 第七份**
+
+```java
+                            ui.println("   GLM 明确模型：");
+                            ui.println("   /model glm-5.1       - 切换到 GLM-5.1");
+                            ...
+                            ui.println("   /model xfyun         - 切换到讯飞星辰 MaaS（读取配置模型）\n");
+```
+
+只配了 anthropic 的用户敲 `/model`，看到的是一屏 GLM/DeepSeek/StepFun。
+
+修法：改成列出**用户已配置的** provider。`config`（`Main.java:236` 声明）在此处可达——已核实 `main` 从 `:201` 起，`:658` 仍在同一方法体内：
+
+```java
+                            ui.println("🤖 当前模型: " + llmClient.getModelName() + " (" + llmClient.getProviderName() + ")");
+                            java.util.List<String> configuredIds =
+                                    new java.util.ArrayList<>(config.getProviders().keySet());
+                            if (configuredIds.isEmpty()) {
+                                ui.println("   还没有配置任何 provider。");
+                                ui.println("   添加: /config provider <name> --api-key <key>\n");
+                            } else {
+                                ui.println("   已配置的 provider（/model <name> 切换）：");
+                                for (String id : configuredIds) {
+                                    String m = config.getModel(id);
+                                    ui.println("   /model " + id
+                                            + (m == null || m.isBlank() ? "" : "   →  " + m));
+                                }
+                                ui.println("");
+                            }
+```
+
+- [ ] **Step 1: 写失败的测试（真红，不是编译失败）**
+
+在 `src/test/java/com/lyhn/wraith/cli/CliCommandParserTest.java` 末尾追加。这些测试**不引用任何尚未存在的方法**，所以在改实现前跑就该红：
+
+```java
+    // ── provider 白名单不该存在(Task 5c) ─────────────────────────────────────
+    //
+    // /config provider anthropic 此前被 isSupportedProvider 硬拒:「暂不支持 provider: anthropic」。
+    // 桌面走 config.setProvider RPC 没有这道闸,所以桌面能配、CLI 不能 —— 同一个产品两套能力。
+    // 这条闸此前没有任何测试覆盖(全仓 rg '暂不支持' 只命中生产代码一处)。
+
+    @Test
+    @DisplayName("/config provider anthropic 必须被接受 —— 白名单外的 provider 不该被 CLI 拒绝")
+    void acceptsAnthropicProvider() {
+        Main.ProviderConfigUpdate u =
+                Main.parseProviderConfigUpdate("provider anthropic --api-key sk-test");
+
+        assertNull(u.error(), "实际错误: " + u.error());
+        assertEquals("anthropic", u.provider());
+    }
+
+    @Test
+    @DisplayName("其它白名单外 provider 同样接受(siliconflow / openrouter / 多实例 id)")
+    void acceptsOtherUnlistedProviders() {
+        for (String id : java.util.List.of("siliconflow", "openrouter", "freellmapi-5", "my-gateway")) {
+            Main.ProviderConfigUpdate u =
+                    Main.parseProviderConfigUpdate("provider " + id + " --api-key sk-test");
+            assertNull(u.error(), id + " 被拒了: " + u.error());
+            assertEquals(id, u.provider(), "provider 名不该被改写");
+        }
+    }
+
+    @Test
+    @DisplayName("别名仍然归一,且归一只有一份实现(ProviderNames)")
+    void aliasesStillNormalize() {
+        assertEquals("kimi",
+                Main.parseProviderConfigUpdate("provider moonshot --api-key k").provider());
+        assertEquals("xfyun",
+                Main.parseProviderConfigUpdate("provider iflytek --api-key k").provider());
+        assertEquals("step",
+                Main.parseProviderConfigUpdate("provider stepfun --api-key k").provider());
+    }
+
+    @Test
+    @DisplayName("裸 /model glm 与其它 provider 一样读配置里的模型 —— 不再是唯一被强制指定的那个")
+    void bareGlmSelectionNoLongerForcesAModel() {
+        Main.ModelSelection glm = Main.resolveModelSelection("glm");
+        Main.ModelSelection ds = Main.resolveModelSelection("deepseek");
+
+        assertNull(glm.model(), "裸 /model glm 不该硬塞 glm-5.1");
+        assertNull(ds.model());
+        assertEquals("glm", glm.provider());
+    }
+
+    @Test
+    @DisplayName("显式模型名仍然生效(/model glm-5v-turbo)")
+    void explicitModelNameStillWorks() {
+        Main.ModelSelection s = Main.resolveModelSelection("glm-5v-turbo");
+
+        assertEquals("glm", s.provider());
+        assertEquals("glm-5v-turbo", s.model());
+    }
+
+    @Test
+    @DisplayName("白名单外的 provider 也能被 /model 选中")
+    void unlistedProviderCanBeSelected() {
+        Main.ModelSelection s = Main.resolveModelSelection("anthropic");
+
+        assertEquals("anthropic", s.provider());
+        assertNull(s.model());
+    }
+```
+
+若该文件缺 import，按需补 `org.junit.jupiter.api.DisplayName` 与 `static org.junit.jupiter.api.Assertions.*`。
+
+⚠️ `ProviderConfigUpdate` / `ModelSelection` 的访问修饰符若是 private，测试访问不到——那时**停下报告**，不要擅自把生产类型提成 public（前面的任务因为把重载提成 public 被开过 Important）。`CliCommandParserTest` 已经在测 `parseProviderConfigUpdate`，说明至少它是可达的。
+
+- [ ] **Step 2: 跑测试确认红**
+
+```bash
+mvn -q test -DskipTests=false -Dtest=CliCommandParserTest
+```
+
+Expected: `acceptsAnthropicProvider` / `acceptsOtherUnlistedProviders` 红（「暂不支持 provider」）；`bareGlmSelectionNoLongerForcesAModel` 红（`glm.model()` 是 `"glm-5.1"` 不是 null）。**这次是真红。**
+
+- [ ] **Step 3: 按上面 [A][B][C][D] 四处改实现**
+
+- [ ] **Step 4: 跑测试确认绿 + 无回归**
+
+```bash
+mvn -q test -DskipTests=false -Dtest=CliCommandParserTest,MainInputNormalizationTest,WraithCompleterTest
+mvn -q compile -DskipTests=false
+```
+
+- [ ] **Step 5: 提交**
+
+```bash
+git add src/main/java/com/lyhn/wraith/cli/Main.java \
+        src/test/java/com/lyhn/wraith/cli/CliCommandParserTest.java
+git commit -F - <<'EOF'
+fix(cli): 终端里配不了 anthropic——isSupportedProvider 这道白名单闸删掉
+
+系统性窗口聚类扫描(任意 12 行内 >=4 个六家 provider 名)后确认:provider 硬编码
+是**九份**,不是调查阶段断定的四份。剩余全部在 Main.java,四处:
+
+[A] isSupportedProvider(:3456)是**功能性硬拒绝**,拦在 parseProviderConfigUpdate:
+      /config provider anthropic --api-key sk-... → 「暂不支持 provider: anthropic」
+    桌面走 config.setProvider RPC 没有这道闸 —— 于是桌面能配、CLI 不能,同一个产品
+    两套能力。这是用户诉求「不应出现只有 glm 才能完成的事」最纯粹的形态,而且是硬
+    报错不是静默退化,严重度高于 Task 2 那个(那个拿不到 client,这个直接拒)。
+    这道闸此前零测试覆盖。删掉方法与调用;不需要替代校验 —— splitArgs 已保证 token
+    非空无空格,而桌面路径从来没有校验也一直正常。
+
+[B] normalizeProviderName(:3445)是**第五份别名表**,与 Task 1 抽出的
+    ProviderNames.normalize 14 个别名逐字相同 —— Task 1 的单一来源目标被它架空。
+    改为委托,并保住原方法对 null 返回 "" 的语义(normalize 返回 null)。
+
+[C] resolveModelSelection(:4403)是**第六份别名表**,且藏着一个 GLM 特例:
+    case "glm" -> new ModelSelection("glm", "glm-5.1", true) —— 唯一被强制指定模型
+    的 provider,其它都是 null(读各自 config)。改为先过 ProviderNames 归一、case 只
+    留规范名,并把 glm 拉平到和别人一样。行为不变(GLMClient 自己的默认模型就是
+    glm-5.1),但不再有「只有 GLM 才有的待遇」。
+
+[D] /model 空参的帮助文案(:658)是**第七份**,硬列 GLM/DeepSeek/StepFun 一屏。
+    改为列出用户已配置的 provider(config 在该作用域可达,已核实 main 从 :201 起)。
+
+顺带把系统扫描判定为**合法**的 6 处记进计划,免得后来人误删:ProviderNames 的表
+本身、ProviderResolver.ENDPOINT_KNOWN(端点护栏,与白名单作用相反)、
+LlmClientFactory 的 client 派发 switch(每个 case 构造不同类,不是名单)、
+WraithConfig 三个 env 变量名映射(都有 default -> 通用兜底,只为处理不规则名)。
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_0186i8XTzXVmK2TuYfAXXJAQ
+EOF
+```
+
+---
+
 ## Task 6: `defaultProvider` 初值改 null + 桌面文案去 GLM
 
 **Files:**
