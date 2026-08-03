@@ -65,21 +65,28 @@ class ModelCatalogTest {
 
     // ── Test: hasKey=false when no key configured ────────────────────────────
 
+    // M4(最终评审): 原实现走 public 入口 ModelCatalog.providers(config) 扫真实 env,
+    // 又把断言锁在 "step".equals(name) 这个条件里 —— 本机因 ./.env 里的真实 DEEPSEEK_API_KEY,
+    // providers() 恰好返回 [deepseek],if 分支永不成立;干净 CI 上 providers() 又是空表,
+    // for 体根本不执行。两种环境下都是"零断言空转通过",名字承诺的事一条也没验。
+    //
+    // 换成注入重载(不扫真实 env)+ 一个本机 env 里绝不可能存在对应 key 的探测 id,
+    // 断言才有判别力且环境无关。
     @Test
+    @DisplayName("config 里有条目但没填 key → hasKey 必须是 false(不是靠 env 偶然为 false 才绿)")
     void providersHasKeyFalseWhenNoKeyConfigured() {
-        WraithConfig config = new WraithConfig(); // no providers configured
+        String probeId = "probe-no-key-provider";
+        WraithConfig config = new WraithConfig();
+        config.setProviders(new java.util.LinkedHashMap<>());
+        config.getProviders().put(probeId, new WraithConfig.ProviderConfig(null, null, "m")); // 无 key
 
-        List<Map<String, Object>> providers = ModelCatalog.providers(config);
-        // All entries should have hasKey=false (no env vars set in test)
-        for (Map<String, Object> entry : providers) {
-            String name = (String) entry.get("name");
-            // Only assert for providers that definitely have no env-var keys in CI
-            // Use glm as a safe bet (no GLM_API_KEY env var in test environment)
-            if ("step".equals(name)) {
-                // step has no fallback env var that would normally be set
-                assertNotNull(entry.get("hasKey"), "hasKey field must be present for provider: " + name);
-            }
-        }
+        List<Map<String, Object>> providers = ModelCatalog.providers(config, List.of()); // 不扫真实 env
+
+        Map<String, Object> entry = providers.stream()
+                .filter(e -> probeId.equals(e.get("name")))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("探测 provider 条目缺失: " + providers));
+        assertEquals(false, entry.get("hasKey"), "config 里没填 key 时 hasKey 必须是 false");
     }
 
     // ── Test: result() full shape with canary injection ──────────────────────

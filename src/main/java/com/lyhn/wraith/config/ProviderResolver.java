@@ -15,9 +15,15 @@ import java.util.function.Function;
  * 「谁是可用 provider」的唯一答案：<b>config 或 env 里有 key 的就是</b>。
  *
  * <p><b>它替换掉了什么</b>：此前 {@code {glm,deepseek,step,kimi,freellmapi,xfyun}} 这个列表在
- * 仓库里硬编码了四份（{@code ModelCatalog.KNOWN_PROVIDERS}、{@code LlmClientFactory} 的回落数组、
- * {@code WraithCompleter} 的两处补全），互不一致，且其中 factory 那份是可达 bug——
- * 只配了 anthropic 的用户拿不到 client。
+ * 仓库里硬编码了<b>九处</b>（调查分三轮才摸清全貌：最初判定四份，评审纠正为六份，系统性窗口
+ * 聚类扫描最终确认九处）——含 {@code ModelCatalog.KNOWN_PROVIDERS}、{@code LlmClientFactory}
+ * 的回落数组、{@code WraithCompleter} 的两处补全、{@code Main.slashCommandHints}、
+ * {@code Main.handleConfigPalette} 的帮助文案、旧 {@code Main.isSupportedProvider} 白名单闸等，
+ * 互不一致。其中 factory 那份是可达 bug——只配了 anthropic 的用户拿不到 client；
+ * {@code isSupportedProvider} 那处更严重，是功能性硬拒绝（终端 {@code /config provider anthropic}
+ * 被直接拒掉，桌面却能配）。完整九处清单与调查演进过程见
+ * {@code docs/superpowers/specs/2026-08-03-provider-agnostic-registry-design.md} §2.1
+ * 与 {@code .superpowers/sdd/2026-08-03-provider-agnostic-registry/progress.md}。
  *
  * <p>这条规则不是新发明的：{@code Main.configRemoveProvider} 早就在用「挑下一个有 key 的」，
  * 只是只装在了删除路径上。本类把它推广到启动回落、{@code model.list} 载荷与命令补全。
@@ -44,7 +50,7 @@ public final class ProviderResolver {
     /**
      * 端点可确定的 provider —— env-only 发现的护栏白名单。
      *
-     * <p><b>这张表的作用与被删掉的四份白名单相反</b>：白名单是*限制*谁能被创建，
+     * <p><b>这张表的作用与被删掉的白名单相反</b>：白名单是*限制*谁能被创建，
      * 这张表是*允许* env-only 发现。不在表里的 provider 依然可用，只是需要显式
      * {@code <NAME>_BASE_URL} 或写进 config.json。
      *
@@ -53,8 +59,14 @@ public final class ProviderResolver {
      * 「连不上」——它会<b>静默把那个 key 发给 OpenAI</b>。这比失败更糟。
      *
      * <p>逐个 client 类核实的来源：GLMClient/DeepSeekClient 构造器不收 baseUrl（烧死）；
-     * Step/Kimi/FreeLlmApi/XfyunMaaS 各有 {@code DEFAULT_BASE_URL}；
-     * AnthropicClient 有 {@code DEFAULT_BASE}；openai 命中 GenericOpenAiClient 的兜底。
+     * Step/Kimi/FreeLlmApi/XfyunMaaS 各有 {@code DEFAULT_BASE_URL}；openai 命中
+     * GenericOpenAiClient 的兜底；<b>anthropic 由 {@code LlmClientFactory} 显式派发到
+     * {@code AnthropicClient}（不经过 default 分支的 protocol 判断），后者有
+     * {@code DEFAULT_BASE}</b>——这条曾经的入表理由写的是「AnthropicClient 有 DEFAULT_BASE」，
+     * 但当时 {@code LlmClientFactory} 的 default 分支只在 protocol=="anthropic" 才会派发到它，
+     * 而没有 config 条目时 {@code WraithConfig.getProtocol} 缺省返回 "openai"——那条路
+     * 实际上永远走不到 AnthropicClient，会落进 GenericOpenAiClient 把 key 发给 api.openai.com。
+     * 显式 {@code case "anthropic"} 落地后，这条注释描述的事实才成立。
      *
      * <p><b>装的是规范名</b>，所以查表前必须先过 {@link ProviderNames#normalize}——
      * 否则 {@code MOONSHOT_API_KEY} 发现出的 {@code moonshot} 会被误挡：

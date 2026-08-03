@@ -34,6 +34,15 @@ public class LlmClientFactory {
             case "kimi" -> new KimiClient(apiKey, model, baseUrl);
             case "freellmapi" -> new FreeLlmApiClient(apiKey, model, baseUrl);
             case "xfyun" -> new XfyunMaaSClient(apiKey, model, baseUrl, loraId);
+            // anthropic 必须在这里显式派发,不能靠 default 分支的 protocol 判断:
+            // WraithConfig.getProtocol 在没有 config 条目时返回 "openai",于是 env-only
+            // 或 CLI 配置(CLI 无 --protocol 时)的 anthropic 会落进 GenericOpenAiClient,
+            // 而后者 baseUrl 空时兜底 api.openai.com —— 用户的 Anthropic key 会被发给 OpenAI。
+            // anthropic 必须在这里显式派发,不能靠 default 分支的 protocol 判断:
+            // WraithConfig.getProtocol 在没有 config 条目时返回 "openai",于是 env-only
+            // 或 CLI 配置(CLI 无 --protocol 时)的 anthropic 会落进 GenericOpenAiClient,
+            // 而后者 baseUrl 空时兜底 api.openai.com —— 用户的 Anthropic key 会被发给 OpenAI。
+            case "anthropic" -> new AnthropicClient(apiKey, model, baseUrl);
             default -> {
                 String protocol = config.getProtocol(configuredProvider);
                 if ("anthropic".equalsIgnoreCase(protocol)) {

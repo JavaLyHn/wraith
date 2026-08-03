@@ -15,9 +15,11 @@
 
 ## 2. 调查结论
 
-### 2.1 「那 6 家」被硬编码了 4 遍，且互不一致
+### 2.1 「那 6 家」被硬编码了 9 处，且互不一致（调查分三轮才摸清全貌）
 
-`{glm, deepseek, step, kimi, freellmapi, xfyun}` 这个列表在仓库里抄了四份：
+`{glm, deepseek, step, kimi, freellmapi, xfyun}` 这个列表在仓库里抄了九处。下表是本设计文档
+编写时的初次扫描结果，只找到 4 处；完整九处清单见 `AGENTS.md` §5.2 与
+`.superpowers/sdd/2026-08-03-provider-agnostic-registry/progress.md`：
 
 | # | 位置 | 内容 | 后果 |
 |---|---|---|---|
@@ -25,6 +27,13 @@
 | 2 | `LlmClientFactory.java:52` 回落数组 | 6 个 provider | **真 bug**（见 2.2） |
 | 3 | `WraithCompleter.java:91-98` `/model` 补全 | 5 provider + **2 个 GLM 模型名** | 首推 `glm-5.1` |
 | 4 | `WraithCompleter.java:117-122` `/config provider` 补全 | 6 个 provider | 其余 provider 无补全 |
+
+> **调查完整性的教训**：本设计文档最初判定为「四遍」；Task 5 评审在验收阶段发现遗漏的两处
+> 最显眼的拷贝（`Main.slashCommandHints` 与 `handleConfigPalette` 帮助文案），纠正为「六份」；
+> 随后 Task 5c 的系统性窗口聚类扫描（`rg 'model glm-5\.1|"glm", "deepseek", "step"|glm-5v-turbo'`）
+> 又挖出三处活的拷贝，其中一处（`isSupportedProvider`）是功能性硬拒绝而不只是文案不一致——
+> 最终确认是九处。调查不完整曾在这条工作线里反复发生，留这段演进记录是为了让下一个人
+> 别重演同样的「以为扫完了」。
 
 这是本仓库反复出现的「同一份内容抄多份、改一处修不干净」模式（此前已在 `bash -c`、Plan/Team 的 JSON 抽取、pet 窗口的 `resizable`/`movable` 上各栽一次）。
 
@@ -137,9 +146,9 @@ static List<String> candidates(WraithConfig config,
 第二项是必须的：stale `"glm"` 下 `ProvidersPanel.tsx:101` 的 `defaultId === p.name` 匹配不上任何行，
 面板会**一个「默认」标都不显示**。
 
-为什么强调共用：§2.1 刚证明这仓库会把同一份逻辑抄四遍。两个消费者各写一遍必然漂移。
+为什么强调共用：§2.1 刚证明这仓库会把同一份逻辑抄九遍。两个消费者各写一遍必然漂移。
 
-### 3.2 D2 —— 四份白名单全删
+### 3.2 D2 —— 白名单全删
 
 | 位置 | 改成 |
 |---|---|
@@ -175,14 +184,14 @@ static List<String> candidates(WraithConfig config,
 | `kimi` | `KimiClient.DEFAULT_BASE_URL` |
 | `freellmapi` | `FreeLlmApiClient.DEFAULT_BASE_URL` |
 | `xfyun` | `XfyunMaaSClient.DEFAULT_BASE_URL` |
-| `anthropic` | `AnthropicClient.DEFAULT_BASE` |
+| `anthropic` | `AnthropicClient.DEFAULT_BASE`（**须 `LlmClientFactory` 显式派发到该类才成立**——见最终评审 C1：早期实现里 default 分支只在 `protocol=="anthropic"` 才会派发，而没有 config 条目时协议缺省是 `"openai"`，那条路实际上永远走不到 `AnthropicClient`，会落进 `GenericOpenAiClient` 把 key 发给 `api.openai.com`） |
 | `openai` | `GenericOpenAiClient` 的兜底就是 `https://api.openai.com/v1` |
 
 **为什么必须有这道护栏**：`GenericOpenAiClient.java:21` 在 baseUrl 为空时兜底
 `https://api.openai.com/v1`。所以一个无关的 `MY_SERVICE_API_KEY` 不会「连不上」——
 它会**静默指向 api.openai.com 并把那个 key 发过去**。这比失败更糟。
 
-这张表是「哪个 client 类烧死了哪个端点」的事实记录，不是偏好排序；它的作用与被删掉的四份白名单
+这张表是「哪个 client 类烧死了哪个端点」的事实记录，不是偏好排序；它的作用与被删掉的白名单
 **相反**——白名单是*限制*谁能被创建，这张表是*允许* env-only 发现，不在表里的 provider 依然可用，
 只是需要显式给 `<NAME>_BASE_URL` 或写进 config.json。
 

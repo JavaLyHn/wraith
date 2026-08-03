@@ -2,6 +2,7 @@ package com.lyhn.wraith.cli;
 
 import org.jline.reader.Candidate;
 import org.jline.reader.ParsedLine;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import com.lyhn.wraith.mcp.resources.McpResourceDescriptor;
 import com.lyhn.wraith.skill.Skill;
@@ -209,14 +210,33 @@ class WraithCompleterTest {
 
     @Test
     void modelCompletionDropsUnconfiguredHardcodedProviders() {
+        // discovered 显式注入空表(四参构造器),不走会扫真实 env 的默认实现:
+        // 本仓库自己的默认 provider 就叫 GLM_API_KEY,贡献者本机很可能设了它——
+        // 若这里用三参构造器走默认实现,"没配 glm 就不该推荐它" 这条断言会在这类机器上假红。
         WraithCompleter completer = new WraithCompleter(
-                List::of, List::of, () -> cfgWith("anthropic"));
+                List::of, List::of, () -> cfgWith("anthropic"), List::of);
         List<Candidate> candidates = new ArrayList<>();
 
         completer.complete(null, parsed("/model ", ""), candidates);
 
         assertFalse(candidates.stream().anyMatch(c -> c.value().trim().equals("glm")),
                 "没配 glm 就不该推荐它: " + values(candidates));
+    }
+
+    @Test
+    @DisplayName("env 发现的 provider 也该出现在补全里 —— 否则只写了 .env 的用户 Tab 补全一条不给(I3)")
+    void modelCompletionIncludesEnvDiscoveredProviders() {
+        // discovered 显式注入(四参构造器),不扫真实 env —— 这里验的是「注入的候选会被并进补全」
+        // 这条合并逻辑本身,不是 ProviderResolver.candidates 有没有正确扫到真实环境变量
+        // (那部分由 ProviderResolverTest 覆盖)。
+        WraithCompleter completer = new WraithCompleter(
+                List::of, List::of, () -> cfgWith(), () -> List.of("deepseek"));
+        List<Candidate> candidates = new ArrayList<>();
+
+        completer.complete(null, parsed("/model ", ""), candidates);
+
+        assertTrue(candidates.stream().anyMatch(c -> c.value().trim().equals("deepseek")),
+                "config 为空但 env 发现了 deepseek 时,补全应包含它: " + values(candidates));
     }
 
     @Test
@@ -248,9 +268,12 @@ class WraithCompleterTest {
     void completionFollowsLiveConfigNotASnapshot() {
         // 本仓库已四次栽在 snapshot-vs-live-signal 上(沙箱护盾、动作卡…)。
         // 用户刚在桌面面板里加完 provider,不该等重启才补全得出来。
+        //
+        // discovered 显式注入空表(四参构造器),不走会扫真实 env 的默认实现 —— 否则 "groq"
+        // 在恰好设了 GROQ_API_KEY 的宿主机上会从一开始就出现,断言就假红。
         java.util.List<String> ids = new java.util.ArrayList<>(List.of("anthropic"));
         WraithCompleter completer = new WraithCompleter(
-                List::of, List::of, () -> cfgWith(ids.toArray(new String[0])));
+                List::of, List::of, () -> cfgWith(ids.toArray(new String[0])), List::of);
 
         List<Candidate> before = new ArrayList<>();
         completer.complete(null, parsed("/model ", ""), before);

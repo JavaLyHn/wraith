@@ -661,8 +661,10 @@ public class Main {
                         String selection = command.payload();
                         if (selection == null || selection.isEmpty()) {
                             ui.println("🤖 当前模型: " + llmClient.getModelName() + " (" + llmClient.getProviderName() + ")");
-                            java.util.List<String> configuredIds =
-                                    new java.util.ArrayList<>(config.getProviders().keySet());
+                            // config 项 ∪ env 发现的候选 —— 只用 config.getProviders().keySet()
+                            // 会让 .env 只写了 <NAME>_API_KEY、没跑过 /config 的用户看到自相矛盾的
+                            // 两行:状态行报着 deepseek,下一行却说「还没有配置任何 provider」(I3)。
+                            List<String> configuredIds = knownProviderIds(config);
                             if (configuredIds.isEmpty()) {
                                 ui.println("   还没有配置任何 provider。");
                                 ui.println("   添加: /config provider <name> --api-key <key>\n");
@@ -676,7 +678,7 @@ public class Main {
                                 ui.println("");
                             }
                         } else {
-                            ModelSelection target = resolveModelSelection(selection);
+                            ModelSelection target = resolveModelSelection(selection, config);
                             if (target.explicitModel()) {
                                 ensureProviderConfig(config, target.provider()).setModel(target.model());
                             }
@@ -3309,6 +3311,9 @@ public class Main {
         if (update.loraId() != null) {
             providerConfig.setLoraId(update.loraId());
         }
+        if (update.protocol() != null) {
+            providerConfig.setProtocol(update.protocol());
+        }
         if (update.setDefault()) {
             config.setDefaultProvider(update.provider());
         }
@@ -3320,6 +3325,8 @@ public class Main {
                 ? "(默认)" : providerConfig.getModel()).append('\n');
         out.append("   baseUrl: ").append(providerConfig.getBaseUrl() == null || providerConfig.getBaseUrl().isBlank()
                 ? "(默认)" : providerConfig.getBaseUrl()).append('\n');
+        out.append("   protocol: ").append(providerConfig.getProtocol() == null || providerConfig.getProtocol().isBlank()
+                ? "openai(默认)" : providerConfig.getProtocol()).append('\n');
         out.append("   apiKey: ").append(maskSecret(providerConfig.getApiKey())).append('\n');
         if ("xfyun".equals(update.provider())) {
             out.append("   loraId: ").append(providerConfig.getLoraId() == null || providerConfig.getLoraId().isBlank()
@@ -3344,6 +3351,7 @@ public class Main {
         String baseUrl = null;
         String model = null;
         String loraId = null;
+        String protocol = null;
         boolean setDefault = false;
         for (int i = 2; i < args.size(); i++) {
             String token = args.get(i);
@@ -3371,6 +3379,7 @@ public class Main {
                 case "base-url" -> baseUrl = value;
                 case "model" -> model = value;
                 case "lora-id" -> loraId = value;
+                case "protocol" -> protocol = value;
                 default -> {
                     return ProviderConfigUpdate.error("未知配置项: " + key);
                 }
@@ -3381,10 +3390,21 @@ public class Main {
             return ProviderConfigUpdate.error("--lora-id 仅支持 xfyun provider");
         }
 
-        if (apiKey == null && baseUrl == null && model == null && loraId == null && !setDefault) {
+        // --protocol 决定 LlmClientFactory 的 default 分支走 AnthropicClient 还是
+        // GenericOpenAiClient(见 C1)。非法取值必须报人话,不能静默吞掉或悄悄落成 openai——
+        // 那样用户会以为设置生效了,实际却把 key 发去了别的地方。
+        if (protocol != null) {
+            String normalizedProtocol = protocol.trim().toLowerCase(Locale.ROOT);
+            if (!"openai".equals(normalizedProtocol) && !"anthropic".equals(normalizedProtocol)) {
+                return ProviderConfigUpdate.error("--protocol 只支持 openai 或 anthropic");
+            }
+            protocol = normalizedProtocol;
+        }
+
+        if (apiKey == null && baseUrl == null && model == null && loraId == null && protocol == null && !setDefault) {
             return ProviderConfigUpdate.error("至少提供一个配置项");
         }
-        return new ProviderConfigUpdate(provider, apiKey, baseUrl, model, loraId, setDefault, null);
+        return new ProviderConfigUpdate(provider, apiKey, baseUrl, model, loraId, protocol, setDefault, null);
     }
 
     private static String providerConfigUsage() {
@@ -3394,6 +3414,7 @@ public class Main {
                   /config provider freellmapi --model qwen/qwen3-coder:free --default
                   /config provider xfyun --base-url https://maas-api.cn-huabei-1.xf-yun.com/v2 --api-key <key> --model Qwen3.6-35B-A3B --default
                   /config provider xfyun --lora-id <resourceId>
+                  /config provider anthropic --protocol anthropic --api-key <key> --model claude-sonnet-4-5
                   /model freellmapi
                   /model xfyun
                 """.stripTrailing();
@@ -4397,7 +4418,40 @@ public class Main {
         return null;
     }
 
-    static ModelSelection resolveModelSelection(String raw) {
+    /**
+     * 「/model 空参」与 {@code WraithCompleter} 的 provider 补全要展示的 id 全集：
+     * config 里写下的（含暂时没填 key 的）∪ env 发现的候选，config 项在前、保持插入序，去重。
+     *
+     * <p>两者都要，谁都不能替代谁：{@code config.getProviders().keySet()} 收录**所有写下过的**
+     * provider，包括暂时没填 key 的——用户很可能正要去填它；而 {@code ProviderResolver.candidates}
+     * 只收有 key 且端点可确定的，补的是「只在 .env 里写了 {@code <NAME>_API_KEY}、从没跑过
+     * {@code /config}」的用户——此前这里只用前者，于是这类用户敲 {@code /model} 时状态行报着
+     * 已发现的模型，下一行却说「还没有配置任何 provider」，自相矛盾（I3）；
+     * {@code WraithCompleter} 的 Tab 补全同理，一条都不给。
+     */
+    static List<String> knownProviderIds(WraithConfig config) {
+        return knownProviderIds(config, com.lyhn.wraith.config.ProviderResolver.candidates(config));
+    }
+
+    /**
+     * 同上，但候选表由调用方给出。
+     *
+     * <p>存在的唯一理由是<b>测试确定性</b>：{@code ProviderResolver.candidates(config)} 会扫
+     * 真实环境变量 + {@code ./.env} + {@code ~/.env}，若测试走一参入口，「config 为空但 env 有
+     * 发现」这类断言的结果就会取决于跑它的机器设了什么变量。
+     */
+    static List<String> knownProviderIds(WraithConfig config, List<String> discovered) {
+        java.util.LinkedHashSet<String> ids = new java.util.LinkedHashSet<>();
+        if (config != null && config.getProviders() != null) {
+            ids.addAll(config.getProviders().keySet());
+        }
+        if (discovered != null) {
+            ids.addAll(discovered);
+        }
+        return List.copyOf(ids);
+    }
+
+    static ModelSelection resolveModelSelection(String raw, WraithConfig config) {
         String value = raw == null ? "" : raw.trim();
         String normalized = value.toLowerCase(Locale.ROOT);
         // 先过别名表(单一来源),case 标签只留规范名 —— 此前这里把 14 个别名又抄了一遍。
@@ -4424,9 +4478,53 @@ public class Main {
                 if (normalized.startsWith("kimi-") || normalized.startsWith("moonshot-")) {
                     yield new ModelSelection("kimi", value, true);
                 }
+                // 上面四条是「provider 名恰好是模型名前缀」这个巧合覆盖的四家 —— 第十份名单的
+                // 教训是:巧合不该被当成规则。白名单外的 provider(claude-*、gpt-*、qwen-* …)
+                // 通用做法是查已配置的 provider,而不是再加一条 claude-/gpt- 前缀判断(I4)。
+                ModelSelection matched = matchConfiguredProvider(normalized, value, config);
+                if (matched != null) {
+                    yield matched;
+                }
                 yield new ModelSelection(canonical, null, false);
             }
         };
+    }
+
+    /**
+     * 把「具体模型名」映射回它所属的已配置 provider —— 通用做法,不需要第十份硬编码前缀名单(I4)。
+     * 命中条件二选一:
+     * <ol>
+     *   <li>{@code normalized} 是某个已配置 provider id 的<b>真前缀延伸</b>（如 provider
+     *       {@code "qwen"} ⇒ 输入 {@code "qwen-max"}）——裸 provider id 本身不算这条,那种情况
+     *       该走 {@link #resolveModelSelection} 末尾的「非显式」回落,否则 {@code /model qwen}
+     *       会被误当成「把模型名设成字面量 qwen」。</li>
+     *   <li>该 provider 已记录的 {@code model} 字段与 {@code normalized} 完全相等——覆盖
+     *       provider id 与模型名前缀对不上的情况（如 provider {@code "anthropic"} 的模型是
+     *       {@code "claude-sonnet-4-5"}，起头对不上 {@code "anthropic"}）。</li>
+     * </ol>
+     * 只查 {@code config.getProviders()} —— 不查 {@code ProviderResolver.candidates},那个会扫
+     * 真实 env,会让这条本该是纯函数的解析逻辑在不同机器上跑出不同结果。
+     */
+    private static ModelSelection matchConfiguredProvider(String normalized, String rawValue, WraithConfig config) {
+        if (config == null || config.getProviders() == null || normalized.isEmpty()) {
+            return null;
+        }
+        for (String id : config.getProviders().keySet()) {
+            if (id == null || id.isBlank()) {
+                continue;
+            }
+            String idLower = id.toLowerCase(Locale.ROOT);
+            if (!normalized.equals(idLower) && normalized.startsWith(idLower)) {
+                return new ModelSelection(id, rawValue, true);
+            }
+        }
+        for (String id : config.getProviders().keySet()) {
+            String model = config.getModel(id);
+            if (model != null && normalized.equals(model.trim().toLowerCase(Locale.ROOT))) {
+                return new ModelSelection(id, rawValue, true);
+            }
+        }
+        return null;
     }
 
     private static WraithConfig.ProviderConfig ensureProviderConfig(WraithConfig config, String provider) {
@@ -4640,9 +4738,9 @@ public class Main {
     }
 
     record ProviderConfigUpdate(String provider, String apiKey, String baseUrl, String model, String loraId,
-                                boolean setDefault, String error) {
+                                String protocol, boolean setDefault, String error) {
         static ProviderConfigUpdate error(String error) {
-            return new ProviderConfigUpdate(null, null, null, null, null, false, error);
+            return new ProviderConfigUpdate(null, null, null, null, null, null, false, error);
         }
     }
 

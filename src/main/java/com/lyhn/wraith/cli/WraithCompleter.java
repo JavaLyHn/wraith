@@ -25,6 +25,17 @@ final class WraithCompleter implements Completer {
      * 而不是回退到硬编码列表。
      */
     private final Supplier<com.lyhn.wraith.config.WraithConfig> configSupplier;
+    /**
+     * env 发现的候选 provider id 来源；{@code null}（三参及以下构造器的老调用点，含生产唯一
+     * 调用点 {@code Main.java}）时走默认实现 {@code ProviderResolver.candidates(config)}。
+     *
+     * <p>存在的唯一理由是<b>测试确定性</b>：{@code ProviderResolver.candidates} 会扫真实
+     * {@code System.getenv()} + {@code ./.env} + {@code ~/.env}——若测试断言某个 provider
+     * <b>不</b>在补全里，结果就会取决于跑测试的机器上有没有设对应的 {@code <NAME>_API_KEY}
+     * （本仓库自己的默认 provider 就叫 {@code GLM_API_KEY}，贡献者本机很可能设了它）。
+     * 四参构造器让这类断言注入固定候选表，绕开真实环境变量。
+     */
+    private final Supplier<List<String>> discoveredProviderIdsSupplier;
 
     WraithCompleter(Supplier<List<McpResourceDescriptor>> resourceSupplier) {
         this(resourceSupplier, List::of, null);
@@ -38,9 +49,17 @@ final class WraithCompleter implements Completer {
     WraithCompleter(Supplier<List<McpResourceDescriptor>> resourceSupplier,
                     Supplier<List<Skill>> skillSupplier,
                     Supplier<com.lyhn.wraith.config.WraithConfig> configSupplier) {
+        this(resourceSupplier, skillSupplier, configSupplier, null);
+    }
+
+    WraithCompleter(Supplier<List<McpResourceDescriptor>> resourceSupplier,
+                    Supplier<List<Skill>> skillSupplier,
+                    Supplier<com.lyhn.wraith.config.WraithConfig> configSupplier,
+                    Supplier<List<String>> discoveredProviderIdsSupplier) {
         this.resourceSupplier = resourceSupplier;
         this.skillSupplier = skillSupplier == null ? List::of : skillSupplier;
         this.configSupplier = configSupplier;
+        this.discoveredProviderIdsSupplier = discoveredProviderIdsSupplier;
     }
 
     @Override
@@ -98,11 +117,13 @@ final class WraithCompleter implements Completer {
     }
 
     /**
-     * 已写下的 provider id，按插入序（＝用户添加序）。
+     * 已写下的 provider id ∪ env 发现的候选（{@link Main#knownProviderIds}），
+     * config 项在前、保持插入序（＝用户添加序），env 发现的追加在后，去重。
      *
-     * <p>刻意用 {@code getProviders().keySet()} 而非 {@code ProviderResolver.candidates}：
-     * 补全要列出**所有写下过的** provider，包括暂时没填 key 的——用户很可能正要去填它。
-     * 候选表是给「装载哪个 client」用的，判据不同。
+     * <p>两者都要，谁都不能替代谁：{@code getProviders().keySet()} 收录**所有写下过的**
+     * provider，包括暂时没填 key 的——用户很可能正要去填它；单靠它漏了「只在 .env 里写了
+     * {@code <NAME>_API_KEY}、从没跑过 {@code /config}」的用户——这类用户敲 {@code /model}
+     * 时 Tab 补全此前一条都不给（I3），别让下一个人以为漏 env 是故意的。
      */
     private List<String> configuredProviderIds() {
         if (configSupplier == null) {
@@ -110,10 +131,13 @@ final class WraithCompleter implements Completer {
         }
         try {
             com.lyhn.wraith.config.WraithConfig config = configSupplier.get();
-            if (config == null || config.getProviders() == null) {
+            if (config == null) {
                 return List.of();
             }
-            return List.copyOf(config.getProviders().keySet());
+            if (discoveredProviderIdsSupplier != null) {
+                return Main.knownProviderIds(config, discoveredProviderIdsSupplier.get());
+            }
+            return Main.knownProviderIds(config);
         } catch (Exception e) {
             return List.of();   // 补全坏了不该把 REPL 带崩
         }

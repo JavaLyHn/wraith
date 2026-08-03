@@ -77,6 +77,8 @@ class ProviderDefaultSelfHealWiringTest {
         assertTrue(setResult.get("ok").asBoolean());
 
         JsonNode cfg = readConfigJson(home);
+        // ⚠ 断言消息把整份 cfg 拼了进去(当前是假 key + @TempDir,无害)——
+        // 这个模式别复用到真实 config.json 上,否则真实 API Key 会被打进 surefire 报告(M8)。
         String defaultProvider = cfg.path("defaultProvider").asText(null);
         assertEquals("anthropic", defaultProvider,
                 "存完 anthropic 就该立刻可用 —— defaultProvider 若仍是硬编码初值 \"glm\","
@@ -99,6 +101,7 @@ class ProviderDefaultSelfHealWiringTest {
         assertTrue(removeResult.get("ok").asBoolean());
 
         JsonNode cfg = readConfigJson(home);
+        // ⚠ 同上:断言消息把整份 cfg 拼了进去,别把这个模式复用到真实 config.json 上(M8)。
         String defaultProvider = cfg.path("defaultProvider").asText(null);
         assertEquals("siliconflow", defaultProvider,
                 "删掉当前默认(deepseek)后,defaultProvider 应落到下一个有 key 的 provider(siliconflow)——"

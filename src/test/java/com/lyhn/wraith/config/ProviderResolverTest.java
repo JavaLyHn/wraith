@@ -177,6 +177,11 @@ class ProviderResolverTest {
         assertEquals(List.of("my_service"), got);
     }
 
+    // 最终评审 C1: anthropic 这一档此前只验证了「进护栏白名单」这一步,却没验证护栏放行后
+    // 那个候选真的会被造成 AnthropicClient(而不是落进 GenericOpenAiClient 把 key 发给 OpenAI)——
+    // 也就是把这个曾经的回归行为钉成了绿灯。C1 修复(LlmClientFactory 显式 case "anthropic")后
+    // 这条断言本身是对的,真正要锁住的那件事由
+    // LlmClientFactoryRoutingTest.envOnlyAnthropicDoesNotLeakToOpenAi 补上。
     @Test
     @DisplayName("端点可确定的 8 家不需要 BASE_URL 也放行")
     void builtinEndpointProvidersPassWithoutBaseUrl() {

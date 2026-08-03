@@ -1,12 +1,22 @@
 package com.lyhn.wraith.cli;
 
+import com.lyhn.wraith.config.WraithConfig;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class CliCommandParserTest {
+
+    /** 空 config —— resolveModelSelection 的大多数用例不依赖已配置的 provider。 */
+    private static WraithConfig noConfig() {
+        return new WraithConfig();
+    }
 
     @Test
     void parsesPlanSlashCommandWithoutPayload() {
@@ -50,46 +60,46 @@ class CliCommandParserTest {
 
     @Test
     void resolvesConcreteModelNameToProviderAndModel() {
-        Main.ModelSelection step = Main.resolveModelSelection("step-custom-model");
+        Main.ModelSelection step = Main.resolveModelSelection("step-custom-model", noConfig());
         assertEquals("step", step.provider());
         assertEquals("step-custom-model", step.model());
         assertEquals(true, step.explicitModel());
 
-        Main.ModelSelection glm = Main.resolveModelSelection("glm-4v-plus");
+        Main.ModelSelection glm = Main.resolveModelSelection("glm-4v-plus", noConfig());
         assertEquals("glm", glm.provider());
         assertEquals("glm-4v-plus", glm.model());
 
-        Main.ModelSelection provider = Main.resolveModelSelection("step");
+        Main.ModelSelection provider = Main.resolveModelSelection("step", noConfig());
         assertEquals("step", provider.provider());
         assertNull(provider.model());
         assertEquals(false, provider.explicitModel());
 
-        Main.ModelSelection defaultGlm = Main.resolveModelSelection("glm");
+        Main.ModelSelection defaultGlm = Main.resolveModelSelection("glm", noConfig());
         assertEquals("glm", defaultGlm.provider());
         assertNull(defaultGlm.model());
         assertEquals(false, defaultGlm.explicitModel());
 
-        Main.ModelSelection explicitGlm = Main.resolveModelSelection("glm-5.1");
+        Main.ModelSelection explicitGlm = Main.resolveModelSelection("glm-5.1", noConfig());
         assertEquals("glm", explicitGlm.provider());
         assertEquals("glm-5.1", explicitGlm.model());
         assertEquals(true, explicitGlm.explicitModel());
 
-        Main.ModelSelection kimi = Main.resolveModelSelection("kimi-k2.6");
+        Main.ModelSelection kimi = Main.resolveModelSelection("kimi-k2.6", noConfig());
         assertEquals("kimi", kimi.provider());
         assertEquals("kimi-k2.6", kimi.model());
         assertEquals(true, kimi.explicitModel());
 
-        Main.ModelSelection moonshot = Main.resolveModelSelection("moonshot");
+        Main.ModelSelection moonshot = Main.resolveModelSelection("moonshot", noConfig());
         assertEquals("kimi", moonshot.provider());
         assertNull(moonshot.model());
         assertEquals(false, moonshot.explicitModel());
 
-        Main.ModelSelection freeLlmApi = Main.resolveModelSelection("free-llm-api");
+        Main.ModelSelection freeLlmApi = Main.resolveModelSelection("free-llm-api", noConfig());
         assertEquals("freellmapi", freeLlmApi.provider());
         assertNull(freeLlmApi.model());
         assertEquals(false, freeLlmApi.explicitModel());
 
-        Main.ModelSelection xfyun = Main.resolveModelSelection("maas");
+        Main.ModelSelection xfyun = Main.resolveModelSelection("maas", noConfig());
         assertEquals("xfyun", xfyun.provider());
         assertNull(xfyun.model());
         assertEquals(false, xfyun.explicitModel());
@@ -505,11 +515,80 @@ class CliCommandParserTest {
                 Main.parseProviderConfigUpdate("provider stepfun --api-key k").provider());
     }
 
+    // ── C1(2)/I2: CLI 补上 --protocol,补 CLI↔桌面对等 ────────────────────────
+    //
+    // 桌面 ProvidersPanel 有 protocol 字段('openai'|'anthropic'),CLI 此前没有任何选项能设它。
+    // 后果见 C1:env-only 或纯 CLI 配置的 anthropic 会静默落进 GenericOpenAiClient,把
+    // Anthropic key 发给 api.openai.com。
+
+    @Test
+    @DisplayName("--protocol anthropic 被正确解析并透传")
+    void parsesProtocolOption() {
+        Main.ProviderConfigUpdate u =
+                Main.parseProviderConfigUpdate("provider anthropic --protocol anthropic --api-key sk-test");
+
+        assertNull(u.error(), "实际错误: " + u.error());
+        assertEquals("anthropic", u.provider());
+        assertEquals("anthropic", u.protocol());
+    }
+
+    @Test
+    @DisplayName("--protocol openai 同样被接受(桌面默认值)")
+    void parsesOpenaiProtocolOption() {
+        Main.ProviderConfigUpdate u =
+                Main.parseProviderConfigUpdate("provider my-gateway --protocol openai --api-key sk-test");
+
+        assertNull(u.error(), "实际错误: " + u.error());
+        assertEquals("openai", u.protocol());
+    }
+
+    @Test
+    @DisplayName("--protocol 非法取值要给人话报错,不能静默吞掉")
+    void rejectsInvalidProtocolOptionWithHumanReadableError() {
+        Main.ProviderConfigUpdate u =
+                Main.parseProviderConfigUpdate("provider anthropic --protocol foo --api-key sk-test");
+
+        assertTrue(u.error() != null && u.error().contains("openai") && u.error().contains("anthropic"),
+                "错误信息应指出合法取值,实际: " + u.error());
+    }
+
+    @Test
+    @DisplayName("未指定 --protocol 时该字段为 null(不覆盖已有配置)")
+    void protocolIsNullWhenNotSpecified() {
+        Main.ProviderConfigUpdate u =
+                Main.parseProviderConfigUpdate("provider deepseek --api-key sk-test");
+
+        assertNull(u.error(), "实际错误: " + u.error());
+        assertNull(u.protocol());
+    }
+
+    @Test
+    @DisplayName("handleConfigCommand 把 --protocol 写进 ProviderConfig(接线,不只是解析)")
+    void handleConfigCommandWiresProtocolIntoProviderConfig(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tempDir) {
+        // config.save() 会真的落盘;绝不碰开发机真实的 ~/.wraith,重定向到 @TempDir(既有做法,
+        // 见 EmbeddingConfigWiringTest/AppServerDriver)。
+        String previous = System.getProperty("wraith.config.dir");
+        System.setProperty("wraith.config.dir", tempDir.toString());
+        try {
+            WraithConfig config = new WraithConfig();
+            Main.handleConfigCommand(config, "provider anthropic --protocol anthropic --api-key sk-test");
+
+            assertEquals("anthropic", config.getProviders().get("anthropic").getProtocol(),
+                    "--protocol 必须真的写进 ProviderConfig,不能停在解析这一层");
+        } finally {
+            if (previous == null) {
+                System.clearProperty("wraith.config.dir");
+            } else {
+                System.setProperty("wraith.config.dir", previous);
+            }
+        }
+    }
+
     @Test
     @DisplayName("裸 /model glm 与其它 provider 一样读配置里的模型 —— 不再是唯一被强制指定的那个")
     void bareGlmSelectionNoLongerForcesAModel() {
-        Main.ModelSelection glm = Main.resolveModelSelection("glm");
-        Main.ModelSelection ds = Main.resolveModelSelection("deepseek");
+        Main.ModelSelection glm = Main.resolveModelSelection("glm", noConfig());
+        Main.ModelSelection ds = Main.resolveModelSelection("deepseek", noConfig());
 
         assertNull(glm.model(), "裸 /model glm 不该硬塞 glm-5.1");
         assertNull(ds.model());
@@ -519,7 +598,7 @@ class CliCommandParserTest {
     @Test
     @DisplayName("显式模型名仍然生效(/model glm-5v-turbo)")
     void explicitModelNameStillWorks() {
-        Main.ModelSelection s = Main.resolveModelSelection("glm-5v-turbo");
+        Main.ModelSelection s = Main.resolveModelSelection("glm-5v-turbo", noConfig());
 
         assertEquals("glm", s.provider());
         assertEquals("glm-5v-turbo", s.model());
@@ -528,9 +607,100 @@ class CliCommandParserTest {
     @Test
     @DisplayName("白名单外的 provider 也能被 /model 选中")
     void unlistedProviderCanBeSelected() {
-        Main.ModelSelection s = Main.resolveModelSelection("anthropic");
+        Main.ModelSelection s = Main.resolveModelSelection("anthropic", noConfig());
 
         assertEquals("anthropic", s.provider());
         assertNull(s.model());
+    }
+
+    // ── I4: /model <具体模型名> 不再靠第十份硬编码前缀名单 ──────────────────────
+    //
+    // Main.resolveModelSelection 的 default 分支此前只认 glm-/deepseek/step/kimi-|moonshot-
+    // 四个硬编码前缀,于是 /model claude-sonnet-4-5、/model gpt-4o、/model qwen-max 全部失败
+    // (报「未配置 xxx 的 API Key」,xxx 是整段模型名被误当成了 provider id)。
+    // 通用做法:查已配置的 provider —— 前缀匹配覆盖 provider id 恰好是模型名前缀的情况
+    // (如 "qwen" ⇒ "qwen-max"),model 字段完全相等覆盖前缀对不上的情况
+    // (如 provider "anthropic" 的模型是 "claude-sonnet-4-5")。
+
+    @Test
+    @DisplayName("模型名前缀匹配已配置的 provider id(I4)")
+    void resolvesModelNameByConfiguredProviderPrefix() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("qwen", new WraithConfig.ProviderConfig("sk-qwen", null, null));
+
+        Main.ModelSelection s = Main.resolveModelSelection("qwen-max", config);
+
+        assertEquals("qwen", s.provider());
+        assertEquals("qwen-max", s.model());
+        assertEquals(true, s.explicitModel());
+    }
+
+    @Test
+    @DisplayName("模型名与已配置 provider 的 model 字段完全相等时也能归位(覆盖前缀对不上的 claude/gpt,I4)")
+    void resolvesModelNameByExactConfiguredModelMatch() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("anthropic",
+                new WraithConfig.ProviderConfig("sk-ant", null, "claude-sonnet-4-5"));
+
+        Main.ModelSelection s = Main.resolveModelSelection("claude-sonnet-4-5", config);
+
+        assertEquals("anthropic", s.provider());
+        assertEquals("claude-sonnet-4-5", s.model());
+        assertEquals(true, s.explicitModel());
+    }
+
+    @Test
+    @DisplayName("裸 provider id 不该被误当成显式模型名(前缀匹配须排除完全相等)")
+    void bareConfiguredProviderIdIsNotMistakenForExplicitModel() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("qwen", new WraithConfig.ProviderConfig("sk-qwen", null, "qwen-max"));
+
+        Main.ModelSelection s = Main.resolveModelSelection("qwen", config);
+
+        assertEquals("qwen", s.provider());
+        assertNull(s.model(), "裸 /model qwen 应读配置里的模型,不该把 model 字段硬塞成字面量 \"qwen\"");
+        assertEquals(false, s.explicitModel());
+    }
+
+    @Test
+    @DisplayName("未配置的 provider 前缀/模型名仍然拿不到归位 —— 不是本次修法负责的场景")
+    void unmatchedModelNameFallsThroughUnchanged() {
+        Main.ModelSelection s = Main.resolveModelSelection("totally-unknown-model-xyz", noConfig());
+
+        assertEquals("totally-unknown-model-xyz", s.provider());
+        assertNull(s.model());
+        assertEquals(false, s.explicitModel());
+    }
+
+    // ── I3: /model 空参与补全的 provider 列表须并入 env 发现的候选 ───────────────
+    //
+    // Main.knownProviderIds 是 /model 空参帮助与 WraithCompleter 补全共用的合并逻辑。
+    // 只用 config.getProviders().keySet() 会让「.env 只写了 <NAME>_API_KEY、没跑过 /config」
+    // 的用户看到自相矛盾的两行:状态行报着已发现的模型,下一行却说「还没有配置任何 provider」。
+    //
+    // 这里测的是**合并决策本身**(通过二参注入重载,不扫真实环境变量),不是
+    // ProviderResolver.candidates 有没有正确扫到真实 env(那部分由 ProviderResolverTest 覆盖)。
+
+    @Test
+    @DisplayName("config 为空但 discovered 非空时,合并结果不能是空表(I3)")
+    void knownProviderIdsMergesConfigAndDiscoveredWithoutRealEnvScan() {
+        WraithConfig config = new WraithConfig(); // 模拟只写了 .env、没跑过 /config 的用户
+
+        List<String> ids = Main.knownProviderIds(config, List.of("deepseek"));
+
+        assertFalse(ids.isEmpty(),
+                "config 为空但 env 有发现时,不能报告「还没有配置任何 provider」");
+        assertEquals(List.of("deepseek"), ids);
+    }
+
+    @Test
+    @DisplayName("config 项在前、与 discovered 重复的去重(I3 的保序要求)")
+    void knownProviderIdsKeepsConfigFirstAndDedupes() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("glm", new WraithConfig.ProviderConfig("sk-glm", null, "m"));
+
+        List<String> ids = Main.knownProviderIds(config, List.of("glm", "deepseek"));
+
+        assertEquals(List.of("glm", "deepseek"), ids, "config 项应在前,且与 discovered 重复的要去重");
     }
 }
