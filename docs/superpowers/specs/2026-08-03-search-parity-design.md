@@ -94,17 +94,20 @@
 - **DDG 做成显式可选**（§3.6）——愿意吃抖动的人自己开，自动选择链永远不返回它，所以它无法静默降低任何人的搜索质量。
 - **浏览器那条只补话术**（§3.2 / §3.5）——`chrome-devtools` 已是内建 MCP（`Main.java:315`，`npx -y chrome-devtools-mcp@latest`），`web-access` skill 也在教模型用它。缺的只是「搜索这一步」没有降级指令：`web-access/SKILL.md:26` 那行的 fallback 列是 `—`。补一行字，不加类、不加依赖。
 
-### 2.5 会被本次改动打红的既有测试（第六条「在断言旧契约」）
+### 2.5 会被本次改动打红的既有测试（第六到第九条「在断言旧契约」）
 
-`src/test/java/com/lyhn/wraith/web/SearchProviderFactoryTest.java:37`：
+写实现计划时逐个文件核对了一遍，这类测试**不止一条**——初稿只数到 `SearchProviderFactoryTest:37`，实际有四条：
 
-```java
-        assertEquals("zhipu", SearchProviderFactory.pickProvider(null, null, null, null));
-```
+| 文件:行 | 它在断言什么 | 处置 |
+|---|---|---|
+| `SearchProviderFactoryTest.java:37` | `assertEquals("zhipu", pickProvider(null,null,null,null))` —— **§2.2 那个偏心本身** | 改写为 `"unconfigured"` |
+| `SearchKeyFromConfigTest.java:51-58` | `onlyMappedKeysConsultConfig`，`@DisplayName` 写着「SERPAPI/SEARXNG **仍是环境变量专属**」 —— **§2.1 那个不对等本身** | **反转**为「三条路都读得到」 |
+| `SearchUnavailableHintTest.java:69-76` | Zhipu 的提示要给出全部三条路 —— **§2.2 那层错位本身** | 改指向 `UnconfiguredSearchProvider` |
+| `SearchUnavailableHintTest.java:78-84` | Zhipu 的提示要点明 SearXNG 免费 —— 同上 | 改指向 `UnconfiguredSearchProvider` |
 
-它**正在断言 §2.2 那个偏心**。本次必须改写。
+第二条尤其要注意：它不是「顺带被打红」，而是**把缺陷写成了断言**。机械翻译成新 API 会把不对等一起搬过去，必须反转。
 
-（前一条工作线里已有五条同类测试由用户裁决后改写：`ModelCatalogTest` 钉死 6 家那条、`WraithCompleterTest` 三条、`MainInputNormalizationTest` 那条、`CliCommandParserTest.resolvesConcreteModelNameToProviderAndModel`。这是第六条。）
+（前一条工作线里已有五条同类测试由用户裁决后改写：`ModelCatalogTest` 钉死 6 家那条、`WraithCompleterTest` 三条、`MainInputNormalizationTest` 那条、`CliCommandParserTest.resolvesConcreteModelNameToProviderAndModel`。加上本节四条，本仓库这一类累计九条。）
 
 ## 3. 设计
 
