@@ -1140,6 +1140,25 @@ public final class AppServer {
         writer.result(msg.id(), Map.of("sessionId", sessionId));
     }
 
+    /**
+     * 归一化执行模式。
+     *
+     * <p>只有 {@code plan} / {@code team} 会走各自的分支（见 Main 里那个四参
+     * {@code runTurn} 覆写），其余一切都按 ReAct 跑。此前没有这一步：拼错的、带空格的、
+     * 大写的值都会<b>安静地降级成 ReAct</b>，而 {@code turn.started} 又不回声模式，
+     * 于是谁都不知道本轮其实没按选的模式跑。
+     *
+     * <p>宽松地接受 trim + 大小写形式，但认不出来的一律回 {@code react} ——
+     * 与实际行为一致，绝不回一个从未生效过的值。
+     */
+    static String normalizeRunMode(String raw) {
+        if (raw == null) {
+            return "react";
+        }
+        String v = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        return ("plan".equals(v) || "team".equals(v)) ? v : "react";
+    }
+
     private void handleTurn(JsonRpc.Incoming msg) {
         if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
         Thread running = turnThread;
@@ -1149,8 +1168,12 @@ public final class AppServer {
         }
         JsonNode params = msg.params();
         String input = (params != null && params.hasNonNull("input")) ? params.get("input").asText() : "";
-        // 读取执行模式(react|plan),缺省 react
-        String mode = (params != null && params.hasNonNull("mode")) ? params.get("mode").asText("react") : "react";
+        // 读取执行模式(react|plan|team),缺省 react。**归一化一次**并把结果回声在
+        // turn.started 里 —— 此前这条线是单向的:前端一个 React state → 参数 → 分支,
+        // 没有任何回声。用户于是「不能知道 agent 有没有感知到模式的切换」;更糟的是
+        // 拼错/带空格/大写的值会安静地按 react 跑而没人知道。
+        String mode = normalizeRunMode(params != null && params.hasNonNull("mode")
+                ? params.get("mode").asText("react") : "react");
 
         // 附件解析与校验（失败走 started→turn.failed 时序，不发 LLM）
         TurnAttachments.Resolved att;
@@ -1159,7 +1182,7 @@ public final class AppServer {
         } catch (IOException e) {
             String turnId = "turn_" + turnSeq.incrementAndGet();
             writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
-            writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
+            writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId, "mode", mode));
             writer.notify("turn.failed", Map.of("sessionId", sessionId, "turnId", turnId, "error", "附件错误: " + e.getMessage()));
             return;
         }
@@ -1176,7 +1199,9 @@ public final class AppServer {
             session.renderer().setSessionId(sessionId);
         }
         writer.result(msg.id(), Map.of("turnId", turnId, "status", "running"));
-        writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId));
+        // mode 是归一化之后的值 = 后端真正要用的那个。原样回传参数只能证明"我收到了字符串",
+        // 证明不了"我按它跑"。
+        writer.notify("turn.started", Map.of("sessionId", sessionId, "turnId", turnId, "mode", mode));
         final TurnAttachments.Resolved attFinal = att;
         final String modeFinal = mode;
         Thread t = new Thread(() -> {

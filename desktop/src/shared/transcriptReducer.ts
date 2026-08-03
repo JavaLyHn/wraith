@@ -11,7 +11,7 @@
  *   scanning the items array and is O(1).
  */
 
-import type { BackendEvent, StatusData, PlanStepView, SandboxKindWire } from './types'
+import type { BackendEvent, StatusData, PlanStepView, SandboxKindWire, RunMode } from './types'
 import { shouldPopChatApproval } from './approvalScope'
 
 // ---------------------------------------------------------------------------
@@ -136,7 +136,14 @@ export interface ContextObservability {
 const CONTEXT_INITIAL: ContextObservability = { watermark: null, compactions: [], liveSummary: null, totalsFromSnapshot: null }
 
 export type Item =
-  | { type: 'user'; text: string; attachments?: AttachmentRef[] }
+  /**
+   * 用户气泡。`mode` = 本轮**实际生效**的执行模式，由后端 `turn.started` 回声（归一化后）。
+   *
+   * 此前模式是一条单向的线（前端 React state → turn.submit 参数 → 后端分支），不回声，
+   * 于是用户「不能知道 agent 有没有感知到模式的切换」。老后端不回声时保持 undefined，
+   * 不臆造一个默认值 —— 显示一个没被证实的模式与不显示同样糟。
+   */
+  | { type: 'user'; text: string; attachments?: AttachmentRef[]; mode?: RunMode }
   | { type: 'message'; text: string }
   | { type: 'error'; text: string }
   | { type: 'thinking'; label: string; text: string; done: boolean }
@@ -216,6 +223,26 @@ export const initialState: TranscriptState = {
 // ---------------------------------------------------------------------------
 // Helper — safe extraction of string field from tool argsJson
 // ---------------------------------------------------------------------------
+
+/**
+ * 把本轮实际生效的模式标到**最后一条**用户气泡上。
+ *
+ * 从尾部往前找第一条 user:气泡在提交瞬间就已乐观追加,而 turn.started 稍后到达,
+ * 期间可能已插入别的 item(message.delta 等),所以不能只看数组最后一项。
+ * 没有 user 气泡(自动化触发的轮次)时原样返回。
+ */
+function tagLastUserMode(items: Item[], mode: RunMode): Item[] {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const it = items[i]
+    if (it.type === 'user') {
+      if (it.mode === mode) return items          // 幂等:重复事件不制造新数组
+      const next = items.slice()
+      next[i] = { ...it, mode }
+      return next
+    }
+  }
+  return items
+}
 
 /** 从工具 argsJson 安全取一个字符串字段;非法 JSON / 缺字段 → 空串,绝不抛。 */
 function toolArgString(argsJson: string, key: string): string {
@@ -310,7 +337,14 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
       // 后端在轮次开始即为新会话落桩并把真实 sessionId 带在 turn.started 里 →
       // 立即置 sessionId,使侧栏能高亮并即时拉到该会话(不必等 turn.completed)。
       const sid = typeof p['sessionId'] === 'string' ? p['sessionId'] : ''
-      return { ...state, turn: 'running', ...(sid ? { sessionId: sid } : {}) }
+      // mode 是后端回声的**归一化后**模式(= 本轮真正生效的那个),标在刚提交的那条用户
+      // 气泡上,给用户一条可核对的记录:此前模式是一条单向的线,切了也无从确认后端收到没有。
+      // 认不出来的值不写 —— 显示一个没被证实的模式是新的假话。
+      const mode = typeof p['mode'] === 'string' ? p['mode'] : ''
+      const items = (mode === 'react' || mode === 'plan' || mode === 'team')
+        ? tagLastUserMode(state.items, mode)
+        : state.items
+      return { ...state, turn: 'running', items, ...(sid ? { sessionId: sid } : {}) }
     }
 
     case 'turn.completed': {

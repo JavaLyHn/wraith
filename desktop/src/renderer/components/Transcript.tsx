@@ -136,6 +136,7 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
             <Fragment key={`user-${userOrdinal}`}>
               <UserMessage
                 text={item.text}
+                mode={item.mode}
                 attachments={item.attachments}
                 ordinal={userOrdinal}
                 isLastUser={userOrdinal === totalUsers}

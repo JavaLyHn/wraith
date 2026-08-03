@@ -2,9 +2,19 @@ import { useEffect, useState } from 'react'
 import { useSettings } from '../settings/SettingsContext'
 import { userAvatarGlyph } from '../lib/chatIdentity'
 import type { AttachmentRef } from '../../shared/transcriptReducer'
+import type { RunMode } from '../../shared/types'
+
+/**
+ * 本轮实际生效的模式标签。ReAct 是缺省模式，标出来只是噪音；Plan / Team 是用户
+ * 显式选的，必须能看见 —— 用户此前「不能知道 agent 有没有感知到模式的切换」。
+ * 这个值来自后端 `turn.started` 的回声（归一化后 = 真正跑的那个），不是前端自述。
+ */
+const MODE_LABEL: Partial<Record<RunMode, string>> = { plan: 'Plan', team: 'Team' }
 
 interface UserMessageProps {
   text: string
+  /** 本轮实际生效的执行模式(后端回声);老后端不回声时为 undefined。 */
+  mode?: RunMode
   /** 随该条消息发出的附件(图片显示缩略图,其它显示文件名)。 */
   attachments?: AttachmentRef[]
   /** 该气泡是第几条用户消息(1-based),rewind 用。 */
@@ -19,7 +29,7 @@ interface UserMessageProps {
 }
 
 /** 用户气泡:hover 浮现编辑/删除;编辑就地展开;删除二次点击确认(真回溯,裁掉之后全部)。 */
-export default function UserMessage({ text, attachments, ordinal, isLastUser, busy, onEdit, onDelete, onResend }: UserMessageProps): JSX.Element {
+export default function UserMessage({ text, mode, attachments, ordinal, isLastUser, busy, onEdit, onDelete, onResend }: UserMessageProps): JSX.Element {
   const { prefs } = useSettings()
   const glyph = userAvatarGlyph(prefs.profile)
   const [editing, setEditing] = useState(false)
@@ -152,6 +162,13 @@ export default function UserMessage({ text, attachments, ordinal, isLastUser, bu
           <div data-testid="user-msg" className="rounded-2xl bg-accent px-3 py-2 text-sm text-accent-fg shadow-sm">
             {text}
           </div>
+        )}
+        {/* 后端确认「这一轮我按 X 跑的」。只标非缺省模式:ReAct 每条都标是噪音。 */}
+        {mode && MODE_LABEL[mode] && (
+          <span data-testid="user-msg-mode" title="本轮实际生效的执行模式(后端确认)"
+            className="rounded px-1.5 py-0.5 text-3xs text-fg-subtle">
+            {MODE_LABEL[mode]} 模式
+          </span>
         )}
       </div>
       <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-accent/15 text-xs font-medium text-fg" aria-hidden>{glyph}</div>

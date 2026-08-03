@@ -36,7 +36,7 @@ public class PromptAssembler {
         append(prompt, repository.loadRequired("personalities/calm.md"));
         append(prompt, applyVariables(repository.loadRequired(mode.resourcePath()), ctx));
         append(prompt, repository.loadRequired("approvals/" + approvalMode(ctx) + ".md"));
-        append(prompt, runtimeContext());
+        append(prompt, runtimeContext(mode));
         append(prompt, dynamicSection("Project Context", ctx.projectMemoryContext(), ctx.memoryContext(),
                 ctx.externalContext()));
         append(prompt, dynamicSection("Skills", ctx.skillIndex()));
@@ -60,10 +60,15 @@ public class PromptAssembler {
         };
     }
 
-    private static String runtimeContext() {
+    private static String runtimeContext(PromptMode mode) {
         ZoneId zone = ZoneId.systemDefault();
         return runtimeContext(LocalDate.now(zone).toString(), zone.toString(),
-                System.getProperty("os.name", ""));
+                System.getProperty("os.name", ""), mode);
+    }
+
+    /** 旧三参重载：不声明模式。保留给既有调用方与测试。 */
+    static String runtimeContext(String date, String zone, String osName) {
+        return runtimeContext(date, zone, osName, null);
     }
 
     /**
@@ -74,13 +79,27 @@ public class PromptAssembler {
      * {@code bash.exe} 恰好在 PATH）。模型若不知道这件事，会照 POSIX 习惯吐
      * {@code ls -la} / {@code rm -rf build}，然后拿一堆「不是内部或外部命令」回来，
      * 白白烧掉几轮往返才自己纠正过来。
+     *
+     * <p><b>为什么要告诉模型当前是哪个运行模式：</b>此前 prompt 语料里<b>没有任何地方</b>
+     * 说这件事（唯一沾边的是 {@code modes/agent.md} 里一句静态的「你在默认 ReAct 模式下工作」）。
+     * 而对话历史里<b>有</b>强信号：Plan / Team 模式下问一个问题会撞 NoPlanException，
+     * 那段「把模式切回 ReAct 再问一次」会被写进历史。此后哪怕用户切回了 ReAct，模型看到
+     * 历史里那段具体的话，就会对用户宣布「我注意到你当前处于 Plan 模式」—— 一句错的事实陈述。
+     * 所以这里不仅要报现值，还要<b>显式作废历史里的模式说法</b>。
      */
-    static String runtimeContext(String date, String zone, String osName) {
+    static String runtimeContext(String date, String zone, String osName, PromptMode mode) {
         boolean win = com.lyhn.wraith.policy.sandbox.ShellCommand.isWindows(osName);
         StringBuilder sb = new StringBuilder("## Runtime Context\n\n");
         sb.append("- 当前日期: ").append(date).append('\n');
         sb.append("- 当前时区: ").append(zone).append('\n');
         sb.append("- 操作系统: ").append(osName == null || osName.isBlank() ? "未知" : osName).append('\n');
+        if (mode != null) {
+            sb.append("- 当前运行模式: **").append(mode.displayName()).append("**")
+                    .append("（用户可在输入框**右下角**的模式选择器切换 ReAct / Plan / Team）。")
+                    .append("对话历史里可能出现关于模式的说明或提示（例如「把模式切回 ReAct 再问一次」），")
+                    .append("那是**过去某一回合**的记录，**不代表现在**；判断当前模式只依据本行，")
+                    .append("也不要主动向用户宣布他处于哪个模式，除非他问起。\n");
+        }
         if (win) {
             sb.append("- `execute_command` 的 shell 是 **cmd.exe**（Windows）。"
                     + "请用 Windows 命令：`dir` 而非 `ls`，`type` 而非 `cat`，"

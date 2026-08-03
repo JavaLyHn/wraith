@@ -62,7 +62,10 @@ public final class PlanJson {
         sb.append("模型没有返回可执行计划，而是直接用自然语言回答了。\n")
                 .append("Plan / Team 模式会先要求模型产出 JSON 计划再逐步执行，"
                         + "所以更适合「要做的事」而不是「要问的问题」。\n")
-                .append("· 想直接得到回答 → 把左下角模式切回 ReAct 再问一次\n")
+                // 「左下角」是错的:模式选择器在输入框**右下角**(Composer 里 flex-1 之后那一簇)。
+                // 这句话会被 addAssistantMessage 写进对话历史,模型此后会照着复述给用户 ——
+                // 用户实测里模型就说了「ReAct 模式(左下角可切)」,把人指向一个不存在的位置。
+                .append("· 想直接得到回答 → 把右下角模式选择器切回 ReAct 再问一次\n")
                 .append("· 想让它动手 → 把目标写成一件事，例如「把 utils 重构成 X 并补测试」");
         if (!prose.isEmpty()) {
             sb.append("\n\n模型的原话：\n").append(truncate(prose));

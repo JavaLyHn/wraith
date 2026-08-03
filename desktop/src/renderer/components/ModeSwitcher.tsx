@@ -4,7 +4,14 @@ import { Popover, PopoverTrigger, PopoverContent } from './ui/popover'
 import type { RunMode } from '../../shared/types'
 
 interface ModeSwitcherProps {
-  /** 当前逐条执行模式(受控,发送后由父级复位为 react)。 */
+  /**
+   * 当前执行模式(受控)。
+   *
+   * **粘性**:选定后一直生效直到手动切换(见 lib/nextPendingMode)。这里原先写的是
+   * 「发送后由父级复位为 react」——那是早期的逐条语义,早就改了,注释一直没跟上。
+   * 这个差别不是文字游戏:粘性意味着一次误切会影响后面所有回合,所以每一轮实际生效的
+   * 模式必须能被核对(用户气泡上的模式标签,值来自后端 turn.started 的回声)。
+   */
   mode: RunMode
   /** 选择新模式。 */
   onModeChange?: (m: RunMode) => void
@@ -29,7 +36,7 @@ const MODES: ModeDef[] = [
 /**
  * 执行模式下拉选择器(替代分段按钮)。
  * 触发器显示当前模式(图标 + 名称 + 下拉箭头);展开后每行 = 图标 + 名称 + 描述,
- * 当前项打勾。逐条语义:选择只改父级 pendingMode,发送后父级复位。
+ * 当前项打勾。选择只改父级 pendingMode,**粘性生效**(不在发送后复位)。
  */
 export default function ModeSwitcher({ mode, onModeChange, running = false }: ModeSwitcherProps): JSX.Element {
   const [open, setOpen] = useState(false)
