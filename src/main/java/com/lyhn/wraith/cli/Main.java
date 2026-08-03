@@ -4479,6 +4479,34 @@ public class Main {
             case "glm", "deepseek", "step", "kimi", "freellmapi", "xfyun" ->
                     new ModelSelection(canonical, null, false);
             default -> {
+                // 裸 provider id 优先级最高 —— 压过下面的模型名归位与老前缀(X2/N4)。
+                // 提到这里的原因:X2 守卫原先只是 return null,调序后 null 会落进老前缀,于是
+                // 给中转站起名 glm-relay / deepseek-cn / step-proxy 的用户执行 /model glm-relay
+                // 会被 startsWith("glm-") 接手,产出 provider=glm、model="glm-relay",调用方据此
+                // 把垃圾串写进 glm 的 model 并落盘 —— 即 N3 那个回归,只是触发串换成了老前缀。
+                // (这个洞在调序前就存在,老前缀在前时同样落到 glm。)
+                String bareId = configuredProviderIdEqualTo(normalized, config);
+                if (bareId != null) {
+                    yield new ModelSelection(bareId, null, false);
+                }
+                // 再查「用户实际配了什么模型」,最后才回落硬编码前缀(N4)。
+                //
+                // 反过来的顺序(前缀在前)会让下面那四条老前缀永远抢先,于是 matchConfiguredProvider
+                // 在它们覆盖的模型名上永远轮不到 —— 而那四条建立在一个巧合上:官方 provider 的 id
+                // 恰好是它模型名的前缀(glm ⇒ glm-*)。中转站用户身上巧合不成立:他的 glm-4.7 挂在
+                // freellmapi-4 上,却被 startsWith("glm-") 硬派给一个他根本没配的 glm。
+                // 实测某用户 6 个中转站 provider,三个模型名(DeepSeek-V4-Flash / deepseek-v4-pro /
+                // glm-4.7)因此完全切不动。
+                //
+                // 优先级含义:「这个模型名确实存在某个已配置 provider 上」是比「名字前缀像某官方
+                // provider」更强的信号。同时配了官方 glm 与一个把 model 记成 glm-4.7 的中转站时,
+                // 后者胜出 —— 用户把这个串写进那个 provider 就是意图本身。
+                ModelSelection matched = matchConfiguredProvider(normalized, value, config);
+                if (matched != null) {
+                    yield matched;
+                }
+                // 下面四条留作兜底,不是冗余:provider id 与模型名前缀对不上时它们仍是唯一出路
+                // (最典型的是 kimi ⇒ moonshot-*,前缀匹配覆盖不到)。
                 if (normalized.startsWith("glm-")) {
                     yield new ModelSelection("glm", value, true);
                 }
@@ -4490,13 +4518,6 @@ public class Main {
                 }
                 if (normalized.startsWith("kimi-") || normalized.startsWith("moonshot-")) {
                     yield new ModelSelection("kimi", value, true);
-                }
-                // 上面四条是「provider 名恰好是模型名前缀」这个巧合覆盖的四家 —— 第十份名单的
-                // 教训是:巧合不该被当成规则。白名单外的 provider(claude-*、gpt-*、qwen-* …)
-                // 通用做法是查已配置的 provider,而不是再加一条 claude-/gpt- 前缀判断(I4)。
-                ModelSelection matched = matchConfiguredProvider(normalized, value, config);
-                if (matched != null) {
-                    yield matched;
                 }
                 yield new ModelSelection(canonical, null, false);
             }
@@ -4518,9 +4539,11 @@ public class Main {
      *       前缀,短前缀不该抢在更具体的实例前面命中。</li>
      * </ol>
      *
-     * <p><b>调用前先排除「裸 provider id 本身」(X2)</b>: 若 {@code normalized} 与某个已配置 id
-     * 逐字相等,那不是「模型名」,是用户在切 provider——必须在这里直接 {@code return null},
-     * 交回 {@link #resolveModelSelection} 末尾的「非显式」回落。否则 {@code providers =
+     * <p><b>「裸 provider id 本身」已在调用方排掉了(X2)</b>: 见
+     * {@link #configuredProviderIdEqualTo}——它在 {@link #resolveModelSelection} 里跑在本方法
+     * <b>之前</b>,所以进到这里的 {@code normalized} 一定不等于任何已配置 id。
+     * 那个检查曾经长在本方法开头、命中就 {@code return null},但调序(N4)之后 null 会落进四条
+     * 老前缀而不是「非显式」回落,守卫就漏了,故提到调用方。若不排掉,{@code providers =
      * [freellmapi, freellmapi-2]} 时 {@code /model freellmapi-2} 会被前缀匹配命中
      * {@code freellmapi}(因为 {@code "freellmapi-2".startsWith("freellmapi")}),产出
      * {@code provider=freellmapi, model="freellmapi-2", explicitModel=true}——调用方
@@ -4535,11 +4558,6 @@ public class Main {
     private static ModelSelection matchConfiguredProvider(String normalized, String rawValue, WraithConfig config) {
         if (config == null || config.getProviders() == null || normalized.isEmpty()) {
             return null;
-        }
-        for (String id : config.getProviders().keySet()) {
-            if (id != null && normalized.equals(id.toLowerCase(Locale.ROOT))) {
-                return null;
-            }
         }
         for (String id : config.getProviders().keySet()) {
             String model = config.getModel(id);
@@ -4561,6 +4579,29 @@ public class Main {
         }
         if (bestId != null) {
             return new ModelSelection(bestId, rawValue, true);
+        }
+        return null;
+    }
+
+    /**
+     * {@code normalized} 逐字等于某个已配置 provider id 时返回<b>配置里那个原始大小写的 key</b>,
+     * 否则 {@code null}。
+     *
+     * <p>返回原 key 而不是 {@code normalized} 是有意的:{@link ModelSelection#provider()} 会被拿去
+     * 索引 {@code config.getProviders()},而那张 map 的 key 是用户写下的原串。此前这条路走的是
+     * {@link #resolveModelSelection} 末尾的 {@code canonical} 回落(已被小写化),于是 provider 名叫
+     * {@code MyRelay} 的人执行 {@code /model MyRelay} 会拿到 {@code "myrelay"},对不上自己的 key。
+     *
+     * @see #matchConfiguredProvider 为什么这个检查必须跑在它之前(X2/N4)
+     */
+    private static String configuredProviderIdEqualTo(String normalized, WraithConfig config) {
+        if (config == null || config.getProviders() == null || normalized == null || normalized.isEmpty()) {
+            return null;
+        }
+        for (String id : config.getProviders().keySet()) {
+            if (id != null && normalized.equals(id.toLowerCase(Locale.ROOT))) {
+                return id;
+            }
         }
         return null;
     }

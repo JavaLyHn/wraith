@@ -764,6 +764,104 @@ class CliCommandParserTest {
         assertEquals(false, s.explicitModel());
     }
 
+    // ── N4: 四条老前缀不该抢在「查已配置 provider」之前 ────────────────────────
+    //
+    // I4 加的 matchConfiguredProvider 排在 glm-/deepseek/step/kimi-|moonshot- 四条老前缀
+    // *之后*,于是永远轮不到它处理这四个前缀覆盖的模型名。那四条建立在一个巧合上:官方
+    // provider 的 id 恰好是它模型名的前缀。中转站用户身上巧合不成立 —— 他的 glm-4.7 挂在
+    // freellmapi-4 上,却被 startsWith("glm-") 硬派给一个他根本没配的 glm。
+    // 实测(用户 6 个中转站 provider): DeepSeek-V4-Flash / deepseek-v4-pro / glm-4.7 三个
+    // 模型名全部按名字切不动,只有 Qwen/Qwen3-8B 与 Doubao-Seed-1.6-vision 能走到
+    // matchConfiguredProvider。修法是调序,四条老前缀留在后面当兜底(见
+    // legacyOfficialPrefixStillAppliesWhenNothingConfiguredMatches)。
+
+    @Test
+    @DisplayName("中转站上的 glm-4.7 归位到承载它的 provider,不再被 startsWith(\"glm-\") 抢给没配的 glm(N4)")
+    void configuredRelayModelNameBeatsLegacyOfficialPrefix() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("freellmapi", new WraithConfig.ProviderConfig("sk-a", null, "DeepSeek-V4-Flash"));
+        config.getProviders().put("freellmapi-2", new WraithConfig.ProviderConfig("sk-b", null, "deepseek-v4-pro"));
+        config.getProviders().put("freellmapi-4", new WraithConfig.ProviderConfig("sk-d", null, "glm-4.7"));
+
+        Main.ModelSelection glm = Main.resolveModelSelection("glm-4.7", config);
+        assertEquals("freellmapi-4", glm.provider(), "glm-4.7 存在 freellmapi-4 上,不该派给未配置的 glm");
+        assertEquals("glm-4.7", glm.model());
+        assertEquals(true, glm.explicitModel());
+
+        Main.ModelSelection flash = Main.resolveModelSelection("DeepSeek-V4-Flash", config);
+        assertEquals("freellmapi", flash.provider(), "不该被 startsWith(\"deepseek\") 派给未配置的 deepseek");
+        assertEquals("DeepSeek-V4-Flash", flash.model(), "原样保留大小写 —— 归位只用小写比对,落盘用原串");
+
+        Main.ModelSelection pro = Main.resolveModelSelection("deepseek-v4-pro", config);
+        assertEquals("freellmapi-2", pro.provider());
+        assertEquals("deepseek-v4-pro", pro.model());
+    }
+
+    @Test
+    @DisplayName("已配置 provider 都对不上时,四条老前缀仍然兜底(不是把它们删掉,N4)")
+    void legacyOfficialPrefixStillAppliesWhenNothingConfiguredMatches() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("freellmapi-4", new WraithConfig.ProviderConfig("sk-d", null, "glm-4.7"));
+
+        // glm-4v-plus 既不等于任何已记录的 model,也不是 "freellmapi-4" 的前缀延伸
+        Main.ModelSelection s = Main.resolveModelSelection("glm-4v-plus", config);
+        assertEquals("glm", s.provider(), "对不上已配置的就该回落老前缀,而不是把整段当 provider id");
+        assertEquals("glm-4v-plus", s.model());
+
+        // moonshot- 这条前缀是老前缀真正在挣工资的地方:provider id 是 kimi,模型名却以 moonshot- 开头,
+        // 前缀匹配("moonshot-v1".startsWith("kimi") 为假)覆盖不到它
+        WraithConfig withKimi = new WraithConfig();
+        withKimi.getProviders().put("kimi", new WraithConfig.ProviderConfig("sk-k", null, null));
+        Main.ModelSelection moonshot = Main.resolveModelSelection("moonshot-v1-8k", withKimi);
+        assertEquals("kimi", moonshot.provider());
+        assertEquals("moonshot-v1-8k", moonshot.model());
+    }
+
+    @Test
+    @DisplayName("配了官方 provider 的人不受调序影响 —— id 本身就是模型名前缀(N4 回归)")
+    void officialProviderUsersAreUnaffectedByTheReorder() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("glm", new WraithConfig.ProviderConfig("sk-glm", null, "glm-5.1"));
+        config.getProviders().put("deepseek", new WraithConfig.ProviderConfig("sk-ds", null, null));
+
+        // 走 matchConfiguredProvider 的前缀匹配("glm-4.7".startsWith("glm")),落点与老前缀一致
+        Main.ModelSelection glm = Main.resolveModelSelection("glm-4.7", config);
+        assertEquals("glm", glm.provider());
+        assertEquals("glm-4.7", glm.model());
+        assertEquals(true, glm.explicitModel());
+
+        Main.ModelSelection ds = Main.resolveModelSelection("deepseek-v4-pro", config);
+        assertEquals("deepseek", ds.provider());
+        assertEquals("deepseek-v4-pro", ds.model());
+    }
+
+    @Test
+    @DisplayName("裸 provider id 撞上老前缀时不该被当成模型名落盘(X2 守卫必须压过老前缀,N4)")
+    void bareConfiguredProviderIdOutranksLegacyPrefixes() {
+        // 用户给中转站起名 glm-relay / deepseek-cn / step-proxy —— 都撞上那四条老前缀。
+        // X2 守卫认出「这是裸 id,不是模型名」后若只是 return null,老前缀就会接手,产出
+        // provider=glm、model="glm-relay"、explicitModel=true,调用方据此
+        // ensureProviderConfig("glm").setModel("glm-relay") 并 save() —— 正是 N3 那个
+        // 「把另一个 provider 的 id 当模型名写进配置」的回归,只是触发串换成了老前缀。
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("glm-relay", new WraithConfig.ProviderConfig("sk-a", null, "glm-4.7"));
+        config.getProviders().put("deepseek-cn", new WraithConfig.ProviderConfig("sk-b", null, null));
+        config.getProviders().put("step-proxy", new WraithConfig.ProviderConfig("sk-c", null, null));
+
+        Main.ModelSelection relay = Main.resolveModelSelection("glm-relay", config);
+        assertEquals("glm-relay", relay.provider(), "这是一个已配置的 provider id,不是 glm 的模型名");
+        assertNull(relay.model(), "不该把 \"glm-relay\" 当模型名塞给 glm 并落盘");
+        assertEquals(false, relay.explicitModel());
+
+        Main.ModelSelection cn = Main.resolveModelSelection("deepseek-cn", config);
+        assertEquals("deepseek-cn", cn.provider());
+        assertNull(cn.model());
+
+        Main.ModelSelection proxy = Main.resolveModelSelection("step-proxy", config);
+        assertEquals("step-proxy", proxy.provider());
+        assertNull(proxy.model());
+    }
+
     // ── I3: /model 空参与补全的 provider 列表须并入 env 发现的候选 ───────────────
     //
     // Main.knownProviderIds 是 /model 空参帮助与 WraithCompleter 补全共用的合并逻辑。
