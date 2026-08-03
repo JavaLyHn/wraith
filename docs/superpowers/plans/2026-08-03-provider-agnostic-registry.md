@@ -1232,14 +1232,23 @@ class ProviderDefaultSelfHealTest {
     }
 
     @Test
-    @DisplayName("生产入口能跑通(不断言具体值 —— 那取决于跑它的机器有哪些环境变量)")
-    void productionEntryPointWorks() {
-        // 这条只验「一参入口确实委托给了决策本体、不抛」。
-        // 具体解析结果由 ProviderResolverTest 覆盖,在这里断言会引入机器依赖。
+    @DisplayName("生产入口跑完后,默认值必定是「空」或「一个真有 key 的 provider」")
+    void productionEntryPointLeavesUsableDefault() {
+        // 断言的是一条**在任何机器上都成立的不变式**,而不是具体是哪个 provider ——
+        // 后者取决于跑它的机器设了哪些环境变量(设了 GLM_API_KEY 的机器上 glm 确实有 key)。
+        // 「具体谁是有效默认」由 ProviderResolverTest 覆盖。
         WraithConfig c = cfgWithDefault("glm");
         put(c, "anthropic", "sk-a");
 
-        assertDoesNotThrow(() -> ProviderDefaults.healDefault(c));
+        ProviderDefaults.healDefault(c);
+
+        String after = c.getDefaultProvider();
+        if (after != null) {
+            assertFalse(after.isBlank(), "要么是 null,要么是个真名字,不该留空白串");
+            String key = c.getApiKey(after);
+            assertTrue(key != null && !key.isBlank(),
+                    "自愈后的默认必须拿得到 key,否则自愈没有意义。实际默认=" + after);
+        }
     }
 }
 ```
@@ -1734,12 +1743,17 @@ class DefaultProviderInitialValueTest {
     }
 
     @Test
-    @DisplayName("null 默认不能让候选表或有效默认崩")
-    void nullDefaultIsSafeDownstream() {
+    @DisplayName("null 默认下,effectiveDefault 与 candidates 首项始终一致")
+    void nullDefaultKeepsResolverSelfConsistent() {
+        // 断言的是两个 API 之间的**关系**,在任何机器上都成立;
+        // 不断言具体值 —— 那取决于跑它的机器设了哪些 *_API_KEY。
         WraithConfig c = new WraithConfig();
 
-        assertDoesNotThrow(() -> ProviderResolver.candidates(c));
-        assertDoesNotThrow(() -> ProviderResolver.effectiveDefault(c));
+        java.util.List<String> list = ProviderResolver.candidates(c);
+        String expected = list.isEmpty() ? "" : list.get(0);
+
+        assertEquals(expected, ProviderResolver.effectiveDefault(c),
+                "effectiveDefault 必须就是候选首项,否则两个入口会给出矛盾的答案");
     }
 }
 ```
