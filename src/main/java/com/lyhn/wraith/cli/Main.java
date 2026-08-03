@@ -679,12 +679,26 @@ public class Main {
                             }
                         } else {
                             ModelSelection target = resolveModelSelection(selection, config);
+                            // LlmClientFactory.create(provider, config) 是从 config 里读模型的,
+                            // 所以显式模型必须先写进去才能生效 —— 顺序不能反。代价是切换失败时
+                            // config 已经被改脏了,故先留好回滚料。两参形式(/model <p> <m>)让打错
+                            // provider 名变得很容易,这个回滚从「洁癖」变成了必要。
+                            boolean providerExisted = config.getProviders() != null
+                                    && config.getProviders().containsKey(target.provider());
+                            String previousModel = providerExisted
+                                    ? config.getProviders().get(target.provider()).getModel()
+                                    : null;
                             if (target.explicitModel()) {
                                 ensureProviderConfig(config, target.provider()).setModel(target.model());
                             }
                             LlmClient newClient = LlmClientFactory.create(target.provider(), config);
                             if (newClient == null) {
-                                ui.println("❌ 切换失败：未配置 " + target.provider() + " 的 API Key\n");
+                                if (target.explicitModel()) {
+                                    rollbackModelWrite(config, target.provider(), providerExisted, previousModel);
+                                }
+                                ui.println("❌ 切换失败：未配置 " + target.provider() + " 的 API Key");
+                                ui.println("   两参形式是 /model <provider> <model>，第一段须是 provider 名"
+                                        + "（/model 空参可列出已配置的）\n");
                             } else {
                                 llmClient = newClient;
                                 llmClientRef.set(newClient);
@@ -3050,7 +3064,12 @@ public class Main {
     static List<SlashCommandHint> slashCommandHints() {
         return List.of(
                 new SlashCommandHint("/model", "/model", "查看当前模型"),
-                new SlashCommandHint("/model ", "/model <provider>", "切换 provider（按 Tab 从已配置的里选）"),
+                // 两参形式写在 description 里而不是另开一条 —— insertText 同时充当补全前缀,
+                // 另开一条就得编一个 "/model  "(双空格)当前缀,它会在用户敲完 "/model " 时
+                // 冒出来并插入第二个空格。第二段是模型名,本来也给不出候选:wraith 不知道任何
+                // provider 的可用模型列表(中转站尤其没法枚举)。
+                new SlashCommandHint("/model ", "/model <provider>",
+                        "切换 provider（按 Tab 从已配置的里选）；两参 /model <provider> <model> 可直接指定模型"),
                 new SlashCommandHint("/config provider ", "/config provider <name>", "配置 provider（按 Tab 从已配置的里选）"),
                 new SlashCommandHint("/plan", "/plan", "下一条任务使用 Plan-and-Execute 模式"),
                 new SlashCommandHint("/plan ", "/plan <任务内容>", "直接用计划模式执行这条任务"),
@@ -4466,6 +4485,22 @@ public class Main {
 
     static ModelSelection resolveModelSelection(String raw, WraithConfig config) {
         String value = raw == null ? "" : raw.trim();
+        // 两参形式 /model <provider> <model> —— 不猜,两边都由用户说清(N4)。
+        //
+        // 单参形式必须猜「这个串是 provider 名还是模型名」,而猜的依据(已配置的 model 字段、
+        // provider id 前缀、四条老前缀)都要求模型名与某个已知的东西对得上。切一个还没存进
+        // config 的新模型时它们全都对不上,单参形式此时无解 —— 这就是两参存在的唯一理由。
+        //
+        // 第一段空白之后全算模型名(不再拆): 模型名里带空格罕见但不该被判死,而「用户已经打了
+        // 空格」本身就是在用两参形式,把第一段当 provider、剩下当模型名是最不意外的读法。
+        int sep = indexOfWhitespace(value);
+        if (sep > 0) {
+            String model = value.substring(sep + 1).trim();
+            if (!model.isEmpty()) {
+                return new ModelSelection(
+                        resolveProviderToken(value.substring(0, sep), config), model, true);
+            }
+        }
         String normalized = value.toLowerCase(Locale.ROOT);
         // 先过别名表(单一来源),case 标签只留规范名 —— 此前这里把 14 个别名又抄了一遍。
         String canonical = com.lyhn.wraith.config.ProviderNames.normalize(normalized);
@@ -4581,6 +4616,57 @@ public class Main {
             return new ModelSelection(bestId, rawValue, true);
         }
         return null;
+    }
+
+    /**
+     * 撤销「为了让 {@code LlmClientFactory.create} 读到显式模型而先写进 config」那一步。
+     *
+     * <p>不回滚的后果：{@code /model freellmapi-9 some-model} 打错一次，本次会话的 config 里就
+     * 多一个空壳 {@code freellmapi-9}（{@code /model} 空参列表里会看到它，但它没有 key）；provider
+     * 名打对而模型名打错时更糟——已有 provider 的 model 被改成一个连不上的串。两种都不落盘
+     * （{@code config.save()} 只在切换成功的分支跑），但会污染本次会话。
+     */
+    static void rollbackModelWrite(WraithConfig config, String provider,
+                                   boolean providerExisted, String previousModel) {
+        if (config.getProviders() == null) {
+            return;
+        }
+        if (providerExisted) {
+            WraithConfig.ProviderConfig existing = config.getProviders().get(provider);
+            if (existing != null) {
+                existing.setModel(previousModel);
+            }
+        } else {
+            config.getProviders().remove(provider);
+        }
+    }
+
+    /** 首个空白字符的下标，没有则 {@code -1}。 */
+    private static int indexOfWhitespace(String value) {
+        for (int i = 0; i < value.length(); i++) {
+            if (Character.isWhitespace(value.charAt(i))) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * 两参形式里第一段（provider 那段）的解析：<b>已配置的 id 压过别名表</b>。
+     *
+     * <p>顺序理由与 N4 同源：provider 叫 {@code moonshot} 的人执行
+     * {@code /model moonshot kimi-k2.6} 想切的是他自己那个 {@code moonshot}，而别名表会把
+     * {@code moonshot} 改写成 {@code kimi}。「用户实际配了什么」是比内置别名更强的信号。
+     * 两个都对不上时原样返回小写串——让调用方去报「未配置 X 的 API Key」，比在这里静默改名好。
+     */
+    private static String resolveProviderToken(String token, WraithConfig config) {
+        String lower = token.trim().toLowerCase(Locale.ROOT);
+        String configured = configuredProviderIdEqualTo(lower, config);
+        if (configured != null) {
+            return configured;
+        }
+        String canonical = com.lyhn.wraith.config.ProviderNames.normalize(lower);
+        return canonical == null || canonical.isEmpty() ? lower : canonical;
     }
 
     /**

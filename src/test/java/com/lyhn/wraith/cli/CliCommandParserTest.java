@@ -862,6 +862,92 @@ class CliCommandParserTest {
         assertNull(proxy.model());
     }
 
+    // ── 两参 /model <provider> <model> ──────────────────────────────────────
+    //
+    // 单参形式必须猜「这串是 provider 名还是模型名」,而三条猜法(已记录的 model 字段完全相等、
+    // provider id 前缀延伸、四条老前缀)都要求模型名与某个已知的东西对得上。切一个还没存进
+    // config 的新模型时全都对不上 —— 这是单参无解、两参存在的唯一理由。
+
+    @Test
+    @DisplayName("两参形式直接指定 provider 与模型,模型不必已存在于配置里")
+    void twoArgFormTakesProviderAndModelVerbatim() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("freellmapi-2", new WraithConfig.ProviderConfig("sk-b", null, "deepseek-v4-pro"));
+
+        Main.ModelSelection s = Main.resolveModelSelection("freellmapi-2 claude-sonnet-4-5", config);
+
+        assertEquals("freellmapi-2", s.provider());
+        assertEquals("claude-sonnet-4-5", s.model(), "配置里没有这个模型名,两参形式也该照用");
+        assertEquals(true, s.explicitModel());
+    }
+
+    @Test
+    @DisplayName("两参形式保留模型名原始大小写与斜杠(Qwen/Qwen3-8B 这类)")
+    void twoArgFormPreservesModelNameVerbatim() {
+        Main.ModelSelection s = Main.resolveModelSelection("siliconflow Qwen/Qwen3-8B", noConfig());
+
+        assertEquals("siliconflow", s.provider());
+        assertEquals("Qwen/Qwen3-8B", s.model());
+    }
+
+    @Test
+    @DisplayName("两参第一段:已配置的 id 压过内置别名表(与 N4 同源的优先级)")
+    void twoArgProviderTokenPrefersConfiguredIdOverAliasTable() {
+        // 别名表会把 moonshot 改写成 kimi;但用户自己配了一个就叫 moonshot 的 provider
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("moonshot", new WraithConfig.ProviderConfig("sk-m", null, null));
+
+        Main.ModelSelection mine = Main.resolveModelSelection("moonshot kimi-k2.6", config);
+        assertEquals("moonshot", mine.provider(), "用户自己的 moonshot 不该被别名表改写成 kimi");
+
+        // 没配过 moonshot 时才走别名表
+        Main.ModelSelection aliased = Main.resolveModelSelection("moonshot kimi-k2.6", noConfig());
+        assertEquals("kimi", aliased.provider());
+    }
+
+    @Test
+    @DisplayName("第一段空白之后全算模型名 —— 带空格的模型名不被判死")
+    void twoArgFormKeepsEverythingAfterFirstGapAsModelName() {
+        Main.ModelSelection s = Main.resolveModelSelection("myrelay some model name", noConfig());
+
+        assertEquals("myrelay", s.provider());
+        assertEquals("some model name", s.model());
+    }
+
+    @Test
+    @DisplayName("单参形式不受两参改动影响(多余空白只被 trim 掉)")
+    void singleArgFormIsUnaffectedByTheTwoArgBranch() {
+        Main.ModelSelection padded = Main.resolveModelSelection("   glm-4v-plus   ", noConfig());
+        assertEquals("glm", padded.provider());
+        assertEquals("glm-4v-plus", padded.model());
+
+        Main.ModelSelection bare = Main.resolveModelSelection("  step  ", noConfig());
+        assertEquals("step", bare.provider());
+        assertNull(bare.model(), "裸 provider 名仍该读配置里的模型");
+        assertEquals(false, bare.explicitModel());
+    }
+
+    @Test
+    @DisplayName("切换失败要回滚那次为了传模型而做的 config 写入(不留幽灵 provider)")
+    void failedSwitchRollsBackTheModelWrite() {
+        WraithConfig config = new WraithConfig();
+
+        // provider 原本不存在 —— 回滚应把它整条摘掉
+        Main.ModelSelection ghost = Main.resolveModelSelection("freellmapi-9 some-model", config);
+        config.getProviders().computeIfAbsent(ghost.provider(), k -> new WraithConfig.ProviderConfig())
+                .setModel(ghost.model());
+        Main.rollbackModelWrite(config, ghost.provider(), false, null);
+        assertFalse(config.getProviders().containsKey("freellmapi-9"),
+                "打错一次 /model 不该在本次会话留下一个没有 key 的空壳 provider");
+
+        // provider 原本存在 —— 回滚应还原它原来的 model 字段
+        config.getProviders().put("freellmapi", new WraithConfig.ProviderConfig("sk-a", null, "DeepSeek-V4-Flash"));
+        config.getProviders().get("freellmapi").setModel("typo-model");
+        Main.rollbackModelWrite(config, "freellmapi", true, "DeepSeek-V4-Flash");
+        assertEquals("DeepSeek-V4-Flash", config.getProviders().get("freellmapi").getModel(),
+                "已有 provider 的可用模型不该被一次打错的切换改坏");
+    }
+
     // ── I3: /model 空参与补全的 provider 列表须并入 env 发现的候选 ───────────────
     //
     // Main.knownProviderIds 是 /model 空参帮助与 WraithCompleter 补全共用的合并逻辑。
