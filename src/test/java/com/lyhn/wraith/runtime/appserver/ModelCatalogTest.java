@@ -162,7 +162,7 @@ class ModelCatalogTest {
     // ProvidersPanel:30 doneInstances、:90 restCatalog、modelSwitcher:9
     // configuredProviders),纯属每次 model.list 多发的死载荷。
 
-    // 这四条都走**注入重载**,不碰真实环境变量:若调 public 入口,它会扫 env,
+    // 这五条都走**注入重载**,不碰真实环境变量:若调 public 入口,它会扫 env,
     // 于是「零配置报空表」在设了 ANTHROPIC_API_KEY 的开发机上失败、在干净 CI 上通过。
 
     /** 一个只含指定 provider(都带 key)的 config。 */
@@ -222,8 +222,13 @@ class ModelCatalogTest {
     }
 
     @Test
-    @DisplayName("一个都没配时 default 是空串,不是 null(桌面直接读,不判 null)")
+    @DisplayName("候选表为空时 default 是空串,不是死配置里那个没 key 的 defaultProvider(桌面直接读,不判 null)")
     void effectiveDefaultIsEmptyStringWhenNothingConfigured() {
-        assertEquals("", ModelCatalog.result(cfg(null), "", "", false, List.of()).get("default"));
+        // defaultProvider="glm" 但零 provider、候选表(模拟 ProviderResolver 判定 glm 没 key)为空——
+        // 老逻辑 config.getDefaultProvider()!=null?...:"" 会原样吐出 "glm"(有判别力);
+        // 用 cfg(null) 的话 defaultProvider 本来就是 null,老逻辑对 null 输入也会回落成 "",
+        // 新旧结果相同,验证不出这条 bug,所以必须用非空但没 key 的 defaultProvider。
+        WraithConfig config = cfg("glm");
+        assertEquals("", ModelCatalog.result(config, "", "", false, List.of()).get("default"));
     }
 }
