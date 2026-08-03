@@ -56,6 +56,9 @@ public final class SearchProviderFactory {
             case "searxng" -> new SearxngSearchProvider(settings.searxngUrl());
             case "serpapi" -> new SerpApiSearchProvider(settings.serpKey());
             case "unconfigured" -> new UnconfiguredSearchProvider();
+            // 只有显式 SEARCH_PROVIDER / /config search 才走到这里 ——
+            // pickProvider 的自动链永远不返回 duckduckgo(D6)
+            case "duckduckgo" -> new DuckDuckGoSearchProvider();
             // default 是 zhipu：显式 SEARCH_PROVIDER 写了别的值时也落到这里,
             // 由 ZhipuSearchProvider 自己报「没有 GLM_API_KEY」。
             default -> new ZhipuSearchProvider(settings.glmKey(), settings.zhipuEngine());
@@ -96,6 +99,8 @@ public final class SearchProviderFactory {
         if (searxngUrl != null && !searxngUrl.isBlank()) {
             return "searxng";
         }
+        // 注意:自动链到此结束,它永远不返回 "duckduckgo"(D6 的核心约束,
+        // 由 SearchProviderAutoSelectionTest 穷举 8 种组合守门)。
         return "unconfigured"; // 载体换成 UnconfiguredSearchProvider —— 见 D2
     }
 

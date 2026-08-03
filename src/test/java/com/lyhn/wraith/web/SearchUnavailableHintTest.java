@@ -108,7 +108,10 @@ class SearchUnavailableHintTest {
                 new ZhipuSearchProvider(null, null),
                 new SerpApiSearchProvider(null),
                 new SearxngSearchProvider(null),
-                new UnconfiguredSearchProvider(() -> false, () -> false)}) {
+                new UnconfiguredSearchProvider(() -> false, () -> false),
+                // DDG 的 unavailableHint() 因 isReady() 恒真而不会被展示,但仍须非空 ——
+                // 留一句空串会让后来人以为这里没写完。
+                new DuckDuckGoSearchProvider()}) {
             assertNotNull(p.unavailableHint(), p.getClass().getSimpleName());
             assertFalse(p.unavailableHint().isBlank(), p.getClass().getSimpleName());
         }
