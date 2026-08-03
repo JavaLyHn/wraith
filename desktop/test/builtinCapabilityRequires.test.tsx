@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, afterEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
 import PluginsPanel from '../src/renderer/components/PluginsPanel'
 import { BUILTIN_CAPABILITIES } from '../src/renderer/lib/pluginShowcase'
+import type { McpServerView, SearchStatusView } from '../src/shared/types'
 
 /**
  * 内置能力面板不许再说「无需配置」。
@@ -18,20 +19,54 @@ import { BUILTIN_CAPABILITIES } from '../src/renderer/lib/pluginShowcase'
  * <p>其余七项（文件读写 / 代码搜索 / 执行命令 / 新建项目 / 技能 / 记忆 / 任务清单）
  * 是真·零配置。
  *
- * <p>判据取「**说清楚**」而不是「实时探测」：静态标注在任何机器上都成立
- * （这项能力确实内置、且确实需要一个 key），不会像实时状态那样在没探测到时
- * 反过来误报。真实可用性由 agent 调用时的 provider 提示负责。
+ * <p>**这里原先写的判据是「静态标注而不是实时探测」**，理由是「实时状态在没探测到时会
+ * 反过来误报」。那个理由只覆盖了一个方向：静态标注对**配好了的人**是恒定误报 ——
+ * 用户已经能搜到 GitHub 内容了，卡片还挂着黄色「需配置」和整段「搜索需四者之一…」，
+ * 于是问「明明能搜到了，为什么还显示这些黄色内容」。
+ *
+ * <p>现在两项都有真实信号可问（搜索 ← `config.getSearch`；浏览器 ← 内置 chrome-devtools
+ * MCP 的 state），所以角标改成实时。`requires` 这份文案**仍然要留着** —— 它是
+ * 「确实没配」时给出的「怎么配」，只是不再无条件显示。判定逻辑与它的单测在
+ * `capabilityReadiness.test.ts`；这里守的是**面板接线**。
+ *
+ * <p>探不到时是中性的「检测中…」，不退回假黄标 —— 这就是原理由担心的那个方向，
+ * 用第三种状态解决，而不是用一句恒定的假话解决。
  */
 
 const NEED_CONFIG = ['web', 'browser']
 
-function props(): React.ComponentProps<typeof PluginsPanel> {
+/** 测试里 window.wraith 只需要这一个方法;不设则走「探不到」分支。 */
+function stubBackend(status: SearchStatusView | null): void {
+  ;(window as unknown as { wraith: unknown }).wraith = {
+    configGetSearch: async () => {
+      if (status === null) throw new Error('backend not connected')
+      return status
+    },
+  }
+}
+
+afterEach(() => {
+  delete (window as unknown as { wraith?: unknown }).wraith
+})
+
+const readyServer: McpServerView = {
+  name: 'chrome-devtools', state: 'ready', scope: 'builtin', enabled: true,
+  shadowed: false, transport: 'stdio', tools: [], envKeys: [],
+}
+
+function props(over: Partial<React.ComponentProps<typeof PluginsPanel>> = {}):
+    React.ComponentProps<typeof PluginsPanel> {
   return {
     servers: [], configError: null, busy: false,
     onBack: () => {}, onRefresh: () => {}, onToggle: () => {},
     onRestart: () => {}, onRemove: () => {}, onSubmitForm: async () => true,
+    ...over,
   }
 }
+
+const cardText = (container: HTMLElement, name: string): string =>
+  [...container.querySelectorAll('[data-testid="mcp-builtin-card"]')]
+    .find(c => c.textContent?.includes(name))!.textContent ?? ''
 
 describe('BUILTIN_CAPABILITIES 的前置条件标注', () => {
   it('有前置条件的两项被标出来了,并写清缺什么', () => {
@@ -87,23 +122,66 @@ describe('面板文案', () => {
     expect(sub.textContent).not.toContain('无需配置')
   })
 
-  it('需配置的卡片挂「需配置」徽标,零配置的仍是「已内置」', () => {
+  it('确实没配时:挂「需配置」并把「缺什么」直接写在卡上,不用点进去才看得到', async () => {
+    stubBackend({ provider: 'unconfigured', ready: false })
     const { container } = render(<PluginsPanel {...props()} />)
-    const cards = container.querySelectorAll('[data-testid="mcp-builtin-card"]')
-    expect(cards.length).toBe(BUILTIN_CAPABILITIES.length)
 
-    const byName = (n: string): Element =>
-      [...cards].find(c => c.textContent?.includes(n))!
-    expect(byName('网页搜索与抓取').textContent).toContain('需配置')
-    expect(byName('浏览器接管').textContent).toContain('需配置')
-    expect(byName('文件读写').textContent).toContain('已内置')
-    expect(byName('文件读写').textContent).not.toContain('需配置')
+    await waitFor(() => expect(cardText(container, '网页搜索与抓取')).toContain('需配置'))
+    expect(cardText(container, '网页搜索与抓取')).toMatch(/GLM_API_KEY/)
   })
 
-  it('需配置的卡片把「缺什么」直接写在卡上,不用点进去才看得到', () => {
+  it('配好了就转「已就绪」,并说出用的是哪个后端 —— 用户问的正是这个', async () => {
+    stubBackend({ provider: 'searxng', ready: true })
     const { container } = render(<PluginsPanel {...props()} />)
-    const web = [...container.querySelectorAll('[data-testid="mcp-builtin-card"]')]
-      .find(c => c.textContent?.includes('网页搜索与抓取'))!
-    expect(web.textContent).toMatch(/GLM_API_KEY/)
+
+    await waitFor(() => expect(cardText(container, '网页搜索与抓取')).toContain('已就绪'))
+    const web = cardText(container, '网页搜索与抓取')
+    expect(web).toContain('searxng')
+    expect(web).not.toContain('需配置')
+    // 判别力自证:把 PluginsPanel 里的 capabilityReadiness 换回 c.requires 那套静态判断,
+    // 这两行会红。
+    expect(web).not.toMatch(/GLM_API_KEY/)
+    expect(web).not.toContain('四者之一')
+  })
+
+  it('浏览器接管跟着内置 chrome-devtools MCP 的真实状态走', async () => {
+    stubBackend({ provider: 'searxng', ready: true })
+    const { container } = render(<PluginsPanel {...props({ servers: [readyServer] })} />)
+
+    await waitFor(() => expect(cardText(container, '浏览器接管')).toContain('已就绪'))
+    expect(cardText(container, '浏览器接管')).not.toContain('需配置')
+  })
+
+  it('MCP 起失败时把后端的原始报错写在卡上,比「需装 Node」有用', async () => {
+    stubBackend({ provider: 'unconfigured', ready: false })
+    const { container } = render(<PluginsPanel {...props({
+      servers: [{ ...readyServer, state: 'error', error: 'spawn npx ENOENT' }],
+    })} />)
+
+    await waitFor(() => expect(cardText(container, '浏览器接管')).toContain('spawn npx ENOENT'))
+  })
+
+  it('后端探不到时是中性的「检测中…」,不是那个假黄标', async () => {
+    stubBackend(null)   // configGetSearch 抛错
+    const { container } = render(<PluginsPanel {...props()} />)
+
+    const web = cardText(container, '网页搜索与抓取')
+    expect(web).toContain('检测中')
+    expect(web).not.toContain('需配置')
+    // 探不到就别声称就绪,这是原静态方案担心的那个方向
+    expect(web).not.toContain('已就绪')
+  })
+
+  it('零配置的七项永远是「已内置」,不受探测结果影响', async () => {
+    stubBackend({ provider: 'unconfigured', ready: false })
+    const { container } = render(<PluginsPanel {...props()} />)
+
+    expect(container.querySelectorAll('[data-testid="mcp-builtin-card"]').length)
+      .toBe(BUILTIN_CAPABILITIES.length)
+    for (const c of BUILTIN_CAPABILITIES.filter(x => !NEED_CONFIG.includes(x.id))) {
+      const text = cardText(container, c.name)
+      expect(text, c.id).toContain('已内置')
+      expect(text, c.id).not.toContain('需配置')
+    }
   })
 })

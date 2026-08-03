@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import type { McpServerView, McpResourceView, BuiltinToolView } from '../../shared/types'
+import type { McpServerView, McpResourceView, BuiltinToolView, SearchStatusView } from '../../shared/types'
 import McpServerForm, { type McpFormValue, type McpPrefill } from './McpServerForm'
 import { BUILTIN_CAPABILITIES, RECOMMENDED_MCP } from '../lib/pluginShowcase'
+import { capabilityReadiness, readinessBadgeClass } from '../lib/capabilityReadiness'
 import { joinBuiltinTools } from '../lib/builtinCapabilityDetail'
 import ToolDetailRow from './ToolDetailRow'
 
@@ -51,8 +52,26 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
   const [builtinCatalog, setBuiltinCatalog] = useState<BuiltinToolView[] | null>(null)
   const [builtinError, setBuiltinError] = useState(false)
 
+  // 搜索后端实时状态。null = 还没拿到 → 角标显示中性的「检测中…」,
+  // 而不是那个写死的黄色「需配置」(配好了也黄,用户会问「明明能搜到了」)。
+  const [searchStatus, setSearchStatus] = useState<SearchStatusView | null>(null)
+
   // 进入面板拉全量(spec §5.2)
   useEffect(() => { onRefresh() }, [onRefresh])
+
+  // 进面板探一次搜索后端。失败就留在 null(检测中),不退回假黄标。
+  useEffect(() => {
+    let stale = false
+    void (async () => {
+      try {
+        const status = await window.wraith.configGetSearch()
+        if (!stale) setSearchStatus(status)
+      } catch (err) {
+        console.error('[wraith] configGetSearch error:', err)
+      }
+    })()
+    return () => { stale = true }
+  }, [])
 
   const current = selected !== OVERVIEW ? (servers.find(s => s.name === selected) ?? null) : null
 
@@ -203,24 +222,33 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                   Wraith 自带的能力,不用装 MCP 就能在对话中调用;标「需配置」的还需要一个 key 或本机依赖。
                 </div>
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-                  {BUILTIN_CAPABILITIES.map(c => (
-                    <button key={c.id} type="button" data-testid="mcp-builtin-card"
-                      onClick={() => setSelected('builtin:' + c.id)}
-                      title={c.tools.join(' · ')}
-                      className="rounded-lg border border-border bg-surface/40 p-3 text-left hover:border-accent">
-                      <div className="flex items-center gap-2">
-                        <span className="text-base leading-none">{c.icon}</span>
-                        <span className="truncate text-xs font-medium text-fg">{c.name}</span>
-                        <span className={'ml-auto shrink-0 rounded px-1.5 py-0.5 text-4xs '
-                          + (c.requires ? 'bg-warn/15 text-warn' : 'bg-surface text-fg-subtle')}>
-                          {c.requires ? '需配置' : '已内置'}
-                        </span>
-                      </div>
-                      <div className="mt-1 text-2xs text-fg-muted">{c.desc}</div>
-                      {/* 缺什么直接写在卡面上:要点进去才看得到的话,等于没说 */}
-                      {c.requires && <div className="mt-1 text-3xs leading-relaxed text-warn/90">{c.requires}</div>}
-                    </button>
-                  ))}
+                  {BUILTIN_CAPABILITIES.map(c => {
+                    const r = capabilityReadiness(c, { search: searchStatus, servers })
+                    return (
+                      <button key={c.id} type="button" data-testid="mcp-builtin-card"
+                        onClick={() => setSelected('builtin:' + c.id)}
+                        title={c.tools.join(' · ')}
+                        className="rounded-lg border border-border bg-surface/40 p-3 text-left hover:border-accent">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base leading-none">{c.icon}</span>
+                          <span className="truncate text-xs font-medium text-fg">{c.name}</span>
+                          <span data-testid={`mcp-builtin-badge-${c.id}`}
+                            className={'ml-auto shrink-0 rounded px-1.5 py-0.5 text-4xs ' + readinessBadgeClass(r.state)}>
+                            {r.label}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-2xs text-fg-muted">{c.desc}</div>
+                        {/* 缺什么直接写在卡面上:要点进去才看得到的话,等于没说。
+                            已就绪时这一行改成灰色的「现在用的是什么」,不再是那段橙色的怎么配。 */}
+                        {r.detail && (
+                          <div className={'mt-1 text-3xs leading-relaxed '
+                            + (r.state === 'needs-config' ? 'text-warn/90' : 'text-fg-subtle')}>
+                            {r.detail}
+                          </div>
+                        )}
+                      </button>
+                    )
+                  })}
                 </div>
               </section>
               <section>

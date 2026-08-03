@@ -1892,6 +1892,11 @@ public class Main {
                         cfg.save();
                         return java.util.Map.of("ok", true);
                     }
+                    public java.util.Map<String, Object> searchStatus() {
+                        // 问的是 agent 自己那个 registry —— 用户刚 /config search 写完并 invalidate 过,
+                        // 这里就能立刻反映出来,不需要重启后端。
+                        return registry.searchStatus();
+                    }
                     public java.util.Map<String, Object> pricingGet() {
                         return pricingPayload(com.lyhn.wraith.config.WraithConfig.load());
                     }

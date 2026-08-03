@@ -412,6 +412,18 @@ export interface EmbeddingConfigView {
   hasKey: boolean
 }
 
+/**
+ * 搜索后端的实时状态（`config.getSearch` 回包）。
+ *
+ * 只读状态查询，**不含任何 key**。后端问的是 agent 真正会用的那个 SearchProvider 对象，
+ * 所以面板不会出现「面板说就绪、agent 说未配置」这种分裂。
+ */
+export interface SearchStatusView {
+  /** zhipu / serpapi / searxng / duckduckgo / unconfigured */
+  provider: string
+  ready: boolean
+}
+
 /** 一条模型计价。seeded=内置种子（不可编辑）；价格单位是「每百万 token」。 */
 export interface PricingEntryView {
   modelPrefix: string

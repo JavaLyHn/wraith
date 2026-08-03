@@ -276,6 +276,15 @@ public final class AppServer {
             throw new UnsupportedOperationException("embeddingSet not implemented");
         }
 
+        /**
+         * 搜索后端的实时状态 {@code {provider, ready}} —— 面板角标用。
+         *
+         * <p>只读：不回任何 key。写入口仍然只有 CLI 的 {@code /config search}。
+         */
+        default java.util.Map<String, Object> searchStatus() {
+            throw new UnsupportedOperationException("searchStatus not implemented");
+        }
+
         default java.util.Map<String, Object> pricingGet() {
             throw new UnsupportedOperationException("pricingGet not implemented");
         }
@@ -808,6 +817,12 @@ public final class AppServer {
                 String baseUrl = (p != null && p.hasNonNull("baseUrl")) ? p.get("baseUrl").asText() : "";
                 String apiKey = (p != null && p.hasNonNull("apiKey")) ? p.get("apiKey").asText() : "";
                 try { writer.result(msg.id(), session.embeddingSet(provider, model, baseUrl, apiKey)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.getSearch" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.searchStatus()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

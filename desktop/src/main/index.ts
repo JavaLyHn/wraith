@@ -1143,6 +1143,12 @@ ipcMain.handle('wraith:configSetEmbedding', async (_e, cfg: { provider: string; 
   if (!client) throw new Error('Backend not connected')
   return client.request('config.setEmbedding', cfg)
 })
+// 搜索后端的实时状态(只读,不含 key)。「能力概览」那张卡片的角标靠它,
+// 否则只能显示写死的「需配置」——配好了也永远是黄的。
+ipcMain.handle('wraith:configGetSearch', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.getSearch', {})
+})
 // 模型计价(转发 config.getPricing / config.setPricing RPC)
 ipcMain.handle('wraith:configGetPricing', async () => {
   if (!client) throw new Error('Backend not connected')
