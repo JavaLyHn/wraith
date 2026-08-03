@@ -528,9 +528,12 @@ public final class AppServer {
                 String model = p != null && p.hasNonNull("model") ? p.get("model").asText() : null;
                 String baseUrl = p != null && p.hasNonNull("baseUrl") ? p.get("baseUrl").asText() : null;
                 String protocol = p != null && p.hasNonNull("protocol") ? p.get("protocol").asText() : null;
-                try { writer.result(msg.id(), session.configTestProvider(id, apiKey, model, baseUrl, protocol)); }
-                catch (IllegalArgumentException e) { writer.error(msg.id(), -32602, e.getMessage()); }
-                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                // 必须 offload:探测是一次真实 HTTP 调用,而 dispatch 跑在 serve() 那条**唯一的**
+                // reader 线程上 —— 同步执行会让整个 app-server 在探测期间处理不了任何 RPC,
+                // 表现为「点了测试连接,整个桌面端都没反应」。dispatchAsync 另带 catch(Exception),
+                // 所以任何逃逸都会变成正常的 error 帧而不是永不 settle 的 promise。
+                final SessionRunner s = session;
+                dispatchAsync(msg.id(), () -> s.configTestProvider(id, apiKey, model, baseUrl, protocol));
             }
             case "skills.list" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }

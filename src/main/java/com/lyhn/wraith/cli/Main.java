@@ -1553,18 +1553,24 @@ public class Main {
                         com.lyhn.wraith.llm.LlmClient probe =
                             com.lyhn.wraith.llm.LlmClientFactory.create(id, tmp);
                         if (probe == null) return java.util.Map.of("ok", false, "error", "缺少 API Key");
-                        long t0 = System.nanoTime();
-                        try {
-                            probe.chat(java.util.List.of(com.lyhn.wraith.llm.LlmClient.Message.user("ping")),
-                                       java.util.List.of());
-                            long ms = (System.nanoTime() - t0) / 1_000_000L;
-                            return java.util.Map.of("ok", true, "model", probe.getModelName(), "latencyMs", ms);
-                        } catch (Exception e) {
-                            String em = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
-                            em = redactKey(em, tmp.getApiKey(id));
-                            if (em.length() > 300) em = em.substring(0, 300);
-                            return java.util.Map.of("ok", false, "error", em);
-                        }
+                        // 套 20s 上限:SHARED_HTTP_CLIENT 的 callTimeout 是 600s(按真实对话调的),
+                        // 拿它等一个 ping 的结论毫无意义 —— 用户看到的就是「一直卡着没有响应」。
+                        return awaitProbe(() -> {
+                            long t0 = System.nanoTime();
+                            try {
+                                probe.chat(java.util.List.of(
+                                        com.lyhn.wraith.llm.LlmClient.Message.user("ping")),
+                                        java.util.List.of());
+                                long ms = (System.nanoTime() - t0) / 1_000_000L;
+                                return java.util.Map.of("ok", true,
+                                        "model", probe.getModelName(), "latencyMs", ms);
+                            } catch (Exception e) {
+                                String em = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
+                                em = redactKey(em, tmp.getApiKey(id));
+                                if (em.length() > 300) em = em.substring(0, 300);
+                                return java.util.Map.of("ok", false, "error", em);
+                            }
+                        }, probeTimeoutSeconds());
                     }
                     public boolean setSessionStarred(String id, boolean starred) {
                         return sessionStore.setStarred(id, starred);
@@ -5370,6 +5376,66 @@ public class Main {
                                 String protocol, boolean setDefault, String error) {
         static ProviderConfigUpdate error(String error) {
             return new ProviderConfigUpdate(null, null, null, null, null, null, false, error);
+        }
+    }
+
+    /**
+     * provider 探测专用的守护线程池。
+     *
+     * <p>守护是关键：超时后我们放弃那次调用，但它仍会在后台跑到 OkHttp 的
+     * {@code callTimeout}（默认 600s）才结束——非守护线程会把 JVM 退出拖到那时候。
+     */
+    private static final java.util.concurrent.ExecutorService PROBE_POOL =
+            java.util.concurrent.Executors.newCachedThreadPool(r -> {
+                Thread t = new Thread(r, "wraith-provider-probe");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /**
+     * 探测调用的上限；默认 20 秒，可用 {@code wraith.llm.probe.timeout.seconds} 覆盖。
+     *
+     * <p>为什么不能沿用 {@code SHARED_HTTP_CLIENT} 的超时：那套是按<b>真实对话</b>调的
+     * （connect 60s / read 300s / callTimeout 600s，放这么宽是因为 GLM-5.1 生成大段
+     * reasoning_content 时服务端会长时间静默）。而「测试连接」只是发一个 ping，
+     * 用 10 分钟去等一个结论毫无意义。
+     */
+    static long probeTimeoutSeconds() {
+        String raw = System.getProperty("wraith.llm.probe.timeout.seconds");
+        if (raw != null && !raw.isBlank()) {
+            try {
+                long v = Long.parseLong(raw.trim());
+                if (v > 0) return v;
+            } catch (NumberFormatException ignored) {
+                // 非法值不该让「测试连接」整条路挂掉,退回默认
+            }
+        }
+        return 20L;
+    }
+
+    /**
+     * 给探测调用套一个超时；超时返回 {@code {ok:false,error}} 而不是把调用方吊死。
+     *
+     * <p><b>已知残留</b>：超时返回后那次 OkHttp 调用仍在后台跑到 {@code callTimeout} ——
+     * OkHttp 的 socket 读不响应线程中断，而 {@code LlmClient} 接口没有暴露 {@code Call}
+     * 句柄可以取消。线程是守护线程、不阻塞退出，代价可接受；根治要给 LlmClient 加逐次调用的
+     * 超时钩子，那要动所有 client 实现。
+     */
+    static java.util.Map<String, Object> awaitProbe(
+            java.util.concurrent.Callable<java.util.Map<String, Object>> probe, long timeoutSeconds) {
+        java.util.concurrent.Future<java.util.Map<String, Object>> future = PROBE_POOL.submit(probe);
+        try {
+            return future.get(timeoutSeconds, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            future.cancel(true);
+            return java.util.Map.of("ok", false, "error", timeoutSeconds
+                    + " 秒内没有响应 —— baseUrl 可能能连上但不回应（路径写错 / 防火墙丢包）。"
+                    + "请检查 baseUrl 与网络；确实需要更长时间可设 -Dwraith.llm.probe.timeout.seconds");
+        } catch (Exception e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            String m = cause.getMessage();
+            return java.util.Map.of("ok", false,
+                    "error", m == null || m.isBlank() ? cause.getClass().getSimpleName() : m);
         }
     }
 

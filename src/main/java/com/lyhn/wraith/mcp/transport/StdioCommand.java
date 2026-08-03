@@ -69,6 +69,45 @@ public final class StdioCommand {
         return out;
     }
 
+    /**
+     * Windows 上解析失败时给出的<b>追加</b>诊断；不适用（非 Windows / 解析成功）时返回 {@code ""}。
+     *
+     * <p>{@link #build} 解析不到时刻意原样把裸命令交给 OS —— 让它报自己的错比我们编一句
+     * 「找不到 npx」更准（可能是权限、可能是别的）。但那样会丢掉最有用的一条信息，
+     * 而它恰好区分了两种处境完全不同的情况：
+     *
+     * <ul>
+     *   <li>Node 没装 / 不在 PATH → 该去装 Node</li>
+     *   <li><b>装了，但当前进程继承的是旧 PATH</b>（装完 Node 没重启 wraith，或用 nvm-windows
+     *       装的）→ 该<b>重启 wraith</b>。这一种在 Windows 上极常见，而 OS 的
+     *       「系统找不到指定的文件」完全指不出来</li>
+     * </ul>
+     *
+     * <p>所以不抢 OS 的准确性，只在解析确实失败时追加一句。
+     */
+    public static String windowsResolutionHint(String command) {
+        return windowsResolutionHint(command,
+                System.getProperty("os.name", ""),
+                System.getenv("PATH"),
+                System.getenv("PATHEXT"),
+                p -> Files.isRegularFile(Path.of(p)));
+    }
+
+    /** 可测版本：环境全部注入，便于在 mac 上验证 Windows 分支。 */
+    static String windowsResolutionHint(String command, String osName, String pathEnv,
+                                        String pathExt, Predicate<String> exists) {
+        if (command == null || command.isBlank() || !isWindows(osName)) {
+            return "";
+        }
+        if (resolveOnWindows(command, pathEnv, pathExt, exists) != null) {
+            return "";   // 能解析到就别制造噪音
+        }
+        return "[wraith] 在当前进程的 PATH 上没有找到 " + command
+                + "（也试过 PATHEXT 里的 .cmd/.exe 等后缀）。"
+                + "如果你确认已经装了它，最常见的原因是 wraith 启动时继承的是旧 PATH ——"
+                + "重启 wraith 再试一次；用 nvm 之类版本管理器装的，也要重启后才会被继承。";
+    }
+
     /** 见 {@code ShellCommand.isWindows} 的说明：用前缀而非 {@code contains("win")}，因为 "Darwin" 里含 "win"。 */
     static boolean isWindows(String osName) {
         return osName != null && osName.toLowerCase(Locale.ROOT).startsWith("windows");

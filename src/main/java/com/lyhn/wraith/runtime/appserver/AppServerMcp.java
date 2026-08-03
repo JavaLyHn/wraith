@@ -236,7 +236,7 @@ public final class AppServerMcp implements McpOps {
         } catch (Exception ex) {
             Map<String, Object> err = new LinkedHashMap<>();
             err.put("ok", false);
-            err.put("error", buildTestError(ex, transport)); // 绝不含 env 值
+            err.put("error", buildTestError(ex, transport, command)); // 绝不含 env 值
             return err;
         } finally {
             // 临时进程绝不残留:client 建成走级联关闭,否则直接关 transport
@@ -279,7 +279,8 @@ public final class AppServerMcp implements McpOps {
     }
 
     /** 组测试失败报文:异常消息 + stderr 尾部(≤5 行),总长截断 500 字符。 */
-    private static String buildTestError(Exception ex, com.lyhn.wraith.mcp.transport.StdioTransport transport) {
+    private static String buildTestError(Exception ex, com.lyhn.wraith.mcp.transport.StdioTransport transport,
+                                        String command) {
         StringBuilder sb = new StringBuilder(
                 ex.getMessage() == null ? ex.getClass().getSimpleName() : ex.getMessage());
         if (transport != null) {
@@ -289,8 +290,15 @@ public final class AppServerMcp implements McpOps {
                 sb.append('\n').append(String.join("\n", tail));
             }
         }
-        String s = sb.toString();
-        return s.length() > 500 ? s.substring(0, 500) + "…" : s;
+        // Windows 上 npx 解析失败时追加诊断:OS 只会说「系统找不到指定的文件」,
+        // 分不出「没装」和「装了但 wraith 继承的是旧 PATH」——后者极常见且只需重启。
+        // 放在截断之前:它比 stderr 尾部更可行动,不该被 500 字上限挤掉。
+        String hint = com.lyhn.wraith.mcp.transport.StdioCommand.windowsResolutionHint(command);
+        String body = sb.toString();
+        if (body.length() > 500) {
+            body = body.substring(0, 500) + "…";
+        }
+        return hint.isEmpty() ? body : body + "\n" + hint;
     }
 
     // ── helpers ─────────────────────────────────────────────────────────────

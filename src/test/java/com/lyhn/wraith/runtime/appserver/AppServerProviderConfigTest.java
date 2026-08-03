@@ -42,8 +42,43 @@ class AppServerProviderConfigTest {
         lines.add("{\"jsonrpc\":\"2.0\",\"id\":99,\"method\":\"shutdown\",\"params\":{}}");
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         new AppServer(new ByteArrayInputStream(String.join("\n", lines).concat("\n").getBytes(StandardCharsets.UTF_8)), out, f).serve();
+        // config.testProvider 现在走 dispatchAsync —— 探测是一次真实 HTTP 调用,同步执行会把
+        // serve() 那条唯一的 reader 线程占住,整个 app-server 在探测期间处理不了任何 RPC
+        // (用户症状:点了测试连接,整个桌面端没反应)。代价是它的回帧可能在 serve() 因 shutdown
+        // 返回之后才写出,所以这里不能读一次就算完 —— 等到每个请求 id 都回过为止。
+        // JSON-RPC 按 id 关联、不保证顺序;写出本身是 synchronized 的(JsonRpcWriter.writeLine),
+        // 所以并发帧不会交错。
+        return awaitReplies(out, 1 + requests.length);
+    }
+
+    /** 轮询直到 id 2..lastId 都回过（或 5s 上限）。用等条件而不是固定 sleep。 */
+    private List<JsonNode> awaitReplies(ByteArrayOutputStream out, int lastId) throws Exception {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        while (true) {
+            List<JsonNode> replies = parseReplies(out);
+            boolean complete = true;
+            for (int id = 2; id <= lastId; id++) {
+                int wanted = id;
+                if (replies.stream().noneMatch(n -> n.path("id").asInt(-1) == wanted)) {
+                    complete = false;
+                    break;
+                }
+            }
+            if (complete || System.nanoTime() > deadline) return replies;
+            Thread.sleep(10);
+        }
+    }
+
+    private List<JsonNode> parseReplies(ByteArrayOutputStream out) {
         List<JsonNode> replies = new ArrayList<>();
-        for (String ln : out.toString(StandardCharsets.UTF_8).split("\n")) if (!ln.isBlank()) replies.add(JsonRpc.MAPPER.readTree(ln));
+        for (String ln : out.toString(StandardCharsets.UTF_8).split("\n")) {
+            if (ln.isBlank()) continue;
+            try {
+                replies.add(JsonRpc.MAPPER.readTree(ln));
+            } catch (Exception partial) {
+                // 另一条线程可能刚写完 bytes 还没写 '\n' —— 这行是半截的,下一轮再读
+            }
+        }
         return replies;
     }
     private JsonNode byId(List<JsonNode> r, int id) {
