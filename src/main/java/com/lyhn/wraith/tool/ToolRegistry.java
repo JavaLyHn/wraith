@@ -1026,6 +1026,25 @@ public class ToolRegistry {
         this.searchProvider = null;
     }
 
+    /**
+     * 搜索后端的<b>实时</b>状态 —— 桌面「能力概览」那张卡片的角标数据源。
+     *
+     * <p>刻意用 {@link #searchProvider()}（即 agent 真正会用的那一个）回答，而不另起一套判断：
+     * 否则面板说「已就绪」而 agent 说「未配置」，比一个静态的假角标更糟。
+     *
+     * <p>此前面板上那个「需配置」是 {@code pluginShowcase.ts} 里写死的静态标注，
+     * 配好了也永远是黄的 —— 用户于是问「明明能搜到了，为什么还显示这些黄色内容」。
+     *
+     * <p>只回 {@code provider} 与 {@code ready} 两个字段：这是只读状态查询，不是配置回显，
+     * 任何 key 都不出现在回包里。所有 {@code isReady()} 实现都不发网络请求，可以同步调。
+     */
+    public synchronized java.util.Map<String, Object> searchStatus() {
+        SearchProvider provider = searchProvider();
+        return java.util.Map.of(
+                "provider", provider.name() == null ? "" : provider.name(),
+                "ready", provider.isReady());
+    }
+
     /** 测试注入口（包可见）：避免为了验缓存行为去真连网。 */
     synchronized void setSearchProviderForTest(SearchProvider provider) {
         this.searchProvider = provider;
@@ -1155,7 +1174,7 @@ public class ToolRegistry {
                 truncated = true;
             }
             FetchResult result = FetchResult.ok(raw.url(), extracted.title(), markdown, originalLength, truncated);
-            return formatFetchResult(result);
+            return formatFetchResult(result, raw.body() == null ? 0 : raw.body().length());
         } catch (Exception e) {
             return "抓取失败: " + e.getMessage();
         }
@@ -1194,21 +1213,39 @@ public class ToolRegistry {
                 && !text.startsWith("MCP 工具返回错误");
     }
 
-    private String formatFetchResult(FetchResult result) {
+    /**
+     * 组装递给模型的那段文本。
+     *
+     * <p>{@code htmlChars} 是<b>原始 HTML</b> 的字数，只用来判断「600KB 的页面只提出 100 字正文」
+     * 这种情况。它必须由调用方传进来：此前回包对「抓到了但没提到正文」一个字都不说，
+     * 模型于是自己编因果，对用户讲「网页抓取不了 GitHub」—— 一次成功的抓取被说成失败。
+     *
+     * <p>诊断放在正文<b>之前</b>：塞在 50KB 正文后面的警告等于没写。
+     */
+    static String formatFetchResult(FetchResult result, int htmlChars) {
         StringBuilder sb = new StringBuilder();
         sb.append("🌐 抓取: ").append(result.url()).append("\n");
         if (!result.title().isBlank()) {
             sb.append("📄 标题: ").append(result.title()).append("\n");
         }
+        String advice = com.lyhn.wraith.web.FetchDiagnosis.advise(
+                result.url(), result.markdown().length(), htmlChars);
         if (result.bodyEmpty()) {
             sb.append("\n⚠️ ").append(result.hint()).append("\n");
+            if (!advice.isBlank()) {
+                sb.append("💡 ").append(advice).append("\n");
+            }
             return sb.toString();
         }
         sb.append("📏 正文 ").append(result.contentLength()).append(" 字符");
         if (result.truncated()) {
             sb.append("（已截断）");
         }
-        sb.append("\n\n---\n\n");
+        sb.append("\n");
+        if (!advice.isBlank()) {
+            sb.append("⚠️ ").append(advice).append("\n");
+        }
+        sb.append("\n---\n\n");
         sb.append(result.markdown());
         return sb.toString();
     }

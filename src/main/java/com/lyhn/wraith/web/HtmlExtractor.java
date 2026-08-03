@@ -41,6 +41,24 @@ public class HtmlExtractor {
             "sidebar", "promo", "cookie", "footer", "navigation"
     );
 
+    /**
+     * class / id 的切段规则：非字母数字处切，驼峰边界处也切。
+     *
+     * <p>切完只做<b>整段相等</b>比对（见 {@link #hasNoiseSegment}）。此前是裸子串匹配，
+     * 于是现代页面的 class 名会<b>偶然</b>命中：{@code SharedPageLayout} 里有 {@code share}、
+     * {@code sharepoint} 里也有 —— 命中即连整棵子树删掉，正文就此消失。
+     */
+    private static final java.util.regex.Pattern SEGMENT_SPLIT =
+            java.util.regex.Pattern.compile("[^A-Za-z0-9]+|(?<=[a-z0-9])(?=[A-Z])");
+
+    /**
+     * 一次噪声删除最多能吃掉的正文占比。
+     *
+     * <p>超过它就不删：占了整页的东西不是噪声，是正文，说明关键词是偶然命中。
+     * 实测三个真实页面被误删的元素分别占正文 99% / 99% / 102%，正常的侧栏 / 评论区不会这么大。
+     */
+    private static final double MAX_NOISE_SHARE = 0.5;
+
     public Extracted extract(String html, String baseUrl) {
         Document doc = Jsoup.parse(html, baseUrl == null ? "" : baseUrl, Parser.htmlParser());
         String title = pickTitle(doc);
@@ -65,21 +83,71 @@ public class HtmlExtractor {
         return h1 == null ? "" : h1.text().trim();
     }
 
+    /**
+     * 清理噪声：先按标签，再按 class/id 关键词。
+     *
+     * <p><b>三条护栏</b>，各自有一个真实页面作证人（缺一条就漏一个页面，见
+     * {@code HtmlExtractorNoiseGuardTest}）：
+     * <ol>
+     *   <li>{@code html} / {@code body} 永不删 —— 维基把 {@code navigation} 写进了
+     *       {@code <html>} 的 class，旧写法把整个文档 remove 了，提取结果是 0 字</li>
+     *   <li>关键词按<b>词段</b>比而非裸子串 —— GitHub 正文容器叫
+     *       {@code SharedPageLayout-module__content}，{@code Shared} 不是 {@code share}</li>
+     *   <li>一次删除不得吃掉正文的一半以上 —— MDN 主布局叫 {@code layout__2-sidebars-inline}，
+     *       复数确实命中 {@code sidebar}，只有这条能救它</li>
+     * </ol>
+     */
     private void cleanNoise(Document doc) {
         for (String tag : NOISE_TAGS) {
             doc.select(tag).remove();
         }
-        // 按 class/id 关键词清理常见广告 / 导航壳
-        Elements all = doc.select("[class],[id]");
-        for (Element el : all) {
-            String marker = (el.className() + " " + el.id()).toLowerCase(Locale.ROOT);
-            for (String kw : NOISE_CLASS_KEYWORDS) {
-                if (marker.contains(kw)) {
-                    el.remove();
-                    break;
-                }
+        // 分母在标签清理之后取一次快照:若边删边算,后面的删除会因分母变小而显得"占比不高"
+        int bodyTextLength = doc.body() == null ? 0 : doc.body().text().length();
+        for (Element el : doc.select("[class],[id]")) {
+            if (el.ownerDocument() == null) {
+                continue;   // 已被某个祖先带走,别重复记账
+            }
+            if (isStructuralRoot(el) || !hasNoiseSegment(el.className() + " " + el.id())) {
+                continue;
+            }
+            if (bodyTextLength > 0 && el.text().length() > bodyTextLength * MAX_NOISE_SHARE) {
+                continue;   // 它就是正文本身,关键词是偶然命中
+            }
+            el.remove();
+        }
+    }
+
+    /** 文档骨架不参与噪声判定：删掉它等于删掉整页。 */
+    private static boolean isStructuralRoot(Element el) {
+        String tag = el.tagName().toLowerCase(Locale.ROOT);
+        return "html".equals(tag) || "body".equals(tag);
+    }
+
+    /**
+     * 切段后<b>整段相等</b>才算命中噪声词（容许末尾复数 {@code s}，如 {@code post-comments}）。
+     *
+     * <p>复数容许是有代价的：MDN 的 {@code sidebars} 也因此命中 —— 那由
+     * {@link #MAX_NOISE_SHARE} 兜住。反过来若不容许复数，{@code comments} / {@code banners}
+     * 这类最常见的真噪声就全漏了。
+     */
+    static boolean hasNoiseSegment(String marker) {
+        if (marker == null || marker.isBlank()) {
+            return false;
+        }
+        for (String segment : SEGMENT_SPLIT.split(marker)) {
+            if (segment.isEmpty()) {
+                continue;
+            }
+            String s = segment.toLowerCase(Locale.ROOT);
+            if (NOISE_CLASS_KEYWORDS.contains(s)) {
+                return true;
+            }
+            if (s.length() > 1 && s.endsWith("s")
+                    && NOISE_CLASS_KEYWORDS.contains(s.substring(0, s.length() - 1))) {
+                return true;
             }
         }
+        return false;
     }
 
     private Element pickMainElement(Document doc) {

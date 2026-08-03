@@ -140,7 +140,9 @@ scheme 白名单(http/https) / 主机黑名单(localhost/loopback/link-local/sit
 ### Web Capabilities
 
 - `web_search`：SearchProvider 接口，返回 SearchResult 列表
-- `web_fetch`：NetworkPolicy → WebFetcher → HtmlExtractor，SPA/防爬墙返回空正文 + 边界提示
+- `web_fetch`：NetworkPolicy → WebFetcher → HtmlExtractor → FetchDiagnosis，SPA/防爬墙返回空正文 + 边界提示
+- `HtmlExtractor` 的噪声清理有三条护栏（各有一个真实页面作证人，见 `HtmlExtractorNoiseGuardTest`）：`html`/`body` 永不删；噪声词按**词段**比而非裸子串（`SharedPageLayout` 不是 `share`）；一次删除不得吃掉正文一半以上。缺任一条会把整篇正文当导航壳删掉——GitHub / MDN 各剩 361 / 104 字，维基剩 0 字
+- `FetchDiagnosis`：抓到了但正文极少时，回包必须自己说明「HTTP 已成功、只提取到 N 字、很可能是 JS 渲染」并禁止「这个站点抓不了」的推论；GitHub 的 `/blob/` 另附 `raw.githubusercontent.com` 等价入口（整段照搬，分支名含 `/` 也不会错）
 - 联网决策由模型通过原生 tool call 自主发起；Prompt 不包含 Freshness Policy，不强制 `web_search`。本地“当前项目/当前 README/当前文件/当前代码”仍作为代码库任务交给模型在工具 schema 中选择本地工具。
 - StepSearch 优先级：当前模型 provider=`step` 且 model 以 `step-3.7-flash` 开头，并且自动/显式 `mcp__step_search__web_search` / `mcp__step_search__web_fetch` 已注册时，内置 `web_search` / `web_fetch` 会先代理到 StepSearch MCP；MCP 未就绪或返回不可用结果时回退原实现。
 - JS 渲染 fallback 到 Chrome DevTools MCP
