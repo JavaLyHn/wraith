@@ -1885,8 +1885,9 @@ EOF
         assertTrue(choices.contains("/browser status"), choices);
         assertTrue(choices.contains("/plan"), choices);
         assertFalse(choices.contains("do you wish"), choices);
-        assertFalse(choices.contains("glm-5.1"), choices,
-                "provider/模型名不该再出现在静态提示表里");
+        // 注意 assertFalse 最多两参(condition, message),不要写成三个位置参数。
+        assertFalse(choices.contains("glm-5.1"),
+                "provider/模型名不该再出现在静态提示表里。实际: " + choices);
         assertTrue(choices.lines().count() < Main.slashCommandHints().size(),
                 "choices should be compact multi-column output");
     }
