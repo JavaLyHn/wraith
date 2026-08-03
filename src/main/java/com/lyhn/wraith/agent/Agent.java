@@ -141,6 +141,21 @@ public class Agent {
         curator.setPricingTable(this.pricingTable);
     }
 
+    /**
+     * 计价配置变更后调用；否则本次会话的 usage 行仍用旧表。
+     *
+     * <p><b>第六次 snapshot-vs-live</b>：{@link #setPricingTable} 只在构造 Agent 时被注入
+     * （{@code Main.java:348} 交互 CLI、{@code :1326} app-server 会话），于是用户写完
+     * {@code pricing} 后本次会话依然不显示费用，必须重启。前五次：沙箱护盾、动作卡、
+     * pet 窗口、补全、{@code web_search} 的 provider 缓存。
+     *
+     * <p>{@link #setPricingTable} 已经把表往 {@code curator} 里传一遍，
+     * 所以 curator 侧自动跟上，不必在这里单独接。
+     */
+    public void reloadPricingTable(com.lyhn.wraith.config.WraithConfig config) {
+        setPricingTable(new PricingTable(config == null ? java.util.List.of() : config.getPricing()));
+    }
+
     public void setExternalContextSupplier(Supplier<String> externalContextSupplier) {
         this.externalContextSupplier = externalContextSupplier == null ? () -> "" : externalContextSupplier;
     }

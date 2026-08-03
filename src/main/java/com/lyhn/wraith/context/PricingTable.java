@@ -15,6 +15,18 @@ public final class PricingTable {
     public record Price(double cacheHitPerM, double cacheMissPerM, double outputPerM, String currency) {}
 
     /**
+     * 只读视图：给 {@code /config pricing --list} 与桌面「模型计价」面板用。
+     *
+     * <p>{@code seeded=true} 是内置种子（{@link #SEEDS}），<b>不可写</b>——种子的门槛是
+     * 「两个独立可信来源对得上」，而中转站实付价没有公开来源（见 SEEDS 上的核对记录）。
+     * 用户想覆盖某个种子价，填一条同名的 config 条目即可（同长度时 config 先命中）。
+     *
+     * <p>不外泄 {@link Entry}：那是 private record，且它的字段名 {@code exact} 是匹配语义，
+     * 而视图消费者关心的是「这条能不能编辑」。
+     */
+    public record View(String modelKey, Price price, boolean seeded) {}
+
+    /**
      * exact=true(种子):modelName 必须与 modelKey 完全相等才算命中——核对过的是"这个确切标识符"，
      * 不是它的前缀家族。exact=false(config):modelName 以 modelKey 为前缀即命中，前缀的模糊范围是
      * 用户自己的选择,由用户承担("glm-5" 会覆盖 glm-5.1/glm-5.2 等所有变体)。
@@ -70,6 +82,15 @@ public final class PricingTable {
             }
         }
         entries.addAll(SEEDS);   // config 在前:同长度时先命中用户口径
+    }
+
+    /** 只读视图；顺序同内部列表（config 条目在前，种子在后）。 */
+    public List<View> view() {
+        List<View> out = new ArrayList<>();
+        for (Entry e : entries) {
+            out.add(new View(e.modelKey(), e.price(), e.exact()));
+        }
+        return List.copyOf(out);
     }
 
     /** config 条目最长前缀优先;种子要求精确相等。config 先于种子(同长度时)。 */
