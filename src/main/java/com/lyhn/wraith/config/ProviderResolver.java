@@ -102,18 +102,8 @@ public final class ProviderResolver {
      * </ol>
      * 空表 = 一个都没配。任何查询抛异常都当作「没有」，不向外传播——
      * 配置文件坏了不该让整个后端起不来。
-     *
-     * <p><b>为什么这个四参重载是 public</b>：生产入口只暴露单参的
-     * {@link #candidates(WraithConfig)}，它扫真实 {@code System.getenv()} / {@code .env}。
-     * 跨包测试（{@code com.lyhn.wraith.llm.LlmClientFactoryFallbackTest}）需要验证
-     * 「stale {@code defaultProvider}="glm" + 只配了某个 provider」这类场景，若走单参入口，
-     * 结果会随本机是否设了 {@code GLM_API_KEY}/{@code DEEPSEEK_API_KEY} 等真实变量而漂移
-     * （本仓库 checkout 里就有 {@code ./.env} 落着真实 {@code DEEPSEEK_API_KEY}）。
-     * 开 public 只是为了让这类测试能注入「只认 config、不碰真实环境」的查询函数
-     * （{@code envVarNames=Set.of()}），不是鼓励生产代码绕过 {@link #candidates(WraithConfig)}
-     * 直调本方法。
      */
-    public static List<String> candidates(WraithConfig config,
+    static List<String> candidates(WraithConfig config,
                                    Set<String> envVarNames,
                                    Function<String, String> keyLookup,
                                    Function<String, String> baseUrlLookup) {
