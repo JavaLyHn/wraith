@@ -31,6 +31,10 @@ public final class ProviderNames {
             case "moonshot", "moonshotai", "moonshot-ai" -> "kimi";
             case "free-llm-api", "free_llm_api", "freellm", "free-llm" -> "freellmapi";
             case "xfyun-maas", "xfyun_maas", "iflytek", "iflytek-maas", "iflytek_maas", "maas" -> "xfyun";
+            // claude 是 Anthropic 模型的通俗叫法,用户很自然会这么写(X1)。只登记真实存在的
+            // 别名——拼写错误(anthropi/antropic/anthropics)不进这张表,那是无底洞,交给
+            // /config 回显的端点警示兜底。
+            case "claude", "anthropic-claude" -> "anthropic";
             default -> normalized;
         };
     }

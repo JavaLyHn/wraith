@@ -584,6 +584,56 @@ class CliCommandParserTest {
         }
     }
 
+    // ── X1: /config 回显不能让人以为「baseUrl 留空 == 一切正常」 ──────────────────
+    //
+    // 此前 baseUrl 留空时回显直接打「(默认)」,而实际会发去哪家完全取决于 provider 名有没有
+    // 拼对——拼错(claude/anthropi/antropic/anthropics 等未登记别名)时请求会静默落进
+    // GenericOpenAiClient,发去 api.openai.com,回显却和拼对时一模一样。这里锁住:只要
+    // baseUrl 留空,回显必须带上警示,不能让人以为一切正常。
+
+    @Test
+    @DisplayName("baseUrl 留空时回显要给出警示,不能让人以为一切正常(X1)")
+    void configEchoWarnsWhenBaseUrlIsDefaulted(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tempDir) {
+        String previous = System.getProperty("wraith.config.dir");
+        System.setProperty("wraith.config.dir", tempDir.toString());
+        try {
+            WraithConfig config = new WraithConfig();
+            String out = Main.handleConfigCommand(config, "provider claude --api-key sk-ant-FAKE-PROBE");
+
+            assertFalse(out.contains("baseUrl: (默认)\n"),
+                    "旧文案「(默认)」听起来一切正常,不该再出现: " + out);
+            assertTrue(out.contains("⚠"), "baseUrl 留空必须带警示符号: " + out);
+            assertTrue(out.contains("--base-url"), "警示应指出可以用 --base-url 明确指定: " + out);
+        } finally {
+            if (previous == null) {
+                System.clearProperty("wraith.config.dir");
+            } else {
+                System.setProperty("wraith.config.dir", previous);
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("显式指定 --base-url 时不该出现警示(只在真的留空时才警示)")
+    void configEchoDoesNotWarnWhenBaseUrlIsExplicit(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tempDir) {
+        String previous = System.getProperty("wraith.config.dir");
+        System.setProperty("wraith.config.dir", tempDir.toString());
+        try {
+            WraithConfig config = new WraithConfig();
+            String out = Main.handleConfigCommand(config,
+                    "provider anthropic --api-key sk-ant-FAKE-PROBE --base-url https://api.anthropic.com");
+
+            assertFalse(out.contains("⚠"), "显式给了 baseUrl,不该出现「留空」警示: " + out);
+            assertTrue(out.contains("baseUrl: https://api.anthropic.com"), "实际输出: " + out);
+        } finally {
+            if (previous == null) {
+                System.clearProperty("wraith.config.dir");
+            } else {
+                System.setProperty("wraith.config.dir", previous);
+            }
+        }
+    }
+
     @Test
     @DisplayName("裸 /model glm 与其它 provider 一样读配置里的模型 —— 不再是唯一被强制指定的那个")
     void bareGlmSelectionNoLongerForcesAModel() {
@@ -668,6 +718,48 @@ class CliCommandParserTest {
         Main.ModelSelection s = Main.resolveModelSelection("totally-unknown-model-xyz", noConfig());
 
         assertEquals("totally-unknown-model-xyz", s.provider());
+        assertNull(s.model());
+        assertEquals(false, s.explicitModel());
+    }
+
+    // ── X2: 多实例 provider id 本身不该被误当成另一个 provider 的显式模型名 ─────────
+    //
+    // I4 加的前缀匹配把「另一个已配置 provider 的 id」当成了模型名: providers = [freellmapi,
+    // freellmapi-2] 时 /model freellmapi-2 命中前缀匹配的 "freellmapi"(因为
+    // "freellmapi-2".startsWith("freellmapi")),产出 provider=freellmapi、
+    // model="freellmapi-2"、explicitModel=true。调用方据此执行
+    // ensureProviderConfig("freellmapi").setModel("freellmapi-2") 并 config.save(),
+    // 静默把 freellmapi 的可用模型覆盖成垃圾字符串并落盘,然后切到错的 provider。
+    // 多实例 id 是本仓库明确支持的概念(见 LlmClientFactory 类 Javadoc 里的 freellmapi-2 例子),
+    // 改动前这条路是正确的(provider=freellmapi-2, explicitModel=false)。
+    // bareConfiguredProviderIdIsNotMistakenForExplicitModel 只覆盖「裸 id 等于被匹配的那个
+    // id」这一种情况,漏掉了「裸 id 恰好是另一个已配置 id 的前缀延伸」这个盲区。
+
+    @Test
+    @DisplayName("多实例 id 本身不该被误当成另一实例的显式模型名(X2 回归: freellmapi/freellmapi-2)")
+    void configuredMultiInstanceProviderIdIsNotMistakenForModelName() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("freellmapi", new WraithConfig.ProviderConfig("sk-a", null, null));
+        config.getProviders().put("freellmapi-2", new WraithConfig.ProviderConfig("sk-b", null, null));
+
+        Main.ModelSelection s = Main.resolveModelSelection("freellmapi-2", config);
+
+        assertEquals("freellmapi-2", s.provider(),
+                "不该被前缀匹配抢成 freellmapi —— freellmapi-2 本身就是一个已配置的 provider id");
+        assertNull(s.model(), "不该把 freellmapi 的 model 字段硬塞成字面量 \"freellmapi-2\"");
+        assertEquals(false, s.explicitModel());
+    }
+
+    @Test
+    @DisplayName("同型用例: openai/openai-azure(X2 回归)")
+    void configuredOpenAiAzureProviderIdIsNotMistakenForModelName() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("openai", new WraithConfig.ProviderConfig("sk-a", null, null));
+        config.getProviders().put("openai-azure", new WraithConfig.ProviderConfig("sk-b", null, null));
+
+        Main.ModelSelection s = Main.resolveModelSelection("openai-azure", config);
+
+        assertEquals("openai-azure", s.provider());
         assertNull(s.model());
         assertEquals(false, s.explicitModel());
     }

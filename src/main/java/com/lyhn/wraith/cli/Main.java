@@ -3319,18 +3319,31 @@ public class Main {
         }
         config.save();
 
+        // baseUrl 留空时,实际会请求哪个端点由 LlmClientFactory 在运行时决定(protocol/别名/
+        // client 各自的内置默认三方共同决定),这里没有能不碰生产类就拿到那个 URL 的办法——
+        // 各 client 的 getApiUrl() 是 protected(AnthropicClient 甚至完全没有),为回显加公开
+        // getter 不值得(X1)。于是不再用「(默认)」这种听起来一切正常的说法,而是老实说
+        // 「不知道具体是哪」+ 一条警示:provider 名拼错时,请求可能被发往完全错误的服务商
+        // (最典型的例子就是 X1 本身——把 anthropic 写成 claude/anthropi 等未登记别名/拼写)。
+        boolean baseUrlDefaulted = providerConfig.getBaseUrl() == null || providerConfig.getBaseUrl().isBlank();
+
         StringBuilder out = new StringBuilder();
         out.append("✅ 已保存 provider 配置: ").append(update.provider()).append('\n');
         out.append("   model: ").append(providerConfig.getModel() == null || providerConfig.getModel().isBlank()
                 ? "(默认)" : providerConfig.getModel()).append('\n');
-        out.append("   baseUrl: ").append(providerConfig.getBaseUrl() == null || providerConfig.getBaseUrl().isBlank()
-                ? "(默认)" : providerConfig.getBaseUrl()).append('\n');
+        out.append("   baseUrl: ").append(baseUrlDefaulted
+                ? "(默认，由 provider 决定)" : providerConfig.getBaseUrl()).append('\n');
         out.append("   protocol: ").append(providerConfig.getProtocol() == null || providerConfig.getProtocol().isBlank()
                 ? "openai(默认)" : providerConfig.getProtocol()).append('\n');
         out.append("   apiKey: ").append(maskSecret(providerConfig.getApiKey())).append('\n');
         if ("xfyun".equals(update.provider())) {
             out.append("   loraId: ").append(providerConfig.getLoraId() == null || providerConfig.getLoraId().isBlank()
                     ? "(未配置)" : providerConfig.getLoraId()).append('\n');
+        }
+        if (baseUrlDefaulted) {
+            out.append("   ⚠ 未指定 --base-url，该 provider 的端点将由内置默认决定。\n");
+            out.append("     若 provider 名拼错，请求可能被发往错误的服务商 —— 请用 /model ")
+                    .append(update.provider()).append(" 后看状态行确认。\n");
         }
         if (update.setDefault()) {
             out.append("   默认 provider 已设为 ").append(update.provider()).append('\n');
@@ -4492,17 +4505,31 @@ public class Main {
 
     /**
      * 把「具体模型名」映射回它所属的已配置 provider —— 通用做法,不需要第十份硬编码前缀名单(I4)。
-     * 命中条件二选一:
+     * 命中条件二选一（顺序即优先级）:
      * <ol>
+     *   <li>该 provider 已记录的 {@code model} 字段与 {@code normalized} 完全相等——精确相等是
+     *       比前缀更强的信号,且能覆盖 provider id 与模型名前缀对不上的情况（如 provider
+     *       {@code "anthropic"} 的模型是 {@code "claude-sonnet-4-5"}，起头对不上
+     *       {@code "anthropic"}）。放在前缀匹配<b>之前</b>检查,避免被同 provider 或另一个
+     *       provider 的前缀匹配抢先命中。</li>
      *   <li>{@code normalized} 是某个已配置 provider id 的<b>真前缀延伸</b>（如 provider
-     *       {@code "qwen"} ⇒ 输入 {@code "qwen-max"}）——裸 provider id 本身不算这条,那种情况
-     *       该走 {@link #resolveModelSelection} 末尾的「非显式」回落,否则 {@code /model qwen}
-     *       会被误当成「把模型名设成字面量 qwen」。</li>
-     *   <li>该 provider 已记录的 {@code model} 字段与 {@code normalized} 完全相等——覆盖
-     *       provider id 与模型名前缀对不上的情况（如 provider {@code "anthropic"} 的模型是
-     *       {@code "claude-sonnet-4-5"}，起头对不上 {@code "anthropic"}）。</li>
+     *       {@code "qwen"} ⇒ 输入 {@code "qwen-max"}）。多个 id 都是前缀时取<b>最长</b>的那个
+     *       ——多实例 id({@code freellmapi}/{@code freellmapi-2}/{@code freellmapi-3})共享公共
+     *       前缀,短前缀不该抢在更具体的实例前面命中。</li>
      * </ol>
-     * 只查 {@code config.getProviders()} —— 不查 {@code ProviderResolver.candidates},那个会扫
+     *
+     * <p><b>调用前先排除「裸 provider id 本身」(X2)</b>: 若 {@code normalized} 与某个已配置 id
+     * 逐字相等,那不是「模型名」,是用户在切 provider——必须在这里直接 {@code return null},
+     * 交回 {@link #resolveModelSelection} 末尾的「非显式」回落。否则 {@code providers =
+     * [freellmapi, freellmapi-2]} 时 {@code /model freellmapi-2} 会被前缀匹配命中
+     * {@code freellmapi}(因为 {@code "freellmapi-2".startsWith("freellmapi")}),产出
+     * {@code provider=freellmapi, model="freellmapi-2", explicitModel=true}——调用方
+     * ({@code Main.java} 的 {@code /model} 处理分支)会据此执行
+     * {@code ensureProviderConfig(config,"freellmapi").setModel("freellmapi-2")} 并
+     * {@code config.save()}，静默把 {@code freellmapi} 的可用模型覆盖成垃圾字符串并落盘,
+     * 然后切到错的 provider。多实例 id 是本仓库明确支持的概念,这条回归比合并前更糟。
+     *
+     * <p>只查 {@code config.getProviders()} —— 不查 {@code ProviderResolver.candidates},那个会扫
      * 真实 env,会让这条本该是纯函数的解析逻辑在不同机器上跑出不同结果。
      */
     private static ModelSelection matchConfiguredProvider(String normalized, String rawValue, WraithConfig config) {
@@ -4510,12 +4537,8 @@ public class Main {
             return null;
         }
         for (String id : config.getProviders().keySet()) {
-            if (id == null || id.isBlank()) {
-                continue;
-            }
-            String idLower = id.toLowerCase(Locale.ROOT);
-            if (!normalized.equals(idLower) && normalized.startsWith(idLower)) {
-                return new ModelSelection(id, rawValue, true);
+            if (id != null && normalized.equals(id.toLowerCase(Locale.ROOT))) {
+                return null;
             }
         }
         for (String id : config.getProviders().keySet()) {
@@ -4523,6 +4546,21 @@ public class Main {
             if (model != null && normalized.equals(model.trim().toLowerCase(Locale.ROOT))) {
                 return new ModelSelection(id, rawValue, true);
             }
+        }
+        String bestId = null;
+        int bestLen = -1;
+        for (String id : config.getProviders().keySet()) {
+            if (id == null || id.isBlank()) {
+                continue;
+            }
+            String idLower = id.toLowerCase(Locale.ROOT);
+            if (normalized.startsWith(idLower) && idLower.length() > bestLen) {
+                bestId = id;
+                bestLen = idLower.length();
+            }
+        }
+        if (bestId != null) {
+            return new ModelSelection(bestId, rawValue, true);
         }
         return null;
     }

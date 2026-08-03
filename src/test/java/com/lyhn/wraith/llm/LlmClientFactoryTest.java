@@ -122,6 +122,25 @@ class LlmClientFactoryTest {
         assertNull(LlmClientFactory.create("unknown", config));
     }
 
+    // X1: /config provider claude --api-key sk-ant-... 此前落进 default 分支的
+    // GenericOpenAiClient(baseUrl 空时兜底 api.openai.com),把 Anthropic key 发给了
+    // OpenAI。provider id 故意写成 "claude"、不设 protocol——协议闸(anthropic 硬派发)
+    // 只在 normalizeProvider(provider) 之后按规范名判断,若 ProviderNames.normalize
+    // 没把 "claude" 归一到 "anthropic",这条会退化成 GenericOpenAiClient 而非报错,
+    // 必须靠 instanceof 断言类型才抓得住。
+    @Test
+    void createsAnthropicClientFromClaudeAliasWithoutExplicitProtocol() {
+        WraithConfig config = new WraithConfig();
+        config.getProviders().put("claude",
+                new WraithConfig.ProviderConfig("sk-ant-FAKE-PROBE", null, null));
+
+        LlmClient client = LlmClientFactory.create("claude", config);
+
+        assertInstanceOf(AnthropicClient.class, client,
+                "claude 别名必须派发到 AnthropicClient,不能落进 GenericOpenAiClient");
+        assertEquals("anthropic", client.getProviderName());
+    }
+
     private static String expectedStepChatUrl(String baseUrl) {
         String normalized = baseUrl != null && !baseUrl.isBlank()
                 ? baseUrl.trim()
