@@ -739,7 +739,8 @@ public class Main {
                         if (command.payload() == null || command.payload().isBlank()) {
                             handleConfigPalette(renderer, config, llmClient, hitlHandler, skillRegistry);
                         } else {
-                            ui.println(handleConfigCommand(config, command.payload()));
+                            // 传 registry:搜索配置改完立刻生效,不再需要重启后端
+                            ui.println(handleConfigCommand(config, command.payload(), hitlToolRegistry));
                             renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));
                         }
                         continue;
@@ -3312,6 +3313,27 @@ public class Main {
     }
 
     static String handleConfigCommand(WraithConfig config, String payload) {
+        return handleConfigCommand(config, payload, null);
+    }
+
+    /**
+     * @param registry 非 null 时，写完调 {@code invalidateSearchProvider()}——搜索配置改完
+     *                 立刻生效，不再需要重启后端（第五次 snapshot-vs-live）。
+     *                 <b>无条件调用</b>而不是只在 search 分支调：多一次工厂构造无害，
+     *                 而「再解析一遍 payload 判断是不是 search」会让两处判断有分叉的机会。
+     */
+    static String handleConfigCommand(WraithConfig config, String payload, ToolRegistry registry) {
+        List<String> head = splitArgs(payload);
+        String result = !head.isEmpty() && "search".equalsIgnoreCase(head.get(0))
+                ? applySearchConfig(config, payload)
+                : applyProviderConfig(config, payload);
+        if (registry != null) {
+            registry.invalidateSearchProvider();
+        }
+        return result;
+    }
+
+    private static String applyProviderConfig(WraithConfig config, String payload) {
         ProviderConfigUpdate update = parseProviderConfigUpdate(payload);
         if (update.error() != null) {
             return "❌ " + update.error() + "\n" + providerConfigUsage();
@@ -3447,9 +3469,112 @@ public class Main {
                   /config provider xfyun --base-url https://maas-api.cn-huabei-1.xf-yun.com/v2 --api-key <key> --model Qwen3.6-35B-A3B --default
                   /config provider xfyun --lora-id <resourceId>
                   /config provider anthropic --protocol anthropic --api-key <key> --model claude-sonnet-4-5
+                  /config search --provider searxng --base-url http://localhost:8888
                   /model freellmapi
                   /model xfyun
                 """.stripTrailing();
+    }
+
+    /** `/config search` 支持的四个后端。duckduckgo 见 D6：显式可选，自动链永不选它。 */
+    private static final java.util.Set<String> SEARCH_PROVIDERS =
+            java.util.Set.of("zhipu", "serpapi", "searxng", "duckduckgo");
+
+    static SearchConfigUpdate parseSearchConfigUpdate(String payload) {
+        List<String> args = splitArgs(payload);
+        if (args.isEmpty() || !"search".equalsIgnoreCase(args.get(0))) {
+            return SearchConfigUpdate.error("用法不正确");
+        }
+
+        String provider = null;
+        String apiKey = null;
+        String baseUrl = null;
+        for (int i = 1; i < args.size(); i++) {
+            String token = args.get(i);
+            String key;
+            String value;
+            int equals = token.indexOf('=');
+            if (equals > 0) {
+                key = token.substring(0, equals);
+                value = token.substring(equals + 1);
+            } else {
+                key = token;
+                if (i + 1 >= args.size()) {
+                    return SearchConfigUpdate.error("缺少 " + key + " 的值");
+                }
+                value = args.get(++i);
+            }
+            switch (normalizeConfigKey(key)) {
+                case "provider" -> provider = value;
+                case "api-key" -> apiKey = value;
+                case "base-url" -> baseUrl = value;
+                default -> {
+                    return SearchConfigUpdate.error("未知配置项: " + key);
+                }
+            }
+        }
+
+        // --provider 必需：provider 为空而 apiKey 有值时,「这个 key 属于 zhipu 还是 serpapi」
+        // 不可猜,猜错会把 SerpAPI 的 key 发给智谱(或反之)。宁可现在报错。
+        if (provider == null || provider.isBlank()) {
+            return SearchConfigUpdate.error("必须指定 --provider（zhipu / serpapi / searxng / duckduckgo）");
+        }
+        String normalized = provider.trim().toLowerCase(Locale.ROOT);
+        if (!SEARCH_PROVIDERS.contains(normalized)) {
+            return SearchConfigUpdate.error(
+                    "未知搜索后端: " + provider + "，只支持 zhipu / serpapi / searxng / duckduckgo");
+        }
+        if ("searxng".equals(normalized) && (baseUrl == null || baseUrl.isBlank())) {
+            return SearchConfigUpdate.error(
+                    "searxng 需要 --base-url（例如 --base-url http://localhost:8888）");
+        }
+        // 静默吞掉多给的参数会让用户以为 key 生效了,之后排查不可能。
+        if ("duckduckgo".equals(normalized) && (apiKey != null || baseUrl != null)) {
+            return SearchConfigUpdate.error("duckduckgo 不需要 --api-key / --base-url");
+        }
+        return new SearchConfigUpdate(normalized, apiKey, baseUrl, null);
+    }
+
+    private static String searchConfigUsage() {
+        return """
+                用法:
+                  /config search --provider searxng --base-url http://localhost:8888
+                  /config search --provider serpapi --api-key <key>
+                  /config search --provider zhipu --api-key <key>
+                  /config search --provider zhipu                 # 沿用 providers.glm.apiKey
+                  /config search --provider duckduckgo            # 无需 key,但靠抓 HTML,会抖
+                """.stripTrailing();
+    }
+
+    private static String applySearchConfig(WraithConfig config, String payload) {
+        SearchConfigUpdate update = parseSearchConfigUpdate(payload);
+        if (update.error() != null) {
+            return "❌ " + update.error() + "\n" + searchConfigUsage();
+        }
+
+        WraithConfig.SearchConfig search = config.getSearch();
+        if (search == null) {
+            search = new WraithConfig.SearchConfig();
+            config.setSearch(search);
+        }
+        search.setProvider(update.provider());
+        if (update.apiKey() != null) {
+            search.setApiKey(update.apiKey());
+        }
+        if (update.baseUrl() != null) {
+            search.setBaseUrl(update.baseUrl());
+        }
+        config.save();
+
+        StringBuilder out = new StringBuilder();
+        out.append("✅ 已保存搜索后端: ").append(update.provider()).append('\n');
+        out.append("   apiKey: ").append(maskSecret(search.getApiKey())).append('\n');
+        out.append("   baseUrl: ").append(search.getBaseUrl() == null || search.getBaseUrl().isBlank()
+                ? "(未配置)" : search.getBaseUrl()).append('\n');
+        if ("duckduckgo".equals(update.provider())) {
+            out.append("   ⚠ 这个后端靠抓 HTML，可能因改版或限流失效，只建议临时用。\n");
+        }
+        out.append("   已立即生效，不需要重启。");
+        return out.toString();
     }
 
     private static List<String> splitArgs(String value) {
@@ -4906,6 +5031,12 @@ public class Main {
                                 String protocol, boolean setDefault, String error) {
         static ProviderConfigUpdate error(String error) {
             return new ProviderConfigUpdate(null, null, null, null, null, null, false, error);
+        }
+    }
+
+    record SearchConfigUpdate(String provider, String apiKey, String baseUrl, String error) {
+        static SearchConfigUpdate error(String error) {
+            return new SearchConfigUpdate(null, null, null, error);
         }
     }
 

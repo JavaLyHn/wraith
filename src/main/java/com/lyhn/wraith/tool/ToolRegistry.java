@@ -1016,6 +1016,26 @@ public class ToolRegistry {
         return searchProvider;
     }
 
+    /**
+     * 搜索配置变更后调用；否则本次会话仍用旧 provider。
+     *
+     * <p>此前这个字段<b>没有任何失效路径</b>，用户配好搜索后必须重启后端才生效——
+     * 本仓库第五次 snapshot-vs-live（前四次：沙箱护盾、动作卡、pet 窗口、补全）。
+     */
+    public synchronized void invalidateSearchProvider() {
+        this.searchProvider = null;
+    }
+
+    /** 测试注入口（包可见）：避免为了验缓存行为去真连网。 */
+    synchronized void setSearchProviderForTest(SearchProvider provider) {
+        this.searchProvider = provider;
+    }
+
+    /** 测试观察口（包可见）：未构造时返回 {@code null}，<b>不</b>顺手替调用方构造。 */
+    synchronized SearchProvider searchProviderSnapshotForTest() {
+        return this.searchProvider;
+    }
+
     private synchronized WebFetcher webFetcher() {
         if (webFetcher == null) {
             webFetcher = new WebFetcher();
