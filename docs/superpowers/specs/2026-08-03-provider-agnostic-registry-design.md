@@ -105,9 +105,22 @@ default -> provider.toUpperCase() + "_API_KEY";
 新增 `com.lyhn.wraith.config.ProviderResolver`，纯函数、无 I/O、可单测：
 
 ```java
-/** 按优先级列出「值得一试」的 provider id。空表 = 一个都没配。 */
+/** 生产入口:扫真实 env + ./.env + ~/.env,key/baseUrl 走 config 自带的取值链。 */
 public static List<String> candidates(WraithConfig config)
+
+/** 可测入口:三个查询全注入,不碰真实环境。 */
+static List<String> candidates(WraithConfig config,
+                               Set<String> envVarNames,                    // 发现:环境里存在的变量名
+                               Function<String, String> keyLookup,         // 判定:provider 有没有 key
+                               Function<String, String> baseUrlLookup)     // 护栏:能不能定 baseUrl
 ```
+
+**必须注入，不能内部读真实环境。** 现有 `LlmClientFactoryRoutingTest`
+的 `unknownProviderWithoutKeyReturnsNull` 断言 `create("openai", new WraithConfig())` 为 null
+——而 `getApiKey("openai")` 会回落读真实 `OPENAI_API_KEY`，**那条测试是靠机器上恰好没设那个变量
+才绿的**。resolver 若在内部读真实环境，新测试会继承同一个缺陷：在设了
+`ANTHROPIC_API_KEY` 的开发机上通过、在 CI 上失败（或反之）。注入是这仓库既有做法
+（`SearchProviderFactory.resolveKey` 就是这么写的）。
 
 顺序：
 
@@ -152,11 +165,26 @@ public static List<String> candidates(WraithConfig config)
 **护栏 —— env 发现的候选只在能确定 baseUrl 时才有效**，即满足其一：
 
 - `<NAME>_BASE_URL` 在 env/.env 里有值
-- 该 provider 有内置端点的 client 类（`LlmClientFactory` 的 switch 分支 + `AnthropicClient`
-  的 `DEFAULT_BASE`）
+- 该 provider 落在「端点可确定」集合内（下表，经逐个 client 类核实）
 
-否则一个无关的 `MY_SERVICE_API_KEY` 会造出没有 baseUrl 的 `GenericOpenAiClient`，连出去必失败。
-护栏的判据来自「哪些 client 类存在」这个事实，不是偏好排序。
+| provider | 端点来源 |
+|---|---|
+| `glm` | `GLMClient` 内置（构造器不收 baseUrl） |
+| `deepseek` | `DeepSeekClient` 内置（构造器不收 baseUrl） |
+| `step` | `StepClient.DEFAULT_BASE_URL` |
+| `kimi` | `KimiClient.DEFAULT_BASE_URL` |
+| `freellmapi` | `FreeLlmApiClient.DEFAULT_BASE_URL` |
+| `xfyun` | `XfyunMaaSClient.DEFAULT_BASE_URL` |
+| `anthropic` | `AnthropicClient.DEFAULT_BASE` |
+| `openai` | `GenericOpenAiClient` 的兜底就是 `https://api.openai.com/v1` |
+
+**为什么必须有这道护栏**：`GenericOpenAiClient.java:21` 在 baseUrl 为空时兜底
+`https://api.openai.com/v1`。所以一个无关的 `MY_SERVICE_API_KEY` 不会「连不上」——
+它会**静默指向 api.openai.com 并把那个 key 发过去**。这比失败更糟。
+
+这张表是「哪个 client 类烧死了哪个端点」的事实记录，不是偏好排序；它的作用与被删掉的四份白名单
+**相反**——白名单是*限制*谁能被创建，这张表是*允许* env-only 发现，不在表里的 provider 依然可用，
+只是需要显式给 `<NAME>_BASE_URL` 或写进 config.json。
 
 **排除清单（全仓扫描 `[A-Z][A-Z0-9_]*_API_KEY` 得出，非猜测）**：
 
