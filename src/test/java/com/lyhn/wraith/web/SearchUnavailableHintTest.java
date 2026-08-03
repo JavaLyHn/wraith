@@ -67,18 +67,21 @@ class SearchUnavailableHintTest {
     // ── ② 未配置提示 ───────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("Zhipu 的未配置提示要给出全部三条路,不能只说 GLM")
-    void zhipuHintListsAllThreeRoutes() {
-        String hint = new ZhipuSearchProvider(null, null).unavailableHint();
+    @DisplayName("中立的未配置提示要给出全部三条路 —— 载体是 UnconfiguredSearchProvider,不再是 Zhipu")
+    void unconfiguredHintListsAllThreeRoutes() {
+        // 这条用例此前断在 new ZhipuSearchProvider(null, null).unavailableHint() 上,
+        // 而那正是 D2 要修的错位:「什么都没配」这句话由智谱 provider 代言,
+        // 于是模型张口就说 GLM。内容早就是三路并列了,载体这次才换。
+        String hint = new UnconfiguredSearchProvider(() -> false, () -> false).unavailableHint();
         assertTrue(hint.contains("GLM_API_KEY"), hint);
         assertTrue(hint.contains("SERPAPI_KEY"), hint);
-        assertTrue(hint.contains("SEARXNG_URL"), hint);
+        assertTrue(hint.contains("SEARXNG"), hint);
     }
 
     @Test
     @DisplayName("必须点明 SearXNG **不需要 key** —— 这是「我不想配 key」的用户唯一的答案")
-    void zhipuHintFlagsTheKeyFreeRoute() {
-        String hint = new ZhipuSearchProvider(null, null).unavailableHint();
+    void unconfiguredHintFlagsTheKeyFreeRoute() {
+        String hint = new UnconfiguredSearchProvider(() -> false, () -> false).unavailableHint();
         assertTrue(hint.contains("不需要") || hint.contains("免费") || hint.contains("无需"),
                 "没有任何地方说 SearXNG 不要钱不要 key: " + hint);
     }
@@ -99,12 +102,13 @@ class SearchUnavailableHintTest {
     }
 
     @Test
-    @DisplayName("三个 provider 都给得出非空提示 —— 谁也不许静默")
+    @DisplayName("每个 provider 都给得出非空提示 —— 谁也不许静默")
     void everyProviderHasAHint() {
         for (SearchProvider p : new SearchProvider[]{
                 new ZhipuSearchProvider(null, null),
                 new SerpApiSearchProvider(null),
-                new SearxngSearchProvider(null)}) {
+                new SearxngSearchProvider(null),
+                new UnconfiguredSearchProvider(() -> false, () -> false)}) {
             assertNotNull(p.unavailableHint(), p.getClass().getSimpleName());
             assertFalse(p.unavailableHint().isBlank(), p.getClass().getSimpleName());
         }

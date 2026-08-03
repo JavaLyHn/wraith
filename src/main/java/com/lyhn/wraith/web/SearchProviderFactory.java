@@ -29,7 +29,7 @@ import java.util.Locale;
  *   <li>有 {@code GLM_API_KEY} → zhipu（智谱 Web Search，与 GLM 推理共用 Key）</li>
  *   <li>有 {@code SERPAPI_KEY} → serpapi（国际通用，付费即开即用）</li>
  *   <li>有 {@code SEARXNG_URL} → searxng（开源自托管，免费无需 key）</li>
- *   <li>都没有 → 占位 zhipu provider，isReady() 为 false，由调用方提示用户</li>
+ *   <li>都没有 → {@link UnconfiguredSearchProvider}，isReady() 为 false，由调用方提示用户</li>
  * </ol>
  *
  * 显式 {@code SEARCH_PROVIDER}（zhipu / serpapi / searxng）会跳过自动判断。
@@ -55,6 +55,9 @@ public final class SearchProviderFactory {
         return switch (chosen) {
             case "searxng" -> new SearxngSearchProvider(settings.searxngUrl());
             case "serpapi" -> new SerpApiSearchProvider(settings.serpKey());
+            case "unconfigured" -> new UnconfiguredSearchProvider();
+            // default 是 zhipu：显式 SEARCH_PROVIDER 写了别的值时也落到这里,
+            // 由 ZhipuSearchProvider 自己报「没有 GLM_API_KEY」。
             default -> new ZhipuSearchProvider(settings.glmKey(), settings.zhipuEngine());
         };
     }
@@ -93,7 +96,7 @@ public final class SearchProviderFactory {
         if (searxngUrl != null && !searxngUrl.isBlank()) {
             return "searxng";
         }
-        return "zhipu"; // 默认占位（Wraith 主要面向 GLM 用户），isReady() 会为 false
+        return "unconfigured"; // 载体换成 UnconfiguredSearchProvider —— 见 D2
     }
 
     /**

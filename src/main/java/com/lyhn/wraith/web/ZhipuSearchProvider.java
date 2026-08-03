@@ -89,17 +89,13 @@ public class ZhipuSearchProvider implements SearchProvider {
 
     @Override
     public String unavailableHint() {
-        // 三条路一起给,并点明哪条不要钱 —— 此前只说 GLM,于是"我不想配 GLM"的用户
-        // 以为搜索就是用不了了。SearXNG 是自托管元搜索,免费且**不需要任何 key**。
-        // 取值来源也说全:桌面「Provider 配置」存的是 config.json,不是 .env。
-        return "web_search 未配置搜索服务。任选一条（三者取其一即可）：\n"
-                + "  1) GLM_API_KEY —— 智谱 Web Search，与 GLM 推理共用同一个 key"
-                + "（在桌面「配置 → Provider 配置」里填 GLM，或写 .env / 环境变量）\n"
-                + "  2) SERPAPI_KEY —— 国际通用，付费即开即用：https://serpapi.com/manage-api-key\n"
-                + "  3) SEARXNG_URL —— 自托管开源元搜索，**免费且不需要任何 key**："
-                + "docker run --rm -p 8888:8888 searxng/searxng，然后设 SEARXNG_URL=http://localhost:8888\n"
-                + "注意：搜索用的 key 与你聊天用的模型 key 是两码事——"
-                + "除 GLM（推理与搜索共用）外，其它 provider 的 key 不会被搜索复用。";
+        // 收窄成 GLM 专属 —— 此后这句话只在用户**显式**选了 zhipu 却没给 key 时才出现。
+        // 那条中立的三路指引搬去了 UnconfiguredSearchProvider:它此前挂在这里,于是
+        // 「什么都没配」这件事由智谱 provider 代言,模型张口就说 GLM(D2)。
+        return "智谱 Web Search 需要 GLM_API_KEY —— 与 GLM 推理共用同一个 key。"
+                + "在桌面「配置 → Provider 配置」里填 GLM，或写 .env / 环境变量，"
+                + "或执行 /config search --provider zhipu --api-key <key>。\n"
+                + "不想用智谱的话，/config search 还支持 serpapi 与 searxng（后者免费、不需要任何 key）。";
     }
 
     @Override

@@ -169,12 +169,17 @@ class ZhipuSearchProviderTest {
     void searchWithoutKeyThrows() {
         ZhipuSearchProvider provider = new ZhipuSearchProvider("", "search_std", client);
         IOException ex = assertThrows(IOException.class, () -> provider.search("test", 5));
-        // 原来断言的是文案里含「API Key」四个字 —— 钉死措辞的断言,提示改好一点就红。
-        // 改断意图:这条消息必须**可行动**,即把三条可选路径都点出来
-        // (此前只提 GLM,于是"我不想配 GLM"的用户以为搜索没救了)。
+        // 断言的是意图而不是措辞:这条消息必须**可行动**,且不能让用户以为搜索没救了。
+        //
+        // 演化史(第三版):①最初断言含「API Key」四个字 —— 钉死措辞,提示改好一点就红;
+        // ②改成断言三条路的环境变量名都在 —— 但那把「中立的三路指引」钉在了 Zhipu 身上,
+        // 而那正是 D2 要修的错位:占位 provider 是 zhipu ⇒ 那句话由智谱代言 ⇒ 模型张口说 GLM。
+        // ③现在:三路指引搬去了 UnconfiguredSearchProvider(见 UnconfiguredHintTest),
+        // 这里只在用户**显式选了 zhipu 却没给 key** 时出现,所以断言收窄成
+        // 「说清 zhipu 自己要什么」+「指出还有别的后端可选」。
         String msg = ex.getMessage();
         assertTrue(msg.contains("GLM_API_KEY"), msg);
-        assertTrue(msg.contains("SERPAPI_KEY"), msg);
-        assertTrue(msg.contains("SEARXNG_URL"), msg);
+        assertTrue(msg.contains("serpapi") && msg.contains("searxng"),
+                "不能让显式选了 zhipu 的用户以为只有这一条路: " + msg);
     }
 }

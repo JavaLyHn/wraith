@@ -1,5 +1,6 @@
 package com.lyhn.wraith.web;
 
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -33,8 +34,11 @@ class SearchProviderFactoryTest {
     }
 
     @Test
-    void fallsBackToZhipuPlaceholder() {
-        assertEquals("zhipu", SearchProviderFactory.pickProvider(null, null, null, null));
+    @DisplayName("什么都没配时返回 unconfigured —— 此前返回 zhipu,那是「未配置」话术偏心 GLM 的机制")
+    void fallsBackToUnconfigured() {
+        // 这条断言此前是 assertEquals("zhipu", ...)，它正在钉住那个偏心：
+        // 占位 provider 是 zhipu ⇒ 中立的三路提示物理上挂在智谱 provider 上 ⇒ 模型张口就说 GLM。
+        assertEquals("unconfigured", SearchProviderFactory.pickProvider(null, null, null, null));
     }
 
     @Test
