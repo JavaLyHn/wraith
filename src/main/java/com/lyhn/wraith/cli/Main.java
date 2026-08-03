@@ -739,8 +739,11 @@ public class Main {
                         if (command.payload() == null || command.payload().isBlank()) {
                             handleConfigPalette(renderer, config, llmClient, hitlHandler, skillRegistry);
                         } else {
-                            // 传 registry:搜索配置改完立刻生效,不再需要重启后端
-                            ui.println(handleConfigCommand(config, command.payload(), hitlToolRegistry));
+                            ui.println(handleConfigCommand(config, command.payload(), cfg -> {
+                                // 两件事一起做:失效搜索缓存(第五次) + 重载计价表(第六次 snapshot-vs-live)
+                                hitlToolRegistry.invalidateSearchProvider();
+                                reactAgent.reloadPricingTable(cfg);
+                            }));
                             renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));
                         }
                         continue;
@@ -3317,18 +3320,21 @@ public class Main {
     }
 
     /**
-     * @param registry 非 null 时，写完调 {@code invalidateSearchProvider()}——搜索配置改完
-     *                 立刻生效，不再需要重启后端（第五次 snapshot-vs-live）。
-     *                 <b>无条件调用</b>而不是只在 search 分支调：多一次工厂构造无害，
-     *                 而「再解析一遍 payload 判断是不是 search」会让两处判断有分叉的机会。
+     * @param hook 非 null 时，写完调 {@code afterConfigWrite}——搜索与计价配置改完都要
+     *             立刻生效，不再需要重启后端（第五、第六次 snapshot-vs-live）。
+     *             <b>无条件调用</b>而不是按分支调：多刷一次无害，而「再解析一遍 payload
+     *             判断该刷谁」会让两处判断有分叉的机会。
      */
-    static String handleConfigCommand(WraithConfig config, String payload, ToolRegistry registry) {
+    static String handleConfigCommand(WraithConfig config, String payload, ConfigReloadHook hook) {
         List<String> head = splitArgs(payload);
-        String result = !head.isEmpty() && "search".equalsIgnoreCase(head.get(0))
-                ? applySearchConfig(config, payload)
-                : applyProviderConfig(config, payload);
-        if (registry != null) {
-            registry.invalidateSearchProvider();
+        String first = head.isEmpty() ? "" : head.get(0).toLowerCase(Locale.ROOT);
+        String result = switch (first) {
+            case "search" -> applySearchConfig(config, payload);
+            case "pricing" -> applyPricingConfig(config, payload);
+            default -> applyProviderConfig(config, payload);
+        };
+        if (hook != null) {
+            hook.afterConfigWrite(config);
         }
         return result;
     }
@@ -3470,6 +3476,7 @@ public class Main {
                   /config provider xfyun --lora-id <resourceId>
                   /config provider anthropic --protocol anthropic --api-key <key> --model claude-sonnet-4-5
                   /config search --provider searxng --base-url http://localhost:8888
+                  /config pricing --list
                   /model freellmapi
                   /model xfyun
                 """.stripTrailing();
@@ -3543,6 +3550,247 @@ public class Main {
                   /config search --provider zhipu                 # 沿用 providers.glm.apiKey
                   /config search --provider duckduckgo            # 无需 key,但靠抓 HTML,会抖
                 """.stripTrailing();
+    }
+
+    private static final java.util.Set<String> PRICING_CURRENCIES = java.util.Set.of("CNY", "USD");
+
+    /**
+     * 一条计价条目的校验；返回 {@code null} 表示通过，否则是给人看的错误。
+     * CLI 与 RPC 共用同一套规则——否则用户在一边被拒、在另一边写进去。
+     *
+     * <p><b>刻意不校验 {@code cacheHit <= cacheMiss}</b>：DeepSeek Flash 的真实牌价就是
+     * 0.0028 vs 0.14，但反过来也可能存在，这不是 wraith 该管的。
+     */
+    static String validatePricingEntry(String modelPrefix, double cacheHit, double cacheMiss,
+                                       double output, String currency) {
+        if (modelPrefix == null || modelPrefix.isBlank()) {
+            return "模型前缀不能为空（空前缀会命中所有模型）";
+        }
+        for (double v : new double[]{cacheHit, cacheMiss, output}) {
+            if (Double.isNaN(v) || Double.isInfinite(v) || v < 0) {
+                return "价格必须是 ≥ 0 的有限数字（算出负成本比不显示更糟）";
+            }
+        }
+        String c = currency == null ? "" : currency.trim().toUpperCase(Locale.ROOT);
+        if (!PRICING_CURRENCIES.contains(c)) {
+            return "币种只支持 CNY 或 USD（状态栏只认这两种符号，填别的会一律显示成 ¥）";
+        }
+        return null;
+    }
+
+    /**
+     * 这条前缀会命中哪几个已配置模型。
+     *
+     * <p>语义与 {@code PricingTable.Entry.matches(exact=false)} 一致：<b>小写后 startsWith</b>。
+     * 用户填 {@code glm} 会命中 {@code glm-4.7} 与 {@code glm-5v-turbo}——把这件事显示出来，
+     * 前缀语义就不再是静默的。
+     */
+    static List<String> pricingMatchedModels(String modelPrefix, WraithConfig config) {
+        if (modelPrefix == null || modelPrefix.isBlank() || config == null
+                || config.getProviders() == null) {
+            return List.of();
+        }
+        String prefix = modelPrefix.trim().toLowerCase(Locale.ROOT);
+        java.util.LinkedHashSet<String> hits = new java.util.LinkedHashSet<>();
+        for (String id : config.getProviders().keySet()) {
+            WraithConfig.ProviderConfig pc = config.getProviders().get(id);
+            String model = pc == null ? null : pc.getModel();
+            if (model != null && !model.isBlank()
+                    && model.trim().toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                hits.add(model.trim());
+            }
+        }
+        return List.copyOf(hits);
+    }
+
+    static PricingConfigUpdate parsePricingConfigUpdate(String payload) {
+        List<String> args = splitArgs(payload);
+        if (args.isEmpty() || !"pricing".equalsIgnoreCase(args.get(0))) {
+            return PricingConfigUpdate.error("用法不正确");
+        }
+        if (args.size() == 1) {
+            return new PricingConfigUpdate(PricingAction.LIST, null, 0, 0, 0, null, null);
+        }
+
+        String modelPrefix = null;
+        Double cacheHit = null;
+        Double cacheMiss = null;
+        Double output = null;
+        String currency = null;
+        boolean list = false;
+        String remove = null;
+
+        for (int i = 1; i < args.size(); i++) {
+            String token = args.get(i);
+            if (!token.startsWith("-")) {
+                if (modelPrefix != null) {
+                    return PricingConfigUpdate.error("多余的参数: " + token);
+                }
+                modelPrefix = token;
+                continue;
+            }
+            String key;
+            String value = null;
+            int equals = token.indexOf('=');
+            if (equals > 0) {
+                key = token.substring(0, equals);
+                value = token.substring(equals + 1);
+            } else {
+                key = token;
+            }
+            String normalized = normalizeConfigKey(key);
+            if ("list".equals(normalized)) {
+                list = true;
+                continue;
+            }
+            if (value == null) {
+                if (i + 1 >= args.size()) {
+                    return PricingConfigUpdate.error("缺少 " + key + " 的值");
+                }
+                value = args.get(++i);
+            }
+            switch (normalized) {
+                case "remove" -> remove = value;
+                case "model-prefix" -> modelPrefix = value;
+                case "cache-hit" -> {
+                    Double parsed = parsePricingNumber(value);
+                    if (parsed == null) return PricingConfigUpdate.error("--cache-hit 不是数字: " + value);
+                    cacheHit = parsed;
+                }
+                case "cache-miss" -> {
+                    Double parsed = parsePricingNumber(value);
+                    if (parsed == null) return PricingConfigUpdate.error("--cache-miss 不是数字: " + value);
+                    cacheMiss = parsed;
+                }
+                case "output" -> {
+                    Double parsed = parsePricingNumber(value);
+                    if (parsed == null) return PricingConfigUpdate.error("--output 不是数字: " + value);
+                    output = parsed;
+                }
+                case "currency" -> currency = value;
+                default -> {
+                    return PricingConfigUpdate.error("未知配置项: " + key);
+                }
+            }
+        }
+
+        if (remove != null) {
+            if (remove.isBlank()) return PricingConfigUpdate.error("--remove 需要一个模型前缀");
+            return new PricingConfigUpdate(PricingAction.REMOVE, remove.trim(), 0, 0, 0, null, null);
+        }
+        if (list) {
+            return new PricingConfigUpdate(PricingAction.LIST, null, 0, 0, 0, null, null);
+        }
+        // 三个价一个都不能缺:缺省成 0 会把「免费」当成事实,违反 PricingTable 的「宁缺勿虚」
+        if (cacheHit == null || cacheMiss == null || output == null) {
+            return PricingConfigUpdate.error(
+                    "三个价都要给：--cache-hit / --cache-miss / --output（缺省成 0 会把「免费」当成事实）");
+        }
+        String resolvedCurrency = currency == null || currency.isBlank()
+                ? "CNY" : currency.trim().toUpperCase(Locale.ROOT);
+        String invalid = validatePricingEntry(modelPrefix, cacheHit, cacheMiss, output, resolvedCurrency);
+        if (invalid != null) {
+            return PricingConfigUpdate.error(invalid);
+        }
+        return new PricingConfigUpdate(PricingAction.UPSERT, modelPrefix.trim(),
+                cacheHit, cacheMiss, output, resolvedCurrency, null);
+    }
+
+    /** 数字解析：解析不出返回 null（由调用方报「不是数字」并把原串回给用户）。 */
+    private static Double parsePricingNumber(String value) {
+        try {
+            return Double.parseDouble(value.trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String pricingConfigUsage() {
+        return """
+                用法:
+                  /config pricing --list
+                  /config pricing glm-4.7 --cache-hit 20 --cache-miss 20 --output 60
+                  /config pricing Qwen/Qwen3-8B --cache-hit 0.5 --cache-miss 0.5 --output 1.5 --currency CNY
+                  /config pricing --remove glm-4.7
+                说明:
+                  价格单位是「每百万 token」;币种只支持 CNY / USD。
+                  模型前缀是**前缀匹配**:填 glm 会让 glm-4.7、glm-5v-turbo 套同一个价。
+                """.stripTrailing();
+    }
+
+    private static String applyPricingConfig(WraithConfig config, String payload) {
+        PricingConfigUpdate update = parsePricingConfigUpdate(payload);
+        if (update.error() != null) {
+            return "❌ " + update.error() + "\n" + pricingConfigUsage();
+        }
+        return switch (update.action()) {
+            case LIST -> pricingList(config);
+            case REMOVE -> pricingRemove(config, update.modelPrefix());
+            case UPSERT -> pricingUpsert(config, update);
+        };
+    }
+
+    private static String pricingList(WraithConfig config) {
+        StringBuilder out = new StringBuilder("📊 模型计价（价格单位：每百万 token）\n");
+        List<com.lyhn.wraith.context.PricingTable.View> view =
+                new com.lyhn.wraith.context.PricingTable(config.getPricing()).view();
+        for (com.lyhn.wraith.context.PricingTable.View v : view) {
+            com.lyhn.wraith.context.PricingTable.Price p = v.price();
+            String symbol = "USD".equalsIgnoreCase(p.currency()) ? "$" : "¥";
+            out.append("   ").append(v.modelKey())
+                    .append(v.seeded() ? "  (内置，不可改)" : "")
+                    .append("  ").append(symbol).append(p.cacheHitPerM())
+                    .append(" / ").append(symbol).append(p.cacheMissPerM())
+                    .append(" / ").append(symbol).append(p.outputPerM())
+                    .append('\n');
+            if (!v.seeded()) {
+                List<String> hits = pricingMatchedModels(v.modelKey(), config);
+                out.append("      ").append(hits.isEmpty()
+                        ? "⚠ 当前不命中任何已配置模型" : "会命中：" + String.join("、", hits)).append('\n');
+            }
+        }
+        out.append("   添加/修改: /config pricing <模型前缀> --cache-hit X --cache-miss Y --output Z");
+        return out.toString();
+    }
+
+    private static String pricingRemove(WraithConfig config, String modelPrefix) {
+        List<WraithConfig.PricingEntry> entries = config.getPricing();
+        boolean removed = entries.removeIf(e -> e.getModelPrefix() != null
+                && e.getModelPrefix().trim().equalsIgnoreCase(modelPrefix));
+        if (!removed) {
+            return "❌ 没有前缀为 " + modelPrefix + " 的计价条目（内置种子不可删）\n" + pricingConfigUsage();
+        }
+        config.save();
+        return "✅ 已删除计价条目: " + modelPrefix;
+    }
+
+    private static String pricingUpsert(WraithConfig config, PricingConfigUpdate update) {
+        List<WraithConfig.PricingEntry> entries = config.getPricing();
+        // 同前缀覆盖而不是加第二条:最长前缀相同时哪条胜出是任意的
+        entries.removeIf(e -> e.getModelPrefix() != null
+                && e.getModelPrefix().trim().equalsIgnoreCase(update.modelPrefix()));
+        WraithConfig.PricingEntry entry = new WraithConfig.PricingEntry();
+        entry.setModelPrefix(update.modelPrefix());
+        entry.setCacheHitPerM(update.cacheHitPerM());
+        entry.setCacheMissPerM(update.cacheMissPerM());
+        entry.setOutputPerM(update.outputPerM());
+        entry.setCurrency(update.currency());
+        entries.add(entry);
+        config.save();
+
+        String symbol = "USD".equals(update.currency()) ? "$" : "¥";
+        StringBuilder out = new StringBuilder("✅ 已保存计价: ").append(update.modelPrefix()).append('\n');
+        out.append("   ").append(symbol).append(update.cacheHitPerM())
+                .append(" / ").append(symbol).append(update.cacheMissPerM())
+                .append(" / ").append(symbol).append(update.outputPerM())
+                .append("  每百万 token（缓存命中 / 缓存未中 / 输出）\n");
+        List<String> hits = pricingMatchedModels(update.modelPrefix(), config);
+        out.append("   ").append(hits.isEmpty()
+                        ? "⚠ 当前不命中任何已配置模型 —— 前缀写对了吗？（预填未来要用的模型也正常）"
+                        : "会命中：" + String.join("、", hits))
+                .append('\n');
+        out.append("   已立即生效，不需要重启。");
+        return out.toString();
     }
 
     private static String applySearchConfig(WraithConfig config, String payload) {
@@ -3622,6 +3870,9 @@ public class Main {
             case "apikey", "api_key", "key" -> "api-key";
             case "baseurl", "base_url", "url" -> "base-url";
             case "loraid", "lora_id", "resourceid", "resource_id" -> "lora-id";
+            case "cachehit", "cache_hit" -> "cache-hit";
+            case "cachemiss", "cache_miss" -> "cache-miss";
+            case "modelprefix", "model_prefix", "prefix" -> "model-prefix";
             default -> key;
         };
     }
@@ -5037,6 +5288,27 @@ public class Main {
     record SearchConfigUpdate(String provider, String apiKey, String baseUrl, String error) {
         static SearchConfigUpdate error(String error) {
             return new SearchConfigUpdate(null, null, null, error);
+        }
+    }
+
+    /**
+     * {@code /config} 写完后要刷新的活对象。
+     *
+     * <p>此前这里是 {@code ToolRegistry}（search 那条线为了失效搜索缓存加的），
+     * 但 pricing 要刷的是 {@code Agent} 的计价表——继续往签名上加参数会一路长下去。
+     * 收成一个回调：REPL 传一个 lambda 同时做两件事。
+     */
+    interface ConfigReloadHook {
+        void afterConfigWrite(WraithConfig config);
+    }
+
+    enum PricingAction { LIST, UPSERT, REMOVE }
+
+    record PricingConfigUpdate(PricingAction action, String modelPrefix,
+                               double cacheHitPerM, double cacheMissPerM, double outputPerM,
+                               String currency, String error) {
+        static PricingConfigUpdate error(String error) {
+            return new PricingConfigUpdate(null, null, 0, 0, 0, null, error);
         }
     }
 

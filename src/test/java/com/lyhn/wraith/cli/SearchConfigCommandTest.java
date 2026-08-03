@@ -1,7 +1,6 @@
 package com.lyhn.wraith.cli;
 
 import com.lyhn.wraith.config.WraithConfig;
-import com.lyhn.wraith.tool.ToolRegistry;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -134,23 +133,23 @@ class SearchConfigCommandTest {
     }
 
     @Test
-    @DisplayName("接线：写完立刻失效搜索缓存 —— 否则本次会话仍用旧 provider")
-    void invalidatesSearchCacheAfterWriting(@TempDir Path tempDir) {
+    @DisplayName("接线：写完调 ConfigReloadHook —— 否则本次会话仍用旧 provider / 旧计价表")
+    void invokesReloadHookAfterWriting(@TempDir Path tempDir) {
         withTempConfigDir(tempDir, () -> {
-            boolean[] invalidated = {false};
-            ToolRegistry spy = new ToolRegistry() {
-                @Override
-                public synchronized void invalidateSearchProvider() {
-                    invalidated[0] = true;
-                    super.invalidateSearchProvider();
-                }
-            };
+            // 第三参此前是 ToolRegistry,断言的是「registry.invalidateSearchProvider 被调了」;
+            // pricing 也要刷东西(Agent 的计价表),继续往签名上加参数会一路长下去,故收成
+            // ConfigReloadHook。
+            //
+            // 「invalidateSearchProvider 真的清空了缓存」由 tool 包里的 SearchProviderCacheTest
+            // 继续守 —— 那两个测试钩子(setSearchProviderForTest / searchProviderSnapshotForTest)
+            // 是包可见的,cli 包这里够不到。
+            boolean[] called = {false};
 
             Main.handleConfigCommand(new WraithConfig(),
-                    "search --provider searxng --base-url http://localhost:8888", spy);
+                    "search --provider searxng --base-url http://localhost:8888",
+                    cfg -> called[0] = true);
 
-            assertTrue(invalidated[0],
-                    "第五次 snapshot-vs-live：不失效则用户配好后本次会话依然报「未配置」");
+            assertTrue(called[0], "第五、第六次 snapshot-vs-live：不刷新则写了等于没写");
         });
     }
 
