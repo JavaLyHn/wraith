@@ -101,4 +101,35 @@ describe('PetSprite', () => {
       nowSpy.mockRestore()
     }
   })
+
+  // ── 原生 HTML5 拖拽必须被挡住 ───────────────────────────────────────────
+  //
+  // 症状(Windows 上用「导入图片」的单图宠物):按住宠物拖,只能走一小段就停住,
+  // 同时冒出一个半透明的宠物副本和红色 🚫。
+  //
+  // 根因: Chromium 里 <img> **默认可拖**。pointerdown 后一移动就触发原生 dragstart,
+  // Chromium 接管输入 → pointermove 不再送达 → PetWindowApp 里驱动窗口的
+  // IPC setBounds 停止(所以拖不动了) → 同时画出 ghost 并因无放置目标显示 not-allowed。
+  //
+  // pet.html 里的 user-select:none 挡的是**文本选择**,与原生拖拽是两回事,挡不住它。
+  //
+  // 精灵表那支渲染的是 <div>+backgroundImage,div 默认不可拖,所以只有单图那支中招 ——
+  // 这也解释了为什么内置精灵宠物没事、导入单图才出问题。
+  it('单图那支的 <img> 必须 draggable=false —— 否则原生拖拽会抢走 pointermove', () => {
+    render(
+      <PetSprite previewUrl="data:image/png;base64,AAAA" sprite={null} state="idle" motion="float" scale={1} />
+    )
+    const img = screen.getByTestId('pet-sprite').querySelector('img')
+    expect(img).not.toBeNull()
+    expect(img!.getAttribute('draggable')).toBe('false')
+  })
+
+  it('两支都要挡:精灵表那支的容器也不该被原生拖拽带走', () => {
+    render(
+      <PetSprite previewUrl="data:image/png;base64,AAAA" sprite={SPRITE} state="idle" motion="float" scale={1} />
+    )
+    // div 默认不可拖,但显式标上,免得将来有人把它换成 <img> 又踩一遍
+    const root = screen.getByTestId('pet-sprite')
+    expect(root.getAttribute('draggable')).toBe('false')
+  })
 })

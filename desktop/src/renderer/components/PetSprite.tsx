@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import type { PetMotionStyle, PetSprite as PetSpriteType, PetState } from '../../shared/pets'
 import { detectFrameCounts, motionFor, spriteRowFor } from '../lib/petMotion'
 import { STATIC_IMAGE_MAX_PX, containScale } from '../../shared/petWindow'
@@ -143,7 +143,14 @@ export default function PetSprite({ previewUrl, sprite, state, motion: motionSty
   const capRatio = imgSize ? containScale(imgSize.w, imgSize.h, STATIC_IMAGE_MAX_PX) : null
 
   return (
-    <div data-testid="pet-sprite" style={{ transform: `scaleX(${facing})` }}>
+    // draggable=false 是必需的,不是洁癖:Chromium 里 <img> **默认可拖**,pointerdown 后
+    // 一移动就触发原生 dragstart,Chromium 随即接管输入 —— pointermove 不再送达
+    // PetWindowApp,那边驱动窗口位置的 IPC setBounds 就停了(表现为「只能拖一小段」),
+    // 同时 Chromium 画出半透明 ghost 并因为没有放置目标显示红色 not-allowed 光标。
+    // pet.html 里的 user-select:none 挡的是文本选择,与原生拖拽是两回事,挡不住它。
+    // 根层也标上:精灵表那支现在是 <div>(默认不可拖),但标了才不怕将来被换成 <img>。
+    <div data-testid="pet-sprite" draggable={false} onDragStart={(e) => e.preventDefault()}
+      style={{ transform: `scaleX(${facing})`, WebkitUserDrag: 'none' } as CSSProperties}>
       {!previewUrl ? null : sprite ? (
         <div
           aria-hidden="true"
@@ -159,6 +166,7 @@ export default function PetSprite({ previewUrl, sprite, state, motion: motionSty
       ) : (
         <img
           alt=""
+          draggable={false}
           className={anim.className}
           style={
             imgSize && capRatio !== null

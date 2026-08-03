@@ -4,7 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Wraith Pet</title>
-    <style>html,body{margin:0;height:100vh;background:transparent;overflow:hidden;-webkit-user-select:none;user-select:none}</style>
+    <!--
+      -webkit-user-drag:none 是窗口级兜底,与 user-select:none 不是一回事:
+      后者挡文本选择,前者挡**原生 HTML5 拖拽**。<img> 在 Chromium 里默认可拖,一旦原生
+      dragstart 触发,Chromium 就接管输入 —— pointermove 不再送达渲染层,PetWindowApp 里
+      驱动窗口位置的 IPC setBounds 随之停止(表现为「宠物只能拖一小段就卡住」),同时冒出
+      半透明 ghost 和红色 not-allowed 光标。根因修在 PetSprite 的 draggable={false},
+      这里再兜一道:将来往宠物窗里加任何可拖元素都不会重新踩到。
+    -->
+    <style>html,body{margin:0;height:100vh;background:transparent;overflow:hidden;-webkit-user-select:none;user-select:none}
+    *{-webkit-user-drag:none}</style>
   </head>
   <body>
     <div id="pet-root"></div>
