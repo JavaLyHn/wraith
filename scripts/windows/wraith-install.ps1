@@ -1,4 +1,4 @@
-# wraith-install.ps1 — 构建并安装 jar + 把 `wraith` 命令挂上 PATH(对标 macOS 的 wraith-install)。
+﻿# wraith-install.ps1 — 构建并安装 jar + 把 `wraith` 命令挂上 PATH(对标 macOS 的 wraith-install)。
 #
 #   powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
 #
