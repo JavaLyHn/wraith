@@ -51,6 +51,8 @@ public class WraithConfig {
     private GatewayConfig gateway;
     private SttConfig stt;
     private EmbeddingConfig embedding;
+    /** 搜索后端配置。缺省时 {@code SearchProviderFactory} 回落 env / 自动选。 */
+    private SearchConfig search;
     private java.util.List<PricingEntry> pricing = new java.util.ArrayList<>();
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -165,6 +167,31 @@ public class WraithConfig {
         public void setApiKey(String v) { this.apiKey = v; }
     }
 
+    /**
+     * 搜索后端配置。三条路共用一个形状：provider 选谁、apiKey 给谁、baseUrl 指哪。
+     *
+     * <p>这一节存在的理由是<b>取值链对等</b>：此前只有 {@code GLM_API_KEY} 能回落
+     * {@code config.json}（它蹭的是 {@code providers.glm.apiKey}），{@code SERPAPI_KEY} /
+     * {@code SEARXNG_URL} 在 config.json 里没有对应概念，于是只能来自环境变量。
+     * 「只有配了 GLM 的人 web_search 才零配置可用」的全部机制就是这个不对等。
+     *
+     * <p>{@code apiKey} 一个字段服务 zhipu 与 serpapi 两家，靠 {@code provider} 区分——
+     * 搜索一次只用一家，不需要同时存多家的 key。{@code provider} 为空而 {@code apiKey} 有值时
+     * <b>不猜它属于谁</b>，直接当作没有：猜错会把 SerpAPI 的 key 发给智谱（或反之）。
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class SearchConfig {
+        private String provider;   // zhipu | serpapi | searxng | duckduckgo；空 = 自动选
+        private String apiKey;     // zhipu / serpapi 用；仅本地存储,绝不回包/日志
+        private String baseUrl;    // searxng 用
+        public String getProvider() { return provider; }
+        public void setProvider(String v) { this.provider = v; }
+        public String getApiKey() { return apiKey; }
+        public void setApiKey(String v) { this.apiKey = v; }
+        public String getBaseUrl() { return baseUrl; }
+        public void setBaseUrl(String v) { this.baseUrl = v; }
+    }
+
     /** 模型计价条目(用户自配;官方牌价≠实付价,换算率由掌握合同的人提供)。 */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class PricingEntry {
@@ -195,6 +222,9 @@ public class WraithConfig {
     public void setStt(SttConfig stt) { this.stt = stt; }
     public EmbeddingConfig getEmbedding() { return embedding; }
     public void setEmbedding(EmbeddingConfig embedding) { this.embedding = embedding; }
+
+    public SearchConfig getSearch() { return search; }
+    public void setSearch(SearchConfig search) { this.search = search; }
     public java.util.List<PricingEntry> getPricing() { return pricing; }
     public void setPricing(java.util.List<PricingEntry> pricing) {
         this.pricing = pricing == null ? new java.util.ArrayList<>() : pricing;
