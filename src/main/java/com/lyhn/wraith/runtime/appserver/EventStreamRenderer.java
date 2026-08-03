@@ -368,6 +368,25 @@ public final class EventStreamRenderer implements Renderer {
         emit("team.step.output", p);
     }
 
+    /**
+     * reviewer 开始审查某一步。
+     *
+     * <p>此前只有 {@link #emitTeamReviewOutput} 这一个 reviewer 信号，前端于是<b>无从知道</b>
+     * reviewer 在跑：块要等第一个 token 才出现，思考型模型沉默那几十秒里卡片完全静止，
+     * 用户以为死机了。
+     */
+    public void emitTeamReviewStarted(String teamId, String stepId) {
+        Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId);
+        emit("team.review.started", p);
+    }
+
+    /** reviewer 审完某一步（含 LLM 调用失败那条路——那也是「不再运行」）。 */
+    public void emitTeamReviewCompleted(String teamId, String stepId, boolean approved) {
+        Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId);
+        p.put("approved", approved);
+        emit("team.review.completed", p);
+    }
+
     /** 协作步骤审查 LLM 流式正文片段（嵌套在 TeamCard 步骤行下，标识为 reviewer 输出）。 */
     public void emitTeamReviewOutput(String teamId, String stepId, String text) {
         Map<String, Object> p = base(); p.put("teamId", teamId); p.put("stepId", stepId); p.put("text", text);

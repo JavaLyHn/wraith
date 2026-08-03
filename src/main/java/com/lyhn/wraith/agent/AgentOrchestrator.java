@@ -594,11 +594,16 @@ public class AgentOrchestrator {
         }
 
         out.println("🔍 " + reviewer.getName() + " 正在审查步骤 [" + step.id() + "] 的结果...");
+        // CLI 有上面那句叙述，桌面此前什么都没有:reviewer 唯一的信号是流式正文增量,
+        // 思考型模型出第一个 token 前沉默那几十秒里卡片全程静止,用户以为死机了。
+        progressListener.reviewStarted(step.id());
         AgentMessage reviewResult = reviewer.review(step.description(), result.content(), out, streamFor("review", step.id()));
         reviewer.clearHistory();
 
         if (reviewResult.type() == AgentMessage.Type.ERROR) {
             log.warn("Reviewer failed for step {}: {}", step.id(), reviewResult.content());
+            // 失败也是「不再运行」——不发这一条,UI 会永远停在「审查中…」
+            progressListener.reviewCompleted(step.id(), false);
             out.println("⚠️ 步骤 [" + step.id() + "] 审查阶段 LLM 调用失败，保留当前执行结果\n");
             updateStep(steps, step.id(), step.withResult(result.content()));
             progressListener.stepCompleted(step.id(), "completed", result.content(), false, retryCount.getOrDefault(step.id(), 0));
@@ -606,6 +611,7 @@ public class AgentOrchestrator {
         }
 
         boolean approved = parseReviewApproval(reviewResult.content());
+        progressListener.reviewCompleted(step.id(), approved);
         String acceptedResult = result.content();
 
         if (approved) {
@@ -642,17 +648,21 @@ public class AgentOrchestrator {
             }
 
             acceptedResult = retryResult.content();
+            progressListener.reviewStarted(step.id());
             AgentMessage retryReview = reviewer.review(step.description(), acceptedResult, out, streamFor("review", step.id()));
             reviewer.clearHistory();
 
             if (retryReview.type() == AgentMessage.Type.ERROR) {
                 log.warn("Reviewer failed for step {} retry {}: {}", step.id(), retries, retryReview.content());
                 approved = true;
+                // 传 true 与这里的实际结论一致(下面就 break 当通过处理),别让 UI 与代码说两套话
+                progressListener.reviewCompleted(step.id(), true);
                 issues = "";
                 break;
             }
 
             approved = parseReviewApproval(retryReview.content());
+            progressListener.reviewCompleted(step.id(), approved);
             issues = parseReviewIssues(retryReview.content());
         }
 

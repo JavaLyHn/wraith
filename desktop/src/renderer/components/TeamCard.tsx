@@ -1,6 +1,26 @@
 import { useState } from 'react'
 import type { TeamItem, TeamStep } from '../../shared/transcriptReducer'
 import { resolveExpanded, nextGlobalMode, globalToggleLabel, type GlobalMode } from '../lib/teamCardCollapse'
+import { stepPhaseLabel, reviewerDotClass, showsReviewerBlock } from '../lib/teamCardStatus'
+import { useStickToBottom } from '../lib/stickToBottom'
+
+/**
+ * 流式输出框:内容增长时自动贴底。
+ *
+ * 此前这些框只有 `max-h-48 overflow-y-auto`,不跟随 —— 内容一超过这个高度,可见区就冻在
+ * 最前面几行,后面几千字全长在视野外;框又有高度上限,外层 Transcript 的贴底也没得可滚,
+ * 于是整张卡片在流式期间彻底静止,用户以为死机了。
+ * `[overflow-anchor:none]`:阻止浏览器的 scroll anchoring 在内容增长时反向补偿 scrollTop
+ * (同 Transcript 的理由)。
+ */
+function StreamBox({ text, className }: { text: string; className: string }): JSX.Element {
+  const ref = useStickToBottom<HTMLDivElement>(text)
+  return (
+    <div ref={ref} className={`max-h-48 overflow-y-auto [overflow-anchor:none] ${className}`}>
+      <pre className="whitespace-pre-wrap break-words text-xs">{text}</pre>
+    </div>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Role configuration
@@ -63,13 +83,14 @@ function roleDotClass(
   agentId: string,
   steps: TeamStep[],
 ): string {
-  const anyRunning = steps.some(s => s.status === 'running')
   if (role === 'planner') {
     // Planner is always green once steps exist
     return steps.length > 0 ? 'bg-green-500' : 'bg-fg-subtle/40'
   }
   if (role === 'reviewer') {
-    return anyRunning ? 'bg-amber-400 animate-pulse' : 'bg-fg-subtle/40'
+    // 此前这里是 `anyRunning`(任意步骤在跑) —— 与 reviewer 毫无关系:worker 在跑它也闪,
+    // reviewer 真在审查时它也只是同一个闪法。现在跟 reviewStatus。
+    return reviewerDotClass(steps)
   }
   // Worker: amber if it's the agent of any running step
   const workerRunning = steps.some(s => s.status === 'running' && s.agent === agentId)
@@ -111,6 +132,8 @@ function TeamStepRow({ step, roleColorClass, resultExpanded, reviewExpanded, onT
   const hasLiveOutput = isRunning && typeof step.output === 'string' && step.output.length > 0
   const hasResult = !isRunning && typeof step.result === 'string' && step.result.length > 0
   const hasReviewOutput = typeof step.reviewOutput === 'string' && step.reviewOutput.length > 0
+  const reviewRunning = step.reviewStatus === 'running'
+  const phase = stepPhaseLabel(step)
 
   return (
     <li className="flex flex-col gap-0.5">
@@ -129,6 +152,14 @@ function TeamStepRow({ step, roleColorClass, resultExpanded, reviewExpanded, onT
         </span>
         {/* Description */}
         <span className="min-w-0 flex-1 break-words text-fg-muted">{step.description}</span>
+        {/* 阶段文字:同一个 running 步骤,worker 执行与 reviewer 审查是先后两段,
+            光看那个 ◐ 图标分不出来,而「审查中」那段可能沉默几十秒 */}
+        {phase && (
+          <span data-testid="team-step-phase"
+            className={`shrink-0 animate-pulse ${reviewRunning ? 'text-amber-400' : 'text-accent'}`}>
+            {phase}
+          </span>
+        )}
         {/* Review verdict */}
         <ReviewTag step={step} />
         {/* Expand toggle — 仅 done 且有 result 时显示 */}
@@ -144,33 +175,37 @@ function TeamStepRow({ step, roleColorClass, resultExpanded, reviewExpanded, onT
       </div>
       {/* running 步骤：流式 output 自动展开 */}
       {hasLiveOutput && (
-        <div className="ml-5 mt-0.5 max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
-          <pre className="whitespace-pre-wrap break-words text-xs">{step.output}</pre>
-        </div>
+        <StreamBox text={step.output ?? ''}
+          className="ml-5 mt-0.5 rounded border border-border bg-bg px-2 py-1 text-fg-subtle" />
       )}
       {/* done 步骤：result 可折叠 */}
       {hasResult && resultExpanded && (
-        <div className="ml-5 mt-0.5 max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
-          <pre className="whitespace-pre-wrap break-words text-xs">{step.result}</pre>
-        </div>
+        <StreamBox text={step.result ?? ''}
+          className="ml-5 mt-0.5 rounded border border-border bg-bg px-2 py-1 text-fg-subtle" />
       )}
-      {/* reviewer 分区：reviewOutput 存在时渲染，实时增长，默认展开可折叠 */}
-      {hasReviewOutput && (
-        <div className="ml-5 mt-1 border-t border-border/50 pt-1">
+      {/* reviewer 分区：审查中或已有输出时渲染。
+          此前的判据只有 hasReviewOutput —— 于是「审查中但还没吐第一个 token」那几十秒里
+          这一块根本不存在,而那正是用户以为死机的那一段。 */}
+      {showsReviewerBlock(step) && (
+        <div data-testid="team-review-block" className="ml-5 mt-1 border-t border-border/50 pt-1">
           <div className="mb-0.5 flex items-center gap-1 text-amber-400">
             <span className="text-xs">🔎 reviewer</span>
-            <button
-              className="ml-1 shrink-0 text-fg-subtle hover:text-fg-muted text-xs"
-              onClick={onToggleReview}
-              aria-label={reviewExpanded ? '折叠审查输出' : '展开审查输出'}
-            >
-              {reviewExpanded ? '▼' : '▶'}
-            </button>
+            {reviewRunning && (
+              <span data-testid="team-review-running" className="animate-pulse text-xs">审查中…</span>
+            )}
+            {hasReviewOutput && (
+              <button
+                className="ml-1 shrink-0 text-fg-subtle hover:text-fg-muted text-xs"
+                onClick={onToggleReview}
+                aria-label={reviewExpanded ? '折叠审查输出' : '展开审查输出'}
+              >
+                {reviewExpanded ? '▼' : '▶'}
+              </button>
+            )}
           </div>
-          {reviewExpanded && (
-            <div className="max-h-48 overflow-y-auto rounded border border-amber-400/20 bg-amber-400/5 px-2 py-1 text-fg-subtle">
-              <pre className="whitespace-pre-wrap break-words text-xs">{step.reviewOutput}</pre>
-            </div>
+          {hasReviewOutput && reviewExpanded && (
+            <StreamBox text={step.reviewOutput ?? ''}
+              className="rounded border border-amber-400/20 bg-amber-400/5 px-2 py-1 text-fg-subtle" />
           )}
         </div>
       )}
@@ -210,9 +245,8 @@ function PlannerRow({ item, expanded, onToggle }: { item: TeamItem; expanded: bo
       </div>
       {/* Planner 输出可折叠块，默认展开 */}
       {hasPlannerOutput && expanded && (
-        <div className="ml-5 mt-0.5 max-h-48 overflow-y-auto rounded border border-border bg-bg px-2 py-1 text-fg-subtle">
-          <pre className="whitespace-pre-wrap break-words text-xs">{item.plannerOutput}</pre>
-        </div>
+        <StreamBox text={item.plannerOutput ?? ''}
+          className="ml-5 mt-0.5 rounded border border-border bg-bg px-2 py-1 text-fg-subtle" />
       )}
     </div>
   )

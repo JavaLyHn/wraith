@@ -18,6 +18,20 @@ public interface TeamProgressListener {
     void stepStarted(String stepId, String agentName);
     /** status: "completed" | "failed" | "skipped"。approved/retries 为审查结果(skipped/failed 时 approved=false, retries=0)。 */
     void stepCompleted(String stepId, String status, String result, boolean approved, int retries);
+
+    /**
+     * reviewer 开始审查某一步。
+     *
+     * <p>此前<b>没有</b>这一对回调：reviewer 唯一的外部信号是流式正文增量
+     * （{@code team.review.output}）。于是「reviewer 正在审查」这个阶段在 UI 里
+     * <b>不存在</b> —— 思考型模型出第一个 token 前可能沉默几十秒，卡片全程静止，
+     * 用户以为死机了。默认空实现，CLI 行为不变（叙述仍走 {@code out.println}）。
+     */
+    default void reviewStarted(String stepId) {}
+
+    /** reviewer 审完某一步。{@code approved} 为该次审查的结论；LLM 调用失败也算结束。 */
+    default void reviewCompleted(String stepId, boolean approved) {}
+
     void finished(String status); // "completed" | "partial" | "failed"
 
     TeamProgressListener NOOP = new TeamProgressListener() {

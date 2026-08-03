@@ -70,6 +70,14 @@ export interface TeamStep {
   output?: string
   /** 复审器流式正文（team.review.output delta 累积）。 */
   reviewOutput?: string
+  /**
+   * 复审器**当前**是否在跑（team.review.started / completed）。
+   *
+   * 此前不存在这个字段:reviewer 唯一的信号是流式正文增量,于是「reviewer 正在审查」
+   * 这个阶段在 UI 里无从表达 —— 审查块要等第一个 token 才出现,思考型模型出第一个
+   * token 前沉默那几十秒里整张卡片静止,用户以为死机了。
+   */
+  reviewStatus?: 'running' | 'done'
   approved?: boolean
   retries?: number
 }
@@ -696,6 +704,9 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
       return updateTeamStep(state, teamId, stepId, st => ({
         ...st,
         status: stepStatus,
+        // 兜底:步骤都结算了,审查不可能还在跑。万一 team.review.completed 丢了(或被老后端
+        // 省略),不补这一手 UI 会永远停在「审查中…」—— 那是一句持续的假话,比没有指示更糟。
+        ...(st.reviewStatus === 'running' ? { reviewStatus: 'done' as const } : {}),
         ...(result !== undefined ? { result } : {}),
         ...(approved !== undefined ? { approved } : {}),
         ...(retries !== undefined ? { retries } : {}),
@@ -741,6 +752,18 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
         ...st,
         output: (st.output ?? '') + text,
       }))
+    }
+
+    case 'team.review.started': {
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const stepId = typeof p['stepId'] === 'string' ? p['stepId'] : ''
+      return updateTeamStep(state, teamId, stepId, st => ({ ...st, reviewStatus: 'running' }))
+    }
+
+    case 'team.review.completed': {
+      const teamId = typeof p['teamId'] === 'string' ? p['teamId'] : ''
+      const stepId = typeof p['stepId'] === 'string' ? p['stepId'] : ''
+      return updateTeamStep(state, teamId, stepId, st => ({ ...st, reviewStatus: 'done' }))
     }
 
     case 'team.review.output': {

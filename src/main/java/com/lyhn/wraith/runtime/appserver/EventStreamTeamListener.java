@@ -50,6 +50,16 @@ public final class EventStreamTeamListener implements TeamProgressListener {
     }
 
     @Override
+    public void reviewStarted(String stepId) {
+        renderer.emitTeamReviewStarted(teamId, stepId);
+    }
+
+    @Override
+    public void reviewCompleted(String stepId, boolean approved) {
+        renderer.emitTeamReviewCompleted(teamId, stepId, approved);
+    }
+
+    @Override
     public void finished(String status) {
         renderer.emitTeamFinished(teamId, status);
     }
