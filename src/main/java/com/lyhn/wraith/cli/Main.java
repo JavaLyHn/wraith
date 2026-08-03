@@ -1301,8 +1301,9 @@ public class Main {
                 // ── 无模型启动的两个把手 ─────────────────────────────────────────────
                 // ensureClient:currentClient 为空时,按**当前**配置就地热装一个 client。
                 //   用户在 GUI 里配好第一个 provider 后立刻可用,不需要重启后端。
-                //   createFromConfig 本身会在 defaultProvider 拿不到时遍历六家兜底,所以
-                //   只要任意一家有 key 就能装上。
+                //   createFromConfig 会按 ProviderResolver 的候选顺序逐个试,所以 config 或 env 里
+                //   任意一个有 key 的 provider 都能装上(此前是硬编码的 6 家白名单,anthropic /
+                //   openai / siliconflow 乃至 freellmapi-2 这种多实例 id 全都装不上)。
                 // requireClient:需要真实模型的路径(发起对话/plan/team)用它,拿不到就抛出
                 //   一句人能看懂的话 —— 而不是 NPE,也不是让整个后端不启动。
                 final java.util.function.Supplier<com.lyhn.wraith.llm.LlmClient> ensureClient = () -> {
@@ -1483,6 +1484,10 @@ public class Main {
                         if (protocol != null) pc.setProtocol(protocol);
                         if (label != null) pc.setLabel(label);
                         config.getProviders().put(id, pc);
+                        // 存完就该能用:此前这里从不设 defaultProvider,而它的硬编码初值 "glm"
+                        // 会被 save() 落盘 —— 于是配好 anthropic 点保存,createFromConfig
+                        // 先试无 key 的 glm、再遍历旧白名单那 6 家,返回 null,界面说「无可用模型」。
+                        ProviderDefaults.healDefault(config);
                         config.save();
                         // 首个 provider 落地后就地热装 —— 这是打破「想配 key 得先有 key」死锁的一环:
                         // 存完立刻可用,不需要重启后端,也不需要用户再去点一次「设默认」。
@@ -1491,13 +1496,9 @@ public class Main {
                     }
                     public java.util.Map<String, Object> configRemoveProvider(String id) {
                         config.getProviders().remove(id);
-                        if (id.equals(config.getDefaultProvider())) {
-                            // 回落到下一个有 key 的 provider(否则保留原值)
-                            for (java.util.Map.Entry<String, com.lyhn.wraith.config.WraithConfig.ProviderConfig> e : config.getProviders().entrySet())
-                                if (e.getValue() != null && e.getValue().getApiKey() != null && !e.getValue().getApiKey().isBlank()) {
-                                    config.setDefaultProvider(e.getKey()); break;
-                                }
-                        }
+                        // 删掉当前默认那个就落到下一个有 key 的。此前这里手写了一遍循环,
+                        // 现在与 createFromConfig / model.list 共用 ProviderResolver —— 不写第五份。
+                        ProviderDefaults.healDefault(config);
                         config.save();
                         return java.util.Map.of("ok", true);
                     }
