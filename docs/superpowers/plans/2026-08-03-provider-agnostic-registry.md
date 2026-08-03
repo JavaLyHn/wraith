@@ -2446,7 +2446,10 @@ describe('ProvidersPanel — provider 无关化后的载荷形态', () => {
     render(<ProvidersPanel onBack={vi.fn()} />)
 
     expect(await screen.findByTestId('providers-panel')).toBeTruthy()
-    expect(screen.getByText('Anthropic')).toBeTruthy()
+    // 必须限定 selector:'div'。「Anthropic」在 DOM 里出现两次 —— provider 行的显示名(div),
+    // 以及 @lobehub/icons 的 AnthropicMono 为无障碍渲染的 <title>Anthropic</title>。
+    // 不限定的 getByText 遇到多个匹配会直接抛,不是面板的 bug 也不是桩写错了。
+    expect(screen.getByText('Anthropic', { selector: 'div' })).toBeTruthy()
   })
 })
 ```
