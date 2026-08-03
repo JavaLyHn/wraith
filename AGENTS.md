@@ -21,7 +21,7 @@
 
 - Java 17+ / Maven
 - 可选：`ripgrep`（`grep_code` 会优先使用；未安装时自动回退 Java 扫描）
-- 至少一个 API Key：`GLM_API_KEY` / `DEEPSEEK_API_KEY` / `STEP_API_KEY` / `KIMI_API_KEY` / `FREELLMAPI_API_KEY` / `XFYUN_MAAS_API_KEY`
+- 至少一个 API Key：任意 `<NAME>_API_KEY`（小写 `NAME` = provider 名）。端点内置、只给 key 就能跑的八家：`GLM_API_KEY` / `DEEPSEEK_API_KEY` / `STEP_API_KEY` / `KIMI_API_KEY` / `FREELLMAPI_API_KEY` / `XFYUN_MAAS_API_KEY` / `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`；其它 provider 须同时给 `<NAME>_BASE_URL`。详见下方「改 provider 选择逻辑」与 `.env.example`。
 
 ## 常用命令
 
@@ -192,6 +192,8 @@ src/main/java/com/lyhn/wraith/
 ### 5. 改模型/接口 → 联动
 
 对应 Client + `LlmClientFactory.java` + `.env.example` + 文档
+
+- 改 provider 选择逻辑时连带：`ProviderResolver`（唯一的候选排序）+ `LlmClientFactory.createFromConfig` + `ModelCatalog.providers/result` + `ProviderDefaults.healDefault` + `WraithCompleter` 的两处补全 + `Main.slashCommandHints` + `Main.parseProviderConfigUpdate`（那道白名单闸已删，别加回去）+ `Main.resolveModelSelection` + `Main.normalizeProviderName`（已委托 `ProviderNames`）+ `/model` 空参的帮助文案。**不要新增第五份 provider 名单** —— 那 6 家曾被硬编码四遍且互不一致，其中一份是可达 bug（只配 anthropic 起不来），详见 `docs/superpowers/specs/2026-08-03-provider-agnostic-registry-design.md`。别名表的单一来源是 `config/ProviderNames.java`：`LlmClientFactory.normalizeProvider` 与 `Main.normalizeProviderName` 都是委托它，不是各自维护一份。`ProviderResolver.ENDPOINT_KNOWN` 是 env-only 发现的护栏表（记录哪个 client 类烧死了哪个端点），**不是**偏好白名单。
 
 ### 5.1 改 Embedding → `EmbeddingClient` + `VectorStore` + `.env.example` + 文档
 
