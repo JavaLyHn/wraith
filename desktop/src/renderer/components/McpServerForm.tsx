@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Loader2 } from 'lucide-react'
 import type { McpServerView } from '../../shared/types'
 import { buildFormValue, envRowsFromKeys, type EnvRow, type McpFormValue } from '../../shared/mcpFormValue'
 import { formatMcpTestResult } from '../lib/mcpTestResultText'
@@ -117,7 +118,19 @@ export default function McpServerForm({ mode, initial, prefill, busy, onCancel, 
 
       {error && <div className="text-xs text-danger">{error}</div>}
 
-      {testResult && (
+      {/*
+        进行中行与结果行**互斥**:两条并排会让人猜哪条是真的。
+        为什么需要它:MCP 的 initialize 可能一路等到超时(用户遇到的就是 TimeoutException),
+        这段静默里只靠按钮上「测试」→「测试中…」几个字变化,用户分不清是卡死了还是在跑。
+      */}
+      {testing && (
+        <div data-testid="mcp-form-testing" className="flex items-center gap-2 text-xs text-fg-muted">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={1.5} />
+          正在连接 MCP server… 首次运行 npx 可能要下载依赖，请稍候
+        </div>
+      )}
+
+      {!testing && testResult && (
         <div data-testid="mcp-form-test-result"
           className={'whitespace-pre-wrap break-words font-mono text-xs ' +
             (testResult.kind === 'ok' ? 'text-ok' : 'text-danger')}>
@@ -131,7 +144,8 @@ export default function McpServerForm({ mode, initial, prefill, busy, onCancel, 
           {submitting ? '保存中…' : '保存'}
         </button>
         <button data-testid="mcp-form-test" disabled={busy || submitting || testing} onClick={() => void handleTest()}
-          className="rounded-lg border border-border px-4 py-2 text-xs text-fg hover:border-accent disabled:opacity-60">
+          className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-xs text-fg hover:border-accent disabled:opacity-60">
+          {testing && <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={1.5} />}
           {testing ? '测试中…' : '测试'}
         </button>
         <button data-testid="mcp-form-cancel" disabled={testing} onClick={onCancel}

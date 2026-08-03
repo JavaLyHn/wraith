@@ -8,6 +8,11 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -133,20 +138,87 @@ public class StdioTransport implements McpTransport {
         thread.start();
     }
 
+    /**
+     * stderr 读取。<b>刻意不用 UTF-8 的 Reader</b>，与上面 stdout 的读法不同。
+     *
+     * <p>MCP 规范只要求 <b>JSON-RPC 通道</b>（stdin/stdout）是 UTF-8，那两处必须保持 UTF-8。
+     * 但 stderr 不是协议的一部分，它是<b>人读的诊断文本</b>，走的是操作系统的码页：
+     * 中文 Windows 上 cmd.exe 报的「系统找不到指定的文件。」是 GBK，按 UTF-8 读会变成
+     * 一串 {@code ���}，用户在测试结果行里看到的就是那个。
+     *
+     * <p>而<b>同一条 stderr 上两种编码会并存</b>——OS/cmd 报的是系统码页，node 自己抛的错
+     * 是 UTF-8。所以不能整条流固定一种编码，只能<b>逐行判定</b>：按字节切行，先严格按
+     * UTF-8 解，非法字节才退回系统码页。合法 UTF-8 极少同时是合法的多字节 GBK 文本，
+     * 反过来也一样，所以这个判定实践上很稳。
+     */
     private void startStderrReader() {
         Thread thread = new Thread(() -> {
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    appendStderr(line);
+            Charset fallback = nativeCharset();
+            try (java.io.InputStream in = new java.io.BufferedInputStream(process.getErrorStream())) {
+                java.io.ByteArrayOutputStream line = new java.io.ByteArrayOutputStream();
+                int b;
+                while ((b = in.read()) != -1) {
+                    if (b == '\n') {
+                        flushStderrLine(line, fallback);
+                    } else if (b != '\r') {
+                        line.write(b);
+                    }
                 }
+                flushStderrLine(line, fallback); // 进程退出时最后一行可能没有换行符
             } catch (IOException e) {
                 appendStderr("[wraith] stderr reader stopped: " + e.getMessage());
             }
         }, "wraith-mcp-stdio-stderr");
         thread.setDaemon(true);
         thread.start();
+    }
+
+    private void flushStderrLine(java.io.ByteArrayOutputStream buf, Charset fallback) {
+        if (buf.size() == 0) {
+            return;
+        }
+        byte[] bytes = buf.toByteArray();
+        buf.reset();
+        appendStderr(decodeDiagnosticLine(bytes, bytes.length, fallback));
+    }
+
+    /**
+     * 一行诊断文本的解码：先严格 UTF-8，非法字节退回 {@code fallback}。
+     *
+     * <p>{@code fallback} 也解不动时不抛——退化成替换字符即可。stderr 泵是守护线程，
+     * 让它抛异常等于此后再也读不到任何诊断信息，而诊断信息正是用户此刻唯一的线索。
+     */
+    static String decodeDiagnosticLine(byte[] bytes, int length, Charset fallback) {
+        if (length <= 0) {
+            return "";
+        }
+        CharsetDecoder strict = StandardCharsets.UTF_8.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT);
+        try {
+            return strict.decode(ByteBuffer.wrap(bytes, 0, length)).toString();
+        } catch (CharacterCodingException e) {
+            return new String(bytes, 0, length, fallback);
+        }
+    }
+
+    /**
+     * 子进程 stderr 的实际编码。
+     *
+     * <p>取 {@code native.encoding}（JDK 17 起提供，报的是 <b>OS 默认</b>）而<b>不是</b>
+     * {@code file.encoding}——后者自 JEP 400 起在所有平台恒为 UTF-8，用它永远拿不到 GBK，
+     * 这个修复就等于没做。
+     */
+    static Charset nativeCharset() {
+        String name = System.getProperty("native.encoding");
+        if (name != null && !name.isBlank()) {
+            try {
+                return Charset.forName(name.trim());
+            } catch (Exception ignored) {
+                // 属性值非法(理论上不该发生) → 落到平台默认，别因为一个属性把 stderr 读崩
+            }
+        }
+        return Charset.defaultCharset();
     }
 
     private void appendStderr(String line) {
