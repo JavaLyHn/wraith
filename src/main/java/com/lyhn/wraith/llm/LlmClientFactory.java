@@ -59,15 +59,9 @@ public class LlmClientFactory {
         return null;
     }
 
+    /** 委托 {@link com.lyhn.wraith.config.ProviderNames}——别名表只存一份。 */
     private static String normalizeProvider(String provider) {
-        String normalized = provider.trim().toLowerCase();
-        return switch (normalized) {
-            case "stepfun", "step-fun" -> "step";
-            case "moonshot", "moonshotai", "moonshot-ai" -> "kimi";
-            case "free-llm-api", "free_llm_api", "freellm", "free-llm" -> "freellmapi";
-            case "xfyun-maas", "xfyun_maas", "iflytek", "iflytek-maas", "iflytek_maas", "maas" -> "xfyun";
-            default -> normalized;
-        };
+        return com.lyhn.wraith.config.ProviderNames.normalize(provider);
     }
 
     private static String firstConfigured(String primary, String fallback) {
