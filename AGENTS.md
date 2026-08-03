@@ -213,6 +213,16 @@ src/main/java/com/lyhn/wraith/
 
 > **内建 server 写在 `McpConfigLoader.load()` 里**（`step_search` 看 key 有无、`chrome-devtools` 恒补），不是「启动时往 `~/.wraith/mcp.json` 写模板」。写文件那条路只挂得住一个入口 —— 它原先只在交互式 CLI 上，于是桌面 / gateway / automation 三个入口的用户永远没有浏览器能力。加内建项时三条铁律：**用户/项目配置同名即整段让位**（含 `disabled: true`）、**绝不改用户文件**、**给一个持久的退订开关**（内建项在插件面板里 scope=builtin，那一档没有删除键，面板上的「停用」又只在内存里）。
 
+### 5.6 改计价 → `PricingTable` + `Agent.reloadPricingTable` + `/config pricing` + 两条 RPC + 桌面「设置 → 模型计价」 + 测试
+
+> 七层链路缺一层就是「填了没反应」：`PricingTable.view()`（只读视图，`seeded` 标不可写）→ `Main.validatePricingEntry` / `applyPricingEntries`（**校验规则 CLI 与 RPC 共用一份**，否则用户在一边被拒、在另一边写进去）→ `config.getPricing` / `config.setPricing`（**整表替换**，不是逐条 CRUD：`PricingEntry` 无 id 而 `modelPrefix` 会被用户改，「把 glm 改成 glm-4.7」在逐条 API 里有歧义）→ 桌面 `shared/types.ts` + `preload/index.ts` + `main/index.ts` → `renderer/lib/pricingView.ts`（`matchedModels` 是 Java 侧 `pricingMatchedModels` 的**双端重复实现，改一边必须改另一边**）→ `SettingsPricing.tsx`。
+>
+> **`reloadPricingTable` 不调则写了等于没写** —— `setPricingTable` 只在构造 Agent 时注入（`Main.java:348` 交互 CLI、`:1326` app-server 会话），这是本仓库第六次 snapshot-vs-live（前五次：沙箱护盾、动作卡、pet 窗口、补全、`web_search` 的 provider 缓存）。CLI 侧由 `handleConfigCommand` 的 `ConfigReloadHook` 带（同一个 hook 也负责失效搜索缓存 —— 别再往那个签名上加参数）。
+>
+> **`SEEDS` 一条不加不改不可写**：门槛是「两个独立可信来源对得上」，中转站实付价没有公开来源（`PricingTable` 的核对记录里连 `glm-5.1`——本仓库自己的默认模型——都因多源矛盾而缺席）。用户条目同长度时已优先于种子，想覆盖填一条同名的即可。
+>
+> **config 条目是前缀匹配、种子要求精确相等** —— 这个差异是静默的（填 `glm` 会让 `glm-4.7` 与 `glm-5v-turbo` 套同一个价），所以两个写入口都必须显示「这条会命中哪几个已配置模型」。币种只收 `CNY` / `USD`：`formatCost` 只认 `USD` → `$`，其余一律渲染 `¥`，允许 `EUR` 会骗人。
+
 ### 6. 不提交 `.env` / 真实 API Key / `target/` 产物
 
 ### 7. 保持代码可读性，不过度抽象
