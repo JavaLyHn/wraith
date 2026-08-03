@@ -48,7 +48,7 @@ export const BUILTIN_CAPABILITIES: BuiltinCapability[] = [
   {
     id: 'web', icon: '🌐', name: '网页搜索与抓取', desc: '联网搜索并抓取网页内容',
     tools: ['web_search', 'web_fetch'],
-    requires: '搜索需一个 provider key:GLM_API_KEY(与 GLM 推理共用)/ SERPAPI_KEY / SEARXNG_URL 任一;抓取(web_fetch)零配置',
+    requires: '搜索需三者之一:GLM_API_KEY(与 GLM 推理共用)/ SERPAPI_KEY / SEARXNG_URL(自托管,免费无需 key);抓取(web_fetch)零配置',
   },
   {
     id: 'browser', icon: '🖥️', name: '浏览器接管', desc: '连接并驱动本地浏览器',

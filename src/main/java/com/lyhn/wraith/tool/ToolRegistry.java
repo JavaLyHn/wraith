@@ -702,8 +702,13 @@ public class ToolRegistry {
     private void registerWebTools() {
         tools.put("web_search", new Tool(
                 "web_search",
+                // 刻意不写"用的是哪个搜索 provider":模型不选 provider,也管不着;
+                // 而这段话原本还是错的(写着 SerpAPI 是默认,实际默认是 zhipu,且连 zhipu 都没提)。
+                // 模型只会把 tool schema 当事实转述 —— 用户看到的"需要 GLM_API_KEY 或
+                // SerpAPI / SearXNG"就是它照着这句 + unavailableHint 拼出来的。
+                // 真的没配时,provider 自己的 unavailableHint 会把三条路一起给出。
                 "搜索互联网，获取实时信息（最新版本、官方文档、技术资讯等）。" +
-                        "支持 SerpAPI（默认）和 SearXNG（自托管）两种 provider，由 SEARCH_PROVIDER 环境变量切换。",
+                        "未配置搜索服务时会返回一条说明该怎么配的提示，不会静默失败。",
                 createParameters(
                         new Param("query", "string", "搜索关键词，例如'Java 21 新特性'、'Spring Boot 3.3 release notes'", true),
                         new Param("top_k", "integer", "返回结果数量（默认5）", false)

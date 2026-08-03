@@ -169,6 +169,12 @@ class ZhipuSearchProviderTest {
     void searchWithoutKeyThrows() {
         ZhipuSearchProvider provider = new ZhipuSearchProvider("", "search_std", client);
         IOException ex = assertThrows(IOException.class, () -> provider.search("test", 5));
-        assertTrue(ex.getMessage().contains("API Key"));
+        // 原来断言的是文案里含「API Key」四个字 —— 钉死措辞的断言,提示改好一点就红。
+        // 改断意图:这条消息必须**可行动**,即把三条可选路径都点出来
+        // (此前只提 GLM,于是"我不想配 GLM"的用户以为搜索没救了)。
+        String msg = ex.getMessage();
+        assertTrue(msg.contains("GLM_API_KEY"), msg);
+        assertTrue(msg.contains("SERPAPI_KEY"), msg);
+        assertTrue(msg.contains("SEARXNG_URL"), msg);
     }
 }
