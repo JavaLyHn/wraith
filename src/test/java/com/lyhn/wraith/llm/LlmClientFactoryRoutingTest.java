@@ -1,6 +1,7 @@
 package com.lyhn.wraith.llm;
 
 import com.lyhn.wraith.config.WraithConfig;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -52,5 +53,51 @@ class LlmClientFactoryRoutingTest {
         assertTrue(client instanceof AnthropicClient,
                 "落进 " + (client == null ? "null" : client.getClass().getSimpleName())
                         + " 会把 Anthropic key 发给 api.openai.com");
+    }
+
+    @Test
+    @DisplayName("provider 名 anthropic/claude + 显式 protocol=openai(中转站)→ 必须走 GenericOpenAiClient")
+    void explicitOpenAiProtocolIsHonoredForAnthropicNamedProvider() {
+        // 用户全用中转站:protocol=openai + 自定义 baseUrl。若这里派发成 AnthropicClient,
+        // 会用 Anthropic 报文去请求只认 OpenAI 协议的中转站,直接不通。
+        // 改动前这条配置是能用的(走 default 分支),所以这是回归防线。
+        for (String id : java.util.List.of("anthropic", "claude")) {
+            WraithConfig c = new WraithConfig();
+            c.setProviders(new java.util.LinkedHashMap<>());
+            WraithConfig.ProviderConfig pc = new WraithConfig.ProviderConfig(
+                    "sk-relay-test", "https://relay.example/v1", "claude-sonnet-4-5");
+            pc.setProtocol("openai");
+            c.getProviders().put(id, pc);
+
+            assertInstanceOf(GenericOpenAiClient.class, LlmClientFactory.create(id, c),
+                    id + " 显式 protocol=openai 必须被尊重");
+        }
+    }
+
+    @Test
+    @DisplayName("未设 protocol → AnthropicClient(保住 X1:否则 key 会被发给 api.openai.com)")
+    void unsetProtocolStillGivesAnthropicClient() {
+        for (String id : java.util.List.of("anthropic", "claude")) {
+            WraithConfig c = new WraithConfig();
+            c.setProviders(new java.util.LinkedHashMap<>());
+            // 刻意不 setProtocol —— 复现 env-only 与 CLI 无 --protocol 的路径
+            c.getProviders().put(id, new WraithConfig.ProviderConfig(
+                    "sk-ant-test", null, "claude-haiku-4-5"));
+
+            assertInstanceOf(AnthropicClient.class, LlmClientFactory.create(id, c), id);
+        }
+    }
+
+    @Test
+    @DisplayName("显式 protocol=anthropic → AnthropicClient")
+    void explicitAnthropicProtocolGivesAnthropicClient() {
+        WraithConfig c = new WraithConfig();
+        c.setProviders(new java.util.LinkedHashMap<>());
+        WraithConfig.ProviderConfig pc = new WraithConfig.ProviderConfig(
+                "sk-ant-test", "https://api.anthropic.com", "claude-haiku-4-5");
+        pc.setProtocol("anthropic");
+        c.getProviders().put("anthropic", pc);
+
+        assertInstanceOf(AnthropicClient.class, LlmClientFactory.create("anthropic", c));
     }
 }

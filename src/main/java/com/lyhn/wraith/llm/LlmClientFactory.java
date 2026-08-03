@@ -34,15 +34,27 @@ public class LlmClientFactory {
             case "kimi" -> new KimiClient(apiKey, model, baseUrl);
             case "freellmapi" -> new FreeLlmApiClient(apiKey, model, baseUrl);
             case "xfyun" -> new XfyunMaaSClient(apiKey, model, baseUrl, loraId);
-            // anthropic 必须在这里显式派发,不能靠 default 分支的 protocol 判断:
-            // WraithConfig.getProtocol 在没有 config 条目时返回 "openai",于是 env-only
-            // 或 CLI 配置(CLI 无 --protocol 时)的 anthropic 会落进 GenericOpenAiClient,
-            // 而后者 baseUrl 空时兜底 api.openai.com —— 用户的 Anthropic key 会被发给 OpenAI。
-            // anthropic 必须在这里显式派发,不能靠 default 分支的 protocol 判断:
-            // WraithConfig.getProtocol 在没有 config 条目时返回 "openai",于是 env-only
-            // 或 CLI 配置(CLI 无 --protocol 时)的 anthropic 会落进 GenericOpenAiClient,
-            // 而后者 baseUrl 空时兜底 api.openai.com —— 用户的 Anthropic key 会被发给 OpenAI。
-            case "anthropic" -> new AnthropicClient(apiKey, model, baseUrl);
+            // anthropic 不能像 default 分支那样直接问 WraithConfig.getProtocol——它在没有
+            // config 条目时缺省返回 "openai",分不清「用户没设」和「用户显式选了 openai」。
+            // 这里改读原始 protocol 字段(ProviderConfig.getProtocol(),未设为 null),按三态派发:
+            //   · 未设(null/空白)   → AnthropicClient(保住 X1:env-only / CLI 无 --protocol 时
+            //                          若落进 GenericOpenAiClient,baseUrl 空会把 Anthropic key
+            //                          发给 api.openai.com)
+            //   · 显式 "anthropic" → AnthropicClient
+            //   · 显式 "openai"    → GenericOpenAiClient(中转站场景:用户在中转站上开一条跑
+            //                          claude 的 openai 协议通道,协议选择必须被尊重,否则会用
+            //                          Anthropic 报文去请求一个只认 OpenAI 协议的中转站)
+            // 原始字段按 configuredProvider(用户实际填的 id,比如 "claude")和 normalized
+            // ("anthropic")两个都查,风格与上面 apiKey/model/baseUrl 的双查一致。
+            case "anthropic" -> {
+                String explicitProtocol = firstConfigured(
+                        rawProtocol(config, configuredProvider),
+                        configuredProvider.equals(normalized) ? null : rawProtocol(config, normalized));
+                if ("openai".equalsIgnoreCase(explicitProtocol)) {
+                    yield new GenericOpenAiClient(apiKey, model, baseUrl, configuredProvider);
+                }
+                yield new AnthropicClient(apiKey, model, baseUrl);
+            }
             default -> {
                 String protocol = config.getProtocol(configuredProvider);
                 if ("anthropic".equalsIgnoreCase(protocol)) {
@@ -95,5 +107,14 @@ public class LlmClientFactory {
             return primary;
         }
         return fallback;
+    }
+
+    /**
+     * {@code provider} 在 config 里的原始 protocol 字段——不像 {@link WraithConfig#getProtocol}
+     * 那样把「未设」缺省成 "openai"，未设时原样返回 null。只用于 anthropic 分支的三态判断。
+     */
+    private static String rawProtocol(WraithConfig config, String provider) {
+        WraithConfig.ProviderConfig pc = config.getProviders().get(provider);
+        return pc == null ? null : pc.getProtocol();
     }
 }
