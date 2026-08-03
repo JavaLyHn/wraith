@@ -15,15 +15,32 @@ import java.util.function.Supplier;
 final class WraithCompleter implements Completer {
     private final Supplier<List<McpResourceDescriptor>> resourceSupplier;
     private final Supplier<List<Skill>> skillSupplier;
+    /**
+     * provider 补全的来源。
+     *
+     * <p>用 {@code Supplier} 而非快照：本仓库已四次栽在 snapshot-vs-live-signal 上。
+     * 用户刚在桌面面板里加完 provider，不该等重启后端才补全得出来。
+     *
+     * <p>可为 {@code null}（一参 / 二参构造器的老调用点）——那时不给 provider 建议，
+     * 而不是回退到硬编码列表。
+     */
+    private final Supplier<com.lyhn.wraith.config.WraithConfig> configSupplier;
 
     WraithCompleter(Supplier<List<McpResourceDescriptor>> resourceSupplier) {
-        this(resourceSupplier, List::of);
+        this(resourceSupplier, List::of, null);
     }
 
     WraithCompleter(Supplier<List<McpResourceDescriptor>> resourceSupplier,
                     Supplier<List<Skill>> skillSupplier) {
+        this(resourceSupplier, skillSupplier, null);
+    }
+
+    WraithCompleter(Supplier<List<McpResourceDescriptor>> resourceSupplier,
+                    Supplier<List<Skill>> skillSupplier,
+                    Supplier<com.lyhn.wraith.config.WraithConfig> configSupplier) {
         this.resourceSupplier = resourceSupplier;
         this.skillSupplier = skillSupplier == null ? List::of : skillSupplier;
+        this.configSupplier = configSupplier;
     }
 
     @Override
@@ -80,6 +97,28 @@ final class WraithCompleter implements Completer {
         }
     }
 
+    /**
+     * 已写下的 provider id，按插入序（＝用户添加序）。
+     *
+     * <p>刻意用 {@code getProviders().keySet()} 而非 {@code ProviderResolver.candidates}：
+     * 补全要列出**所有写下过的** provider，包括暂时没填 key 的——用户很可能正要去填它。
+     * 候选表是给「装载哪个 client」用的，判据不同。
+     */
+    private List<String> configuredProviderIds() {
+        if (configSupplier == null) {
+            return List.of();
+        }
+        try {
+            com.lyhn.wraith.config.WraithConfig config = configSupplier.get();
+            if (config == null || config.getProviders() == null) {
+                return List.of();
+            }
+            return List.copyOf(config.getProviders().keySet());
+        } catch (Exception e) {
+            return List.of();   // 补全坏了不该把 REPL 带崩
+        }
+    }
+
     private boolean completeModel(String input, List<Candidate> candidates) {
         if (input.length() > 6 && !input.regionMatches(true, 0, "/model", 0, 6)) {
             return false;
@@ -88,14 +127,14 @@ final class WraithCompleter implements Completer {
             return false;
         }
         String value = input.length() <= 7 ? "" : input.substring(7);
-        addMatching(candidates, "模型", value,
-                option("glm-5.1", "GLM-5.1 长上下文"),
-                option("glm-5v-turbo", "GLM-5V 多模态"),
-                option("deepseek", "DeepSeek，读取配置模型"),
-                option("step", "StepFun，读取配置模型"),
-                option("kimi", "Kimi/Moonshot，读取配置模型"),
-                option("freellmapi", "本地 FreeLLMAPI，读取配置模型"),
-                option("xfyun", "讯飞星辰 MaaS，读取配置模型"));
+        // provider 名来自 config,不再硬编码。原先这里还混进了两个**模型名**
+        // (glm-5.1 / glm-5v-turbo)—— /model 收的是 provider 名,模型由各 provider 的 config 定。
+        List<String> ids = configuredProviderIds();
+        CommandOption[] options = new CommandOption[ids.size()];
+        for (int i = 0; i < ids.size(); i++) {
+            options[i] = option(ids.get(i), "已配置的 provider");
+        }
+        addMatching(candidates, "模型", value, options);
         return true;
     }
 
@@ -113,13 +152,12 @@ final class WraithCompleter implements Completer {
         if (parts.length >= 1 && "provider".equalsIgnoreCase(parts[0])) {
             String prefix = payload.endsWith(" ") ? "" : parts[parts.length - 1];
             if (parts.length <= 2 && !payload.contains("--")) {
-                addMatching(candidates, "Provider", prefix,
-                        option("freellmapi ", "本地 FreeLLMAPI"),
-                        option("glm ", "GLM"),
-                        option("deepseek ", "DeepSeek"),
-                        option("step ", "StepFun"),
-                        option("kimi ", "Kimi/Moonshot"),
-                        option("xfyun ", "讯飞星辰 MaaS"));
+                List<String> ids = configuredProviderIds();
+                CommandOption[] options = new CommandOption[ids.size()];
+                for (int i = 0; i < ids.size(); i++) {
+                    options[i] = option(ids.get(i) + " ", "已配置的 provider");
+                }
+                addMatching(candidates, "Provider", prefix, options);
                 return true;
             }
             addMatching(candidates, "配置项", prefix,

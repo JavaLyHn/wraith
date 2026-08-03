@@ -281,7 +281,8 @@ public class Main {
                     .terminal(terminal)
                     .history(new WraithHistory())
                     .completer(new WraithCompleter(mcpServerManager::resourceCandidates,
-                            () -> skillRegistryRef.get() == null ? List.of() : skillRegistryRef.get().allSkills()))
+                            () -> skillRegistryRef.get() == null ? List.of() : skillRegistryRef.get().allSkills(),
+                            () -> config))
                     .highlighter(new WraithHighlighter())
                     .build();
             lineReader.option(LineReader.Option.BRACKETED_PASTE, true);
