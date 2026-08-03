@@ -1886,6 +1886,24 @@ public class Main {
                         cfg.save();
                         return java.util.Map.of("ok", true);
                     }
+                    public java.util.Map<String, Object> pricingGet() {
+                        return pricingPayload(com.lyhn.wraith.config.WraithConfig.load());
+                    }
+                    public java.util.Map<String, Object> pricingSet(
+                            java.util.List<java.util.Map<String, Object>> entries) {
+                        com.lyhn.wraith.config.WraithConfig cfg =
+                                com.lyhn.wraith.config.WraithConfig.load();
+                        String error = applyPricingEntries(cfg, entries);
+                        if (error != null) {
+                            // 回 {ok:false,error} 而不是抛:表单要把这句话贴在字段旁边,
+                            // 走 writer.error 的话前端只能弹一个通用失败框。
+                            return java.util.Map.of("ok", false, "error", error);
+                        }
+                        cfg.save();
+                        // 第六次 snapshot-vs-live:不刷新则本次会话状态栏仍用旧计价表
+                        agent.reloadPricingTable(cfg);
+                        return java.util.Map.of("ok", true);
+                    }
                     public java.util.Map<String, Object> ragStatus() {
                         try (com.lyhn.wraith.rag.CodeRetriever r = new com.lyhn.wraith.rag.CodeRetriever(root, ragEmbeddingClient())) {
                             com.lyhn.wraith.rag.VectorStore.IndexStats s = r.getStats();
@@ -3791,6 +3809,76 @@ public class Main {
                 .append('\n');
         out.append("   已立即生效，不需要重启。");
         return out.toString();
+    }
+
+    /** {@code config.getPricing} 的回包：用户条目 + 内置种子，各带 {@code seeded}。 */
+    static java.util.Map<String, Object> pricingPayload(WraithConfig config) {
+        List<java.util.Map<String, Object>> rows = new ArrayList<>();
+        for (com.lyhn.wraith.context.PricingTable.View v
+                : new com.lyhn.wraith.context.PricingTable(config.getPricing()).view()) {
+            java.util.Map<String, Object> row = new LinkedHashMap<>();
+            row.put("modelPrefix", v.modelKey());
+            row.put("cacheHitPerM", v.price().cacheHitPerM());
+            row.put("cacheMissPerM", v.price().cacheMissPerM());
+            row.put("outputPerM", v.price().outputPerM());
+            row.put("currency", v.price().currency());
+            row.put("seeded", v.seeded());
+            rows.add(row);
+        }
+        return java.util.Map.of("entries", rows);
+    }
+
+    /**
+     * {@code config.setPricing} 的落地：<b>整表替换</b>。返回 {@code null} 表示成功，
+     * 否则是给人看的错误（此时 config <b>一条都不写</b>）。
+     *
+     * <p>为什么整表替换而不是逐条 CRUD：{@code PricingEntry} 没有 id，{@code modelPrefix}
+     * 是天然主键但用户会改它——「把 glm 改成 glm-4.7」在逐条 API 里是「改一条」还是
+     * 「删一条加一条」有歧义，而歧义会在两个客户端之间分叉。
+     *
+     * <p>校验通过后才动 config：单条非法就整批拒绝，避免「写进去一半」这种最难排查的状态。
+     */
+    static String applyPricingEntries(WraithConfig config, List<java.util.Map<String, Object>> entries) {
+        List<WraithConfig.PricingEntry> parsed = new ArrayList<>();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (java.util.Map<String, Object> row
+                : entries == null ? List.<java.util.Map<String, Object>>of() : entries) {
+            String prefix = row.get("modelPrefix") == null
+                    ? "" : String.valueOf(row.get("modelPrefix")).trim();
+            double hit = pricingNumberOf(row.get("cacheHitPerM"));
+            double miss = pricingNumberOf(row.get("cacheMissPerM"));
+            double out = pricingNumberOf(row.get("outputPerM"));
+            String currency = row.get("currency") == null || String.valueOf(row.get("currency")).isBlank()
+                    ? "CNY" : String.valueOf(row.get("currency")).trim().toUpperCase(Locale.ROOT);
+
+            String invalid = validatePricingEntry(prefix, hit, miss, out, currency);
+            if (invalid != null) {
+                return invalid + "（条目：" + (prefix.isBlank() ? "(空)" : prefix) + "）";
+            }
+            if (!seen.add(prefix.toLowerCase(Locale.ROOT))) {
+                return "重复的模型前缀: " + prefix + "（两条同名时哪条胜出是任意的）";
+            }
+            WraithConfig.PricingEntry entry = new WraithConfig.PricingEntry();
+            entry.setModelPrefix(prefix);
+            entry.setCacheHitPerM(hit);
+            entry.setCacheMissPerM(miss);
+            entry.setOutputPerM(out);
+            entry.setCurrency(currency);
+            parsed.add(entry);
+        }
+        config.setPricing(parsed);
+        return null;
+    }
+
+    /** JSON 数字可能是 Integer/Double/String，统一读成 double；读不出交给校验报「必须是有限数字」。 */
+    private static double pricingNumberOf(Object value) {
+        if (value instanceof Number n) return n.doubleValue();
+        if (value == null) return 0;
+        try {
+            return Double.parseDouble(String.valueOf(value).trim());
+        } catch (Exception e) {
+            return Double.NaN;
+        }
     }
 
     private static String applySearchConfig(WraithConfig config, String payload) {

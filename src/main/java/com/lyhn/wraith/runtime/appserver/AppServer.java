@@ -275,6 +275,14 @@ public final class AppServer {
         default java.util.Map<String, Object> embeddingSet(String provider, String model, String baseUrl, String apiKey) {
             throw new UnsupportedOperationException("embeddingSet not implemented");
         }
+
+        default java.util.Map<String, Object> pricingGet() {
+            throw new UnsupportedOperationException("pricingGet not implemented");
+        }
+
+        default java.util.Map<String, Object> pricingSet(java.util.List<java.util.Map<String, Object>> entries) {
+            throw new UnsupportedOperationException("pricingSet not implemented");
+        }
         /** RAG 索引状态 {indexed, chunkCount, relationCount}。默认抛出。 */
         default java.util.Map<String, Object> ragStatus() {
             throw new UnsupportedOperationException("ragStatus not implemented");
@@ -797,6 +805,32 @@ public final class AppServer {
                 String baseUrl = (p != null && p.hasNonNull("baseUrl")) ? p.get("baseUrl").asText() : "";
                 String apiKey = (p != null && p.hasNonNull("apiKey")) ? p.get("apiKey").asText() : "";
                 try { writer.result(msg.id(), session.embeddingSet(provider, model, baseUrl, apiKey)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.getPricing" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.pricingGet()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.setPricing" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                java.util.List<java.util.Map<String, Object>> entries = new java.util.ArrayList<>();
+                JsonNode arr = p == null ? null : p.get("entries");
+                if (arr != null && arr.isArray()) {
+                    for (JsonNode node : arr) {
+                        java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+                        row.put("modelPrefix", node.hasNonNull("modelPrefix") ? node.get("modelPrefix").asText() : "");
+                        row.put("cacheHitPerM", node.hasNonNull("cacheHitPerM") ? node.get("cacheHitPerM").asDouble() : 0d);
+                        row.put("cacheMissPerM", node.hasNonNull("cacheMissPerM") ? node.get("cacheMissPerM").asDouble() : 0d);
+                        row.put("outputPerM", node.hasNonNull("outputPerM") ? node.get("outputPerM").asDouble() : 0d);
+                        row.put("currency", node.hasNonNull("currency") ? node.get("currency").asText() : "CNY");
+                        entries.add(row);
+                    }
+                }
+                try { writer.result(msg.id(), session.pricingSet(entries)); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }
