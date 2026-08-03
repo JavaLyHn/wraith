@@ -32,6 +32,8 @@
 
 | 文件 | 责任 | 动作 |
 |---|---|---|
+| `src/main/java/com/lyhn/wraith/config/ProviderNames.java` | **新增。** provider 别名 → 规范名的**单一来源**（14 个别名，现私有于 `LlmClientFactory:62-71`）。 | Create |
+| `src/main/java/com/lyhn/wraith/llm/LlmClientFactory.java:62-71` | `normalizeProvider` 改为委托 `ProviderNames.normalize`，别名表不再各存一份。 | Modify |
 | `src/main/java/com/lyhn/wraith/config/ProviderResolver.java` | **新增。** 唯一的「候选 provider 排序」逻辑。纯函数 + 一个生产包装。 | Create |
 | `src/test/java/com/lyhn/wraith/config/ProviderResolverTest.java` | 上者的测试。 | Create |
 | `src/main/java/com/lyhn/wraith/llm/LlmClientFactory.java:47-60` | `createFromConfig` 改走 resolver，删 6 家数组。 | Modify |
@@ -317,6 +319,26 @@ class ProviderResolverTest {
         assertEquals(List.of("xfyun"), got);
     }
 
+    @Test
+    @DisplayName("别名的端点护栏要按**规范名**判 —— 否则 14 个别名会被全部误挡")
+    void aliasesPassTheEndpointGuardByNormalizedName() {
+        // ENDPOINT_KNOWN 装的是规范名。若拿原始名直接查表,moonshot/stepfun/iflytek…
+        // 都会被挡下 —— 而它们规范化后是 kimi/step/xfyun,端点都由 bespoke client 烧死了。
+        // 每对里前者是发现到的原始名(候选必须保留它),后者是它规范化后的名字。
+        record Alias(String envName, String rawProvider) {}
+        for (Alias a : List.of(
+                new Alias("MOONSHOT_API_KEY", "moonshot"),
+                new Alias("STEPFUN_API_KEY", "stepfun"),
+                new Alias("IFLYTEK_API_KEY", "iflytek"),
+                new Alias("FREELLM_API_KEY", "freellm"))) {
+            List<String> got = ProviderResolver.candidates(cfg(null),
+                    Set.of(a.envName()), keys(Map.of(a.rawProvider(), "sk-k")), noBaseUrls());
+
+            assertEquals(List.of(a.rawProvider()), got,
+                    a.envName() + " 应产出原始名 " + a.rawProvider() + " 且不被端点护栏挡下");
+        }
+    }
+
     // ── effectiveDefault ────────────────────────────────────────────────────
 
     @Test
@@ -351,7 +373,65 @@ mvn -q test -DskipTests=false -Dtest=ProviderResolverTest
 
 Expected: 编译失败 —— `cannot find symbol: class ProviderResolver`。
 
-- [ ] **Step 3: 写实现**
+- [ ] **Step 3a: 抽出别名表（`ProviderNames`）**
+
+创建 `src/main/java/com/lyhn/wraith/config/ProviderNames.java`：
+
+```java
+package com.lyhn.wraith.config;
+
+import java.util.Locale;
+
+/**
+ * provider 别名 → 规范名的<b>单一来源</b>。
+ *
+ * <p>这张表原先私有在 {@code LlmClientFactory.normalizeProvider}（:62-71）。抽出来的原因：
+ * {@link ProviderResolver} 的端点护栏也要用它——{@code MOONSHOT_API_KEY} 发现出的候选是
+ * {@code moonshot}，而端点白名单装的是规范名 {@code kimi}，不规范化就查会把它误挡下，
+ * 尽管 {@code KimiClient.DEFAULT_BASE_URL}（{@code https://api.moonshot.ai/v1}）确实存在。
+ *
+ * <p>本次改动的主题就是「同一份 provider 名单别抄多份」，所以这里不复制一份别名表，
+ * 而是让 {@code LlmClientFactory} 反过来委托这里。
+ */
+public final class ProviderNames {
+
+    private ProviderNames() {}
+
+    /**
+     * 别名归一。表外的名字原样返回（小写、去空白）——新 provider 不需要登记就能用。
+     * 入参为 null 时返回 null。
+     */
+    public static String normalize(String provider) {
+        if (provider == null) {
+            return null;
+        }
+        String normalized = provider.trim().toLowerCase(Locale.ROOT);
+        return switch (normalized) {
+            case "stepfun", "step-fun" -> "step";
+            case "moonshot", "moonshotai", "moonshot-ai" -> "kimi";
+            case "free-llm-api", "free_llm_api", "freellm", "free-llm" -> "freellmapi";
+            case "xfyun-maas", "xfyun_maas", "iflytek", "iflytek-maas", "iflytek_maas", "maas" -> "xfyun";
+            default -> normalized;
+        };
+    }
+}
+```
+
+然后把 `src/main/java/com/lyhn/wraith/llm/LlmClientFactory.java:62-71` 的 `normalizeProvider`
+改为委托（**不要**删掉这个方法，`create()` 里还在调它）：
+
+```java
+    /** 委托 {@link com.lyhn.wraith.config.ProviderNames}——别名表只存一份。 */
+    private static String normalizeProvider(String provider) {
+        return com.lyhn.wraith.config.ProviderNames.normalize(provider);
+    }
+```
+
+⚠️ 注意原方法**没有** null 保护（`provider.trim()` 会 NPE），但 `create()` 在调它之前
+已经 `if (provider == null) return null;`。`ProviderNames.normalize` 增加了 null 保护，
+是放宽而非收紧，不影响现有调用。
+
+- [ ] **Step 3b: 写 `ProviderResolver` 实现**
 
 创建 `src/main/java/com/lyhn/wraith/config/ProviderResolver.java`：
 
@@ -413,6 +493,12 @@ public final class ProviderResolver {
      * <p>逐个 client 类核实的来源：GLMClient/DeepSeekClient 构造器不收 baseUrl（烧死）；
      * Step/Kimi/FreeLlmApi/XfyunMaaS 各有 {@code DEFAULT_BASE_URL}；
      * AnthropicClient 有 {@code DEFAULT_BASE}；openai 命中 GenericOpenAiClient 的兜底。
+     *
+     * <p><b>装的是规范名</b>，所以查表前必须先过 {@link ProviderNames#normalize}——
+     * 否则 {@code MOONSHOT_API_KEY} 发现出的 {@code moonshot} 会被误挡：
+     * 它规范化后是 {@code kimi}，而 {@code KimiClient.DEFAULT_BASE_URL}
+     * （{@code https://api.moonshot.ai/v1}）确实存在，端点是可确定的。
+     * 14 个别名都吃这个坑。
      */
     private static final Set<String> ENDPOINT_KNOWN = Set.of(
             "glm", "deepseek", "step", "kimi", "freellmapi", "xfyun", "anthropic", "openai");
@@ -498,11 +584,16 @@ public final class ProviderResolver {
     }
 
     /**
-     * 端点能不能确定：显式 {@code <NAME>_BASE_URL}，或落在 {@link #ENDPOINT_KNOWN}。
+     * 端点能不能确定：显式 {@code <NAME>_BASE_URL}，或规范化后落在 {@link #ENDPOINT_KNOWN}。
      * 只对 env 发现的候选生效——config 里写下的条目是用户的明确意图，不替他判断。
+     *
+     * <p><b>必须先 normalize。</b> {@code ENDPOINT_KNOWN} 装的是规范名，而传进来的是
+     * 发现到的原始名（{@code moonshot}、{@code stepfun}、{@code iflytek}…）。
+     * 不 normalize 就查，14 个别名会被全部误挡——而它们的端点其实都由对应的
+     * bespoke client 烧死了。
      */
     private static boolean endpointResolvable(String provider, Function<String, String> baseUrlLookup) {
-        if (ENDPOINT_KNOWN.contains(provider)) {
+        if (ENDPOINT_KNOWN.contains(ProviderNames.normalize(provider))) {
             return true;
         }
         try {
@@ -599,7 +690,9 @@ Expected: PASS，18 个测试全绿。
 
 ```bash
 cd /Users/aa00945/Desktop/wraith
-git add src/main/java/com/lyhn/wraith/config/ProviderResolver.java \
+git add src/main/java/com/lyhn/wraith/config/ProviderNames.java \
+        src/main/java/com/lyhn/wraith/config/ProviderResolver.java \
+        src/main/java/com/lyhn/wraith/llm/LlmClientFactory.java \
         src/test/java/com/lyhn/wraith/config/ProviderResolverTest.java
 git commit -F - <<'EOF'
 feat(config): ProviderResolver——「谁是可用 provider」收敛成一个纯函数
@@ -628,6 +721,13 @@ env 发现带两道闸:
 候选名保留发现到的原始名,不预先 normalize:MOONSHOT_API_KEY 是活证据 ——
 normalizeProvider("moonshot")→"kimi",而 getApiKey("kimi") 读 KIMI_API_KEY
 (不存在),它能用全靠 LlmClientFactory:20-23 用原始名再查一次。
+
+但端点护栏必须按**规范名**判:ENDPOINT_KNOWN 装的是规范名,拿原始名直接查会把
+14 个别名全部误挡 —— moonshot 规范化后是 kimi,而 KimiClient.DEFAULT_BASE_URL
+(https://api.moonshot.ai/v1)确实存在,它的端点本来就是可确定的。为此把别名表
+从 LlmClientFactory 私有的 normalizeProvider 抽成 config 包的 ProviderNames,
+LlmClientFactory 反过来委托 —— 本次改动的主题就是「同一份 provider 名单别抄多份」,
+不能为了护栏再复制一份别名表。
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_0186i8XTzXVmK2TuYfAXXJAQ
