@@ -1190,5 +1190,42 @@ cd desktop && npm run dev
 6. 点文件夹图标 → 访达/资源管理器定位到 `~/.wraith/documents/`。
 7. 点删除一次 → 变勾；移开鼠标 → 复原；再点两次 → 文件消失。
 8. 手动往 `~/.wraith/documents/` 扔一个文件，返回对话再进面板 → 新文件出现（验证「目录即真相源」）。
+9. **⌘K 打命令面板搜「文档」** → 能到达（final review 发现的漏登记，已修）。
+10. **聊天里说「打开文档面板」** → 出现动作卡（这一步需要下面的 jar 同步，否则模型只会拿到「未知面板」）。
 
-注意：本功能是纯 renderer + main 改动，**不涉及 Java**，无需 `mvn package` 或同步 `~/.wraith/wraith.jar`；改 renderer 走 HMR，改 main 需重启 `npm run dev`。
+> ⚠ 计划原文这里写的是「本功能不涉及 Java，无需 jar 同步」—— **那句已被 final review 推翻。**
+> `open_panel` 白名单与 `capabilities.md` 在 Java 侧，第 10 步必须先
+> `mvn package` + `cp target/*.jar ~/.wraith/wraith.jar` + 重启 App 才生效。
+> 第 1-9 步是纯渲染/主进程，HMR 或重启 `npm run dev` 即可。
+
+---
+
+## 实施后的遗留清单（2026-08-04 收尾时固化，未做）
+
+五个任务 + 一轮 final-review fix wave 全部合入 `feat/windows-parity-block1`（13 个提交），
+两套测试全绿（desktop 1536 / Java 2207-0F-0E）。以下是**明知而有意未做**的部分。
+
+### 已判定「真实但不承重」的 parked findings
+
+| # | 内容 | 裁定理由 |
+|---|---|---|
+| 1 | `documents.ts` 文件头 docstring 仍写「列表全部由 readdir + `stat` 现算」，而实现已改 `lstat`（`:49` 的新注释是对的） | 同文件内自相矛盾的旧措辞，一行注释的事，不影响行为 |
+| 2 | `EACCES`/`EPERM` 一律译成「无读取权限」，但 `copyFile` 的 EACCES 也可能来自**目标**（库目录不可写），会把责任错记到源文件上 | finding 本身指定了映射这两个 errno，属被指定的取舍；要更准需拆读/写两侧判断 |
+
+### 各任务 review 记录、判定「可留下」的 deferred minors
+
+- `open`/`reveal` 两个 handler 各重复两行 `resolveInVault` + missing 抛错，可抽 `resolveOrThrow`（共 4 行，抽出来不增加测试价值）。
+- `documents:add` 无参分支未带 `WRAITH_E2E` 注入 —— 将来补无头 e2e 会卡在真实系统对话框。**更正一条依据**：照抄来源 `pickAttachments` 其实**是带**这个分支的，所以这是「照抄时丢了一半」，不是「仓库都不带」。
+- `doOpen`/`doReveal` 失败仅 `catch→setError`，无 busy 态，与 `doAdd` 不对称（`shell.openPath` 返回快，重复点最多重复启动一次外部程序）。
+- `r.failed.length > 0` 且同一次 `doAdd` 触发的 `load()` 也失败时，`load()` 的刷新失败提示被 add 失败摘要覆盖 —— 两者都是错误，用户刚做的动作结果更该优先；将来两条拼接即可。
+
+### Out-of-scope（本功能之外发现，未动）
+
+- **`ModelCatalogTest` 依赖仓库根一个 `.gitignore` 掉的 `./.env`** —— 真仓库绿，新克隆 / CI / git worktree 里必红。这是个潜在的假警报源：以后在隔离工作树里跑 Java 测试看到它失败，先想到这条，别去查自己的改动。
+- 库内软链**指向库内文件**时口径反向不对称：不会被列出，但 `resolveInVault` 会放行。无害（不产生死行，不可达即不可操作）。
+
+### 同期混入本分支的无关提交（避免日后看 git log 困惑）
+
+`29b07cd`（检索质量评测台）与 `2f7e13b`（索引范围开关）是另一条 RAG 工作线在本功能施工期间并行提交的，
+与文档面板零功能重叠。`2f7e13b` 碰过 `shared/types.ts` / `main/index.ts` / `preload/index.ts`
+（区域不同，无冲突）。本功能的 review 范围已用它作 base 精确排除。
