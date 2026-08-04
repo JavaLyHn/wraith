@@ -4,6 +4,8 @@ import type { EmbeddingConfigView, EmbeddingTestResult, RagScopeView, RagStatus,
 import { embeddingDefaults, staleIndexWarning, indexSummaryLines, relationHint,
   scopeMismatchWarning, scopeEffectNote, scopeSummaryLine } from '../lib/ragView'
 import { embeddingTestLines, embeddingTestTone, embeddingTestToneClass, embeddingTestTitle, embeddingTestTitleClass } from '../lib/embeddingTestView'
+import { parseIndexProgress, indexProgressView, indexCompositionBars } from '../lib/indexProgressView'
+import type { IndexProgress } from '../lib/indexProgressView'
 
 type Draft = { provider: string; model: string; baseUrl: string; apiKey: string }
 
@@ -13,6 +15,10 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   const [status, setStatus] = useState<RagStatus | null>(null)
   const [indexBusy, setIndexBusy] = useState(false)
   const [indexProgress, setIndexProgress] = useState('')
+  // 结构化进度 + 开始时刻。ETA 由渲染层自己计时算 —— 后端不带时间。
+  const [progress, setProgress] = useState<IndexProgress | null>(null)
+  const [startedAtMs, setStartedAtMs] = useState(0)
+  const [nowMs, setNowMs] = useState(0)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<RagSearchItem[]>([])
   const [searchBusy, setSearchBusy] = useState(false)
@@ -71,16 +77,35 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   const relHint = lastIndex ? relationHint(lastIndex) : null
   const scopeStale = scopeMismatchWarning(status)
   const scopeLine = lastIndex ? scopeSummaryLine(lastIndex) : null
+  const pv = progress ? indexProgressView({ ...progress, startedAtMs, nowMs }) : null
+  const compBars = lastIndex ? indexCompositionBars(lastIndex) : []
 
   // 订阅索引实时进度(后端 CodeIndex.ProgressListener → writer.notify rag.index.progress)
   useEffect(() => {
     return window.wraith.onEvent((evt) => {
       if (evt.kind === 'notification' && evt.method === 'rag.index.progress') {
         const m = (evt.params as { message?: string })?.message
-        if (typeof m === 'string') setIndexProgress(m)
+        if (typeof m === 'string') {
+          setIndexProgress(m)
+          // 事件只带 message 一个字符串,所以这里**解析显示串**取出进度。
+          // 这个耦合是有意识的(见 indexProgressView.ts 的说明),Java 侧有
+          // IndexProgressDetailTest#progressLineShapeIsParsedByDesktop 钉住格式:
+          // 改那句进度文案会让那条测试变红。
+          const parsed = parseIndexProgress(m)
+          if (parsed) setProgress(parsed)
+        }
       }
     })
   }, [])
+
+  // 索引期间每秒推进一次 now,让「已用/剩余」是活的。**只在 indexBusy 时跑** ——
+  // 常驻 timer 会让整个面板每秒重渲染一次。
+  useEffect(() => {
+    if (!indexBusy) return
+    setNowMs(Date.now())
+    const id = setInterval(() => setNowMs(Date.now()), 1000)
+    return () => clearInterval(id)
+  }, [indexBusy])
 
   const saveCfg = useCallback(async (): Promise<void> => {
     setNotice(null)
@@ -112,6 +137,7 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
 
   const doIndex = useCallback(async (): Promise<void> => {
     setIndexBusy(true); setNotice(null); setError(null); setIndexProgress('')
+    setProgress({ phase: 'scanning' }); setStartedAtMs(Date.now()); setNowMs(Date.now())
     try {
       const r = await window.wraith.ragIndex()
       setLastIndex(r.error ? null : r)
@@ -123,7 +149,7 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
       } else setNotice('✅ 索引完成')
       void loadStatus()
     } catch (err) { setError((err as Error).message) }
-    finally { setIndexBusy(false); setIndexProgress('') }
+    finally { setIndexBusy(false); setIndexProgress(''); setProgress(null) }
   }, [loadStatus])
 
   const doSearch = useCallback(async (): Promise<void> => {
@@ -262,15 +288,38 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
         <div className={sectionHead}>索引</div>
         <div className="mb-5 flex items-center gap-3">
           <span className="text-xs text-fg-muted">
-            {status?.error ? `状态未知(${status.error})` : status?.indexed ? `已索引 ${status.chunkCount} 块 · ${status.relationCount} 关系` : '未索引'}
+            {/* 重建期间不显示上一份索引的统计:那些数字属于**旧**索引,
+                摆在实时进度旁边会被读成「已经索引了 9718 块」 */}
+            {indexBusy
+              ? (status?.indexed ? `上一份索引:${status.chunkCount} 块 · ${status.relationCount} 关系（正在重建）` : '正在建立索引…')
+              : status?.error ? `状态未知(${status.error})` : status?.indexed ? `已索引 ${status.chunkCount} 块 · ${status.relationCount} 关系` : '未索引'}
           </span>
           <button onClick={() => void doIndex()} disabled={indexBusy}
             className="ml-auto rounded-lg border border-border px-2.5 py-1.5 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:opacity-40">
             {indexBusy ? '索引中…' : status?.indexed ? '重建索引' : '建立索引'}
           </button>
         </div>
-        {indexBusy && (
-          <div className="mb-5 -mt-3 truncate font-mono text-3xs text-fg-subtle">{indexProgress || '正在建立索引…(大库可能数分钟)'}</div>
+        {indexBusy && pv && (
+          <div data-testid="rag-index-progress" className="mb-5 -mt-3">
+            <div className="mb-1 flex items-baseline gap-2 text-2xs">
+              <span className="font-bold text-fg">{pv.phaseLabel}</span>
+              {pv.barPercent !== null && <span className="text-fg-muted">{pv.barPercent}%</span>}
+              {pv.detail && <span className="text-fg-subtle">{pv.detail}</span>}
+              <span className="ml-auto text-fg-subtle">
+                已用 {pv.elapsedText}{pv.etaText ? ` · 剩余约 ${pv.etaText}` : ''}
+                {pv.rateText ? ` · ${pv.rateText}` : ''}
+              </span>
+            </div>
+            {/* 有总数就画确定宽度的条;前置阶段没有总数 → 走脉冲,不停在 0% 让人以为卡住 */}
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
+              <div data-testid="rag-index-bar"
+                className={`h-full rounded-full bg-accent transition-[width] duration-500 ${pv.indeterminate ? 'animate-pulse' : ''}`}
+                style={{ width: pv.indeterminate ? '100%' : `${pv.barPercent}%` }} />
+            </div>
+            {progress?.file && (
+              <div className="mt-1 truncate font-mono text-3xs text-fg-subtle">刚完成 {progress.file}</div>
+            )}
+          </div>
         )}
         {/* 建完之后的明细。此前只有一句「已索引 N 块 · M 关系」,说不出索引了什么。 */}
         {!indexBusy && lastIndex && summaryLines.length > 0 && (
@@ -281,6 +330,24 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
                 <div key={l} className="font-mono text-2xs text-fg-muted">{l}</div>
               ))}
             </div>
+            {/* 构成条:把范围开关的效果画出来 —— 光看「6283 块」看不出「排掉了 482 个测试文件」 */}
+            {compBars.length > 1 && (
+              <div data-testid="rag-index-composition" className="mt-2">
+                <div className="flex h-2 w-full overflow-hidden rounded-full bg-border">
+                  {compBars.map((b) => (
+                    <div key={b.label} className={b.className} style={{ width: `${b.pct}%` }} title={b.label} />
+                  ))}
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                  {compBars.map((b) => (
+                    <span key={b.label} className="flex items-center gap-1 text-3xs text-fg-muted">
+                      <span className={`inline-block h-2 w-2 rounded-sm ${b.className}`} />
+                      {b.label}（{Math.round(b.pct)}%）
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
             {/* 打开范围开关后块数会明显下降(9718→6283),不报会被读成索引出错 */}
             {scopeLine && (
               <div data-testid="rag-index-scope" className="mt-1 font-mono text-2xs text-fg-muted">{scopeLine}</div>

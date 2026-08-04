@@ -123,6 +123,17 @@ Python 复刻，它与真实 Java 已经证明**差了 2 条题**。**所以 T0 
 
 现在按行硬切、**零重叠**，切点落在语义中间时两边都表达不好。收益未量化。
 
+### T5b. 给 `rag.index.progress` 事件加结构化字段
+
+事件现在只带一个 `message` 字符串（`CodeIndex.ProgressListener` 的签名就是 `String`），
+所以桌面的进度条是**解析显示串**取出 `done/total/percent/file` 的。
+
+这个耦合是有意识的（改 `ProgressListener` 签名会波及 CLI 与一批调用点），并且对冲了：
+`IndexProgressDetailTest#progressLineShapeIsParsedByDesktop` 钉住那一行的形状，
+改文案会让它变红并在失败信息里指出要同步改 `indexProgressView.ts`。
+**但守门人只是让它不会静默坏掉，不等于不该修。** 正解是事件里直接带
+`{phase, done, total, percent, file}`，桌面不再认文案。
+
 ### T6. `file` 段的语义标签
 
 现在 `file` 段的 `name` 是 `路径#3` —— 关键词检索对它们等于失效（name 里只有路径），

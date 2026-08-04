@@ -77,6 +77,35 @@ class IndexProgressDetailTest {
     }
 
     @Test
+    @DisplayName("**桌面在解析这一行** —— 进度行的形状被前端正则依赖,改文案要同步改那边")
+    void progressLineShapeIsParsedByDesktop() throws Exception {
+        // 桌面的 desktop/src/renderer/lib/indexProgressView.ts 用这条正则取进度:
+        //   /进度\s+(\d+)%\s+(\d+)\s*\/\s*(\d+)\s*块\s*·\s*刚完成\s*(.+?)\s*$/
+        // 事件只带一个 message 字符串(ProgressListener 的签名就是 String),所以那边
+        // 只能解析显示串。这条测试是那个耦合的守门人:**改这句文案会让它变红**,
+        // 而不是让进度条静默停在 0%。
+        System.setProperty("wraith.rag.dir", tempDir.toString());
+        System.setProperty("wraith.rag.embed.concurrency", "1");
+        List<String> msgs = messages();
+        Path root = project(3, 0);
+
+        new CodeIndex(stub(), msgs::add).index(root.toString());
+
+        java.util.regex.Pattern desktopRe = java.util.regex.Pattern.compile(
+                "进度\\s+(\\d+)%\\s+(\\d+)\\s*/\\s*(\\d+)\\s*块\\s*·\\s*刚完成\\s*(.+?)\\s*$");
+        List<String> progress = msgs.stream().filter(m -> m.contains("进度")).toList();
+        assertTrue(!progress.isEmpty(), "该有进度消息: " + msgs);
+        for (String m : progress) {
+            assertTrue(desktopRe.matcher(m).find(),
+                    "这一行桌面解析不了(改了文案?同步改 indexProgressView.ts 的正则): " + m);
+        }
+        // 前置阶段那几行桌面按关键词识别,同样不能随便改措辞
+        assertTrue(msgs.stream().anyMatch(m -> m.contains("开始索引")), "桌面靠「开始索引」识别扫描阶段");
+        assertTrue(msgs.stream().anyMatch(m -> m.contains("个文件待索引")), "桌面靠「个文件待索引」识别扫描阶段");
+        assertTrue(msgs.stream().anyMatch(m -> m.contains("开始向量化")), "桌面靠「开始向量化」识别分块阶段");
+    }
+
+    @Test
     @DisplayName("进度里只写文件名不写全路径 —— 全路径会把那一行撑爆")
     void progressUsesFileNameNotFullPath() throws Exception {
         System.setProperty("wraith.rag.dir", tempDir.toString());
