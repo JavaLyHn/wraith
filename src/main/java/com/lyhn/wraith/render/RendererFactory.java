@@ -73,7 +73,15 @@ public final class RendererFactory {
                 if (TerminalCapabilities.supportsAnsi(terminal)) {
                     yield new InlineRenderer(terminal);
                 }
-                System.err.println("⚠️ 终端不支持 ANSI，inline 模式回退到 plain");
+                // 措辞改过（2026-08-04）：原文是「终端不支持 ANSI」，而用户在 Windows Terminal
+                // 上看到这句话的下一行就是带颜色的 WRAITH 大字 —— 那句话是错的，还把人引向
+                // 「换个终端」这个错方向。真正的意思是「探测不到 ANSI 能力的证据」，
+                // 而探测清单必然有漏，所以这里必须给出逃生阀。
+                System.err.println("⚠️ 探测不到 ANSI 能力（type="
+                        + (terminal == null ? "无终端" : terminal.getType())
+                        + "），inline 回退到 plain。");
+                System.err.println("   若你的终端其实支持 ANSI：设 WRAITH_FORCE_ANSI=true 强制启用；"
+                        + "完整诊断：wraith terminal doctor");
                 yield new PlainRenderer();
             }
             case LANTERNA -> new PlainRenderer();    // Day 5 后替换为 LanternaRenderer

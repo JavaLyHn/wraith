@@ -66,6 +66,12 @@ mvn -DskipTests=false test        # ⚠ 本仓库测试默认跳过,必须显式
       现在中文全在 `wraith-msg.ps1` 里,`.cmd` 是纯 ASCII(`WindowsLauncherScriptTest` 钉住)。
       详见 `docs/windows-usage.md` 的「短命令输出乱码 / `wraith-install` 静默空转」
 - [ ] `wraith` 无参进 REPL 时**不该**冒出 `'app-server' 不是内部或外部命令` 这类你没敲过的子命令错
+- [ ] **`wraith terminal doctor` 跑得通**,并把输出贴回来 —— 这是唯一能看到「JLine 在你机器上
+      拿到了什么终端、哪个 provider 失败、为什么失败」的地方(mac 上看不到 Windows 的答案)
+- [ ] 起 REPL 后**没有** `?? 终端不支持 ANSI` 这种提示;若仍降级,提示应说的是「行编辑失灵」而不是「不支持 ANSI」
+- [ ] emoji 不再是 `??`:GBK 控制台下应显示 `[!]` / `[ok]` / `[x]` 这类 ASCII 替代
+- [ ] **方向键 / Tab 补全 / 上下翻历史 / Ctrl-R 都能用** —— 这是 dumb 降级最直接的症状,
+      不能用就把 doctor 输出里 jni 的失败原因贴回来
 
 **终端 CLI**
 

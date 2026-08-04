@@ -230,8 +230,20 @@ public class Main {
             }
             return;
         }
+        if (com.lyhn.wraith.render.TerminalDoctor.isCommand(args)) {
+            configureLogging();
+            int code = com.lyhn.wraith.render.TerminalDoctor.run(args);
+            if (code != 0) {
+                System.exit(code);
+            }
+            return;
+        }
 
         configureLogging();
+        // 只在交互式 CLI 分支装:GBK 控制台上把 emoji 降级成 ASCII,否则满屏 `?`。
+        // **必须在所有子命令分发之后** —— app-server / gateway 走 stdio 上的 NDJSON,
+        // 改一个字符就破协议。
+        installConsoleSafety();
 
         WraithConfig config = WraithConfig.load();
         LlmClient llmClient = LlmClientFactory.createFromConfig(config);
@@ -247,11 +259,13 @@ public class Main {
         AtomicReference<LlmClient> llmClientRef = new AtomicReference<>(llmClient);
         ResumeIntent resumeIntent = ResumeIntent.from(args); // --continue / --resume [id]
 
-        // graphemeCluster(false): 禁掉 JLine 启动时的 mode 2027(grapheme cluster)探测。
-        // 该探测会写 ESC[?2027$p(DECRQM 查询),不支持此查询的终端(如 Apple Terminal)
-        // 会把序列尾字符 'p' 直接打印出来——表现为启动后左上角冒出一个 'p'。探测对这类终端
-        // 本就返回 false(100ms 超时无应答),关掉它不丢任何能力,只是不再写那串探测字节。
-        try (Terminal terminal = TerminalBuilder.builder().system(true).dumb(true).graphemeCluster(false).build()) {
+        // 终端创建收口到 TerminalBootstrap:它在构建期间临时接住 org.jline 的日志,
+        // 于是「JLine 为什么降级成 dumb」不再是个黑洞 —— 那正是 Windows 上
+        // 「输入命令也不管用」的根子(dumb 没有 raw mode ⇒ 行编辑/补全/历史全失灵)。
+        // 顺带在 JDK<22 时跳过注定失败的 ffm provider。诊断详见 wraith terminal doctor。
+        java.util.concurrent.atomic.AtomicReference<com.lyhn.wraith.render.TerminalBootstrap.Diagnosis>
+                terminalDiagnosis = new java.util.concurrent.atomic.AtomicReference<>();
+        try (Terminal terminal = com.lyhn.wraith.render.TerminalBootstrap.open(terminalDiagnosis::set)) {
             refreshTerminalColumns(terminal);
             TerminalHitlHandler terminalHitlHandler = new TerminalHitlHandler(false);
             SwitchableHitlHandler hitlHandler = new SwitchableHitlHandler(terminalHitlHandler);
@@ -311,6 +325,10 @@ public class Main {
             renderer.updateStatus(statusInfo(llmClient, hitlHandler, "idle", mcpServerManager, null));
 
             String startupNote = "";
+            // 终端降级要**主动告知**,否则用户按 Tab 没反应会以为是自己的问题。
+            // 一行摘要进启动屏,完整诊断走 wraith terminal doctor。
+            startupNote = appendStartupNote(startupNote,
+                    com.lyhn.wraith.render.TerminalBootstrap.shortNote(terminalDiagnosis.get()));
             try {
                 // chrome-devtools 现在是 McpConfigLoader 里的内建项(缺位才补,用户配置优先)。
                 // 此前这里会往 ~/.wraith/mcp.json 写一份默认模板 —— 那条路只挂在交互式 CLI 上,
@@ -4936,6 +4954,23 @@ public class Main {
      */
     private static String loadApiKey() {
         return loadConfigValue("GLM_API_KEY", null);
+    }
+
+    /**
+     * GBK 之类窄编码的控制台上，把 {@code System.out}/{@code System.err} 的<b>文本</b>
+     * 降级成能表示的形态。Windows 上用户看到的第一行就是 {@code ?? 终端不支持 ANSI…} ——
+     * {@code ⚠}(U+26A0) 与变体选择符都不在 GBK 里，各降一个 {@code ?}。
+     *
+     * <p>UTF-8 控制台（mac/Linux/已 chcp 65001）不包装，零开销零行为变化。
+     */
+    private static void installConsoleSafety() {
+        try {
+            java.nio.charset.Charset out = com.lyhn.wraith.render.TerminalDoctor.consoleEncoding();
+            System.setOut(com.lyhn.wraith.util.SafeConsoleStream.wrapIfNeeded(System.out, out));
+            System.setErr(com.lyhn.wraith.util.SafeConsoleStream.wrapIfNeeded(System.err, out));
+        } catch (Throwable ignored) {
+            // 装不上就算了 —— 顶多是 emoji 显示成 ?,不该因此起不来
+        }
     }
 
     private static void configureLogging() {

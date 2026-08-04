@@ -462,6 +462,7 @@ npm run dev
 | 设了环境变量但 App 不认 | 环境变量是进程启动时读的 | 重启 App；或直接改用图形界面配 |
 | `npm install` ERESOLVE 失败 | react peer 冲突 | 必须带 `--legacy-peer-deps` |
 | 加 MCP server 报 `Cannot run program "npx"` / `CreateProcess error=2` | **两个原因共用同一句错**：① 机器上没装 Node（Windows 不自带，安装包也不含）；② Node 有，但 Windows 上 npx 实际是 `npx.cmd`，`CreateProcess` 不做 `PATHEXT` 补全 | 先 `where.exe npx` 分诊：找不到 = ①，去装 Node 或改用 HTTP transport；列出两行 = ②，已修复，**重跑 `wraith-install`** 即可。见下方「加 MCP server 报 …」 |
+| 起来第一行是 `?? 终端不支持 ANSI` + 方向键/Tab 补全不管用 | **三个问题混在一句里**：① `??` 是 GBK 表示不了 emoji；② 「不支持 ANSI」这句话本身是错的（下一行就是带颜色的）；③ 真正的损失是 JLine 降级成 DumbTerminal 后**没有 raw mode**，行编辑全失灵 | 先跑 `wraith terminal doctor`（新增），它会打出 JLine 实际拿到什么终端、哪个 provider 失败、为什么失败。①② 已修；③ 看诊断里的 jni 失败原因。见下方「终端提示「不支持 ANSI」」 |
 | 加 MCP server 报 `Cannot run program "uvx"` | **`uvx` 不属于 Node** —— 它是 [uv](https://docs.astral.sh/uv/)（Python 生态的包管理器）自带的命令，装 Node **不会**带来它。推荐清单 10 项里只有 Fetch / Git / Time 这 3 项用它 | `where.exe uvx` 分诊：找不到 = 装 uv（`winget install --id=astral-sh.uv -e`，或官方脚本），或干脆只用走 `npx` 的另外 7 项；能找到 = wraith 继承的是**旧 PATH**，**重启 wraith**。见下方「加 MCP server 报 `Cannot run program "uvx"`」 |
 | 建代码索引 / 语义检索报 `Failed to connect to localhost/[0:0:0:0:0:0:0:1]:11434` | 本机 embedding 后端（**ollama**）没装或没在跑。那串 IPv6 是**障眼法** —— Java 先试的是 `127.0.0.1`，真正的意思是那个端口上没人监听 | 先 `where.exe ollama` 分诊：找不到 = 没装（**内置工具里只有 `search_code` 依赖它**，可以装、可以改用云端 embedding、也可以干脆不建索引）；能找到 = 服务没起，从开始菜单启动 Ollama 或跑 `ollama serve`。见下方「代码索引报连不上 11434」 |
 | `npm install` 报错末尾有「**Log files were not written** ... `_logs`」 | **npm 缓存目录不可用**，与项目无关。连日志都落不下就是这个病的指纹，不管上面报 `EPERM` 还是 `ENOENT` | 见下方「npm 缓存目录不可用」——先 `npm config get cache` |
@@ -867,6 +868,75 @@ npx 解析 npx.cmd 绝对路径     ← wraith 做的,毫秒级
 > **启动慢不阻塞对话。** MCP server 在后台线程并行启动（最多 8 个并发），
 > 每个 server 各自就绪、各自注册工具 —— 慢的那个只是自己慢，
 > 不会拖住聊天、也不会拖住别的 server。面板上它停在「启动中」，好了自己会变。
+
+---
+
+### 终端提示「不支持 ANSI」/ 输入命令不管用 / emoji 变成 `??`
+
+**一句话指纹**：`wraith` 起来后第一行是
+
+```
+?? 终端不支持 ANSI, inline 模式回退到 plain
+```
+
+紧接着却是**带颜色**的 WRAITH 大字和青色的 Model 行；而且方向键 / Tab 补全 / 历史翻不动。
+
+> ⚠️ **这一句里其实混了三个不同的问题，别一起修。**
+
+| 现象 | 真实原因 | 是不是 bug |
+|---|---|---|
+| `??` 开头 | 中文 Windows 控制台码页是 GBK/936，`⚠`(U+26A0) 与变体选择符**不在 GBK 里**，各降一个 `?` | 是，已修（输出自动降级为 `[!]` 这类 ASCII） |
+| 「不支持 ANSI」 | **这句话本身是错的。** 判据把「JLine 拿到了 DumbTerminal」当成了「终端不解释 ANSI」，而这两件事无关 | 是，已修（改判据 + 改措辞） |
+| 输入命令不管用 | `DumbTerminal` **没有 raw mode** → 行编辑、Tab 补全、历史、Ctrl-R 全部失灵。这才是真正的功能损失 | 根因在 JLine provider，见下 |
+
+**为什么 Windows 上容易降级**：JLine 4.0 的 provider 默认顺序是 `ffm,jni,exec`，而
+
+| provider | 状况 |
+|---|---|
+| `ffm` | 依赖用的是 `jline:4.0.0:jdk11` classifier，里头 `impl/ffm` **一个 class 都没有**（实测；对照 `jni` 15 个、`exec` 6 个）→ 永远不可用，与运行时 JDK 版本无关。已在代码里显式关掉，不再产生噪音日志 |
+| `exec` | 需要 `stty`，Windows 一般没有 |
+| `jni` | 自带原生库（`jlinenative.dll`，x86/x64/arm64 都在 jar 里）→ **Windows 上唯一的路** |
+
+所以 `jni` 一失败就只剩 dumb。
+
+**先跑诊断**（新增子命令，对标 `wraith sandbox doctor`）：
+
+```powershell
+wraith terminal doctor
+```
+
+它会打出运行环境、相关环境变量、JLine 实际拿到的终端与 provider、四项能力判定，以及
+**JLine 内部日志** —— `jni` 到底为什么失败就在那几行里。示例（mac 上管道环境的输出）：
+
+```
+── JLine 拿到的终端 ─────────────────────────────────
+  实现类           org.jline.terminal.impl.DumbTerminal
+  type             dumb
+  provider 顺序    jni,exec
+
+── 能力判定 ─────────────────────────────────────────
+  原生终端控制     ❌ 无   ← 行编辑/补全/历史/方向键会失灵
+  ANSI 转义序列    ✅ 有   ← dumb 但终端会解释 ANSI，颜色与面板照常
+  inline 渲染器    ✅ 有   (false 时回退 PlainRenderer)
+  常驻状态栏       ❌ 无   ← dumb 的尺寸不可信，scroll region 会画错位置，故关闭
+```
+
+> 此前这些信息**完全拿不到**：代码里写的是 `TerminalBuilder...dumb(true)`，而 JLine 打降级日志的
+> 条件是 `if (!forceDumb && dumb == null)` —— 显式传了 `dumb(true)` 就一行都不打。
+> 现在构建期间会临时接住 `org.jline` 的日志再恢复。
+
+**逃生阀**（`wraith terminal doctor` 结尾也会列出来）：
+
+| 开关 | 作用 |
+|---|---|
+| `WRAITH_FORCE_ANSI=true` | 强制认定终端支持 ANSI。**值必须是 `true`，写 `1` 不生效**（走 `Boolean.parseBoolean`） |
+| `WRAITH_RENDERER=plain` | 关掉 inline 渲染，最朴素最不容易出问题 |
+| `WRAITH_NO_STATUSBAR=true` | 只关常驻状态栏 |
+| `-Dorg.jline.terminal.providers=jni` | 手动指定 provider 顺序（设了就完全尊重，代码不再自动收窄） |
+
+> **`dumb` 下现在保留什么、放弃什么**：认了 ANSI 就保留颜色、思考面板、diff、工具块折叠；
+> 但**不开常驻状态栏** —— `DumbTerminal.getSize()` 来自 env `COLUMNS`/`LINES`，没有就是 `(80,24)` 兜底，
+> 按错的行数设 scroll region 会把状态栏画到屏幕中间或裁掉正文，那比没有状态栏糟得多。
 
 ---
 
