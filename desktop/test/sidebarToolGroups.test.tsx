@@ -7,13 +7,13 @@ afterEach(cleanup)
 
 type SidebarProps = React.ComponentProps<typeof Sidebar>
 
-/** 11 个工具项各自的回调,便于逐个验证「重构后线没接错」。 */
+/** 12 个工具项各自的回调,便于逐个验证「重构后线没接错」。 */
 function toolHandlers() {
   return {
     onOpenPlugins: vi.fn(), onOpenAutomations: vi.fn(), onOpenImGateway: vi.fn(),
     onOpenProviders: vi.fn(), onOpenSkills: vi.fn(), onOpenMemory: vi.fn(),
     onOpenSnapshots: vi.fn(), onOpenTasks: vi.fn(), onOpenPolicy: vi.fn(),
-    onOpenBrowser: vi.fn(), onOpenRag: vi.fn(),
+    onOpenBrowser: vi.fn(), onOpenRag: vi.fn(), onOpenDocuments: vi.fn(),
   }
 }
 
@@ -45,15 +45,15 @@ function orderOf(container: HTMLElement, testId: string): number {
  * 只加小标题、不做逐组折叠:分段是为了扫得快,不是为了藏起来;「工具」本身已能整体折叠。
  */
 describe('侧栏工具分组', () => {
-  it('三个组标题都在', () => {
+  it('四个组标题都在', () => {
     render(<Sidebar {...props()} />)
-    for (const g of ['配置', '运行', '观察']) expect(screen.getByText(g)).toBeTruthy()
+    for (const g of ['配置', '运行', '观察', '资料']) expect(screen.getByText(g)).toBeTruthy()
   })
 
-  it('11 个工具项一个不少(重构不能丢项)', () => {
+  it('12 个工具项一个不少(重构不能丢项)', () => {
     render(<Sidebar {...props()} />)
     const ids = ['nav-plugins', 'nav-providers', 'nav-skills', 'nav-automations', 'nav-im-gateway',
-      'nav-tasks', 'nav-memory', 'nav-snapshots', 'nav-policy', 'nav-browser', 'nav-rag']
+      'nav-tasks', 'nav-memory', 'nav-snapshots', 'nav-policy', 'nav-browser', 'nav-rag', 'nav-documents']
     for (const id of ids) expect(screen.getByTestId(id), id + ' 丢了').toBeTruthy()
   })
 
@@ -64,13 +64,13 @@ describe('侧栏工具分组', () => {
       ['nav-plugins', 'onOpenPlugins'], ['nav-providers', 'onOpenProviders'], ['nav-skills', 'onOpenSkills'],
       ['nav-automations', 'onOpenAutomations'], ['nav-im-gateway', 'onOpenImGateway'], ['nav-tasks', 'onOpenTasks'],
       ['nav-memory', 'onOpenMemory'], ['nav-snapshots', 'onOpenSnapshots'], ['nav-policy', 'onOpenPolicy'],
-      ['nav-browser', 'onOpenBrowser'], ['nav-rag', 'onOpenRag'],
+      ['nav-browser', 'onOpenBrowser'], ['nav-rag', 'onOpenRag'], ['nav-documents', 'onOpenDocuments'],
     ]
     for (const [testId, cb] of pairs) {
       fireEvent.click(screen.getByTestId(testId))
       expect(h[cb], testId + ' → ' + String(cb) + ' 没被调到').toHaveBeenCalledTimes(1)
     }
-    // 交叉检查:点了 11 次,每个回调恰好 1 次 —— 若两个项指向同一个 handler,上面会漏掉
+    // 交叉检查:点了 12 次,每个回调恰好 1 次 —— 若两个项指向同一个 handler,上面会漏掉
     for (const cb of Object.values(h)) expect(cb).toHaveBeenCalledTimes(1)
   })
 
@@ -85,6 +85,11 @@ describe('侧栏工具分组', () => {
     const { container } = render(<Sidebar {...props()} />)
     expect(orderOf(container, 'nav-plugins')).toBeLessThan(orderOf(container, 'nav-automations'))
     expect(orderOf(container, 'nav-automations')).toBeLessThan(orderOf(container, 'nav-memory'))
+  })
+
+  it('「资料」组排在「观察」之后(它是「我的东西」,不属于前三组的 agent 工作流)', () => {
+    const { container } = render(<Sidebar {...props()} />)
+    expect(orderOf(container, 'nav-rag')).toBeLessThan(orderOf(container, 'nav-documents'))
   })
 
   it('红点仍挂在自动化项上(它只可能出现在「运行」组)', () => {

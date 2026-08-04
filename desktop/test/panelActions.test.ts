@@ -18,4 +18,9 @@ describe('panelActions', () => {
     expect(PANEL_LABELS['im-gateway']).toBe('IM 网关')
     expect(PANEL_LABELS['plugins']).toBe('MCP')
   })
+  it('documents 有中文名且能归一', () => {
+    expect(PANEL_LABELS.documents).toBe('文档')
+    expect(normalizePanel('documents')).toBe('documents')
+    expect(normalizePanel('  DOCUMENTS ')).toBe('documents')
+  })
 })

@@ -20,7 +20,7 @@ function sidebarProps(over: Partial<SidebarProps> = {}): SidebarProps {
     onOpenPlugins: vi.fn(), onOpenAutomations: vi.fn(), onOpenImGateway: vi.fn(),
     onOpenProviders: vi.fn(), onOpenSkills: vi.fn(), onOpenMemory: vi.fn(),
     onOpenSnapshots: vi.fn(), onOpenTasks: vi.fn(), onOpenPolicy: vi.fn(),
-    onOpenBrowser: vi.fn(), onOpenRag: vi.fn(), onOpenSettings: vi.fn(),
+    onOpenBrowser: vi.fn(), onOpenRag: vi.fn(), onOpenDocuments: vi.fn(), onOpenSettings: vi.fn(),
     automationBadge: false, onOpenSearch: vi.fn(),
     ...over,
   }

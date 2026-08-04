@@ -6,7 +6,7 @@
 
 export type PanelId =
   | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills'
-  | 'memory' | 'snapshots' | 'tasks' | 'policy' | 'browser' | 'rag'
+  | 'memory' | 'snapshots' | 'tasks' | 'policy' | 'browser' | 'rag' | 'documents'
 
 export const PANEL_LABELS: Record<PanelId, string> = {
   plugins: 'MCP',
@@ -20,6 +20,7 @@ export const PANEL_LABELS: Record<PanelId, string> = {
   policy: '安全',
   browser: '浏览器',
   rag: '代码检索',
+  documents: '文档',
 }
 
 /** LLM 传入 panel 参数归一:trim + 小写,别名 mcp→plugins;非法返回 null。 */

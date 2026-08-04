@@ -71,6 +71,7 @@ import TaskPanel from './components/TaskPanel'
 import PolicyPanel from './components/PolicyPanel'
 import BrowserPanel from './components/BrowserPanel'
 import RagPanel from './components/RagPanel'
+import DocumentsPanel from './components/DocumentsPanel'
 import SettingsPanel from './components/SettingsPanel'
 import TerminalDrawer from './components/TerminalDrawer'
 import RightDock, { type RightDockPane } from './components/RightDock'
@@ -184,7 +185,7 @@ export default function App(): JSX.Element {
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
-  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'settings'>('chat')
+  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'settings'>('chat')
   const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
   const [automationBadge, setAutomationBadge] = useState(false)
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
@@ -1050,6 +1051,7 @@ export default function App(): JSX.Element {
           onOpenPolicy={() => setView('policy')}
           onOpenBrowser={() => setView('browser')}
           onOpenRag={() => setView('rag')}
+          onOpenDocuments={() => setView('documents')}
           onOpenSettings={() => setView('settings')}
           automationBadge={automationBadge}
           onOpenSearch={() => setPaletteOpen(true)}
@@ -1133,6 +1135,8 @@ export default function App(): JSX.Element {
           <BrowserPanel onBack={() => setView('chat')} />
         ) : view === 'rag' ? (
           <RagPanel onBack={() => setView('chat')} />
+        ) : view === 'documents' ? (
+          <DocumentsPanel onBack={() => setView('chat')} />
         ) : view === 'settings' ? (
           <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} />
         ) : (
