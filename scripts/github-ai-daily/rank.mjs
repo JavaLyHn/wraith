@@ -75,10 +75,10 @@ export function attributeStars(rows) {
 
 const dayDiff = (aISO, bISO) => Math.round((Date.parse(`${aISO}T00:00:00Z`) - Date.parse(`${bISO}T00:00:00Z`)) / DAY_MS);
 
-export function updateStreaks(prev, rankedFullNames, todayISO) {
+export function updateStreaks(prev, rankedFullNames, todayISO, ttlDays = STREAK_TTL_DAYS) {
   const out = {};
   for (const [key, rec] of Object.entries(prev ?? {})) {
-    if (dayDiff(todayISO, rec.lastDate) <= STREAK_TTL_DAYS) out[key] = { ...rec };
+    if (dayDiff(todayISO, rec.lastDate) <= ttlDays) out[key] = { ...rec };
   }
   for (const key of rankedFullNames) {
     const rec = out[key];

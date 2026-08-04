@@ -41,7 +41,10 @@ export function isExcluded(repo, config) {
 export function isKnowledge(repo, config) {
   const lang = repo.primaryLanguage;
   if (lang === null || lang === undefined || String(lang).toLowerCase() === 'markdown') return true;
-  return (config.knowledgeRepoHints ?? []).some((h) => haystacks(repo).some((x) => matchesKeyword(x, h)));
+  // 与 isExcluded 对称：topics 也进干草堆。只打了 tag、名字/简介里没线索的教程仓
+  // （比如某些 awesome-list）不然会溜进主榜而不是知识栏。
+  const fields = [...haystacks(repo), ...(repo.topics ?? [])];
+  return (config.knowledgeRepoHints ?? []).some((h) => fields.some((x) => matchesKeyword(x, h)));
 }
 
 export function classify(repo, config) {

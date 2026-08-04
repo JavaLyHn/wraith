@@ -169,12 +169,16 @@ export class GitHubClient {
     sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now = () => new Date(),
     log = () => {},
+    searchThrottleMs = SEARCH_THROTTLE_MS,
+    maxRetries = MAX_RETRIES,
   } = {}) {
     this.token = token;
     this.fetchImpl = fetchImpl;
     this.sleep = sleep;
     this.now = now;
     this.log = log;
+    this.searchThrottleMs = searchThrottleMs;
+    this.maxRetries = maxRetries;
     // 三个计数器分别对应 report.mjs 的 cost.*，每个都只在对应方法里累加一次。
     this.cost = { graphqlPoints: 0, searchRequests: 0, restRequests: 0 };
     this.notes = [];
@@ -184,7 +188,7 @@ export class GitHubClient {
   // RATE_LIMITED 可能以 HTTP 200 + body.errors 的形式出现（不是 4xx），所以检测放在 body 里。
   async graphql(query, variables) {
     const body = JSON.stringify({ query, variables });
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
       const res = await this.fetchImpl(GRAPHQL_URL, {
         method: 'POST',
         headers: authHeaders(this.token, { 'Content-Type': 'application/json' }),
@@ -207,9 +211,9 @@ export class GitHubClient {
         return parsed.data;
       }
       const retryable = rateLimited || res.status === 403 || res.status >= 500;
-      if (!retryable || attempt === MAX_RETRIES) {
+      if (!retryable || attempt === this.maxRetries) {
         const reason = rateLimited ? 'RATE_LIMITED' : `HTTP ${res.status}`;
-        throw new Error(`GraphQL 请求失败（${reason}），已用尽 ${MAX_RETRIES} 次重试`);
+        throw new Error(`GraphQL 请求失败（${reason}），已用尽 ${this.maxRetries} 次重试`);
       }
       this.log(`[github] GraphQL 限流/${res.status}，退避重试（第 ${attempt + 1} 次）`);
       await this.sleep(parseRateLimitReset(res.headers, this.now()));
@@ -305,7 +309,7 @@ export class GitHubClient {
   async searchRepos(q, { maxPages = 3 } = {}) {
     const repos = [];
     for (let page = 1; page <= maxPages; page += 1) {
-      await this.sleep(SEARCH_THROTTLE_MS);
+      await this.sleep(this.searchThrottleMs);
       const url = `${REST_BASE}/search/repositories?q=${encodeURIComponent(q)}`
         + `&sort=stars&order=desc&per_page=100&page=${page}`;
       const res = await this._restFetch(url, { counterKey: 'searchRequests' });

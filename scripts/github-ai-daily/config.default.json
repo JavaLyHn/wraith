@@ -3,12 +3,12 @@
     "agent":       ["ai-agent","agents","agentic","multi-agent","autonomous-agents",
                     "agent-framework","coding-agent","computer-use","browser-use","swe-agent"],
     "engineering": ["llmops","rag","retrieval-augmented-generation","embeddings",
-                    "vector-database","inference","llm-serving","evals","evaluation",
-                    "observability","guardrails","fine-tuning","quantization","prompt-engineering"],
+                    "vector-database","llm-serving","evals",
+                    "guardrails","fine-tuning","quantization","prompt-engineering"],
     "spec":        ["mcp","model-context-protocol","a2a","agent-protocol","agents-md",
                     "llms-txt","spec-driven-development","ai-governance","responsible-ai"],
-    "context":     ["memory","context-engineering","long-context","knowledge-graph"],
-    "security":    ["prompt-injection","jailbreak","ai-red-teaming","agent-security","sandbox"],
+    "context":     ["context-engineering","long-context","knowledge-graph"],
+    "security":    ["prompt-injection","jailbreak","ai-red-teaming","agent-security"],
     "ecosystem":   ["local-llm","ollama","edge-ai","on-device","voice-agent",
                     "deep-research","multimodal","vlm","claude-code"]
   },
@@ -29,5 +29,10 @@
   "contributorPoolTopRepos": 50,
   "contributorsPerRepo": 5,
   "watchlistReposPerOwner": 20,
-  "watchlistMinScore": 1
+  "watchlistMinScore": 1,
+  "streakTtlDays": 30,
+  "windowNominalHours": 24,
+  "windowToleranceHours": 1,
+  "searchThrottleMs": 2100,
+  "graphqlMaxRetries": 3
 }

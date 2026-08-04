@@ -86,3 +86,28 @@ describe('DEFAULT_DATA_DIR', () => {
     expect(DEFAULT_DATA_DIR.endsWith(join('.wraith', 'reports', 'github-ai-daily'))).toBe(true);
   });
 });
+
+describe('config.default.json 的默认口径', () => {
+  const tpl = JSON.parse(readFileSync(
+    new URL('../../scripts/github-ai-daily/config.default.json', import.meta.url), 'utf8'));
+
+  it('所有时间口径都在配置里', () => {
+    for (const k of ['streakTtlDays', 'windowNominalHours', 'windowToleranceHours',
+                     'searchThrottleMs', 'graphqlMaxRetries', 'baselineMinAgeHours',
+                     'snapshotRetainDays', 'activeWithinDays']) {
+      expect(typeof tpl[k], k).toBe('number');
+    }
+  });
+  it('通用词不再当强信号', () => {
+    const all = Object.values(tpl.topics).flat();
+    for (const g of ['observability', 'evaluation', 'inference', 'memory', 'sandbox']) {
+      expect(all, g).not.toContain(g);
+    }
+  });
+  it('AI 专用的近义词保留', () => {
+    const all = Object.values(tpl.topics).flat();
+    for (const k of ['evals', 'llm-serving', 'context-engineering', 'agent-security']) {
+      expect(all, k).toContain(k);
+    }
+  });
+});

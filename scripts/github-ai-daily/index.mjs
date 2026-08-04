@@ -31,8 +31,6 @@ const EXIT_NETWORK = 3;
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
-const WINDOW_NOMINAL_HOURS = 24;
-const WINDOW_TOLERANCE_HOURS = 1;
 const BASELINE_MAX_ATTEMPTS = 3;    // 坏快照最多往回退 3 份（spec §8）
 const COLD_START_FORK_CANDIDATES = 30;   // brief Step 1 第 8 条明文规定的数字，不是本层自选的口径
 
@@ -310,7 +308,14 @@ async function run(argv) {
 
   // 2. token（绝不打印其值）+ 客户端
   const token = resolveToken();
-  const client = new GitHubClient({ token, log });
+  // 用户显式写 null 也不能崩：?? 兜底用与 config.default.json 一致的默认值，
+  // 不依赖 mergeConfig 一定已经把这两个新键补齐。
+  const client = new GitHubClient({
+    token,
+    log,
+    searchThrottleMs: config.searchThrottleMs ?? 2100,
+    maxRetries: config.graphqlMaxRetries ?? 3,
+  });
 
   const now = new Date();
   const todayISO = localDateISO(now);
@@ -371,7 +376,9 @@ async function run(argv) {
   if (baseline) {
     win.from = localMinuteISO(baseline.at);
     win.hours = windowHours(baseline.at, now);
-    if (Math.abs(win.hours - WINDOW_NOMINAL_HOURS) > WINDOW_TOLERANCE_HOURS) {
+    const nominalHours = config.windowNominalHours ?? 24;
+    const toleranceHours = config.windowToleranceHours ?? 1;
+    if (Math.abs(win.hours - nominalHours) > toleranceHours) {
       win.degraded = true;
       win.note = `本期窗口是 ${win.hours} 小时，不是 24 小时（上一份可用快照是 ${localMinuteISO(baseline.at)}，`
         + '中间大概漏跑了）。下面所有「日增」覆盖的就是这么长的时间，没有折算成一天。';
@@ -481,7 +488,8 @@ async function run(argv) {
   ].map((r) => r.repo.fullName))];
   // 只在内存里算；落盘要等报告真的写成（见下），否则渲染一失败，今天照样被计入
   // 每个仓库的「第 N 天在榜」，明天的天数就凭空多了一天。
-  const streaks = updateStreaks(readJsonFile(streaksPath, {}, 'streaks.json', notes), ranked, todayISO);
+  const streaks = updateStreaks(
+    readJsonFile(streaksPath, {}, 'streaks.json', notes), ranked, todayISO, config.streakTtlDays ?? 30);
 
   // 10. 渲染 → 落盘 → 清理超期快照
   const model = {

@@ -207,3 +207,26 @@ describe('GitHubClient.trendingRepos', () => {
     expect(c.notes.some((n) => n.includes('0 条'))).toBe(true);
   });
 });
+
+describe('节流与重试可配置', () => {
+  it('搜索节流用注入的 searchThrottleMs', async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = vi.fn(async () => jsonRes({ items: [], total_count: 0 }));
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep, searchThrottleMs: 500 });
+    await c.searchRepos('topic:mcp', { maxPages: 1 });
+    expect(sleep).toHaveBeenCalledWith(500);
+  });
+  it('maxRetries 给 1 时最多 2 次 fetch', async () => {
+    const fetchImpl = vi.fn(async () => jsonRes({ errors: [{ type: 'RATE_LIMITED' }] }));
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep: async () => {}, maxRetries: 1 });
+    await expect(c.graphql('query{}', {})).rejects.toThrow();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+  it('都不传时沿用 2100ms / 3 次重试的默认', async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = vi.fn(async () => jsonRes({ items: [], total_count: 0 }));
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep });
+    await c.searchRepos('topic:mcp', { maxPages: 1 });
+    expect(sleep).toHaveBeenCalledWith(2100);
+  });
+});

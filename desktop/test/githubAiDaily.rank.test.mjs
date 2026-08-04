@@ -189,4 +189,15 @@ describe('updateStreaks', () => {
     const s = updateStreaks({ 'a/b': { days: 3, lastDate: '2026-06-01' } }, [], '2026-08-04');
     expect(s['a/b']).toBeUndefined();
   });
+  it('TTL 可配置：给 5 天时，6 天没上榜的清掉、正好 5 天的保留', () => {
+    const prev = { 'a/old': { days: 2, lastDate: '2026-07-29' },
+                   'a/edge': { days: 2, lastDate: '2026-07-30' } };
+    const s = updateStreaks(prev, [], '2026-08-04', 5);
+    expect(s['a/old']).toBeUndefined();
+    expect(s['a/edge']).toEqual({ days: 2, lastDate: '2026-07-30' });
+  });
+  it('不传 TTL 时沿用 30 天默认（旧调用不受影响）', () => {
+    const s = updateStreaks({ 'a/b': { days: 1, lastDate: '2026-07-20' } }, [], '2026-08-04');
+    expect(s['a/b']).toBeDefined();
+  });
 });

@@ -89,6 +89,13 @@ describe('isKnowledge', () => {
     expect(isKnowledge(repo({ primaryLanguage: null }), CONFIG)).toBe(true);
   });
   it('正常代码仓库不算', () => { expect(isKnowledge(repo(), CONFIG)).toBe(false); });
+  it('提示词只出现在 topics 里也算知识类（教程仓常只打 tag，名字里没线索）', () => {
+    expect(isKnowledge(repo({ topics: ['awesome-list'], primaryLanguage: 'Python' }), CONFIG)).toBe(true);
+  });
+  it('topics 干草堆与 isExcluded 对称 —— 两者都看 topics', () => {
+    expect(isKnowledge(repo({ topics: ['cookbook'], primaryLanguage: 'Go' }), CONFIG)).toBe(true);
+    expect(isKnowledge(repo({ topics: ['ai-agent'], primaryLanguage: 'Go' }), CONFIG)).toBe(false);
+  });
 });
 
 describe('classify', () => {
@@ -112,5 +119,9 @@ describe('classify', () => {
   });
   it('知识类但与 AI 无关 → unrelated（不进知识栏）', () => {
     expect(classify(repo({ name: 'awesome-cooking' }), CONFIG).kind).toBe('unrelated');
+  });
+  it('靠 topic 认出的教程仓进知识栏而不是主榜', () => {
+    const r = classify(repo({ topics: ['mcp', 'awesome-list'], primaryLanguage: 'Python' }), CONFIG);
+    expect(r.kind).toBe('knowledge');
   });
 });
