@@ -51,6 +51,12 @@ mvn -DskipTests=false test        # ⚠ 本仓库测试默认跳过,必须显式
 - [ ] `wraith -h` 打印用法(**不需要 jar 也能打印** —— help 分支在 jar 检查之前)
 - [ ] 重复跑一次 install:打印「PATH 里已有 …」而**不是**把同一段追加第二遍
 - [ ] 临时把 `%USERPROFILE%\.wraith\wraith.jar` 改名 → `wraith` 报「还没安装 jar」并指向 `wraith-install`(不是 java 的堆栈)
+- [ ] **中文提示不乱码**:上面两条打印出的中文是可读的,不是 `鑻ヨ繛 wraith-install 閮芥壘涓嶅埌` 这种。
+      曾经的真 bug:`.cmd` 里的中文被 cmd.exe 按 GBK 拆掉,连带吞掉换行符,`wraith-install.cmd`
+      的 6 行被读成 4 行、`powershell` 那行被并进 rem 注释 → **安装静默空转且退出码 0**。
+      现在中文全在 `wraith-msg.ps1` 里,`.cmd` 是纯 ASCII(`WindowsLauncherScriptTest` 钉住)。
+      详见 `docs/windows-usage.md` 的「短命令输出乱码 / `wraith-install` 静默空转」
+- [ ] `wraith` 无参进 REPL 时**不该**冒出 `'app-server' 不是内部或外部命令` 这类你没敲过的子命令错
 
 **终端 CLI**
 

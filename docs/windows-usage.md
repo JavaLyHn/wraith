@@ -495,6 +495,59 @@ where.exe wraith
 
 > **`wraith: 还没安装 jar`** 是另一回事——PATH 好了，但 `%USERPROFILE%\.wraith\wraith.jar` 不在。
 > 跑一次 `wraith-install` 补上（它构建后端并装到那个位置）。
+>
+> **跑了 `wraith-install` 却还是报「还没安装 jar」** —— 那是脚本自己的 bug，不是你的操作问题，
+> 见下一节。
+
+---
+
+### 短命令输出乱码 / `wraith-install` 静默空转（已修）
+
+**一句话指纹**：中文提示变成 `鑻ヨ繛 wraith-install 閮芥壘涓嶅埌`；或者报一句
+`'app-server' 不是内部或外部命令` —— 一个你根本没敲过的子命令；
+或者 `wraith-install` 看着「跑完了」（退出码 0、没有任何报错），但 jar 从来没出现。
+
+**根因**：`cmd.exe` 按 **OEM 码页**（中文 Windows = GBK/936）**逐字节**解析 `.cmd`，
+对双字节字符用的是「见到 lead byte 就盲目前进 2 字节」。UTF-8 的中文是三字节，
+被错拆成 GBK 序列后行尾常剩下一个孤立 lead byte（0x81–0xFE），
+它会**把紧随其后的那一个字节吞掉**。可被吞的范围里有两个要命的东西：
+
+| 被吞的字节 | 后果 |
+|---|---|
+| `0x0A`（换行） | 相邻两行被并成**一条**命令 |
+| `0x5E`（`^`，批处理转义符） | `^(` 变成裸 `(`，括号块提前闭合或永不闭合 |
+
+**实测（字节级模拟，已写成测试）**：
+
+| 文件 | 物理行数 | cmd.exe 眼里 | 后果 |
+|---|---|---|---|
+| `wraith-install.cmd` | 6 | **4** | `powershell -File wraith-install.ps1` 整行被并进上一条 `rem` 注释 → **安装什么都没做，退出码还是 0** |
+| `wraith.cmd` | 72 | **66** | 另有 42 个 ASCII 字节被吞，包含 `:usage` 段里 `echo   wraith app-server …^(` 的那个 `^` |
+
+所以症状链是闭合的：`wraith-install` 静默空转 → jar 从未构建 → `wraith` 报「还没安装 jar」，
+而那句提示自己又是乱码。（`'app-server' 不是内部或外部命令` 这一条落在被打乱的解析里哪一步，
+只能在真 `cmd.exe` 上复现确认；能确定的是 `app-server` 这个词在整个启动器里只出现在
+`rem` 注释和 `:usage` 两处，两处都被上表的破坏波及。）
+
+**修法**（消灭整个类别，不是补一处转义）：
+
+1. `.cmd` 只留**纯 ASCII**，所有中文（注释与用户可见文案）搬进 `scripts\windows\wraith-msg.ps1`
+   —— `.ps1` 带 UTF-8 BOM，PowerShell 会正确按 UTF-8 读（见下方「BOM」那一条）。
+2. `.cmd` 强制 **CRLF**（`.gitattributes` 用 `-text` 保证字节原样进出）。
+   `CR` 是挡在换行前面的「牺牲字节」：孤立 lead byte 会先吃掉它，换行因此存活。
+3. 去掉多行 `(...)` 括号块，改用 `goto` —— 括号块正是需要 `^` 转义的地方，而 `^` 会被吞。
+4. `rem` 注释里不再出现 `|` / `&` / 尖括号：`rem` **不**屏蔽管道与重定向
+   （`rem note > f` 会真的建出一个文件）。
+
+**怎么确认自己这份是修过的**：
+
+```powershell
+# 应该没有任何输出(纯 ASCII);有输出说明是旧版
+Select-String -Path scripts\windows\*.cmd -Pattern '[^\x00-\x7F]' -Encoding Byte
+```
+
+约束由 `WindowsLauncherScriptTest`（`.cmd` 纯 ASCII + CRLF + 委派契约）与
+`PowerShellBomTest`（`.ps1` 必须带 BOM）钉住，任何人往 `.cmd` 里加一句中文都会让测试变红。
 
 ---
 

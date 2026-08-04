@@ -1,0 +1,15 @@
+# Windows 脚本的字节必须原样进出仓库 —— 不许 git 做行尾转换。
+#
+# `-text` 而不是 `eol=crlf`:后者只在检出时转,工作区在 mac 上仍是 LF,
+# 于是「磁盘上是不是 CRLF」在两个平台上给出不同答案,测试就没法断言字节。
+# `-text` 让文件按仓库里存的样子进出,两边一致。
+#
+# 为什么 .cmd 非要 CRLF:cmd.exe 按 OEM 码页逐字节解析批处理,行尾少了 CR 这个
+# 「牺牲字节」时,孤立的 GBK lead byte 会直接吞掉 LF,把两行并成一条命令。
+# 为什么 .ps1 也在这里:它们靠 UTF-8 BOM 才不会被 PowerShell 5.1 按 GBK 读,
+# 别让任何自动改写碰它们的头三个字节。
+#
+# 两条约束分别由 WindowsLauncherScriptTest 与 PowerShellBomTest 钉住。
+*.cmd -text
+*.bat -text
+*.ps1 -text
