@@ -157,9 +157,24 @@ public class VectorStore implements AutoCloseable {
     }
 
     /**
-     * 语义检索：根据查询向量返回最相似的 TopK 代码块
+     * 语义检索：根据查询向量返回最相似的 TopK 代码块。
+     *
+     * <p><b>维度不一致时抛异常，而不是返回一堆 0 分结果。</b> 换了 embedding 模型却没重建索引
+     * 时会撞上这件事：{@code cosineSimilarity} 对不等长向量返回 0（它是个数学原语，这没问题），
+     * 于是 search 会安静地返回若干条相关度全为 {@code 0.0000} 的结果 —— 那<b>看起来像</b>
+     * 「这个库里没有相关代码」，是一句假话，用户无从知道真正原因是维度变了。
+     *
+     * <p>实测（真 ollama）：用 {@code nomic-embed-text}（768 维）建好索引后拿 1024 维查询向量
+     * （{@code bge-m3} 那一档）去搜，返回 3 条结果、分数全 0、不抛任何异常。
+     * 而换模型这件事<b>一定会发生</b>：默认的 {@code nomic-embed-text} 是纯英文模型，
+     * 中文查询排序是错的（实测「打印发票」把 AuthService 排在 InvoicePrinter 前面）。
      */
     public List<SearchResult> search(float[] queryEmbedding, int topK) throws SQLException {
+        // 空查询向量(embed 对空文本就返回 float[0])直接给空结果。此前它会走下去,
+        // 与库里每条都"长度不等"→ 相似度 0 → 返回一堆 0 分结果 —— 与维度不一致同一种假话。
+        if (queryEmbedding == null || queryEmbedding.length == 0) {
+            return new ArrayList<>();
+        }
         String sql = "SELECT file_path, chunk_type, name, content, embedding_json FROM code_chunks WHERE project_path = ?";
         List<SearchResult> candidates = new ArrayList<>();
 
@@ -172,6 +187,15 @@ public class VectorStore implements AutoCloseable {
                         continue;
                     }
                     float[] embedding = jsonToEmbedding(embeddingJson);
+                    // 库里这条为空(embedding 落盘失败)不算不一致;空库也不算 —— 那是「还没建索引」
+                    if (queryEmbedding.length > 0 && embedding.length > 0
+                            && queryEmbedding.length != embedding.length) {
+                        throw new SQLException(
+                                "索引与当前 embedding 模型的向量维度不一致：索引里是 " + embedding.length
+                                + " 维，当前模型给出 " + queryEmbedding.length + " 维。"
+                                + "这通常是换过 embedding 模型（provider / model）导致的 —— "
+                                + "请在「代码检索」面板点『重建索引』后再检索。");
+                    }
                     double similarity = cosineSimilarity(queryEmbedding, embedding);
                     candidates.add(new SearchResult(
                             rs.getString("file_path"),
