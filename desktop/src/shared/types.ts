@@ -442,6 +442,15 @@ export interface RagStatus {
   indexed: boolean
   chunkCount: number
   relationCount: number
+  /**
+   * 建这份索引时用的 embedding 模型。**老索引没记过 → 缺省**（不是空串），
+   * 前端据此显示「未知」而不是编一个默认模型名。
+   *
+   * 用途:换了模型却没重建索引时,检索会安静地返回一堆 0 分结果 —— 面板要靠这个字段
+   * 在「保存 Embedding 配置」那一刻就提示重建,而不是等用户搜出一堆无关结果。
+   */
+  embeddingModel?: string
+  embeddingDim?: number
   error?: string
 }
 

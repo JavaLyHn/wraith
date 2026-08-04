@@ -61,6 +61,20 @@ public class VectorStore implements AutoCloseable {
                 )
                 """;
 
+        // 索引元数据：记住这份索引是用哪个 embedding 模型建的。
+        // 换模型不重建索引会让检索全军覆没(相关度全 0),而面板要能在「保存配置」那一刻就提示重建,
+        // 就必须能诚实回答「索引是用哪个模型建的」—— 此前这个信息压根没被记录过。
+        // 用独立小表而不是给 code_chunks 加列:CREATE TABLE IF NOT EXISTS 对新库老库都成立,
+        // 不需要 ALTER TABLE 与迁移判断;老库读出来是 null,由上层显示「未知」而不是编一个模型名。
+        String createMeta = """
+                CREATE TABLE IF NOT EXISTS index_meta (
+                    project_path TEXT PRIMARY KEY,
+                    embedding_model TEXT,
+                    embedding_dim INTEGER,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """;
+
         // 索引加速查询
         String createIdxProject = "CREATE INDEX IF NOT EXISTS idx_project ON code_chunks(project_path)";
         String createIdxFile = "CREATE INDEX IF NOT EXISTS idx_file ON code_chunks(file_path)";
@@ -72,6 +86,7 @@ public class VectorStore implements AutoCloseable {
         try (Statement stmt = connection.createStatement()) {
             stmt.execute(createChunks);
             stmt.execute(createRelations);
+            stmt.execute(createMeta);
             stmt.execute(createIdxProject);
             stmt.execute(createIdxFile);
             stmt.execute(createIdxType);
@@ -87,12 +102,17 @@ public class VectorStore implements AutoCloseable {
     public void clearProject() throws SQLException {
         String deleteChunks = "DELETE FROM code_chunks WHERE project_path = ?";
         String deleteRelations = "DELETE FROM code_relations WHERE project_path = ?";
+        // 元数据一起清:留着会指向一个已经不存在的索引
+        String deleteMeta = "DELETE FROM index_meta WHERE project_path = ?";
         try (PreparedStatement ps1 = connection.prepareStatement(deleteChunks);
-             PreparedStatement ps2 = connection.prepareStatement(deleteRelations)) {
+             PreparedStatement ps2 = connection.prepareStatement(deleteRelations);
+             PreparedStatement ps3 = connection.prepareStatement(deleteMeta)) {
             ps1.setString(1, projectPath);
             ps2.setString(1, projectPath);
+            ps3.setString(1, projectPath);
             ps1.executeUpdate();
             ps2.executeUpdate();
+            ps3.executeUpdate();
         }
     }
 
@@ -321,7 +341,8 @@ public class VectorStore implements AutoCloseable {
                 if (rs.next()) relations = rs.getInt(1);
             }
         }
-        return new IndexStats(chunks, relations);
+        IndexMeta meta = readIndexMeta();
+        return new IndexStats(chunks, relations, meta.embeddingModel(), meta.embeddingDim());
     }
 
     private double cosineSimilarity(float[] a, float[] b) {
@@ -377,7 +398,58 @@ public class VectorStore implements AutoCloseable {
                                 String name, String content, double similarity) {}
 
     /**
-     * 索引统计
+     * 索引统计。
+     *
+     * <p>{@code embeddingModel} 为 {@code null} 表示这份索引建立时没有记录模型（老索引）——
+     * <b>不知道就说不知道</b>，上层据此显示「未知」，不许回落成某个默认模型名。
      */
-    public record IndexStats(int chunkCount, int relationCount) {}
+    public record IndexStats(int chunkCount, int relationCount,
+                             String embeddingModel, int embeddingDim) {
+        /** 兼容旧构造：不带模型信息。 */
+        public IndexStats(int chunkCount, int relationCount) {
+            this(chunkCount, relationCount, null, 0);
+        }
+    }
+
+    /** 索引元数据。字段含义同 {@link IndexStats}。 */
+    public record IndexMeta(String embeddingModel, int embeddingDim) {}
+
+    /**
+     * 记下这份索引是用哪个模型、多少维建的。空模型名不写 —— 存个空串等于假装记录过。
+     */
+    public void recordIndexMeta(String embeddingModel, int embeddingDim) throws SQLException {
+        if (embeddingModel == null || embeddingModel.isBlank()) {
+            return;
+        }
+        String sql = """
+                INSERT INTO index_meta (project_path, embedding_model, embedding_dim, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(project_path) DO UPDATE SET
+                    embedding_model = excluded.embedding_model,
+                    embedding_dim = excluded.embedding_dim,
+                    updated_at = CURRENT_TIMESTAMP
+                """;
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, projectPath);
+            ps.setString(2, embeddingModel.trim());
+            ps.setInt(3, embeddingDim);
+            ps.executeUpdate();
+        }
+    }
+
+    /** 读回元数据；没记过时两个字段分别是 {@code null} 与 {@code 0}。 */
+    public IndexMeta readIndexMeta() throws SQLException {
+        String sql = "SELECT embedding_model, embedding_dim FROM index_meta WHERE project_path = ?";
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, projectPath);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String model = rs.getString("embedding_model");
+                    return new IndexMeta(model == null || model.isBlank() ? null : model,
+                            rs.getInt("embedding_dim"));
+                }
+            }
+        }
+        return new IndexMeta(null, 0);
+    }
 }

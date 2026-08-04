@@ -108,6 +108,10 @@ public class CodeIndex {
             store.clearProject();
             store.insertChunks(embedded.entries);
             store.insertRelations(allRelations);
+            // 记下这份索引用的是哪个模型/多少维。换模型不重建索引会让检索全军覆没
+            // (相关度全 0),面板要靠这条在「保存 Embedding 配置」那一刻就提示重建。
+            store.recordIndexMeta(embeddingClient.getModel(),
+                    embedded.entries.isEmpty() ? 0 : embedded.entries.get(0).embedding().length);
 
             VectorStore.IndexStats stats = store.getStats();
             Set<String> failedFiles = new LinkedHashSet<>(chunkFailedFiles);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, ScanSearch, Database, Search, Network, Save } from 'lucide-react'
 import type { EmbeddingConfigView, RagStatus, RagSearchItem, RagRelation } from '../../shared/types'
-import { embeddingDefaults } from '../lib/ragView'
+import { embeddingDefaults, staleIndexWarning } from '../lib/ragView'
 
 type Draft = { provider: string; model: string; baseUrl: string; apiKey: string }
 
@@ -33,6 +33,8 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
 
   useEffect(() => { void loadCfg(); void loadStatus() }, [loadCfg, loadStatus])
 
+  const stale = staleIndexWarning(status, emb?.model ?? '')
+
   // 订阅索引实时进度(后端 CodeIndex.ProgressListener → writer.notify rag.index.progress)
   useEffect(() => {
     return window.wraith.onEvent((evt) => {
@@ -45,9 +47,16 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
 
   const saveCfg = useCallback(async (): Promise<void> => {
     setNotice(null)
-    try { await window.wraith.configSetEmbedding(draft); setNotice('✅ Embedding 配置已保存'); void loadCfg() }
+    try {
+      await window.wraith.configSetEmbedding(draft)
+      setNotice('✅ Embedding 配置已保存')
+      void loadCfg()
+      // 也要重拉 status:换了模型的话「索引是旧模型建的」提示应当**立刻**出现,
+      // 而不是等下次进面板 —— 那期间用户已经去检索并拿到一堆 0 分结果了。
+      void loadStatus()
+    }
     catch (err) { setError((err as Error).message) }
-  }, [draft, loadCfg])
+  }, [draft, loadCfg, loadStatus])
 
   const doIndex = useCallback(async (): Promise<void> => {
     setIndexBusy(true); setNotice(null); setError(null); setIndexProgress('')
@@ -147,6 +156,14 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
         </div>
         {indexBusy && (
           <div className="mb-5 -mt-3 truncate font-mono text-3xs text-fg-subtle">{indexProgress || '正在建立索引…(大库可能数分钟)'}</div>
+        )}
+        {/* 索引是旧模型建的:比的是**已保存**的 emb.model,不是 draft.model ——
+            用户正在输入框里打字的中间态不该触发警告。 */}
+        {!indexBusy && stale && (
+          <div data-testid="rag-stale-index"
+            className="mb-5 -mt-3 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-2xs leading-relaxed text-warn">
+            ⚠ {stale}
+          </div>
         )}
 
         {/* 3. 检索 */}

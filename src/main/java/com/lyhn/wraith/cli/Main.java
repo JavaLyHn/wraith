@@ -1918,7 +1918,18 @@ public class Main {
                     public java.util.Map<String, Object> ragStatus() {
                         try (com.lyhn.wraith.rag.CodeRetriever r = new com.lyhn.wraith.rag.CodeRetriever(root, ragEmbeddingClient())) {
                             com.lyhn.wraith.rag.VectorStore.IndexStats s = r.getStats();
-                            return java.util.Map.of("indexed", s.chunkCount() > 0, "chunkCount", s.chunkCount(), "relationCount", s.relationCount());
+                            java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+                            out.put("indexed", s.chunkCount() > 0);
+                            out.put("chunkCount", s.chunkCount());
+                            out.put("relationCount", s.relationCount());
+                            // 索引是用哪个模型建的。面板据此在「换了模型但没重建」时提示 ——
+                            // 否则检索会安静地返回一堆 0 分结果。老索引没记过 → 不回这两个字段,
+                            // 前端显示「未知」而不是编一个默认模型名。
+                            if (s.embeddingModel() != null) {
+                                out.put("embeddingModel", s.embeddingModel());
+                                out.put("embeddingDim", s.embeddingDim());
+                            }
+                            return out;
                         } catch (Exception ex) {
                             return java.util.Map.of("indexed", false, "chunkCount", 0, "relationCount", 0, "error", ex.getClass().getSimpleName());
                         }
