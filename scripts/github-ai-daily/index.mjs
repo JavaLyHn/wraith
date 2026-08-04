@@ -187,8 +187,8 @@ async function fetchWatchlist(client, config, rows, windowFromMs, notes) {
   ])].filter(Boolean);
   const entries = [];
 
-  // 关注名单的门槛**故意比主榜低**（用户裁定）：主榜要 score ≥ 3（AI_THRESHOLD），
-  // 这里只要 score ≥ watchlistMinScore（默认 1）。
+  // 关注名单的门槛**故意比主榜低**（用户裁定）：主榜要 score ≥ config.aiThreshold（默认 2），
+  // 这里只要 score ≥ config.watchlistMinScore（默认 1）。两个门槛都可配，别在这儿写死数字。
   //
   // 为什么两套门槛不是随意为之：关注名单存在的意义，恰恰是兜住打分器兜不住的仓库
   // （spec §11「池外爆款会漏，缓解手段是加进 watchlist」）。实测铁证 ——
