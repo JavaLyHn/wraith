@@ -146,8 +146,9 @@ function TeamStepRow({ step, roleColorClass, resultExpanded, reviewExpanded, onT
             {agentName}
           </span>
         )}
-        {/* Status icon（running 时脉冲动画,避免整卡看着静止） */}
-        <span className={`shrink-0 ${step.status === 'running' ? 'animate-pulse ' : ''}${stepStatusClass(step.status)}`}>
+        {/* Status icon:running 时转圈。与 PlanCard 统一 —— 两张卡长得像,动得也该一样。
+            inline-block 必需:CSS transform 对 inline 元素无效(pulse 动的是 opacity 才没这问题)。 */}
+        <span className={`shrink-0 ${step.status === 'running' ? 'inline-block animate-spin ' : ''}${stepStatusClass(step.status)}`}>
           {stepStatusIcon(step.status)}
         </span>
         {/* Description */}
