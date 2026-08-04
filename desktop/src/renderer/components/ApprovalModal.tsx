@@ -13,6 +13,7 @@ import {
   validateArgsJson,
   type ApprovalResponsePayload,
 } from '../../shared/buildApprovalResponse'
+import { argsView } from '../lib/toolArgsView'
 
 interface ApprovalModalProps {
   approvalId: string
@@ -43,6 +44,11 @@ export default function ApprovalModal({
       return null
     }
   }, [argsJson])
+
+  // 参数区形态:none=没有参数(收起整个框)/rows=逐行键值/raw=解析不了,原样摊开。
+  // 此前一律用一个 <pre> 塞 argsJson —— 于是无参数工具(如 mcp 的 list_resources,
+  // 用的是 emptyObjectSchema())在弹窗里挂着一个空的大框,占掉四分之一却什么都没写。
+  const view = useMemo(() => argsView(argsJson), [argsJson])
 
   const isCommand = toolName === 'execute_command'
   const isWrite = toolName === 'write_file'
@@ -120,9 +126,30 @@ export default function ApprovalModal({
           </div>
         ) : (
           <div className="mb-3">
-            {!jsonOpen && (
-              <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-black/[0.03] px-3 py-2 font-mono text-xs text-fg-muted">
-                {argsJson}
+            {!jsonOpen && view.kind === 'none' && (
+              <div data-testid="approval-no-args" className="text-2xs text-fg-subtle">
+                无参数（这个工具不接受参数）
+              </div>
+            )}
+            {!jsonOpen && view.kind === 'rows' && (
+              <dl data-testid="approval-args-rows"
+                className="max-h-40 overflow-y-auto rounded-lg border border-border bg-black/[0.03] px-3 py-2 text-xs">
+                {view.rows.map(r => (
+                  <div key={r.key} className="flex gap-2 py-0.5">
+                    <dt className="shrink-0 font-mono text-fg-subtle">{r.key}</dt>
+                    {/* 空值标成「(空)」而不是藏掉:藏一个参数等于让用户盲批 */}
+                    <dd className={'min-w-0 flex-1 whitespace-pre-wrap break-words font-mono '
+                      + (r.empty ? 'italic text-fg-subtle' : 'text-fg-muted')}>
+                      {r.display}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+            {!jsonOpen && view.kind === 'raw' && (
+              <pre data-testid="approval-args-raw"
+                className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-border bg-black/[0.03] px-3 py-2 font-mono text-xs text-fg-muted">
+                {view.raw}
               </pre>
             )}
             {jsonOpen ? (
@@ -142,7 +169,7 @@ export default function ApprovalModal({
                 onClick={() => setJsonOpen(true)}
                 className="mt-2 text-2xs text-accent hover:underline"
               >
-                编辑参数
+                {view.kind === 'none' ? '手动补参数' : '编辑参数'}
               </button>
             )}
           </div>

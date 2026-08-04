@@ -3,6 +3,7 @@ import type { ToolCard as ToolCardType } from '../../shared/transcriptReducer'
 import { toolBadgeLabel, toolCardFailed } from '../../shared/toolBadge'
 import { toolCardDefaultExpanded } from '../lib/toolCardExpand'
 import { prettyArgs } from '../lib/toolContent'
+import { hasArgs } from '../lib/toolArgsView'
 
 interface ToolCardProps {
   card: ToolCardType
@@ -35,7 +36,10 @@ export default function ToolCard({ card }: ToolCardProps): JSX.Element {
       >
         <span className="shrink-0 text-fg-subtle">{expanded ? '▾' : '▸'}</span>
         <span className="font-semibold text-accent">{card.name}</span>
-        <span className="flex-1 truncate text-fg-muted">{card.argsJson}</span>
+        {/* 无参数(如 mcp 的 list_resources)时不要把字面量 `{}` 贴在工具名后面 —— 那是纯噪音 */}
+        <span className="flex-1 truncate text-fg-muted">
+          {hasArgs(card.argsJson) ? card.argsJson : ''}
+        </span>
         <span
           className={`shrink-0 rounded px-1.5 py-0.5 text-2xs ${card.done ? 'font-semibold' : ''} ${badgeClass}`}
         >
@@ -44,7 +48,8 @@ export default function ToolCard({ card }: ToolCardProps): JSX.Element {
       </button>
       {expanded && (
         <div className="border-t border-border">
-          {card.argsJson.trim() && (
+          {/* .trim() 拦不住 `{}` —— 那会为两个字符单独撑出一条带边框的区块 */}
+          {hasArgs(card.argsJson) && (
             <pre data-testid="tool-args" className="m-0 max-h-40 overflow-y-auto whitespace-pre-wrap break-words border-b border-border/50 px-3 py-2 text-2xs leading-relaxed text-fg-subtle">
               {prettyArgs(card.argsJson)}
             </pre>
