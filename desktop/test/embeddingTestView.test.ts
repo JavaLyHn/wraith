@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { embeddingTestLines, embeddingTestTone } from '../src/renderer/lib/embeddingTestView'
+import { embeddingTestLines, embeddingTestTone, embeddingTestToneClass, embeddingTestTitleClass } from '../src/renderer/lib/embeddingTestView'
 import type { EmbeddingTestResult } from '../src/shared/types'
 
 /**
@@ -85,5 +85,63 @@ describe('embeddingTestTone', () => {
   it('「通了但不兼容」不能算成功 —— 那正是它最容易被忽略的地方', () => {
     // 绿勾 + 一行小字警告 = 用户只看见绿勾,然后带着不兼容的索引去检索
     expect(embeddingTestTone(ok({ warning: '维度不一致' }))).not.toBe('ok')
+  })
+})
+
+/**
+ * 配色。两条,都是量出来的,不是审美判断。
+ *
+ * **① 必须走主题令牌,不能写死 Tailwind 调色板。** 初版写的是 `text-emerald-200` /
+ * `text-amber-200` / `text-red-200` —— 那是**暗色主题**的浅色文字。用户是亮色主题,
+ * 浅绿字压在 `emerald-500/10` 这种近白底上,实测「压根看不清」。算下来对比度 **1.09:1**
+ * （WCAG 正文要求 ≥4.5:1）。令牌 `--ok-rgb` 等在 `tokens.css` 里对 `:root`（亮）与
+ * `[data-theme="dark"]`（暗）各有一套值。
+ *
+ * **② 但换成令牌还不够 —— 正文不能用 tone 色。** 那三个令牌是给角标/短标签设计的。
+ * 实测压在 `tone/10` 底色上的对比度:
+ * <pre>
+ *            亮色主题            暗色主题
+ *   text-ok      2.93:1 ❌         6.46:1 ✅
+ *   text-warn    2.44:1 ❌         7.24:1 ✅
+ *   text-danger  4.43:1 △          5.27:1 ✅
+ *   text-fg-muted 4.9~5.2:1 ✅     6.5~6.8:1 ✅
+ *   text-fg      13.3~14.0:1 ✅   13.4~14.0:1 ✅
+ * </pre>
+ * 所以 **tone 色只留给描边 / 底色 / 标题**（标题短且有 emoji 冗余编码），
+ * 明细行走 `text-fg-muted` —— 那才是两个主题都过 AA 的组合。
+ *
+ * <p>这也是为什么 `embeddingTestToneClass` **不再返回任何 `text-*`**:返回了,
+ * 里面的明细行就会继承 tone 色,又回到亮色主题下看不清。
+ */
+describe('embeddingTestToneClass', () => {
+  const TONES = ['ok', 'warn', 'error'] as const
+  const token = (t: string): string => (t === 'error' ? 'danger' : t)
+
+  it('底色与描边走对应的语义令牌', () => {
+    for (const t of TONES) {
+      const cls = embeddingTestToneClass(t)
+      expect(cls, `${t}: ${cls}`).toContain(`bg-${token(t)}/`)
+      expect(cls, `${t}: ${cls}`).toContain(`border-${token(t)}/`)
+    }
+  })
+
+  it('容器**不带**文字色 —— 带了明细行就继承 tone 色,亮色主题下 2.4~2.9:1 看不清', () => {
+    for (const t of TONES) {
+      expect(embeddingTestToneClass(t), `${t} 不该定文字色`).not.toMatch(/\btext-/)
+    }
+  })
+
+  it('标题用 tone 色 —— 它短、加粗,而且有 emoji 冗余编码状态', () => {
+    expect(embeddingTestTitleClass('ok')).toContain('text-ok')
+    expect(embeddingTestTitleClass('warn')).toContain('text-warn')
+    expect(embeddingTestTitleClass('error')).toContain('text-danger')
+  })
+
+  it('不许出现写死的调色板色阶 —— 那种颜色只在一种主题下可读', () => {
+    const palette = /\b(?:text|bg|border)-(?:emerald|amber|red|green|yellow|slate|gray|zinc|neutral|stone|blue|sky)-\d{2,3}\b/
+    for (const t of TONES) {
+      expect(embeddingTestToneClass(t), `${t} 容器: ${embeddingTestToneClass(t)}`).not.toMatch(palette)
+      expect(embeddingTestTitleClass(t), `${t} 标题: ${embeddingTestTitleClass(t)}`).not.toMatch(palette)
+    }
   })
 })

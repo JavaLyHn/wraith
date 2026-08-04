@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, ScanSearch, Database, Search, Network, Save, PlugZap } from 'lucide-react'
 import type { EmbeddingConfigView, EmbeddingTestResult, RagStatus, RagSearchItem, RagRelation, RagIndexResult } from '../../shared/types'
 import { embeddingDefaults, staleIndexWarning, indexSummaryLines, relationHint } from '../lib/ragView'
-import { embeddingTestLines, embeddingTestTone, embeddingTestToneClass, embeddingTestTitle } from '../lib/embeddingTestView'
+import { embeddingTestLines, embeddingTestTone, embeddingTestToneClass, embeddingTestTitle, embeddingTestTitleClass } from '../lib/embeddingTestView'
 
 type Draft = { provider: string; model: string; baseUrl: string; apiKey: string }
 
@@ -178,10 +178,16 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
           {testResult && (
             <div data-testid="rag-embedding-test-result"
               className={`col-span-2 rounded-lg border px-3 py-2 ${embeddingTestToneClass(embeddingTestTone(testResult))}`}>
-              <div className="mb-1 text-2xs font-bold">{embeddingTestTitle(embeddingTestTone(testResult))}</div>
+              <div className={`mb-1 text-2xs font-bold ${embeddingTestTitleClass(embeddingTestTone(testResult))}`}>
+                {embeddingTestTitle(embeddingTestTone(testResult))}
+              </div>
               <div className="flex flex-col gap-0.5">
+                {/* 明细行走**正文令牌**而不是 tone 色:tone 色压在 tone/10 底上亮色主题
+                    只有 2.4~2.9:1(量过),text-fg-muted 是 4.9~5.2:1。也不加 opacity ——
+                    那是把刚调够的对比度再压回去。break-words 而非 break-all,
+                    后者会把中文句子在任意字符处切断。 */}
                 {embeddingTestLines(testResult).map((l, i) => (
-                  <div key={i} className="whitespace-pre-wrap break-all font-mono text-2xs opacity-90">{l}</div>
+                  <div key={i} className="whitespace-pre-wrap break-words font-mono text-2xs leading-relaxed text-fg-muted">{l}</div>
                 ))}
               </div>
             </div>
@@ -217,10 +223,12 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
         )}
 
         {/* 索引是旧模型建的:比的是**已保存**的 emb.model,不是 draft.model ——
-            用户正在输入框里打字的中间态不该触发警告。 */}
+            用户正在输入框里打字的中间态不该触发警告。
+            正文用 text-fg-muted 而不是 text-warn:后者压在 bg-warn/10 上亮色主题只有
+            2.44:1(量过,正文要 ≥4.5:1)。状态由描边 + 底色 + ⚠ 承载,不靠文字颜色。 */}
         {!indexBusy && stale && (
           <div data-testid="rag-stale-index"
-            className="mb-5 -mt-3 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-2xs leading-relaxed text-warn">
+            className="mb-5 -mt-3 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-2xs leading-relaxed text-fg-muted">
             ⚠ {stale}
           </div>
         )}

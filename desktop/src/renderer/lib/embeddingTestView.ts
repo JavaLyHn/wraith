@@ -48,12 +48,40 @@ export function embeddingTestTone(r: EmbeddingTestResult): 'ok' | 'warn' | 'erro
   return r.warning ? 'warn' : 'ok'
 }
 
-/** 三态对应的样式（与面板其余提示框同一套配色）。 */
+/**
+ * 结果框的描边与底色。**刻意不含任何 `text-*`** —— 见下。
+ *
+ * 两条都是量出来的：
+ *
+ * **① 必须走主题令牌，不能写死 Tailwind 调色板。** 初版写的是 `text-emerald-200` 等
+ * 暗色主题的浅色文字，在亮色主题下压在近白底上对比度只有 **1.09:1**（WCAG 正文要求
+ * ≥4.5:1），用户实测「压根看不清」。
+ *
+ * **② 换成令牌仍然不够：正文不能用 tone 色。** 那三个令牌是给角标 / 短标签设计的，
+ * 压在 `tone/10` 底色上亮色主题只有 `ok 2.93:1` / `warn 2.44:1` / `danger 4.43:1`，
+ * 而 `text-fg-muted` 是 4.9~5.2:1、`text-fg` 是 13.3~14.0:1（两个主题都过）。
+ * 所以容器这里**不定文字色**，明细行由调用方给 `text-fg-muted`；容器返回了文字色，
+ * 明细行就会继承它，又回到看不清。
+ */
 export function embeddingTestToneClass(tone: 'ok' | 'warn' | 'error'): string {
   switch (tone) {
-    case 'ok': return 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
-    case 'warn': return 'border-amber-500/40 bg-amber-500/10 text-amber-200'
-    default: return 'border-red-500/40 bg-red-500/10 text-red-200'
+    case 'ok': return 'border-ok/40 bg-ok/10'
+    case 'warn': return 'border-warn/40 bg-warn/10'
+    default: return 'border-danger/40 bg-danger/10'
+  }
+}
+
+/**
+ * 标题的文字色。
+ *
+ * 这里可以用 tone 色：标题短、加粗，而且状态被 emoji（✅/⚠/❌）冗余编码了 ——
+ * 即使颜色分辨不出来，信息也没丢。明细行没有这层冗余，所以走正文令牌。
+ */
+export function embeddingTestTitleClass(tone: 'ok' | 'warn' | 'error'): string {
+  switch (tone) {
+    case 'ok': return 'text-ok'
+    case 'warn': return 'text-warn'
+    default: return 'text-danger'
   }
 }
 
