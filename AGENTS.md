@@ -199,7 +199,7 @@ src/main/java/com/lyhn/wraith/
 
 > 改**桌面「代码检索」面板的 embedding 后端**连带六层：`EmbeddingProbe`（「测试连接」的逻辑；`effectiveKey` 的「空=保留旧 key」**必须与 `embeddingSet` 同义** —— 面板的 KEY 框从不回填已存 key，不继承就会「测出 401 但保存是好的」）+ `config.testEmbedding` RPC（**必须 `dispatchAsync`**：ollama 首次请求要把模型载进内存，同步执行会冻住整个 app-server，`config.testProvider` 已经踩过一次）+ `shared/types.ts:EmbeddingTestResult` + `preload/index.ts` + `main/index.ts` + `renderer/lib/embeddingTestView.ts`（三态：通了 / **通了但与现有索引不兼容** / 没通 —— 第二态混进第一态就等于没做）+ `RagPanel.tsx`。
 >
-> 探测超时走 `wraith.embed.probe.timeout.seconds`（默认 60s），**刻意宽于** LLM 探测的 20s：冷加载大模型是 LLM ping 没有的成本，宁可让人多等也不要对一个好后端报「没有响应」。失败话术的家在 `EmbeddingErrorHint`，纪律是**只在能确定的形态上说话**（连不上 / 404 模型没拉 / 404 路径不存在），其余返回空串；**原文一律保留**，诊断另放一个字段。
+> 探测超时走 `wraith.embed.probe.timeout.seconds`（默认 60s），**刻意宽于** LLM 探测的 20s：冷加载大模型是 LLM ping 没有的成本，宁可让人多等也不要对一个好后端报「没有响应」。失败话术的家在 `EmbeddingErrorHint`，纪律是**只在能确定的形态上说话**（连不上 / 404 模型没拉 / 404 路径不存在），其余返回空串；**原文一律保留**，诊断另放一个字段。设计与取舍详见 `docs/superpowers/specs/2026-08-04-embedding-test-connection-design.md`。
 
 ### 5.2 改 Web/搜索 → `web/` 相关 + ToolRegistry + `.env.example` + 文档 + 测试
 
