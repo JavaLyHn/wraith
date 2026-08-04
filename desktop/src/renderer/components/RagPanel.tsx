@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, ScanSearch, Database, Search, Network, Save } from 'lucide-react'
-import type { EmbeddingConfigView, RagStatus, RagSearchItem, RagRelation, RagIndexResult } from '../../shared/types'
+import { ArrowLeft, ScanSearch, Database, Search, Network, Save, PlugZap } from 'lucide-react'
+import type { EmbeddingConfigView, EmbeddingTestResult, RagStatus, RagSearchItem, RagRelation, RagIndexResult } from '../../shared/types'
 import { embeddingDefaults, staleIndexWarning, indexSummaryLines, relationHint } from '../lib/ragView'
+import { embeddingTestLines, embeddingTestTone, embeddingTestToneClass, embeddingTestTitle } from '../lib/embeddingTestView'
 
 type Draft = { provider: string; model: string; baseUrl: string; apiKey: string }
 
@@ -21,6 +22,10 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   // 上一次索引的明细。此前建完只留一句「已索引 N 块 · M 关系」——用户原话「没有结果展示」。
   const [lastIndex, setLastIndex] = useState<RagIndexResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // 「测试连接」的结果。与 notice/error 分开放:它有自己的三态(通了 / 通了但不兼容 / 没通),
+  // 而且要一直挂在表单下面 —— 边改边测时上一次的结论还得看得见。
+  const [testResult, setTestResult] = useState<EmbeddingTestResult | null>(null)
+  const [testBusy, setTestBusy] = useState(false)
 
   const loadCfg = useCallback(async (): Promise<void> => {
     try {
@@ -61,6 +66,21 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
     }
     catch (err) { setError((err as Error).message) }
   }, [draft, loadCfg, loadStatus])
+
+  /**
+   * 用**表单草稿**发一次真实 embedding 请求。刻意不写盘 —— 点测试就把一份没验过的配置
+   * 存进 config.json 是另一回事。apiKey 留空时后端沿用已存的那个（与保存同语义），
+   * 否则云端后端永远测出 401:KEY 框从不回填已存 key。
+   */
+  const testCfg = useCallback(async (): Promise<void> => {
+    setTestBusy(true); setTestResult(null); setNotice(null); setError(null)
+    try {
+      setTestResult(await window.wraith.configTestEmbedding(draft))
+    } catch (err) {
+      // RPC 层自己挂了(旧 jar 没有 config.testEmbedding)也要落到界面上,不能静默
+      setError((err as Error).message)
+    } finally { setTestBusy(false) }
+  }, [draft])
 
   const doIndex = useCallback(async (): Promise<void> => {
     setIndexBusy(true); setNotice(null); setError(null); setIndexProgress('')
@@ -141,11 +161,31 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
             <input type="password" value={draft.apiKey} onChange={(e) => setDraft({ ...draft, apiKey: e.target.value })}
               placeholder={draft.provider === 'ollama' ? '(本地 ollama 可留空)' : (emb?.hasKey ? '••••••••(留空保留)' : '')} className={inp} />
           </div>
-          <div className="col-span-2">
+          <div className="col-span-2 flex items-center gap-2">
             <button onClick={() => void saveCfg()} className="flex items-center gap-1.5 rounded-lg border border-accent px-2.5 py-1.5 text-xs text-accent hover:bg-accent/10">
               <Save className="h-3.5 w-3.5" strokeWidth={1.5} />保存配置
             </button>
+            {/* 此前验证后端唯一的办法是点「建立索引」—— 上千个代码块的整库扫描。
+                配错一个字符就得等它跑完,或者盯着一句 OkHttp 原文猜。 */}
+            <button data-testid="rag-test-embedding" onClick={() => void testCfg()} disabled={testBusy}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-fg-muted hover:border-accent hover:text-accent disabled:opacity-40">
+              <PlugZap className={`h-3.5 w-3.5 ${testBusy ? 'inline-block animate-pulse' : ''}`} strokeWidth={1.5} />
+              {testBusy ? '测试中…' : '测试连接'}
+            </button>
           </div>
+          {/* 结果三态:通了 / 通了但与现有索引不兼容 / 没通。第二态不能混进第一态 ——
+              给个绿勾加一行小字,用户只会看见绿勾。 */}
+          {testResult && (
+            <div data-testid="rag-embedding-test-result"
+              className={`col-span-2 rounded-lg border px-3 py-2 ${embeddingTestToneClass(embeddingTestTone(testResult))}`}>
+              <div className="mb-1 text-2xs font-bold">{embeddingTestTitle(embeddingTestTone(testResult))}</div>
+              <div className="flex flex-col gap-0.5">
+                {embeddingTestLines(testResult).map((l, i) => (
+                  <div key={i} className="whitespace-pre-wrap break-all font-mono text-2xs opacity-90">{l}</div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* 2. 索引 */}

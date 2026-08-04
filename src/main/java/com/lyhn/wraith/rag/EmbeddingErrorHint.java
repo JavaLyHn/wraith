@@ -75,6 +75,18 @@ public final class EmbeddingErrorHint {
                     + (model.isEmpty() ? "<模型名>" : model) + "`，再重试。";
         }
 
+        // 404 但不是「模型没拉」:那说明**那个路径**不存在,而不是模型或服务的问题。
+        // 真实复现:provider 选 openai 却填 ollama 的地址,打到 /embeddings,ollama 回
+        // 一句光秃秃的「404 page not found」—— 原文没错,但没人看得出问题在哪。
+        // 这个推断是确定的(服务回了 404,所以它在听;不是 model-not-found,所以是路径),
+        // 因此这里敢说话;至于到底哪一处写错了不猜,把两种协议的真实路径给出来让人对照。
+        if (msg.contains("[404]")) {
+            return "对方回了 404 —— 服务是通的，但**那个路径下没有这个接口**。"
+                    + "检查 PROVIDER 与 BASE URL 是否配套：ollama 打的是 `<baseUrl>/api/embeddings`，"
+                    + "OpenAI 兼容后端打的是 `<baseUrl>/embeddings`（所以那类 baseUrl 通常要带 `/v1`）。"
+                    + "把 ollama 的地址配成 openai 协议、或反过来，看到的就是这条 404。";
+        }
+
         // 只认「连不上」。读超时是「连上了但慢」,401/402/429 各有各的处理 —— 都不在这里说话。
         boolean connectFailure = connectException || msg.startsWith("Failed to connect to");
         if (!connectFailure) {

@@ -1143,6 +1143,12 @@ ipcMain.handle('wraith:configSetEmbedding', async (_e, cfg: { provider: string; 
   if (!client) throw new Error('Backend not connected')
   return client.request('config.setEmbedding', cfg)
 })
+// 「测试连接」:发一次真实 embedding 请求。传的是**表单草稿**(不写盘),apiKey 空=后端沿用已存。
+// 后端那支是 dispatchAsync 的,所以这次请求不会占住 app-server 的 reader 线程。
+ipcMain.handle('wraith:configTestEmbedding', async (_e, cfg: { provider: string; model: string; baseUrl: string; apiKey: string }) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.testEmbedding', cfg)
+})
 // 搜索后端的实时状态(只读,不含 key)。「能力概览」那张卡片的角标靠它,
 // 否则只能显示写死的「需配置」——配好了也永远是黄的。
 ipcMain.handle('wraith:configGetSearch', async () => {

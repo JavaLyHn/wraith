@@ -413,6 +413,30 @@ export interface EmbeddingConfigView {
 }
 
 /**
+ * 「测试连接」的回包（`config.testEmbedding` / 后端 `EmbeddingProbe`）。
+ *
+ * 除 `ok` 外全是可选的：字段随成败而不同，而桌面端还可能跑在旧 jar 上。
+ * `error` 是**原文**，`hint` 是可行动诊断 —— 两个字段，界面上都要显示。
+ * 回包里**绝不含 apiKey**（后端会把它从错误原文里抹掉）。
+ */
+export interface EmbeddingTestResult {
+  ok: boolean
+  /** 向量维度 = 后端回的向量真实长度。与索引维度不一致时检索会报错。 */
+  dim?: number
+  latencyMs?: number
+  /** 实际生效的那套（表单留空时后端会填默认值），不是表单里那套。 */
+  provider?: string
+  model?: string
+  baseUrl?: string
+  /** 与已有索引不兼容时的提示（维度不同 / 同维度不同模型）。 */
+  warning?: string
+  /** 失败原文，一个字都不改。 */
+  error?: string
+  /** 失败的可行动诊断；后端说不出话时这个字段不出现。 */
+  hint?: string
+}
+
+/**
  * 搜索后端的实时状态（`config.getSearch` 回包）。
  *
  * 只读状态查询，**不含任何 key**。后端问的是 agent 真正会用的那个 SearchProvider 对象，

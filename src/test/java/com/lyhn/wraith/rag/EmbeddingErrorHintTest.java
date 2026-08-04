@@ -139,6 +139,31 @@ class EmbeddingErrorHintTest {
     }
 
     @Test
+    @DisplayName("404 但不是「模型没拉」→ 说的是路径不存在(provider 与 baseUrl 不匹配)")
+    void plain404PointsAtTheEndpointNotTheModel() {
+        // 真实复现:provider 选了 openai 却填 ollama 的地址,打到 /embeddings 上,
+        // ollama 回一句光秃秃的「404 page not found」——原文对,但没人看得出问题在哪。
+        // 「404 且不是 model-not-found」是**能确定**的形态:那个路径不存在。
+        String hint = EmbeddingErrorHint.of(OLLAMA, "openai",
+                new java.io.IOException("Embedding API 请求失败 [404]: 404 page not found"));
+        assertFalse(hint.isEmpty(), "这条 404 值得说话");
+        assertFalse(hint.contains("ollama pull"), "不是模型没拉,别让人去 pull: " + hint);
+        assertFalse(hint.contains("没在运行"), "服务是通的(它回了 404): " + hint);
+        assertTrue(hint.contains("BASE URL") || hint.contains("baseUrl"), hint);
+        assertTrue(hint.contains("/api/embeddings") && hint.contains("/embeddings"),
+                "两种协议的真实路径都要给出来,人才能自己对照: " + hint);
+    }
+
+    @Test
+    @DisplayName("404 里带 model not found 时仍走「去 pull」那条 —— 顺序不能被上一条抢掉")
+    void modelNotFoundStillWinsOver404PathAdvice() {
+        String hint = EmbeddingErrorHint.of(OLLAMA, "ollama", new java.io.IOException(
+                "Embedding API 请求失败 [404]: {\"error\":\"model \\\"bge-m3:latest\\\" not found, try pulling it first\"}"));
+        assertTrue(hint.contains("ollama pull"), hint);
+        assertFalse(hint.contains("BASE URL"), "别把两条建议都糊上去: " + hint);
+    }
+
+    @Test
     @DisplayName("验证地址:端口用配置的那个,主机名规范成 127.0.0.1")
     void verifyUrlKeepsThePortAndNormalizesTheHost() {
         // 写死 11434 会叫人去查一个他没在用的端口(EmbeddingConfigWiringTest 就是这么红的)

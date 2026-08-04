@@ -275,6 +275,16 @@ public final class AppServer {
         default java.util.Map<String, Object> embeddingSet(String provider, String model, String baseUrl, String apiKey) {
             throw new UnsupportedOperationException("embeddingSet not implemented");
         }
+        /**
+         * 「测试连接」：用表单值发一次真实 embedding 请求，回
+         * {@code {ok, dim, latencyMs, provider, model, baseUrl, warning?}} 或 {@code {ok:false, error, hint?}}。
+         *
+         * <p>{@code apiKey} 空 = 沿用已存（同 {@code embeddingSet}）—— 测的必须正是保存会落盘的那套。
+         * 回包<b>绝不含 key</b>。默认抛出。
+         */
+        default java.util.Map<String, Object> embeddingTest(String provider, String model, String baseUrl, String apiKey) {
+            throw new UnsupportedOperationException("embeddingTest not implemented");
+        }
 
         /**
          * 搜索后端的实时状态 {@code {provider, ready}} —— 面板角标用。
@@ -819,6 +829,20 @@ public final class AppServer {
                 try { writer.result(msg.id(), session.embeddingSet(provider, model, baseUrl, apiKey)); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.testEmbedding" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String provider = textParam(p, "provider");
+                String model = (p != null && p.hasNonNull("model")) ? p.get("model").asText() : "";
+                String baseUrl = (p != null && p.hasNonNull("baseUrl")) ? p.get("baseUrl").asText() : "";
+                String apiKey = (p != null && p.hasNonNull("apiKey")) ? p.get("apiKey").asText() : "";
+                // 必须 offload,同 config.testProvider:dispatch 跑在 serve() 那条**唯一的** reader
+                // 线程上,同步执行会让整个 app-server 在探测期间处理不了任何 RPC —— 表现为
+                // 「点了测试连接,整个桌面端都没反应」。embedding 的时间尺度更糟:ollama 首次请求
+                // 要把模型载进内存(大模型 + 慢盘几十秒)。
+                final SessionRunner s = session;
+                dispatchAsync(msg.id(), () -> s.embeddingTest(provider, model, baseUrl, apiKey));
             }
             case "config.getSearch" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }

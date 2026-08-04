@@ -1892,6 +1892,46 @@ public class Main {
                         cfg.save();
                         return java.util.Map.of("ok", true);
                     }
+                    /**
+                     * 「测试连接」:用<b>表单值</b>发一次真实 embedding 请求。
+                     *
+                     * <p>此前验证 embedding 后端唯一的办法是点「建立索引」—— 那是上千个代码块的
+                     * 整库扫描。配错一个字符就得等它跑完或者盯着一句 OkHttp 原文猜。
+                     *
+                     * <p>三件事必须与别处严格对齐,否则这个按钮会撒谎:
+                     * <ul>
+                     *   <li>apiKey 空 = 沿用已存(同 {@code embeddingSet})—— <b>测的是保存会落盘的那套</b>;
+                     *       面板的 KEY 框从不回填已存 key,不继承就永远 401,而保存却是好的。</li>
+                     *   <li>客户端走 {@code EmbeddingClient.of} —— 与索引/检索同一个构造口,
+                     *       表单留空时填的默认值也就与实际跑的一致。</li>
+                     *   <li>索引元信息一并带上,好在建索引<b>之前</b>就报出维度/模型冲突。</li>
+                     * </ul>
+                     */
+                    public java.util.Map<String, Object> embeddingTest(String provider, String model,
+                                                                      String baseUrl, String apiKey) {
+                        com.lyhn.wraith.config.WraithConfig.EmbeddingConfig saved =
+                                com.lyhn.wraith.config.WraithConfig.load().getEmbedding();
+                        String key = com.lyhn.wraith.rag.EmbeddingProbe.effectiveKey(
+                                saved == null ? null : saved.getApiKey(), apiKey);
+                        com.lyhn.wraith.rag.EmbeddingClient client =
+                                com.lyhn.wraith.rag.EmbeddingClient.of(provider, model, baseUrl, key);
+                        // 已有索引的元信息:读不到就是 null(没建过 / 老索引没记过)——不猜,不警告
+                        com.lyhn.wraith.rag.VectorStore.IndexMeta meta = null;
+                        try (com.lyhn.wraith.rag.CodeRetriever r =
+                                     new com.lyhn.wraith.rag.CodeRetriever(root, client)) {
+                            com.lyhn.wraith.rag.VectorStore.IndexStats s = r.getStats();
+                            if (s.embeddingModel() != null && s.chunkCount() > 0) {
+                                meta = new com.lyhn.wraith.rag.VectorStore.IndexMeta(
+                                        s.embeddingModel(), s.embeddingDim());
+                            }
+                        } catch (Exception ignored) {
+                            // 索引库打不开不该让「测试连接」失败 —— 那是两件独立的事
+                        }
+                        final com.lyhn.wraith.rag.VectorStore.IndexMeta indexMeta = meta;
+                        return awaitProbe(
+                                () -> com.lyhn.wraith.rag.EmbeddingProbe.probe(client, indexMeta, key),
+                                embedProbeTimeoutSeconds());
+                    }
                     public java.util.Map<String, Object> searchStatus() {
                         // 问的是 agent 自己那个 registry —— 用户刚 /config search 写完并 invalidate 过,
                         // 这里就能立刻反映出来,不需要重启后端。
@@ -2855,11 +2895,15 @@ public class Main {
         return SENSITIVE_ASSIGNMENT.matcher(redacted).replaceAll("$1***");
     }
 
-    /** 从异常消息里抹掉可能被底层客户端带进来的 apiKey(防御性;红线:回包绝不含 key)。null 安全。 */
+    /**
+     * 从异常消息里抹掉可能被底层客户端带进来的 apiKey(防御性;红线:回包绝不含 key)。null 安全。
+     *
+     * <p>实现搬到了 {@link com.lyhn.wraith.config.SecretRedaction} —— {@code rag} 那边的
+     * embedding 探测也要抹，而 {@code rag} 不该依赖 {@code cli}。这里保留成委托，
+     * 是为了不动已有调用点与 {@code RedactKeyTest}。
+     */
     static String redactKey(String message, String apiKey) {
-        if (message == null) return null;
-        if (apiKey == null || apiKey.isBlank()) return message;
-        return message.contains(apiKey) ? message.replace(apiKey, "[redacted]") : message;
+        return com.lyhn.wraith.config.SecretRedaction.redact(message, apiKey);
     }
 
     private static int terminalColumns() {
@@ -5440,6 +5484,30 @@ public class Main {
             }
         }
         return 20L;
+    }
+
+    /**
+     * embedding 探测的上限；默认 <b>60</b> 秒，可用 {@code wraith.embed.probe.timeout.seconds} 覆盖。
+     *
+     * <p><b>为什么不沿用上面那 20 秒</b>：ollama 的<b>首次</b>请求要把模型载进内存，这是 LLM ping
+     * 没有的成本。本机实测（M 系列 + NVMe）nomic-embed-text 冷 0.6s / 热 0.06s，
+     * bge-m3 冷 2.2s / 热 0.16s —— 这机器上 20 秒绰绰有余，而那正是不该按它定的理由：
+     * 用户跑的是 Windows，qwen3-embedding:8b 有 4.7GB，落在机械盘上冷加载几十秒是常态。
+     *
+     * <p><b>取舍</b>：宁可让人多等，也不要对一个<b>好的</b>后端报「没有响应」——
+     * 后者会让人去改一份本来没错的配置。等待期间按钮有转圈，等是看得见的；误报不是。
+     */
+    static long embedProbeTimeoutSeconds() {
+        String raw = System.getProperty("wraith.embed.probe.timeout.seconds");
+        if (raw != null && !raw.isBlank()) {
+            try {
+                long v = Long.parseLong(raw.trim());
+                if (v > 0) return v;
+            } catch (NumberFormatException ignored) {
+                // 非法值不该让「测试连接」整条路挂掉,退回默认
+            }
+        }
+        return 60L;
     }
 
     /**

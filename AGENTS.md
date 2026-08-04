@@ -197,6 +197,10 @@ src/main/java/com/lyhn/wraith/
 
 ### 5.1 改 Embedding → `EmbeddingClient` + `VectorStore` + `.env.example` + 文档
 
+> 改**桌面「代码检索」面板的 embedding 后端**连带六层：`EmbeddingProbe`（「测试连接」的逻辑；`effectiveKey` 的「空=保留旧 key」**必须与 `embeddingSet` 同义** —— 面板的 KEY 框从不回填已存 key，不继承就会「测出 401 但保存是好的」）+ `config.testEmbedding` RPC（**必须 `dispatchAsync`**：ollama 首次请求要把模型载进内存，同步执行会冻住整个 app-server，`config.testProvider` 已经踩过一次）+ `shared/types.ts:EmbeddingTestResult` + `preload/index.ts` + `main/index.ts` + `renderer/lib/embeddingTestView.ts`（三态：通了 / **通了但与现有索引不兼容** / 没通 —— 第二态混进第一态就等于没做）+ `RagPanel.tsx`。
+>
+> 探测超时走 `wraith.embed.probe.timeout.seconds`（默认 60s），**刻意宽于** LLM 探测的 20s：冷加载大模型是 LLM ping 没有的成本，宁可让人多等也不要对一个好后端报「没有响应」。失败话术的家在 `EmbeddingErrorHint`，纪律是**只在能确定的形态上说话**（连不上 / 404 模型没拉 / 404 路径不存在），其余返回空串；**原文一律保留**，诊断另放一个字段。
+
 ### 5.2 改 Web/搜索 → `web/` 相关 + ToolRegistry + `.env.example` + 文档 + 测试
 
 > 改**搜索后端**另需连带：`WraithConfig.SearchConfig`（config.json 的 `search` 节）+ `UnconfiguredSearchProvider`（「未配置」话术的载体，**不是** Zhipu provider —— 占位 provider 曾是 zhipu，于是那句中立的三路指引由智谱代言，模型张口就说 GLM）+ `DuckDuckGoSearchProvider`（显式可选，**自动选择链永不返回它**，由 `SearchProviderAutoSelectionTest` 穷举 8 种组合守门）+ `SearchDetection`（docker/端口检测，纯函数入口注入，端口常量的家在这里）+ `/config search` 写入口 + `ToolRegistry.invalidateSearchProvider()`（不调则本次会话仍用旧 provider，第五次 snapshot-vs-live）+ `src/main/resources/skills/web-access/SKILL.md` 的工具选择表（搜索那行的 fallback 列不能是 `—`，否则 `web_search` 不可用时模型没有降级指令）+ 桌面 `pluginShowcase.ts` 的 `requires` 文案。

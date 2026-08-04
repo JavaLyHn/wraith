@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, SearchStatusView, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, SearchStatusView, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
@@ -114,6 +114,8 @@ export interface WraithApi {
   browserTabs(): Promise<BrowserCmdResult>
   configGetEmbedding(): Promise<EmbeddingConfigView>
   configSetEmbedding(cfg: { provider: string; model: string; baseUrl: string; apiKey: string }): Promise<{ ok: boolean }>
+  /** 「测试连接」:用表单草稿发一次真实 embedding 请求。不写盘;apiKey 空=后端沿用已存 */
+  configTestEmbedding(cfg: { provider: string; model: string; baseUrl: string; apiKey: string }): Promise<EmbeddingTestResult>
   /** 搜索后端实时状态(只读,不回 key)——「能力概览」角标用 */
   configGetSearch(): Promise<SearchStatusView>
   configGetPricing(): Promise<PricingListResult>
@@ -528,6 +530,9 @@ const wraith: WraithApi = {
   },
   configSetEmbedding(cfg) {
     return ipcRenderer.invoke('wraith:configSetEmbedding', cfg) as Promise<{ ok: boolean }>
+  },
+  configTestEmbedding(cfg) {
+    return ipcRenderer.invoke('wraith:configTestEmbedding', cfg) as Promise<EmbeddingTestResult>
   },
   configGetSearch() {
     return ipcRenderer.invoke('wraith:configGetSearch') as Promise<SearchStatusView>
