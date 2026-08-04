@@ -1,0 +1,165 @@
+# 索引范围可选：排除测试与文档
+
+**日期:** 2026-08-04 **状态:** 设计待批（未实现）**前置事实:** 全部量自 `~/.wraith/rag/codebase.db` 里 wraith 自身那份 bge-m3 索引（9718 块 / 55091 关系）
+
+---
+
+## 1. 起因
+
+给 wraith 自身建完索引后实测检索，发现结果被测试文件压制。构成量出来是：
+
+| 构成 | 块数 | 占比 |
+|---|---|---|
+| Java 主代码 | 3439 | 35.4% |
+| **Java 测试** | 3210 | 33.0% |
+| **docs/ 文档** | 2018 | 20.8% |
+| 桌面源码 | 678 | 7.0% |
+| 桌面测试 | 286 | 2.9% |
+
+**一半以上是测试和文档。** 而测试块特别容易压住主代码 —— 不是巧合：这个仓库的测试名就在描述被测行为（`void thinExtractionSaysFetchSucceeded()`、`void 标记必须是单行_否则桌面按行解析会截断()`），语义上与「这个功能怎么实现的」高度相似。实测例：
+
+```
+问「抓取网页时怎么去掉广告和导航栏」(bge-m3)
+  1. FetchDiagnosisTest.thinExtractionSaysFetchSucceeded()
+  2. HtmlExtractorNoiseGuardTest.htmlElementIsNeverRemovedAsNoise()
+  3. HtmlExtractorNoiseGuardTest.genuineSmallNoiseBlocksAreStillRemoved()
+  4. HtmlExtractor.cleanNoise          ← 真正的实现被三条测试压到第 4
+```
+
+---
+
+## 2. 这个开关的实际代价（先摆数字，再谈设计）
+
+按 §3.2 的判据在真实索引上跑一遍：
+
+```
+块 9718 总计
+  命中测试判据       3495  36.0%
+  命中文档判据       2246  23.1%   (已排除 skills 下的 md)
+  skills 下的 md      129   1.3%   ← 运行时载荷,不是文档,不能排
+  两者都排除后剩      3977  40.9%
+
+关系 55091 总计,其中一端在测试里 28799 (52.3%)
+```
+
+三个必须正视的代价：
+
+1. **索引缩到 41%。** 好处是噪声少了；代价是"这个行为的预期是什么"这类问题再也搜不到 —— 测试是那个问题唯一的答案来源。
+2. **一半以上的关系会消失（52.3%）。** 关系只从 `.java` 提取，文件不进 `filesToIndex` 就不会被 `CodeAnalyzer` 看到。而「谁调用了这个方法」恰恰在**测试**里最有价值。
+3. **文档不是纯噪声。** 问「为什么这么设计」时 `docs/superpowers/specs/` 是唯一的答案来源。实测「桌面宠物窗口不要抢走键盘焦点」的第 2–4 名全是设计文档，而且全对。
+
+**所以这不能做成默认行为**，见 D3。
+
+---
+
+## 3. 设计
+
+### 3.1 D1 —— 判据放在 `collectFiles` 的 `visitFile`
+
+`CodeIndex.index()` 的第一步是 `collectFiles(root, filesToIndex)`，之后才分块 / 提关系 / 逐块 embedding。过滤放在这里：
+
+- **越早排除越省**。唯一的真成本是阶段 2 的 embedding 网络往返（本机 bge-m3 实测 9718 块 18 分 13 秒）。在 `visitFile` 排掉，分块、关系分析、embedding 三样全省。
+- **关系与块自动一致**。同一份 `filesToIndex` 既喂 `chunker` 也喂 `analyzer`，不会出现"块排掉了但关系还在"的错配。
+
+### 3.2 D2 —— 判据必须可枚举、可测，不用启发式
+
+**测试**（命中任一即算）：
+
+| 规则 | 来源 |
+|---|---|
+| 路径含 `/src/test/` 或 `/src/it/` | Maven / Gradle 约定 |
+| 文件名 `*Test.java` / `*Tests.java` / `*IT.java` | Surefire / Failsafe 的默认扫描模式 |
+| 文件名 `*.test.{ts,tsx,js,jsx,mjs}` / `*.spec.*` | vitest / jest 约定 |
+| 路径含 `/test/`、`/tests/`、`/__tests__/` | 通用约定 |
+| `test_*.py` / `*_test.py` / `*_test.go` | pytest / `go test` |
+
+**文档**（命中任一即算）：
+
+| 规则 |
+|---|
+| 扩展名 `.md`（目前白名单里唯一的文档类型） |
+| 路径含 `/docs/` |
+
+**一个必须写死的例外：`src/main/resources/skills/**` 下的 `.md` 不是文档。**
+
+那是**运行时载荷** —— `SKILL.md` 是技能定义，`references/site-patterns/*.md` 是 `web_fetch` 的站点规则。把它们当文档排掉，就是把一部分产品行为从索引里挖走。真实索引里这类 md 有 **129 块**。判据：路径含 `resources/skills/` 时，文档规则不适用。
+
+> 为什么不用启发式（如"内容里 assert 密度高就是测试"）：那会产生"为什么我这个文件没被索引"这类无法自查的问题。规则必须是用户读一眼就能预测的。
+
+### 3.3 D3 —— 两个独立布尔，默认都关
+
+```java
+class RagConfig { boolean excludeTests; boolean excludeDocs; }   // 默认 false / false
+```
+
+**不合并成一个开关**：两者的痛感与价值完全不同（§2 第 1、3 条）。测试几乎总是噪声；文档是"为什么这么设计"的唯一答案来源。绑在一起就迫使用户为了去掉测试而牺牲文档。
+
+**默认都关（= 行为不变）**：
+- 改默认会让现有用户下次重建后索引静默缩到 41%，而他们没做任何事；
+- §2 已经说明两者都不是纯噪声。
+
+真正该修的排序问题在**打分**那一层（关键词分饱和到 1.05、压过语义满分 1.0），那是另一件事。这个开关是给"我就是不想搜到测试"的人的工具，不是排序问题的替代方案。
+
+### 3.4 D4 —— 配置落在新的 `RagConfig`，不塞进 `EmbeddingConfig`
+
+`EmbeddingConfig` 那一节是**后端连接参数**（provider / model / baseUrl / apiKey）。索引范围不是后端的属性 —— 同一个后端可以建不同范围的索引。混在一起以后会看到"改索引范围要动 embedding 配置"这种别扭事。
+
+新增 `WraithConfig.RagConfig`，仿 `EmbeddingConfig` 的写法（嵌套类 + getter/setter + `load()`/`save()`）。
+
+### 3.5 D5 —— **必须记进 `index_meta`**（最容易漏的一条）
+
+`index_meta` 现在记的是 `(project_path, embedding_model, embedding_dim, updated_at)`。**范围设置变了但模型没变** → `ragView.staleIndexWarning` 与 `EmbeddingProbe.compatibilityWarning` 都不会响，因为它们比的是模型和维度。
+
+后果：用户打开"排除测试"却没重建，索引里测试还在，检索照样返回测试 —— 而界面**一个字都不说**。这正是本仓库记了 8 次的 snapshot-vs-live，只不过这次陈旧的是"范围"而不是"模型"。
+
+所以 `index_meta` 加两列 `exclude_tests` / `exclude_docs`，面板据此提示：
+
+> 这份索引是在不同的范围设置下建的（当前设置排除测试，索引里包含测试）。请重建索引。
+
+判据与既有的模型比较同一条纪律：**任一侧未知就不比较**（老索引没有这两列 → 不提示，不猜）。
+
+### 3.6 D6 —— 回包要说清"排掉了什么"
+
+`rag.index` 的结果加 `excludedTests` / `excludedDocs`（文件数）。
+
+不报的话，用户看到块数从 9718 掉到 3977 会以为索引出错了 —— 这与本轮刚修的「建完没有结果展示」是同一类问题。面板的「本次索引」块加一行：
+
+```
+按范围设置排除 412 个测试文件、288 个文档文件
+```
+
+`rag.status` 回包也带上索引时的范围，供 D5 的提示使用。
+
+### 3.7 D7 —— 桌面表单
+
+「Embedding 后端」下面新增「索引范围」一节，两个 checkbox + 一行说明代价的小字（引 §2 的数字量级，不写死具体数）。写入走新的 `config.setRag` RPC，语义与 `config.setEmbedding` 一致。
+
+---
+
+## 4. 行为变化
+
+1. 默认行为**完全不变**（两个开关默认关）。
+2. 新增 `WraithConfig` 的 `rag` 节、`config.getRag` / `config.setRag` 两条 RPC、`index_meta` 两列。
+3. 旧索引（无新列）不会被误判成"范围不符"—— 不知道就不提示。
+4. 打开开关并重建后，`rag.graph` 查到的关系会少一半以上（§2 第 2 条），这是设计内的代价，不是缺陷。
+
+---
+
+## 5. 测试计划
+
+纯函数优先，判据本身必须能穷举地测：
+
+- `RagScopeFilter.isTest(path)` / `isDoc(path)`：每条规则一个用例 + 反例（`Latest.java` 不是测试、`contest/` 不是测试目录、`README.md` 是文档、`resources/skills/x/SKILL.md` **不是**文档）。
+- `CodeIndex`：`@TempDir` 造一个含测试/文档/skills-md 的小项目，断言开关关时全进、开关开时只剩主代码，且 `excludedTests` 计数正确。
+- 关系一致性：断言排除测试后，`from_file` 或 `to_file` 落在测试里的关系一条都不剩（D1 的"自动一致"不能只是注释）。
+- `index_meta` 往返：写入范围 → 读回 → 范围不符时提示、任一侧未知时不提示。
+- 桌面：`ragView` 加范围不符提示的纯函数测试 + 面板 checkbox → `configSetRag` 的调用断言。
+
+---
+
+## 6. 明确不做
+
+- **不做自定义 glob / `.wraithignore`**。会引入"为什么我的文件没被索引"这类无法自查的问题；先解决可枚举的 80%。
+- **不给测试/文档"降权"而只做"排除"**。降权要动 `hybridSearch` 的打分，而那里现在有个更根本的 bug（关键词分饱和到 1.05，超过语义满分 1.0）。在坏的打分上叠权重只会让两个问题纠缠。**排序问题应该单独修**。
+- **不改默认值**。见 D3。
+- **不动 `.js`/`.json` 大文件的问题**（真实索引里 5 个压缩 js 占 87 MB，其中一个 39 MB 的块向量只由前 2000 字符算出）。那是"单块内容上限"，与范围过滤是两件事。
