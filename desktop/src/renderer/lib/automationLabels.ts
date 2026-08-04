@@ -1,5 +1,6 @@
 import type { AutomationTask, AutomationRun, ApprovalMode, ApprovalPolicy, DeliveryTarget } from '../../shared/types'
 import { computeNextRun } from '../../main/automationSchedule'
+import { ipcErrorText } from './ipcError'
 
 /**
  * 「下次 MM-DD HH:mm」标签;renderer 直接复用 main 的纯函数(无 Node 依赖)。
@@ -48,13 +49,12 @@ export function isValidCronShape(expr: string): boolean {
 
 /**
  * 从保存(upsert)抛出的异常里提取可读原因,拼成「保存失败:<原因>」。
- * 会剥掉 Electron `ipcRenderer.invoke` 包的 "Error invoking remote method
- * '...': Error: " 前缀,只留 daemon/主进程给的权威消息(如「非法 cron 表达式: ...」
- * 「Backend not connected」)。消息为空时兜底为「保存失败」。
+ * 剥 Electron IPC 前缀这件事由共享的 `ipcErrorText` 干(它原本就是从这里抽出去的),
+ * 只留 daemon/主进程给的权威消息(如「非法 cron 表达式: ...」「Backend not connected」)。
+ * 消息为空时兜底为「保存失败」。
  */
 export function saveErrorText(err: unknown): string {
-  const raw = err instanceof Error ? err.message : String(err)
-  const reason = raw.replace(/^Error invoking remote method '[^']*':\s*(?:Error:\s*)?/, '').trim()
+  const reason = ipcErrorText(err)
   return reason ? `保存失败:${reason}` : '保存失败'
 }
 

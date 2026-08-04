@@ -5,6 +5,9 @@ import {
 } from 'lucide-react'
 import type { DocEntry } from '../../shared/types'
 import { filterDocs, formatSize, docIconKind } from '../lib/documentsView'
+// list/open/reveal/remove 的错误全来自主进程 throw,message 带 Electron 的
+// "Error invoking remote method '...': Error: " 前缀,必须剥掉才是设计要的文案
+import { ipcErrorText } from '../lib/ipcError'
 // relativeTime(ms, nowMs = Date.now()) —— snapshotView.ts:36,签名与此处用法一致,直接复用
 import { relativeTime } from '../lib/snapshotView'
 
@@ -31,7 +34,7 @@ export default function DocumentsPanel({ onBack }: { onBack: () => void }): JSX.
     try {
       setDocs(await window.wraith.documents.list())
       setError(null)
-    } catch (err) { setError((err as Error).message) }
+    } catch (err) { setError(ipcErrorText(err, '读取文档库失败')) }
   }, [])
 
   useEffect(() => { void load() }, [load])
@@ -46,10 +49,11 @@ export default function DocumentsPanel({ onBack }: { onBack: () => void }): JSX.
       // (不能无条件覆盖:那样会把 load() 这次重载失败的提示悄悄冲掉,参见 task-4 review finding①)
       await load()
       if (r.failed.length) {
+        // f.reason 是主进程当数据回传的、本来就干净的中文原因,不走 ipcErrorText
         setError(`${r.added.length} 个成功,${r.failed.length} 个失败:` +
           r.failed.map(f => `${f.name}(${f.reason})`).join('、'))
       }
-    } catch (err) { setError((err as Error).message) }
+    } catch (err) { setError(ipcErrorText(err, '添加失败')) }
     finally { setBusy(false) }
   }, [load])
 
@@ -57,17 +61,17 @@ export default function DocumentsPanel({ onBack }: { onBack: () => void }): JSX.
     if (confirmDel !== name) { setConfirmDel(name); return }
     setConfirmDel(null)
     try { await window.wraith.documents.remove(name); await load() }
-    catch (err) { setError((err as Error).message) }
+    catch (err) { setError(ipcErrorText(err, '删除失败')) }
   }, [confirmDel, load])
 
   const doOpen = useCallback(async (name: string): Promise<void> => {
     try { await window.wraith.documents.open(name) }
-    catch (err) { setError((err as Error).message) }
+    catch (err) { setError(ipcErrorText(err, '打开失败')) }
   }, [])
 
   const doReveal = useCallback(async (name: string): Promise<void> => {
     try { await window.wraith.documents.reveal(name) }
-    catch (err) { setError((err as Error).message) }
+    catch (err) { setError(ipcErrorText(err, '定位失败')) }
   }, [])
 
   const onDrop = useCallback((e: React.DragEvent): void => {
@@ -83,8 +87,14 @@ export default function DocumentsPanel({ onBack }: { onBack: () => void }): JSX.
   return (
     <div
       className={'flex min-h-0 flex-1 flex-col ' + (dragOver ? 'bg-accent/5 ring-2 ring-inset ring-accent' : '')}
-      onDragOver={e => { e.preventDefault(); setDragOver(true) }}
-      onDragLeave={() => setDragOver(false)}
+      // 只对「拖的是文件」承诺投放区:拖选中的文本时把整块点亮是个假承诺(照 Composer.tsx:230)
+      onDragOver={e => {
+        if (!Array.from(e.dataTransfer?.types ?? []).includes('Files')) return
+        e.preventDefault()
+        setDragOver(true)
+      }}
+      // 只在真正离开容器时收起高亮:dragleave 会冒泡,鼠标在文件行之间移动就会让高亮抖(照 Composer.tsx:237)
+      onDragLeave={e => { if (e.currentTarget === e.target) setDragOver(false) }}
       onDrop={onDrop}
     >
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
@@ -96,8 +106,10 @@ export default function DocumentsPanel({ onBack }: { onBack: () => void }): JSX.
           <FolderOpen className="h-4 w-4 shrink-0" strokeWidth={1.5} />文档
         </span>
         <div className="ml-auto flex items-center gap-2">
-          {/* 只有一个文件时搜索框是多余 UI */}
-          {docs.length > 1 && (
+          {/* 只有一个文件时搜索框是多余 UI —— 但已经输了过滤词就必须留着,
+              否则「3 个文件→过滤→删到只剩 1 个且不匹配」会把输入框卸载掉,
+              query 还在生效,列表只剩「没有匹配」而无处可清(只能退出面板重进) */}
+          {(docs.length > 1 || query !== '') && (
             <div className="flex items-center gap-1.5 rounded-lg bg-fg/5 px-2 py-1.5">
               <Search className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.5} />
               <input
