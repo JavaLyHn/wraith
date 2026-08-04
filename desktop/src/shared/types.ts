@@ -704,3 +704,20 @@ export interface UpdateResult {
 
 /** 内置工具定义(tools.list 回传;= 模型看到的定义)。 */
 export interface BuiltinToolView { name: string; description: string; parameters?: unknown }
+
+// ---------------------------------------------------------------------------
+// 桌面「文档」面板:~/.wraith/documents/ 扁平存放用户资料
+// ---------------------------------------------------------------------------
+
+/** 「文档」面板:库内一条文件记录。name 同时是所有 IPC 的入参。 */
+export interface DocEntry {
+  name: string
+  size: number      // 字节
+  addedAt: number   // epoch ms
+}
+
+/** 「文档」面板:批量入库结果。added 为最终文件名(可能带 " (2)");failed.name 为源文件 basename。 */
+export interface DocAddResult {
+  added: string[]
+  failed: { name: string; reason: string }[]
+}
