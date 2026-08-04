@@ -51,6 +51,7 @@ import {
 import { runPetdexInstall } from './petInstall'
 import { detectEditors, detectWindowsEditors, uniqueDownloadName, performUndo, resolveOpenWithPlan } from './fileOpen'
 import type { EditorApp } from '../shared/editors'
+import { documentsDir, ensureDocumentsDir, listDocuments, resolveInVault, addDocuments, removeDocument } from './documents'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -1427,6 +1428,48 @@ ipcMain.handle('wraith:openExternal', (_e, url: string) => { void shell.openExte
 ipcMain.handle('wraith:openPath', (_e, p: string) => shell.openPath(p))
 
 ipcMain.handle('wraith:revealInFinder', (_e, p: string) => { shell.showItemInFolder(p) })
+
+// ── 「文档」面板:~/.wraith/documents/ 资料库 ──────────────────────────
+// 入参一律是库内文件名而非路径 —— renderer 不该有能力指定任意路径,尤其对 remove。
+function docsDir(): string { return documentsDir(os.homedir()) }
+
+ipcMain.handle('wraith:documents:list', async () => {
+  const dir = docsDir()
+  await ensureDocumentsDir(dir)
+  return listDocuments(dir)
+})
+
+ipcMain.handle('wraith:documents:add', async (_e, paths?: string[]) => {
+  const dir = docsDir()
+  let sources = paths
+  if (!sources || sources.length === 0) {
+    // 无参 = 走系统文件选择器(与既有 pickAttachments 同款降级写法)
+    const result = mainWindow
+      ? await dialog.showOpenDialog(mainWindow, { properties: ['openFile', 'multiSelections'] })
+      : await dialog.showOpenDialog({ properties: ['openFile', 'multiSelections'] })
+    if (result.canceled) return { added: [], failed: [] }
+    sources = result.filePaths
+  }
+  return addDocuments(dir, sources)
+})
+
+ipcMain.handle('wraith:documents:remove', async (_e, name: string) => {
+  await removeDocument(docsDir(), name)
+})
+
+ipcMain.handle('wraith:documents:open', async (_e, name: string) => {
+  const r = resolveInVault(docsDir(), name)
+  if (r.status === 'missing') throw new Error('文件已不存在')
+  const err = await shell.openPath(r.path)
+  if (err) throw new Error(err)   // openPath 失败时返回非空错误串
+})
+
+ipcMain.handle('wraith:documents:reveal', (_e, name: string) => {
+  const r = resolveInVault(docsDir(), name)
+  if (r.status === 'missing') throw new Error('文件已不存在')
+  shell.showItemInFolder(r.path)
+})
+
 ipcMain.handle('wraith:downloadCopy', async (_e, p: string): Promise<string> => {
   const downloads = path.join(os.homedir(), 'Downloads')
   await fs.promises.mkdir(downloads, { recursive: true })

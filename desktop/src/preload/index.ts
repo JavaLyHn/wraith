@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, SearchStatusView, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, SearchStatusView, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
@@ -186,6 +186,15 @@ export interface WraithApi {
   petGetConfig(): Promise<PetConfig>
   petSetConfig(patch: Partial<PetConfig>): Promise<PetConfig>
   onPetConfig(cb: (c: PetConfig) => void): () => void
+  /** 「文档」资料库:~/.wraith/documents/ 扁平存放。入参是库内文件名,不是路径。 */
+  documents: {
+    list(): Promise<DocEntry[]>
+    /** 无参 → 弹系统文件选择器;传 paths → 拖拽入库。 */
+    add(paths?: string[]): Promise<DocAddResult>
+    remove(name: string): Promise<void>
+    open(name: string): Promise<void>
+    reveal(name: string): Promise<void>
+  }
   /** 窗口控制:Windows 无边框自绘窗控用(最小/最大化切换/关闭 + 最大化状态订阅)。 */
   windowControls: WindowControlsApi
 }
@@ -719,6 +728,14 @@ const wraith: WraithApi = {
     const listener = (_e: Electron.IpcRendererEvent, c: PetConfig) => cb(c)
     ipcRenderer.on('pet:config', listener)
     return () => { ipcRenderer.removeListener('pet:config', listener) }
+  },
+
+  documents: {
+    list() { return ipcRenderer.invoke('wraith:documents:list') as Promise<DocEntry[]> },
+    add(paths) { return ipcRenderer.invoke('wraith:documents:add', paths) as Promise<DocAddResult> },
+    remove(name) { return ipcRenderer.invoke('wraith:documents:remove', name) as Promise<void> },
+    open(name) { return ipcRenderer.invoke('wraith:documents:open', name) as Promise<void> },
+    reveal(name) { return ipcRenderer.invoke('wraith:documents:reveal', name) as Promise<void> },
   },
 
   windowControls: {
