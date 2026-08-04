@@ -1,0 +1,160 @@
+{
+ "_schema": {
+  "q": "查询原文(自然语言,和你在面板里会输入的一样)",
+  "path": "正确答案的文件路径子串(相对仓库根,大小写不敏感)",
+  "name": "可选:块名子串(方法签名/类名)。null=只看路径",
+  "group": "分组标签,仅用于分组统计"
+ },
+ "_notes": [
+  "这套题的作者是 Claude,出题时它已在本仓库工作一整天 —— 措辞可能偏向它熟悉的文件。",
+  "这是真实偏差。减轻它的唯一办法是仓库的人自己加题。",
+  "加题只要往 queries 里追加对象;不要为了让某个方案变好而修改已有题目的 path/name。",
+  "改题必须在跑之前改,并记下 md5(报告里会打印)。看过结果再调题目就是拿题凑答案。"
+ ],
+ "queries": [
+  {
+   "q": "app-server 怎么处理建立索引的请求",
+   "path": "cli/Main.java",
+   "name": "startAppServer",
+   "group": "A 答案在超大方法里(预期改善)"
+  },
+  {
+   "q": "测试 embedding 连接的 RPC 在哪里实现",
+   "path": "cli/Main.java",
+   "name": "startAppServer",
+   "group": "A 答案在超大方法里(预期改善)"
+  },
+  {
+   "q": "RPC 的方法名怎么分发到各个处理分支",
+   "path": "appserver/AppServer.java",
+   "name": "dispatch",
+   "group": "A 答案在超大方法里(预期改善)"
+  },
+  {
+   "q": "保存 embedding 配置时空的 apiKey 怎么处理",
+   "path": "cli/Main.java",
+   "name": "startAppServer",
+   "group": "A 答案在超大方法里(预期改善)"
+  },
+  {
+   "q": "收到 shutdown 请求之后 app-server 做什么",
+   "path": "appserver/AppServer.java",
+   "name": "dispatch",
+   "group": "A 答案在超大方法里(预期改善)"
+  },
+  {
+   "q": "斜杠命令的参数是怎么解析的",
+   "path": "CliCommandParser.java",
+   "name": "parse",
+   "group": "A 答案在超大方法里(预期改善)"
+  },
+  {
+   "q": "抓取网页时怎么去掉广告和导航栏",
+   "path": "web/HtmlExtractor.java",
+   "name": null,
+   "group": "B 答案在正常方法里(不该退化)"
+  },
+  {
+   "q": "formatFetchResult",
+   "path": "tool/ToolRegistry.java",
+   "name": "formatFetchResult",
+   "group": "B 答案在正常方法里(不该退化)"
+  },
+  {
+   "q": "embedding 后端连不上的时候给用户什么提示",
+   "path": "rag/EmbeddingErrorHint.java",
+   "name": null,
+   "group": "B 答案在正常方法里(不该退化)"
+  },
+  {
+   "q": "两个向量的余弦相似度是怎么算的",
+   "path": "rag/VectorStore.java",
+   "name": null,
+   "group": "B 答案在正常方法里(不该退化)"
+  },
+  {
+   "q": "怎么发现索引维度和当前模型不一致",
+   "path": "rag/VectorStore.java",
+   "name": null,
+   "group": "B 答案在正常方法里(不该退化)"
+  },
+  {
+   "q": "把 apiKey 从错误消息里抹掉",
+   "path": "SecretRedaction.java",
+   "name": null,
+   "group": "B 答案在正常方法里(不该退化)"
+  },
+  {
+   "q": "中文查询是怎么分词的",
+   "path": "RagQueryTokenizer.java",
+   "name": null,
+   "group": "B 答案在正常方法里(不该退化)"
+  },
+  {
+   "q": "代码文件是怎么切分成块的",
+   "path": "rag/CodeChunker.java",
+   "name": null,
+   "group": "B 答案在正常方法里(不该退化)"
+  },
+  {
+   "q": "沙箱怎么判断一条命令是危险的",
+   "path": "sandbox/CommandSandbox.java",
+   "name": null,
+   "group": "B 答案在正常方法里(不该退化)"
+  },
+  {
+   "q": "429 限流之后怎么退避重试",
+   "path": "rag/EmbeddingClient.java",
+   "name": null,
+   "group": "B 答案在正常方法里(不该退化)"
+  },
+  {
+   "q": "为什么桌宠窗口要设成不抢焦点",
+   "path": "pet-noactivate",
+   "name": null,
+   "group": "C 答案是文档(可能被新块挤掉)"
+  },
+  {
+   "q": "上下文压缩分成几级水位线",
+   "path": "context/curator",
+   "name": null,
+   "group": "C 答案是文档(可能被新块挤掉)"
+  },
+  {
+   "q": "为什么不该再新增一份 provider 名单",
+   "path": "provider-agnostic-registry",
+   "name": null,
+   "group": "C 答案是文档(可能被新块挤掉)"
+  },
+  {
+   "q": "飞书网关是怎么设计的",
+   "path": "2026-07-10-feishu-im-gateway-design.md",
+   "name": null,
+   "group": "C 答案是文档(可能被新块挤掉)"
+  },
+  {
+   "q": "测试连接结果的三种状态怎么配色",
+   "path": "embeddingTestView.ts",
+   "name": null,
+   "group": "D 桌面 TS 代码"
+  },
+  {
+   "q": "计划步骤正在执行时的转圈动画",
+   "path": "planStatus.ts",
+   "name": null,
+   "group": "D 桌面 TS 代码"
+  },
+  {
+   "q": "工具调用的参数是空的时候怎么显示",
+   "path": "toolArgsView.ts",
+   "name": null,
+   "group": "D 桌面 TS 代码"
+  },
+  {
+   "q": "桌宠窗口在 macOS 上不激活怎么实现",
+   "path": "petWindow.ts",
+   "name": null,
+   "group": "D 桌面 TS 代码"
+  }
+ ]
+}

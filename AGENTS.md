@@ -241,6 +241,7 @@ src/main/java/com/lyhn/wraith/
 | Multi-Agent | `mvn test -Dtest=AgentRoleTest,AgentMessageTest,AgentOrchestratorTest` |
 | TUI/终端 | `mvn test -Pphase16-smoke` |
 | RAG | `mvn test -Dtest=CodeChunkerTest,CodeAnalyzerTest,VectorStoreTest,CodeIndexTest` |
+| **检索质量**（改分块/打分/embedding 模型后必跑） | `scripts/rag-eval/run-eval.sh --save-baseline` → 改动 → `--vs-baseline`；量 R@k / MRR@10 + 逐条升降，见 `scripts/rag-eval/README.md` |
 | 常规回归 | `mvn test -Pquick` |
 
 ## 给新线程的导航
