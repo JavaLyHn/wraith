@@ -1,6 +1,6 @@
 # 索引范围可选：排除测试与文档
 
-**日期:** 2026-08-04 **状态:** 设计待批（未实现）**前置事实:** 全部量自 `~/.wraith/rag/codebase.db` 里 wraith 自身那份 bge-m3 索引（9718 块 / 55091 关系）
+**日期:** 2026-08-04 **状态:** **已实现**（见文末「实现后的实测」）**前置事实:** 全部量自 `~/.wraith/rag/codebase.db` 里 wraith 自身那份 bge-m3 索引（9718 块 / 55091 关系）
 
 ---
 
@@ -49,6 +49,26 @@
 3. **文档不是纯噪声。** 问「为什么这么设计」时 `docs/superpowers/specs/` 是唯一的答案来源。实测「桌面宠物窗口不要抢走键盘焦点」的第 2–4 名全是设计文档，而且全对。
 
 **所以这不能做成默认行为**，见 D3。
+
+### 2.1 补测：两个开关的效果方向**相反**（设计定稿后补量的）
+
+原设计只摆了「代价」（索引缩到 41%、关系少一半），没回答**哪个方向是正的**。
+在评测台（`scripts/rag-eval/`，24 条冻结查询集）上补量：
+
+| 配置 | 块数 | R@1 | R@5 | R@10 | MRR@10 | 好/差 |
+|---|---|---|---|---|---|---|
+| 基线（全索引） | 9718 | 16.7% | 37.5% | 54.2% | 0.2693 | — |
+| **排除测试** | 6223 | 20.8% | 45.8% | **66.7%** | **0.3337** | **10/1** |
+| 排除文档 | 7472 | 12.5% | 33.3% | 41.7% | 0.2035 | 1/**4** |
+| 两者都排除 | 3977 | 16.7% | 41.7% | 66.7% | 0.2943 | 12/3 |
+
+**三条结论改变了设计的表述（不是结构）**：
+
+1. **排除测试是本轮性价比最高的一档**：MRR **+24%**，10 好 1 差，而代码改动只是一个路径判据。
+2. **排除文档是净亏**：MRR **−24%**，1 好 4 差。它保留下来是为了「只想省索引时间/磁盘」这个诉求，
+   **不是**为了提升检索质量 —— 界面必须写清这一点，否则用户会以为「都勾上更干净」。
+3. **D3「两个开关分开」从定性判断升级成量化事实**：分开 = 0.3337，合并 = 0.2943。
+   合并会把 +24% 拖成 +9%。
 
 ---
 
@@ -108,6 +128,11 @@ class RagConfig { boolean excludeTests; boolean excludeDocs; }   // 默认 false
 
 ### 3.5 D5 —— **必须记进 `index_meta`**（最容易漏的一条）
 
+> **实现时被变异测试抓到一次**：`index_meta` 那批测试全都直接调 `VectorStore.recordIndexMeta`，
+> 于是把 `CodeIndex` 里传范围那句改成 `(null, null)` 时**一条测试都不红** —— 而这正是本条
+> 标成「最容易漏」的那一环。补了 `CodeIndexScopeTest#indexRecordsScopeIntoMeta` 才堵住。
+
+
 `index_meta` 现在记的是 `(project_path, embedding_model, embedding_dim, updated_at)`。**范围设置变了但模型没变** → `ragView.staleIndexWarning` 与 `EmbeddingProbe.compatibilityWarning` 都不会响，因为它们比的是模型和维度。
 
 后果：用户打开"排除测试"却没重建，索引里测试还在，检索照样返回测试 —— 而界面**一个字都不说**。这正是本仓库记了 8 次的 snapshot-vs-live，只不过这次陈旧的是"范围"而不是"模型"。
@@ -132,14 +157,14 @@ class RagConfig { boolean excludeTests; boolean excludeDocs; }   // 默认 false
 
 ### 3.7 D7 —— 桌面表单
 
-「Embedding 后端」下面新增「索引范围」一节，两个 checkbox + 一行说明代价的小字（引 §2 的数字量级，不写死具体数）。写入走新的 `config.setRag` RPC，语义与 `config.setEmbedding` 一致。
+「Embedding 后端」下面新增「索引范围」一节，两个 checkbox + 一行说明代价的小字（引 §2 的数字量级，不写死具体数）。写入走新的 `config.setRagScope` RPC（**实现时定的名字**，比 `setRag` 更明确：它只写范围，不是整个 rag 节），语义与 `config.setEmbedding` 一致。
 
 ---
 
 ## 4. 行为变化
 
 1. 默认行为**完全不变**（两个开关默认关）。
-2. 新增 `WraithConfig` 的 `rag` 节、`config.getRag` / `config.setRag` 两条 RPC、`index_meta` 两列。
+2. 新增 `WraithConfig` 的 `rag` 节、`config.getRagScope` / `config.setRagScope` 两条 RPC、`index_meta` 两列。
 3. 旧索引（无新列）不会被误判成"范围不符"—— 不知道就不提示。
 4. 打开开关并重建后，`rag.graph` 查到的关系会少一半以上（§2 第 2 条），这是设计内的代价，不是缺陷。
 
@@ -163,3 +188,36 @@ class RagConfig { boolean excludeTests; boolean excludeDocs; }   // 默认 false
 - **不给测试/文档"降权"而只做"排除"**。降权要动 `hybridSearch` 的打分，而那里现在有个更根本的 bug（关键词分饱和到 1.05，超过语义满分 1.0）。在坏的打分上叠权重只会让两个问题纠缠。**排序问题应该单独修**。
 - **不改默认值**。见 D3。
 - **不动 `.js`/`.json` 大文件的问题**（真实索引里 5 个压缩 js 占 87 MB，其中一个 39 MB 的块向量只由前 2000 字符算出）。那是"单块内容上限"，与范围过滤是两件事。
+
+---
+
+## 7. 实现后的实测（2026-08-04）
+
+**已实现**：`RagScopeFilter`（判据）+ `WraithConfig.RagConfig` + `CodeIndex` 过滤与计数
++ `index_meta` 两列（含老库幂等补列）+ `config.getRagScope`/`setRagScope` 两条 RPC
++ `rag.status` 回索引范围 + 桌面「索引范围」一节与「范围不符」提示。
+
+**真机（本仓库自身，bge-m3）**：开启「排除测试」后
+
+```
+📁 发现 871 个文件待索引(按范围设置排除 482 个测试文件、0 个文档文件)
+✂️ 切出 6283 个代码块
+```
+
+模拟预测 6223 块，实际 6283 —— 差 60 块，因为模拟按**块**过滤而实现按**文件**过滤，
+两者的判据边界略有差异（模拟用 Python 正则，实现用 Java 正则）。
+
+**测试**：Java 新增 35 条（`RagScopeFilterTest` 15 / `CodeIndexScopeTest` 8 /
+`IndexScopeMetaTest` 7 / `WraithConfigRagTest` 5），全量 2206 / 0F / 0E。
+桌面新增 11 条（`ragScopeView.test.ts`），全量 1529。
+
+**变异式自证**：4 处打断实现（skills-md 也当文档 / 未知范围当成 false /
+老库不补列 / 范围不写进 meta）—— 前 3 处立刻变红；**第 4 处没红**，暴露了测试覆盖缺口，
+补测试后确认能红。
+
+**桌面**：「Embedding 后端」下方新增「索引范围」一节（两个 checkbox + 一行**带实测数字**的效果说明
+—— 只写「可能影响检索质量」会让人以为「都勾上更干净」），勾选即写盘但**不重建**，
+并立刻重拉 `rag.status` 让「范围不符」提示当场出现。
+
+**仍未做**（另开）：分块修复、打分改造、`chunkLargeText` 的重叠、`file` 段的语义标签。
+见 `docs/superpowers/plans/2026-08-04-rag-retrieval-backlog.md`。

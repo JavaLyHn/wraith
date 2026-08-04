@@ -1146,6 +1146,15 @@ ipcMain.handle('wraith:configSetEmbedding', async (_e, cfg: { provider: string; 
 })
 // 「测试连接」:发一次真实 embedding 请求。传的是**表单草稿**(不写盘),apiKey 空=后端沿用已存。
 // 后端那支是 dispatchAsync 的,所以这次请求不会占住 app-server 的 reader 线程。
+ipcMain.handle('wraith:configGetRagScope', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.getRagScope', {})
+})
+// 只写配置,不动索引:重建是一次整库扫描(实测 bge-m3 18 分钟),不该由一次勾选触发
+ipcMain.handle('wraith:configSetRagScope', async (_e, scope: { excludeTests: boolean; excludeDocs: boolean }) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.setRagScope', scope)
+})
 ipcMain.handle('wraith:configTestEmbedding', async (_e, cfg: { provider: string; model: string; baseUrl: string; apiKey: string }) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.testEmbedding', cfg)

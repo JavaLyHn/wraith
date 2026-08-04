@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, ScanSearch, Database, Search, Network, Save, PlugZap } from 'lucide-react'
-import type { EmbeddingConfigView, EmbeddingTestResult, RagStatus, RagSearchItem, RagRelation, RagIndexResult } from '../../shared/types'
-import { embeddingDefaults, staleIndexWarning, indexSummaryLines, relationHint } from '../lib/ragView'
+import type { EmbeddingConfigView, EmbeddingTestResult, RagScopeView, RagStatus, RagSearchItem, RagRelation, RagIndexResult } from '../../shared/types'
+import { embeddingDefaults, staleIndexWarning, indexSummaryLines, relationHint,
+  scopeMismatchWarning, scopeEffectNote, scopeSummaryLine } from '../lib/ragView'
 import { embeddingTestLines, embeddingTestTone, embeddingTestToneClass, embeddingTestTitle, embeddingTestTitleClass } from '../lib/embeddingTestView'
 
 type Draft = { provider: string; model: string; baseUrl: string; apiKey: string }
@@ -26,6 +27,8 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   // 而且要一直挂在表单下面 —— 边改边测时上一次的结论还得看得见。
   const [testResult, setTestResult] = useState<EmbeddingTestResult | null>(null)
   const [testBusy, setTestBusy] = useState(false)
+  // 索引范围。默认两个都关 = 行为与引入开关前一致。
+  const [scope, setScope] = useState<RagScopeView>({ excludeTests: false, excludeDocs: false })
 
   const loadCfg = useCallback(async (): Promise<void> => {
     try {
@@ -37,12 +40,27 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   const loadStatus = useCallback(async (): Promise<void> => {
     try { setStatus(await window.wraith.ragStatus()) } catch (err) { setError((err as Error).message) }
   }, [])
+  const loadScope = useCallback(async (): Promise<void> => {
+    // 旧 jar 没有这条 RPC —— 拿不到就保持默认关,不把面板整块打挂
+    try { setScope(await window.wraith.configGetRagScope()) } catch { /* 老后端:保持默认 */ }
+  }, [])
+  /** 勾选即写盘,但**不重建索引** —— 重建是一次整库扫描,不该由一次勾选触发。 */
+  const saveScope = useCallback(async (next: RagScopeView): Promise<void> => {
+    setScope(next)
+    try {
+      await window.wraith.configSetRagScope(next)
+      // 重拉 status:范围不符提示要**立刻**出现,而不是等下次进面板
+      void loadStatus()
+    } catch (err) { setError((err as Error).message) }
+  }, [loadStatus])
 
-  useEffect(() => { void loadCfg(); void loadStatus() }, [loadCfg, loadStatus])
+  useEffect(() => { void loadCfg(); void loadStatus(); void loadScope() }, [loadCfg, loadStatus, loadScope])
 
   const stale = staleIndexWarning(status, emb?.model ?? '')
   const summaryLines = lastIndex ? indexSummaryLines(lastIndex) : []
   const relHint = lastIndex ? relationHint(lastIndex) : null
+  const scopeStale = scopeMismatchWarning(status)
+  const scopeLine = lastIndex ? scopeSummaryLine(lastIndex) : null
 
   // 订阅索引实时进度(后端 CodeIndex.ProgressListener → writer.notify rag.index.progress)
   useEffect(() => {
@@ -194,7 +212,31 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
           )}
         </div>
 
-        {/* 2. 索引 */}
+        {/* 2. 索引范围 */}
+        <div className={sectionHead}>索引范围</div>
+        <div className="mb-5">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-fg">
+            <input type="checkbox" data-testid="rag-scope-tests" checked={scope.excludeTests}
+              onChange={(e) => void saveScope({ ...scope, excludeTests: e.target.checked })} />
+            排除测试文件
+          </label>
+          <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-xs text-fg">
+            <input type="checkbox" data-testid="rag-scope-docs" checked={scope.excludeDocs}
+              onChange={(e) => void saveScope({ ...scope, excludeDocs: e.target.checked })} />
+            排除文档（.md / docs/，但保留 skills 下的 md）
+          </label>
+          {/* 两个开关效果**方向相反**,只写「可能影响检索质量」会让人以为「都勾上更干净」 */}
+          <div className="mt-2 text-3xs leading-relaxed text-fg-subtle">{scopeEffectNote()}</div>
+        </div>
+        {/* 范围变了但模型没变时,staleIndexWarning 不会响 —— 它比的是模型 */}
+        {scopeStale && (
+          <div data-testid="rag-scope-stale"
+            className="mb-5 -mt-3 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-2xs leading-relaxed text-fg-muted">
+            ⚠ {scopeStale}
+          </div>
+        )}
+
+        {/* 3. 索引 */}
         <div className={sectionHead}>索引</div>
         <div className="mb-5 flex items-center gap-3">
           <span className="text-xs text-fg-muted">
@@ -217,6 +259,10 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
                 <div key={l} className="font-mono text-2xs text-fg-muted">{l}</div>
               ))}
             </div>
+            {/* 打开范围开关后块数会明显下降(9718→6283),不报会被读成索引出错 */}
+            {scopeLine && (
+              <div data-testid="rag-index-scope" className="mt-1 font-mono text-2xs text-fg-muted">{scopeLine}</div>
+            )}
             {/* 「0 关系」要么解释成正常(非 Java 项目),要么说成异常(有 Java 却 0 条) */}
             {relHint && <div className="mt-1.5 text-2xs leading-relaxed text-fg-subtle">{relHint}</div>}
           </div>

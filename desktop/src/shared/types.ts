@@ -413,6 +413,18 @@ export interface EmbeddingConfigView {
 }
 
 /**
+ * 索引范围设置（`config.getRagScope` / `config.setRagScope`）。
+ *
+ * 两个开关**效果方向相反，实测**（24 条冻结查询集，`scripts/rag-eval/`）：
+ * 排除测试 MRR +24%（好 10 差 1）；排除文档 MRR −24%（好 1 差 4）。
+ * 所以分开而不合并；默认都关（行为不变）。
+ */
+export interface RagScopeView {
+  excludeTests: boolean
+  excludeDocs: boolean
+}
+
+/**
  * 「测试连接」的回包（`config.testEmbedding` / 后端 `EmbeddingProbe`）。
  *
  * 除 `ok` 外全是可选的：字段随成败而不同，而桌面端还可能跑在旧 jar 上。
@@ -475,6 +487,15 @@ export interface RagStatus {
    */
   embeddingModel?: string
   embeddingDim?: number
+  /**
+   * 这份索引**建时**的范围设置。老索引没记过 → 两个字段都缺省，
+   * 前端据此**不比较、不猜**（宁可漏报，也不要对一份可能没问题的索引喊「快重建」）。
+   */
+  indexExcludeTests?: boolean
+  indexExcludeDocs?: boolean
+  /** **当前**配置里的范围设置（用于与上面两个比对，得出「范围不符」）。 */
+  excludeTests?: boolean
+  excludeDocs?: boolean
   error?: string
 }
 
@@ -498,6 +519,12 @@ export interface RagIndexResult {
   elapsedMs?: number
   /** 本次索引实际用的 embedding 模型(与 rag.status 的 embeddingModel 同源)。 */
   embeddingModel?: string
+  /**
+   * 被范围设置排掉的文件数。**必须显示** —— 打开开关后块数会明显下降
+   * （实测 wraith 自身排除测试后 9718→6283 块），不说的话用户会以为索引出错了。
+   */
+  excludedTests?: number
+  excludedDocs?: number
 }
 
 export interface RagSearchItem {

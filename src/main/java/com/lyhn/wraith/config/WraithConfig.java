@@ -51,6 +51,7 @@ public class WraithConfig {
     private GatewayConfig gateway;
     private SttConfig stt;
     private EmbeddingConfig embedding;
+    private RagConfig rag;
     /** 搜索后端配置。缺省时 {@code SearchProviderFactory} 回落 env / 自动选。 */
     private SearchConfig search;
     private java.util.List<PricingEntry> pricing = new java.util.ArrayList<>();
@@ -168,6 +169,28 @@ public class WraithConfig {
     }
 
     /**
+     * 索引范围设置：建索引时可选排除测试 / 文档。
+     *
+     * <p><b>刻意不塞进 {@link EmbeddingConfig}</b>：那一节是<b>后端连接参数</b>
+     * （provider / model / baseUrl / apiKey）。索引范围不是后端的属性 —— 同一个后端
+     * 可以建不同范围的索引。混在一起以后会出现「改索引范围要动 embedding 配置」这种别扭事。
+     *
+     * <p><b>两个开关分开，且默认都关</b>。分开是因为效果方向相反（实测 24 条查询集：
+     * 排除测试 MRR +24%，排除文档 MRR −24%，合并会把 +24% 拖成 +9%）；默认关是因为
+     * 改默认会让现有用户下次重建后索引静默缩小，而他们什么都没做。
+     * 判据见 {@code com.lyhn.wraith.rag.RagScopeFilter}。
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class RagConfig {
+        private boolean excludeTests;
+        private boolean excludeDocs;
+        public boolean isExcludeTests() { return excludeTests; }
+        public void setExcludeTests(boolean v) { this.excludeTests = v; }
+        public boolean isExcludeDocs() { return excludeDocs; }
+        public void setExcludeDocs(boolean v) { this.excludeDocs = v; }
+    }
+
+    /**
      * 搜索后端配置。三条路共用一个形状：provider 选谁、apiKey 给谁、baseUrl 指哪。
      *
      * <p>这一节存在的理由是<b>取值链对等</b>：此前只有 {@code GLM_API_KEY} 能回落
@@ -220,6 +243,8 @@ public class WraithConfig {
     public void setGateway(GatewayConfig gateway) { this.gateway = gateway; }
     public SttConfig getStt() { return stt; }
     public void setStt(SttConfig stt) { this.stt = stt; }
+    public RagConfig getRag() { return rag; }
+    public void setRag(RagConfig rag) { this.rag = rag; }
     public EmbeddingConfig getEmbedding() { return embedding; }
     public void setEmbedding(EmbeddingConfig embedding) { this.embedding = embedding; }
 

@@ -71,6 +71,8 @@ public class VectorStore implements AutoCloseable {
                     project_path TEXT PRIMARY KEY,
                     embedding_model TEXT,
                     embedding_dim INTEGER,
+                    exclude_tests INTEGER,
+                    exclude_docs INTEGER,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """;
@@ -87,6 +89,10 @@ public class VectorStore implements AutoCloseable {
             stmt.execute(createChunks);
             stmt.execute(createRelations);
             stmt.execute(createMeta);
+            // 老库里 index_meta 只有四列(这两列是后加的)。CREATE TABLE IF NOT EXISTS 对老库是
+            // no-op,所以必须就地补列;而重复 ALTER TABLE 会报 duplicate column,所以先查 pragma。
+            ensureColumn(stmt, "index_meta", "exclude_tests", "INTEGER");
+            ensureColumn(stmt, "index_meta", "exclude_docs", "INTEGER");
             stmt.execute(createIdxProject);
             stmt.execute(createIdxFile);
             stmt.execute(createIdxType);
@@ -342,7 +348,8 @@ public class VectorStore implements AutoCloseable {
             }
         }
         IndexMeta meta = readIndexMeta();
-        return new IndexStats(chunks, relations, meta.embeddingModel(), meta.embeddingDim());
+        return new IndexStats(chunks, relations, meta.embeddingModel(), meta.embeddingDim(),
+                meta.excludeTests(), meta.excludeDocs());
     }
 
     private double cosineSimilarity(float[] a, float[] b) {
@@ -404,52 +411,107 @@ public class VectorStore implements AutoCloseable {
      * <b>不知道就说不知道</b>，上层据此显示「未知」，不许回落成某个默认模型名。
      */
     public record IndexStats(int chunkCount, int relationCount,
-                             String embeddingModel, int embeddingDim) {
+                             String embeddingModel, int embeddingDim,
+                             Boolean excludeTests, Boolean excludeDocs) {
         /** 兼容旧构造：不带模型信息。 */
         public IndexStats(int chunkCount, int relationCount) {
-            this(chunkCount, relationCount, null, 0);
+            this(chunkCount, relationCount, null, 0, null, null);
+        }
+
+        /** 兼容旧构造：带模型但不带范围（范围未知）。 */
+        public IndexStats(int chunkCount, int relationCount, String embeddingModel, int embeddingDim) {
+            this(chunkCount, relationCount, embeddingModel, embeddingDim, null, null);
         }
     }
 
     /** 索引元数据。字段含义同 {@link IndexStats}。 */
-    public record IndexMeta(String embeddingModel, int embeddingDim) {}
+    /**
+     * 索引元数据。
+     *
+     * <p>{@code excludeTests} / {@code excludeDocs} 用<b>装箱 Boolean</b>：
+     * {@code null} 表示<b>不知道</b>（老索引没记过），与「知道是关的」（{@code FALSE}）
+     * 不是一回事。当成 false 会对老索引误报「范围不符」。
+     */
+    public record IndexMeta(String embeddingModel, int embeddingDim,
+                            Boolean excludeTests, Boolean excludeDocs) {
+        /** 兼容旧构造：范围未知。 */
+        public IndexMeta(String embeddingModel, int embeddingDim) {
+            this(embeddingModel, embeddingDim, null, null);
+        }
+    }
+
+    /** 幂等补列：已存在就跳过。老库迁移用。 */
+    private static void ensureColumn(Statement stmt, String table, String column, String type)
+            throws SQLException {
+        try (ResultSet rs = stmt.executeQuery("PRAGMA table_info(" + table + ")")) {
+            while (rs.next()) {
+                if (column.equalsIgnoreCase(rs.getString("name"))) {
+                    return;
+                }
+            }
+        }
+        stmt.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + type);
+    }
 
     /**
      * 记下这份索引是用哪个模型、多少维建的。空模型名不写 —— 存个空串等于假装记录过。
      */
     public void recordIndexMeta(String embeddingModel, int embeddingDim) throws SQLException {
+        recordIndexMeta(embeddingModel, embeddingDim, null, null);
+    }
+
+    /**
+     * 带范围的版本。{@code excludeTests}/{@code excludeDocs} 传 {@code null} = 不记录范围
+     * （保持「未知」），供只知道模型的调用点使用。
+     */
+    public void recordIndexMeta(String embeddingModel, int embeddingDim,
+                                Boolean excludeTests, Boolean excludeDocs) throws SQLException {
         if (embeddingModel == null || embeddingModel.isBlank()) {
             return;
         }
         String sql = """
-                INSERT INTO index_meta (project_path, embedding_model, embedding_dim, updated_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO index_meta (project_path, embedding_model, embedding_dim,
+                                        exclude_tests, exclude_docs, updated_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(project_path) DO UPDATE SET
                     embedding_model = excluded.embedding_model,
                     embedding_dim = excluded.embedding_dim,
+                    exclude_tests = excluded.exclude_tests,
+                    exclude_docs = excluded.exclude_docs,
                     updated_at = CURRENT_TIMESTAMP
                 """;
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, projectPath);
             ps.setString(2, embeddingModel.trim());
             ps.setInt(3, embeddingDim);
+            if (excludeTests == null) ps.setNull(4, java.sql.Types.INTEGER);
+            else ps.setInt(4, excludeTests ? 1 : 0);
+            if (excludeDocs == null) ps.setNull(5, java.sql.Types.INTEGER);
+            else ps.setInt(5, excludeDocs ? 1 : 0);
             ps.executeUpdate();
         }
     }
 
     /** 读回元数据；没记过时两个字段分别是 {@code null} 与 {@code 0}。 */
     public IndexMeta readIndexMeta() throws SQLException {
-        String sql = "SELECT embedding_model, embedding_dim FROM index_meta WHERE project_path = ?";
+        String sql = "SELECT embedding_model, embedding_dim, exclude_tests, exclude_docs"
+                + " FROM index_meta WHERE project_path = ?";
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.setString(1, projectPath);
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     String model = rs.getString("embedding_model");
+                    // getBoolean 对 SQL NULL 返回 false —— 那会把「不知道」读成「知道是关的」,
+                    // 于是对老索引误报「范围不符」。必须靠 wasNull 区分。
+                    int t = rs.getInt("exclude_tests");
+                    Boolean tests = rs.wasNull() ? null : t != 0;
+                    int d = rs.getInt("exclude_docs");
+                    Boolean docs = rs.wasNull() ? null : d != 0;
                     return new IndexMeta(model == null || model.isBlank() ? null : model,
-                            rs.getInt("embedding_dim"));
+                            rs.getInt("embedding_dim"), tests, docs);
                 }
             }
         }
-        return new IndexMeta(null, 0);
+        return new IndexMeta(null, 0, null, null);
     }
 }

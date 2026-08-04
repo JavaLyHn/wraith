@@ -1,3 +1,5 @@
+import type { RagStatus, RagIndexResult } from '../../shared/types'
+
 /** RAG embedding 后端的每 provider 默认(与后端 EmbeddingClient.of 对齐,供表单占位)。 */
 export function embeddingDefaults(provider: string): { model: string; baseUrl: string } {
   switch ((provider || '').toLowerCase()) {
@@ -91,4 +93,61 @@ export function relationHint(r: {
   }
   return `扫到了 ${r.javaFileCount} 个 Java 文件却没有解析出任何关系，这不正常 —— `
     + '可能是解析失败（进度里应有「分块失败」字样），建议重试或查看日志。'
+}
+
+/**
+ * 「索引是在不同范围设置下建的」提示。返回 `null` = 不必提示。
+ *
+ * **这是范围开关最容易漏的一环**：范围变了但 embedding 模型没变时，已有的
+ * `staleIndexWarning`（比模型）与后端 `EmbeddingProbe.compatibilityWarning`（比模型/维度）
+ * **都不会响**。用户打开「排除测试」却没重建，索引里测试还在、检索照样返回测试，
+ * 而界面一个字都不说 —— 本仓库第 9 次 snapshot-vs-live，只不过陈旧的是「范围」不是「模型」。
+ *
+ * 判据与模型比较同一条纪律：**任一侧未知就不比较**。老索引没记过范围
+ * （`indexExclude*` 缺省）时不提示 —— 宁可漏报，也不要对着一份可能没问题的索引喊「快重建」。
+ */
+export function scopeMismatchWarning(status: RagStatus | null): string | null {
+  if (!status || !status.indexed) return null
+  const parts: string[] = []
+  if (typeof status.indexExcludeTests === 'boolean'
+      && status.indexExcludeTests !== !!status.excludeTests) {
+    parts.push(status.excludeTests
+      ? '当前设置要排除测试，但这份索引里含测试'
+      : '当前设置要包含测试，但这份索引建时排除了测试')
+  }
+  if (typeof status.indexExcludeDocs === 'boolean'
+      && status.indexExcludeDocs !== !!status.excludeDocs) {
+    parts.push(status.excludeDocs
+      ? '当前设置要排除文档，但这份索引里含文档'
+      : '当前设置要包含文档，但这份索引建时排除了文档')
+  }
+  if (parts.length === 0) return null
+  return parts.join('；') + '。检索结果会与设置不符 —— 请点「重建索引」。'
+}
+
+/**
+ * 范围开关的效果说明（表单下面那行小字）。
+ *
+ * **必须带实测数字**：两个开关的效果**方向相反**，只写「可能影响检索质量」会让人
+ * 误以为「都勾上更干净」。数字来自 24 条冻结查询集（`scripts/rag-eval/`）。
+ */
+export function scopeEffectNote(): string {
+  return '实测（24 条查询集）：排除测试 MRR +24%（检索质量明显变好）；'
+    + '排除文档 MRR −24%（变差——「为什么这么设计」类问题的答案只在 docs 里，'
+    + '这个开关适合「只想省索引时间/磁盘」）。改完需要点「重建索引」才生效。'
+}
+
+/**
+ * 「本次索引按范围排除了多少」的一行。返回 `null` = 没排除任何东西，整行不出现。
+ *
+ * 不报的话，用户看到块数从 9718 掉到 6283 会以为索引出错了。
+ */
+export function scopeSummaryLine(r: RagIndexResult): string | null {
+  const t = r.excludedTests ?? 0
+  const d = r.excludedDocs ?? 0
+  if (t + d === 0) return null
+  const bits: string[] = []
+  if (t > 0) bits.push(`${t} 个测试文件`)
+  if (d > 0) bits.push(`${d} 个文档文件`)
+  return `按范围设置排除 ${bits.join('、')}`
 }

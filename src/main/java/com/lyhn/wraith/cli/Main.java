@@ -1932,6 +1932,27 @@ public class Main {
                                 () -> com.lyhn.wraith.rag.EmbeddingProbe.probe(client, indexMeta, key),
                                 embedProbeTimeoutSeconds());
                     }
+                    /** 当前索引范围设置(没配过 = 两个都关)。 */
+                    private boolean[] ragScope() {
+                        com.lyhn.wraith.config.WraithConfig.RagConfig r =
+                                com.lyhn.wraith.config.WraithConfig.load().getRag();
+                        return new boolean[]{r != null && r.isExcludeTests(), r != null && r.isExcludeDocs()};
+                    }
+                    public java.util.Map<String, Object> ragScopeGet() {
+                        boolean[] sc = ragScope();
+                        return java.util.Map.of("excludeTests", sc[0], "excludeDocs", sc[1]);
+                    }
+                    public java.util.Map<String, Object> ragScopeSet(boolean excludeTests, boolean excludeDocs) {
+                        com.lyhn.wraith.config.WraithConfig cfg = com.lyhn.wraith.config.WraithConfig.load();
+                        com.lyhn.wraith.config.WraithConfig.RagConfig r = cfg.getRag();
+                        if (r == null) { r = new com.lyhn.wraith.config.WraithConfig.RagConfig(); cfg.setRag(r); }
+                        r.setExcludeTests(excludeTests);
+                        r.setExcludeDocs(excludeDocs);
+                        cfg.save();
+                        // 刻意**不**自动重建索引:那是一次整库扫描(本机 bge-m3 实测 18 分 13 秒),
+                        // 不该由一次勾选触发。面板靠 rag.status 回的索引范围提示「范围不符」。
+                        return java.util.Map.of("ok", true);
+                    }
                     public java.util.Map<String, Object> searchStatus() {
                         // 问的是 agent 自己那个 registry —— 用户刚 /config search 写完并 invalidate 过,
                         // 这里就能立刻反映出来,不需要重启后端。
@@ -1969,6 +1990,14 @@ public class Main {
                                 out.put("embeddingModel", s.embeddingModel());
                                 out.put("embeddingDim", s.embeddingDim());
                             }
+                            // 索引**建时的范围**。与当前设置不一致时面板提示重建 ——
+                            // 范围变了但模型没变时,已有的陈旧检测都不会响(比的是模型和维度)。
+                            // 老索引没记过时这两个字段**不出现**,前端据此不比较、不猜。
+                            if (s.excludeTests() != null) out.put("indexExcludeTests", s.excludeTests());
+                            if (s.excludeDocs() != null) out.put("indexExcludeDocs", s.excludeDocs());
+                            boolean[] cur = ragScope();
+                            out.put("excludeTests", cur[0]);
+                            out.put("excludeDocs", cur[1]);
                             return out;
                         } catch (Exception ex) {
                             return java.util.Map.of("indexed", false, "chunkCount", 0, "relationCount", 0, "error", ex.getClass().getSimpleName());
@@ -1995,8 +2024,9 @@ public class Main {
                             // 索引进度经 writer 推 rag.index.progress 事件(writer 线程安全;桌面面板订阅显示)
                             com.lyhn.wraith.rag.CodeIndex.ProgressListener pl =
                                     m -> writer.notify("rag.index.progress", java.util.Map.of("message", m == null ? "" : m));
+                            boolean[] sc = ragScope();
                             com.lyhn.wraith.rag.CodeIndex.IndexResult res =
-                                    new com.lyhn.wraith.rag.CodeIndex(ec, pl).index(root);
+                                    new com.lyhn.wraith.rag.CodeIndex(ec, pl, sc[0], sc[1]).index(root);
                             agent.getToolRegistry().setProjectPath(root); // search_code 工具同库
                             agent.getMemoryManager().setProjectPath(root);
                             java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
@@ -2013,6 +2043,10 @@ public class Main {
                             // 残缺索引必须能被面板看见:只回 chunkCount 会让「已索引 N 块」看起来一切正常
                             m.put("failedChunks", res.failedChunks());
                             m.put("failedFiles", res.failedFiles());
+                            // 被范围设置排掉多少:打开开关后块数会明显下降(实测 wraith 自身
+                            // 排除测试后 9718→6223 块),不报的话用户会以为索引出错了。
+                            m.put("excludedTests", res.excludedTests());
+                            m.put("excludedDocs", res.excludedDocs());
                             return m;
                         } catch (Exception ex) {
                             return java.util.Map.of("error", ex.getClass().getSimpleName());

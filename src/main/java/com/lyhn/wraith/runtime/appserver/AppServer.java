@@ -275,6 +275,17 @@ public final class AppServer {
         default java.util.Map<String, Object> embeddingSet(String provider, String model, String baseUrl, String apiKey) {
             throw new UnsupportedOperationException("embeddingSet not implemented");
         }
+        /** 读索引范围设置 {@code {excludeTests, excludeDocs}}。默认抛出。 */
+        default java.util.Map<String, Object> ragScopeGet() {
+            throw new UnsupportedOperationException("ragScopeGet not implemented");
+        }
+        /**
+         * 写索引范围设置。<b>只写配置，不动索引</b> —— 改完要重建索引才生效，
+         * 面板据 {@code rag.status} 回的索引范围提示「范围不符」。默认抛出。
+         */
+        default java.util.Map<String, Object> ragScopeSet(boolean excludeTests, boolean excludeDocs) {
+            throw new UnsupportedOperationException("ragScopeSet not implemented");
+        }
         /**
          * 「测试连接」：用表单值发一次真实 embedding 请求，回
          * {@code {ok, dim, latencyMs, provider, model, baseUrl, warning?}} 或 {@code {ok:false, error, hint?}}。
@@ -827,6 +838,21 @@ public final class AppServer {
                 String baseUrl = (p != null && p.hasNonNull("baseUrl")) ? p.get("baseUrl").asText() : "";
                 String apiKey = (p != null && p.hasNonNull("apiKey")) ? p.get("apiKey").asText() : "";
                 try { writer.result(msg.id(), session.embeddingSet(provider, model, baseUrl, apiKey)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.getRagScope" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.ragScopeGet()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.setRagScope" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                boolean et = p != null && p.hasNonNull("excludeTests") && p.get("excludeTests").asBoolean();
+                boolean ed = p != null && p.hasNonNull("excludeDocs") && p.get("excludeDocs").asBoolean();
+                try { writer.result(msg.id(), session.ragScopeSet(et, ed)); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

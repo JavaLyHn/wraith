@@ -54,11 +54,30 @@ public class CodeIndex {
     }
 
     public CodeIndex(EmbeddingClient embeddingClient, ProgressListener progressListener) {
+        this(embeddingClient, progressListener, false, false);
+    }
+
+    /** 带索引范围开关。判据见 {@link RagScopeFilter};两个都 false = 与引入开关前完全一致。 */
+    public CodeIndex(EmbeddingClient embeddingClient, boolean excludeTests, boolean excludeDocs) {
+        this(embeddingClient, ProgressListener.noop(), excludeTests, excludeDocs);
+    }
+
+    public CodeIndex(EmbeddingClient embeddingClient, ProgressListener progressListener,
+                     boolean excludeTests, boolean excludeDocs) {
         this.embeddingClient = embeddingClient;
         this.chunker = new CodeChunker();
         this.analyzer = new CodeAnalyzer();
         this.progressListener = progressListener == null ? ProgressListener.noop() : progressListener;
+        this.excludeTests = excludeTests;
+        this.excludeDocs = excludeDocs;
     }
+
+    /** 索引范围:排除测试 / 排除文档。默认都关。 */
+    private final boolean excludeTests;
+    private final boolean excludeDocs;
+    /** 本次被范围设置排掉的文件数,回给面板 —— 不报的话用户看到块数暴跌会以为索引出错了。 */
+    private int excludedTests;
+    private int excludedDocs;
 
     /**
      * 索引指定路径的代码库
@@ -79,7 +98,10 @@ public class CodeIndex {
 
         List<Path> filesToIndex = new ArrayList<>();
         collectFiles(root, filesToIndex);
-        emit("📁 发现 " + filesToIndex.size() + " 个文件待索引");
+        emit("📁 发现 " + filesToIndex.size() + " 个文件待索引"
+                + (excludedTests + excludedDocs > 0
+                   ? "(按范围设置排除 " + excludedTests + " 个测试文件、" + excludedDocs + " 个文档文件)"
+                   : ""));
 
         // ── 阶段 1:分块 + 关系分析 ──────────────────────────────────────────
         // 刻意串行:CodeChunker / CodeAnalyzer 各自持有一个复用的 JavaParser 实例，不是线程安全的；
@@ -113,8 +135,12 @@ public class CodeIndex {
             store.insertRelations(allRelations);
             // 记下这份索引用的是哪个模型/多少维。换模型不重建索引会让检索全军覆没
             // (相关度全 0),面板要靠这条在「保存 Embedding 配置」那一刻就提示重建。
+            // 范围也必须记下:范围变了但模型没变时,已有的两处陈旧检测(staleIndexWarning /
+            // compatibilityWarning)都不会响 —— 它们比的是模型和维度。用户开了开关却没重建,
+            // 索引里测试还在、检索照样返回测试,而界面一个字都不说(第 9 次 snapshot-vs-live)。
             store.recordIndexMeta(embeddingClient.getModel(),
-                    embedded.entries.isEmpty() ? 0 : embedded.entries.get(0).embedding().length);
+                    embedded.entries.isEmpty() ? 0 : embedded.entries.get(0).embedding().length,
+                    excludeTests, excludeDocs);
 
             VectorStore.IndexStats stats = store.getStats();
             Set<String> failedFiles = new LinkedHashSet<>(chunkFailedFiles);
@@ -124,7 +150,7 @@ public class CodeIndex {
             long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
             return new IndexResult(stats.chunkCount(), stats.relationCount(), msg,
                     embedded.failedChunks, failedFiles.size(),
-                    filesToIndex.size(), javaFiles, elapsedMs);
+                    filesToIndex.size(), javaFiles, elapsedMs, excludedTests, excludedDocs);
         } catch (Exception e) {
             String error = "持久化失败: " + e.getMessage();
             emit("❌ " + error);
@@ -137,9 +163,24 @@ public class CodeIndex {
      * 索引小结。有任何失败时必须把「不完整」和首个失败原因说出来 —— 残缺索引最坏的形态是
      * 静默:面板显示「已索引 N 块」，用户以为搜得全，实际有一批代码永远搜不到。
      */
+    /**
+     * 范围排除了多少的一句补充。
+     *
+     * <p>必须说 —— 打开开关后块数会明显下降（实测 wraith 自身排除测试后 9718→6223 块），
+     * 不说的话用户看到数字暴跌会以为索引出错了。全部被排掉时更要说清是范围造成的，
+     * 而不是「没有代码文件」。
+     */
+    private String scopeNote() {
+        if (excludedTests + excludedDocs == 0) {
+            return "";
+        }
+        return String.format("；按范围设置排除了 %d 个测试文件、%d 个文档文件", excludedTests, excludedDocs);
+    }
+
     private String summarize(VectorStore.IndexStats stats, EmbedOutcome embedded, int failedFileCount) {
         if (embedded.failedChunks == 0 && failedFileCount == 0) {
-            return String.format("索引完成：%d 个代码块，%d 条关系", stats.chunkCount(), stats.relationCount());
+            return String.format("索引完成：%d 个代码块，%d 条关系", stats.chunkCount(), stats.relationCount())
+                    + scopeNote();
         }
         String reason = embedded.firstError == null ? "" : "；首个失败原因：" + embedded.firstError;
         String base = String.format("索引完成但不完整：%d 个代码块，%d 条关系（%d 个代码块向量化失败，涉及 %d 个文件失败，"
@@ -270,7 +311,7 @@ public class CodeIndex {
     /**
      * 收集需要索引的文件（排除常见非代码目录）
      */
-    private void collectFiles(Path root, List<Path> files) {
+    private void collectFiles(final Path root, List<Path> files) {
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
                 @Override
@@ -300,7 +341,17 @@ public class CodeIndex {
                             || name.endsWith(".yaml") || name.endsWith(".yml")
                             || name.endsWith(".json") || name.endsWith(".sh")
                             || name.endsWith(".gradle") || name.endsWith(".kt")) {
-                        files.add(file);
+                        // 范围过滤放在**收集阶段**:唯一的真成本是逐块 embedding 的网络往返,
+                        // 在这里排掉,分块、关系分析、embedding 三样全省。
+                        // 同一份 filesToIndex 既喂 chunker 也喂 analyzer,所以块与关系自动一致。
+                        String rel = root.relativize(file).toString();
+                        if (excludeTests && RagScopeFilter.isTest(rel)) {
+                            excludedTests++;
+                        } else if (excludeDocs && RagScopeFilter.isDoc(rel)) {
+                            excludedDocs++;
+                        } else {
+                            files.add(file);
+                        }
                     }
                     return FileVisitResult.CONTINUE;
                 }
@@ -331,14 +382,22 @@ public class CodeIndex {
      */
     public record IndexResult(int chunkCount, int relationCount, String message,
                               int failedChunks, int failedFiles,
-                              int fileCount, int javaFileCount, long elapsedMs) {
+                              int fileCount, int javaFileCount, long elapsedMs,
+                              int excludedTests, int excludedDocs) {
         public IndexResult(int chunkCount, int relationCount, String message) {
-            this(chunkCount, relationCount, message, 0, 0, 0, 0, 0L);
+            this(chunkCount, relationCount, message, 0, 0, 0, 0, 0L, 0, 0);
         }
 
         public IndexResult(int chunkCount, int relationCount, String message,
                            int failedChunks, int failedFiles) {
-            this(chunkCount, relationCount, message, failedChunks, failedFiles, 0, 0, 0L);
+            this(chunkCount, relationCount, message, failedChunks, failedFiles, 0, 0, 0L, 0, 0);
+        }
+
+        public IndexResult(int chunkCount, int relationCount, String message,
+                           int failedChunks, int failedFiles,
+                           int fileCount, int javaFileCount, long elapsedMs) {
+            this(chunkCount, relationCount, message, failedChunks, failedFiles,
+                    fileCount, javaFileCount, elapsedMs, 0, 0);
         }
     }
 }
