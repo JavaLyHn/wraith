@@ -35,3 +35,60 @@ export function staleIndexWarning(
   return `索引是用 ${indexed} 建的，当前 Embedding 模型是 ${current}。`
     + `不同模型的向量维度不同 —— 不重建索引就检索，相关度会全为 0（等于搜不到）。请点「重建索引」。`
 }
+
+/** 毫秒 → 人读的时长。 */
+function humanMs(ms: number): string {
+  if (ms < 1000) return `${ms} 毫秒`
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s} 秒`
+  const m = Math.floor(s / 60)
+  return `${m} 分 ${s % 60} 秒`
+}
+
+/**
+ * 建完索引后的明细行。
+ *
+ * 用户实测:建完只剩「已索引 326 块 · 0 关系」——「没有结果展示」。这里把 rag.index 的回包
+ * 摊成几行看得懂的东西。**缺的字段整行不出现**（老后端不回这些字段），
+ * 绝不显示「文件 undefined 个」。
+ */
+export function indexSummaryLines(r: {
+  chunkCount?: number; relationCount?: number; fileCount?: number
+  javaFileCount?: number; elapsedMs?: number; embeddingModel?: string
+  failedChunks?: number; failedFiles?: number
+}): string[] {
+  const lines: string[] = []
+  if (typeof r.fileCount === 'number') lines.push(`扫描文件 ${r.fileCount} 个`)
+  if (typeof r.chunkCount === 'number') lines.push(`切出代码块 ${r.chunkCount} 个`)
+  if (typeof r.relationCount === 'number') lines.push(`代码关系 ${r.relationCount} 条`)
+  if (r.embeddingModel) lines.push(`向量化模型 ${r.embeddingModel}`)
+  if (typeof r.elapsedMs === 'number' && r.elapsedMs > 0) lines.push(`耗时 ${humanMs(r.elapsedMs)}`)
+  if ((r.failedChunks ?? 0) > 0) {
+    lines.push(`⚠ ${r.failedChunks} 个代码块向量化失败`
+      + (typeof r.failedFiles === 'number' ? `（涉及 ${r.failedFiles} 个文件）` : '')
+      + ' —— 这些代码搜不到，建议重试')
+  }
+  return lines
+}
+
+/**
+ * 「0 关系」要不要解释、怎么解释。返回 `null` = 不必解释。
+ *
+ * **关系图谱只从 `.java` 提取**（`CodeIndex` 里 `endsWith(".java")` 那一句），
+ * 所以非 Java 项目必然是 0 —— 那是正常现象。但**有** Java 文件却仍然 0 关系，
+ * 那才是异常，得说成异常，不能被上一句借口盖过去。
+ *
+ * `javaFileCount` 未知（老后端）时不猜、不解释。
+ */
+export function relationHint(r: {
+  relationCount?: number; javaFileCount?: number
+}): string | null {
+  if (typeof r.relationCount !== 'number' || r.relationCount > 0) return null
+  if (typeof r.javaFileCount !== 'number') return null
+  if (r.javaFileCount === 0) {
+    return '关系图谱目前只从 .java 文件提取，本次没有扫到 Java 文件 —— 所以 0 条关系是正常的，'
+      + '语义检索不受影响。'
+  }
+  return `扫到了 ${r.javaFileCount} 个 Java 文件却没有解析出任何关系，这不正常 —— `
+    + '可能是解析失败（进度里应有「分块失败」字样），建议重试或查看日志。'
+}

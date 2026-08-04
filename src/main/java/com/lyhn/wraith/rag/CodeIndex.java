@@ -67,6 +67,7 @@ public class CodeIndex {
      * @return 索引统计信息
      */
     public IndexResult index(String projectPath) {
+        long startedAt = System.nanoTime();
         Path root = Paths.get(projectPath).toAbsolutePath().normalize();
         if (!Files.exists(root)) {
             String message = "路径不存在: " + projectPath;
@@ -87,10 +88,12 @@ public class CodeIndex {
         List<CodeRelation> allRelations = new ArrayList<>();
         Set<String> chunkFailedFiles = new LinkedHashSet<>();
 
+        int javaFiles = 0;
         for (Path file : filesToIndex) {
             try {
                 allChunks.addAll(chunker.chunkFile(file));
                 if (file.toString().endsWith(".java")) {
+                    javaFiles++;
                     allRelations.addAll(analyzer.analyzeFile(file));
                 }
             } catch (Exception e) {
@@ -118,8 +121,10 @@ public class CodeIndex {
             failedFiles.addAll(embedded.failedFiles);
             String msg = summarize(stats, embedded, failedFiles.size());
             emit("✅ " + msg);
+            long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000;
             return new IndexResult(stats.chunkCount(), stats.relationCount(), msg,
-                    embedded.failedChunks, failedFiles.size());
+                    embedded.failedChunks, failedFiles.size(),
+                    filesToIndex.size(), javaFiles, elapsedMs);
         } catch (Exception e) {
             String error = "持久化失败: " + e.getMessage();
             emit("❌ " + error);
@@ -212,7 +217,12 @@ public class CodeIndex {
                     }
                     int n = done.incrementAndGet();
                     if (n % step == 0 || n == total) {
-                        emit(String.format("   进度: %d/%d 块", n, total));
+                        // 只有 n/m 等于什么都没说(用户原话:「仅仅是数字变化,没有详细的内容」)。
+                        // 带上刚完成的那一块所在文件 —— 措辞是「刚完成」而不是「正在处理」:
+                        // 并发 8 条时"当前"没有唯一答案,说成正在处理就是一句不准的话。
+                        // 只取文件名,全路径会把那一行撑爆。
+                        emit(String.format("   进度 %d%%  %d/%d 块 · 刚完成 %s",
+                                n * 100 / total, n, total, fileNameOf(chunk.filePath())));
                     }
                 }));
             }
@@ -231,6 +241,15 @@ public class CodeIndex {
             pool.shutdownNow();
         }
         return new EmbedOutcome(new ArrayList<>(entries), failedFiles, failedChunks.get(), firstError.get());
+    }
+
+    /** 取路径的最后一段（同时兼容 / 与 \\，Windows 上路径分隔符是后者）。 */
+    private static String fileNameOf(String path) {
+        if (path == null || path.isEmpty()) {
+            return "(未知文件)";
+        }
+        int cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+        return cut >= 0 && cut + 1 < path.length() ? path.substring(cut + 1) : path;
     }
 
     /**
@@ -295,10 +314,24 @@ public class CodeIndex {
      * @param failedChunks 向量化失败的代码块数(>0 即索引不完整,这些代码搜不到)
      * @param failedFiles  至少有一个块失败的文件数
      */
+    /**
+     * 索引结果。
+     *
+     * <p>{@code fileCount} / {@code javaFileCount} / {@code elapsedMs} 是后补的：面板此前只能
+     * 显示「已索引 N 块 · M 关系」，说不出「索引了什么」。其中 {@code javaFileCount} 尤其重要 ——
+     * <b>关系图谱只从 {@code .java} 提取</b>，非 Java 项目必然 0 关系，
+     * 界面得能据此解释而不是让用户以为失败了。
+     */
     public record IndexResult(int chunkCount, int relationCount, String message,
-                              int failedChunks, int failedFiles) {
+                              int failedChunks, int failedFiles,
+                              int fileCount, int javaFileCount, long elapsedMs) {
         public IndexResult(int chunkCount, int relationCount, String message) {
-            this(chunkCount, relationCount, message, 0, 0);
+            this(chunkCount, relationCount, message, 0, 0, 0, 0, 0L);
+        }
+
+        public IndexResult(int chunkCount, int relationCount, String message,
+                           int failedChunks, int failedFiles) {
+            this(chunkCount, relationCount, message, failedChunks, failedFiles, 0, 0, 0L);
         }
     }
 }

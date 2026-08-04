@@ -462,6 +462,18 @@ export interface RagIndexResult {
   /** >0 表示索引残缺:这些代码块向量化失败,搜不到 */
   failedChunks?: number
   failedFiles?: number
+  /** 扫到并索引的文件数。面板据此说明「索引了什么」,而不是只报块数。 */
+  fileCount?: number
+  /**
+   * 其中 `.java` 文件数。
+   *
+   * **关系图谱只从 `.java` 提取**,所以非 Java 项目必然是 0 关系 —— 面板要靠这个字段
+   * 把「0 关系」解释成正常现象,而不是让用户以为索引失败了。
+   */
+  javaFileCount?: number
+  elapsedMs?: number
+  /** 本次索引实际用的 embedding 模型(与 rag.status 的 embeddingModel 同源)。 */
+  embeddingModel?: string
 }
 
 export interface RagSearchItem {

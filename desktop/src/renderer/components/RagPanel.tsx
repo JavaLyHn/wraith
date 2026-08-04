@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft, ScanSearch, Database, Search, Network, Save } from 'lucide-react'
-import type { EmbeddingConfigView, RagStatus, RagSearchItem, RagRelation } from '../../shared/types'
-import { embeddingDefaults, staleIndexWarning } from '../lib/ragView'
+import type { EmbeddingConfigView, RagStatus, RagSearchItem, RagRelation, RagIndexResult } from '../../shared/types'
+import { embeddingDefaults, staleIndexWarning, indexSummaryLines, relationHint } from '../lib/ragView'
 
 type Draft = { provider: string; model: string; baseUrl: string; apiKey: string }
 
@@ -18,6 +18,8 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   const [relations, setRelations] = useState<RagRelation[] | null>(null)
   const [graphBusy, setGraphBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  // 上一次索引的明细。此前建完只留一句「已索引 N 块 · M 关系」——用户原话「没有结果展示」。
+  const [lastIndex, setLastIndex] = useState<RagIndexResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const loadCfg = useCallback(async (): Promise<void> => {
@@ -34,6 +36,8 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   useEffect(() => { void loadCfg(); void loadStatus() }, [loadCfg, loadStatus])
 
   const stale = staleIndexWarning(status, emb?.model ?? '')
+  const summaryLines = lastIndex ? indexSummaryLines(lastIndex) : []
+  const relHint = lastIndex ? relationHint(lastIndex) : null
 
   // 订阅索引实时进度(后端 CodeIndex.ProgressListener → writer.notify rag.index.progress)
   useEffect(() => {
@@ -62,12 +66,13 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
     setIndexBusy(true); setNotice(null); setError(null); setIndexProgress('')
     try {
       const r = await window.wraith.ragIndex()
+      setLastIndex(r.error ? null : r)
       if (r.error) setError('索引失败:' + r.error)
       else if ((r.failedChunks ?? 0) > 0) {
         // 残缺索引不能只报成功数:那会让人以为搜得全,其实有一批代码永远搜不到
         setError(`索引不完整:成功 ${r.chunkCount ?? 0} 块,${r.failedChunks} 块失败`
           + `(涉及 ${r.failedFiles ?? 0} 个文件)。${r.message ?? ''}`)
-      } else setNotice(`✅ 已索引 ${r.chunkCount ?? 0} 块 · ${r.relationCount ?? 0} 关系`)
+      } else setNotice('✅ 索引完成')
       void loadStatus()
     } catch (err) { setError((err as Error).message) }
     finally { setIndexBusy(false); setIndexProgress('') }
@@ -157,6 +162,20 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
         {indexBusy && (
           <div className="mb-5 -mt-3 truncate font-mono text-3xs text-fg-subtle">{indexProgress || '正在建立索引…(大库可能数分钟)'}</div>
         )}
+        {/* 建完之后的明细。此前只有一句「已索引 N 块 · M 关系」,说不出索引了什么。 */}
+        {!indexBusy && lastIndex && summaryLines.length > 0 && (
+          <div data-testid="rag-index-summary" className="mb-5 -mt-3 rounded-lg border border-border bg-surface/40 px-3 py-2">
+            <div className="mb-1 text-3xs uppercase tracking-wider text-fg-subtle">本次索引</div>
+            <div className="flex flex-col gap-0.5">
+              {summaryLines.map((l) => (
+                <div key={l} className="font-mono text-2xs text-fg-muted">{l}</div>
+              ))}
+            </div>
+            {/* 「0 关系」要么解释成正常(非 Java 项目),要么说成异常(有 Java 却 0 条) */}
+            {relHint && <div className="mt-1.5 text-2xs leading-relaxed text-fg-subtle">{relHint}</div>}
+          </div>
+        )}
+
         {/* 索引是旧模型建的:比的是**已保存**的 emb.model,不是 draft.model ——
             用户正在输入框里打字的中间态不该触发警告。 */}
         {!indexBusy && stale && (

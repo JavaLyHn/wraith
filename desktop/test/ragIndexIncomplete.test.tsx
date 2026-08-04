@@ -46,22 +46,35 @@ describe('RagPanel 索引结果', () => {
     expect(screen.queryByText(/✅ 已索引/)).toBeNull()
   })
 
-  it('全部成功 → 走原来的成功提示,不出现「不完整」字样', async () => {
-    mockWraith({ chunkCount: 7173, relationCount: 2200, failedChunks: 0, failedFiles: 0, message: '索引完成：7173 个代码块，2200 条关系' })
+  // 这两条原先钉的是提示文案里的数字(「✅ 已索引 7173 块」)。数字现在搬进了「本次索引」明细块
+  // (用户原话:建完「没有结果展示」),提示只留一句「✅ 索引完成」。意图不变:成功路径给成功提示、
+  // 不出现「不完整」;缺字段不误报。只是断言换到数字实际所在的位置。
+  it('全部成功 → 给成功提示,数字进明细块,不出现「不完整」字样', async () => {
+    mockWraith({
+      chunkCount: 7173, relationCount: 2200, failedChunks: 0, failedFiles: 0,
+      fileCount: 900, javaFileCount: 800, elapsedMs: 5000,
+      message: '索引完成：7173 个代码块，2200 条关系',
+    })
     render(<RagPanel onBack={() => {}} />)
     fireEvent.click(await screen.findByText('建立索引'))
 
-    await waitFor(() => expect(screen.getByText(/✅ 已索引 7173 块/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/✅ 索引完成/)).toBeTruthy())
+    const summary = screen.getByTestId('rag-index-summary').textContent ?? ''
+    expect(summary).toContain('7173')      // 块数
+    expect(summary).toContain('2200')      // 关系数
+    expect(summary).toContain('900')       // 文件数
     expect(screen.queryByText(/不完整/)).toBeNull()
   })
 
   it('后端缺 failedChunks 字段(旧 jar)时不误报不完整', async () => {
     // 桌面可能跑在旧 jar 上:字段缺失 ≠ 失败
-    mockWraith({ chunkCount: 100, relationCount: 10, message: '索引完成：100 个代码块，10 条关系' })
+    mockWraith({ chunkCount: 100, relationCount: 10, fileCount: 20, javaFileCount: 20,
+      message: '索引完成：100 个代码块，10 条关系' })
     render(<RagPanel onBack={() => {}} />)
     fireEvent.click(await screen.findByText('建立索引'))
 
-    await waitFor(() => expect(screen.getByText(/✅ 已索引 100 块/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/✅ 索引完成/)).toBeTruthy())
+    expect(screen.getByTestId('rag-index-summary').textContent ?? '').toContain('100')
     expect(screen.queryByText(/不完整/)).toBeNull()
   })
 })

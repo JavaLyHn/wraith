@@ -1957,6 +1957,13 @@ public class Main {
                             m.put("chunkCount", res.chunkCount());
                             m.put("relationCount", res.relationCount());
                             m.put("message", res.message() != null ? res.message() : "");
+                            // 面板要靠这三个说明「索引了什么」。javaFileCount 尤其重要:
+                            // 关系图谱只从 .java 提取,非 Java 项目必然 0 关系 —— 界面得能据此解释,
+                            // 而不是让用户以为索引失败了。
+                            m.put("fileCount", res.fileCount());
+                            m.put("javaFileCount", res.javaFileCount());
+                            m.put("elapsedMs", res.elapsedMs());
+                            m.put("embeddingModel", ec.getModel());
                             // 残缺索引必须能被面板看见:只回 chunkCount 会让「已索引 N 块」看起来一切正常
                             m.put("failedChunks", res.failedChunks());
                             m.put("failedFiles", res.failedFiles());
