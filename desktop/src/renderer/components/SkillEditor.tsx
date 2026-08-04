@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { SkillDetail } from '../../shared/types'
 import { validateSkillName, toUpsertPayload, scopeToCleanup, type SkillFormState } from '../lib/skillEditor'
 import Select from './ui/select'
+import { configPathLabel } from '../lib/configPathDisplay'
 
 interface Props {
   initial?: SkillDetail     // 编辑时预填;新建为 undefined
@@ -86,7 +87,7 @@ export default function SkillEditor({ initial, lockName, lockScope, onSaved, onC
               disabled={lockScope}
               onChange={v => set('scope', v as 'user' | 'project')}
               options={[
-                { value: 'user', label: '用户(~/.wraith/skills)' },
+                { value: 'user', label: `用户(${configPathLabel(window.wraith?.platform, 'skills')})` },
                 { value: 'project', label: '项目(<项目>/.wraith/skills)' },
               ]}
             />

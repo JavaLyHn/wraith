@@ -185,7 +185,7 @@ public class RootPane extends Panel {
 
         // Ctrl+P: 查看历史对话
         if (keyStroke.getKeyType() == KeyType.Character && keyStroke.isCtrlDown() && keyStroke.getCharacter() == 'P') {
-            centerPane.appendSystemMessage("对话历史已持续保存到 ~/.wraith/history/。");
+            centerPane.appendSystemMessage("对话历史已持续保存到 " + com.lyhn.wraith.config.ConfigPathDisplay.path("history") + "。");
             return true;
         }
 

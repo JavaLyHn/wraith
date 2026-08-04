@@ -129,11 +129,11 @@ public final class BindCommand {
             cfg.save();
 
             if (secretOk) {
-                System.out.println("✅ 绑定成功，已写入 ~/.wraith/config.json。运行 `wraith gateway` 启动网关。");
+                System.out.println("✅ 绑定成功，已写入 " + com.lyhn.wraith.config.ConfigPathDisplay.path("config.json") + "。运行 `wraith gateway` 启动网关。");
             } else {
                 System.err.println("⚠ openclaw 返回的 secret 无法换取 access_token（可能已失效）。");
                 System.err.println("  appId/openid 已写入；请到 q.qq.com 后台复制「机器人密钥」填入");
-                System.err.println("  ~/.wraith/config.json 的 gateway.qq.clientSecret，再运行 `wraith gateway`。");
+                System.err.println("  " + com.lyhn.wraith.config.ConfigPathDisplay.path("config.json") + " 的 gateway.qq.clientSecret，再运行 `wraith gateway`。");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

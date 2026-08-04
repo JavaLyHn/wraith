@@ -3325,7 +3325,7 @@ public class Main {
                 "HITL: " + (hitlHandler.isEnabled() ? "ON" : "OFF"),
                 "Skill 启用数: " + (skillRegistry == null ? 0 : skillRegistry.enabledSkills().size()),
                 "渲染器: " + renderer.getClass().getSimpleName(),
-                "配置文件: ~/.wraith/config.json (只读视图，编辑请用编辑器)"
+                "配置文件: " + com.lyhn.wraith.config.ConfigPathDisplay.path("config.json") + " (只读视图，编辑请用编辑器)"
         );
         int selected = renderer.openPalette("配置 / config", items);
         if (selected < 0) {
@@ -4390,7 +4390,7 @@ public class Main {
                                              HitlHandler hitlHandler) {
         McpServer server = mcpServerManager.server("chrome-devtools");
         if (server == null) {
-            return "❌ 未配置 chrome-devtools MCP server，请先检查 ~/.wraith/mcp.json";
+            return "❌ 未配置 chrome-devtools MCP server，请先检查 " + com.lyhn.wraith.config.ConfigPathDisplay.path("mcp.json");
         }
         List<String> oldArgs = List.copyOf(server.config().getArgs());
         List<String> autoConnectArgs = List.of("-y", "chrome-devtools-mcp@latest", "--autoConnect");
@@ -4421,7 +4421,7 @@ public class Main {
 
         McpServer server = mcpServerManager.server("chrome-devtools");
         if (server == null) {
-            return "❌ 未配置 chrome-devtools MCP server，请先检查 ~/.wraith/mcp.json";
+            return "❌ 未配置 chrome-devtools MCP server，请先检查 " + com.lyhn.wraith.config.ConfigPathDisplay.path("mcp.json");
         }
         List<String> oldArgs = List.copyOf(server.config().getArgs());
         List<String> sharedArgs = List.of("-y", "chrome-devtools-mcp@latest", "--browser-url=" + probe.browserUrl());

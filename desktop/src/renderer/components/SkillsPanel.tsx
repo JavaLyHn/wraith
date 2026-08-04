@@ -2,14 +2,19 @@ import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
 import type { SkillView, SkillDetail } from '../../shared/types'
 import { groupSkillsBySource } from '../lib/skillsView'
+import { configPathLabel } from '../lib/configPathDisplay'
 import SkillEditor from './SkillEditor'
 import SkillViewer from './SkillViewer'
 
 const SOURCE_BADGE: Record<SkillView['source'], string> = { builtin: '内置', user: '用户', project: '项目' }
-const EMPTY_HINT: Record<SkillView['source'], string> = {
-  builtin: '(无内置技能)',
-  user: '把 SKILL.md 放到 ~/.wraith/skills/<名>/ 即可被加载',
-  project: '把 SKILL.md 放到 <项目>/.wraith/skills/<名>/ 即可被加载',
+/**
+ * 用户层那条**按平台**给路径:Windows 上 `~` 既不是用户能点的东西,cmd.exe 也不展开它。
+ * 项目层是相对路径,与平台无关(分隔符两边都认)。
+ */
+function emptyHint(source: SkillView['source'], platform: string | undefined): string {
+  if (source === 'builtin') return '(无内置技能)'
+  if (source === 'user') return `把 SKILL.md 放到 ${configPathLabel(platform, 'skills', '<名>')}/ 即可被加载`
+  return '把 SKILL.md 放到 <项目>/.wraith/skills/<名>/ 即可被加载'
 }
 
 type Mode = { kind: 'list' } | { kind: 'new' } | { kind: 'edit'; detail: SkillDetail } | { kind: 'view'; detail: SkillDetail }
@@ -95,7 +100,9 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
       <div className="min-h-0 flex-1 overflow-y-auto p-4 panel-content">
         {error && <div data-testid="skills-error" className="mb-3 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">{error}</div>}
         {skills.length === 0 && !busy && !error && (
-          <div className="text-xs text-fg-subtle">还没有技能。点「＋ 新建技能」或把 SKILL.md 放到 ~/.wraith/skills/&lt;名&gt;/。</div>
+          <div className="text-xs text-fg-subtle">
+            还没有技能。点「＋ 新建技能」或把 SKILL.md 放到 {configPathLabel(window.wraith?.platform, 'skills', '<名>')}/。
+          </div>
         )}
         {groups.map(g => (
           <section key={g.source} className="mb-4">
@@ -143,7 +150,7 @@ export default function SkillsPanel({ onBack }: { onBack: () => void }): JSX.Ele
         ))}
         {skills.length > 0 && (['user', 'project'] as const).map(src =>
           groups.some(g => g.source === src) ? null : (
-            <div key={src} className="mb-2 text-2xs text-fg-subtle">{SOURCE_BADGE[src]}:{EMPTY_HINT[src]}</div>
+            <div key={src} className="mb-2 text-2xs text-fg-subtle">{SOURCE_BADGE[src]}:{emptyHint(src, window.wraith?.platform)}</div>
           ),
         )}
       </div>

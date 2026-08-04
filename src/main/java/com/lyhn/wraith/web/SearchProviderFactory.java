@@ -78,7 +78,8 @@ public final class SearchProviderFactory {
         try {
             config = com.lyhn.wraith.config.WraithConfig.load();
         } catch (Exception e) {
-            log.warn("加载 ~/.wraith/config.json 失败,搜索配置只用环境变量: {}", e.getMessage());
+            log.warn("加载 {} 失败,搜索配置只用环境变量: {}",
+                    com.lyhn.wraith.config.ConfigPathDisplay.path("config.json"), e.getMessage());
         }
         com.lyhn.wraith.config.WraithConfig loaded = config;
         return resolveSettings(SearchProviderFactory::readEnvOnly,
@@ -160,7 +161,8 @@ public final class SearchProviderFactory {
         try {
             return lookup.apply(provider);
         } catch (Exception e) {
-            log.warn("读取 ~/.wraith/config.json 失败,搜索 key 回落为未配置: {}", e.getMessage());
+            log.warn("读取 {} 失败,搜索 key 回落为未配置: {}",
+                    com.lyhn.wraith.config.ConfigPathDisplay.path("config.json"), e.getMessage());
             return null;
         }
     }

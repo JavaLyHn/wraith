@@ -32,7 +32,9 @@ public class PromptAssembler {
         if (!ctx.toolsEnabled()) {
             append(prompt, noToolsSection());
         }
-        append(prompt, repository.loadRequired("capabilities.md"));
+        // capabilities.md 里含 {{configDir}} 占位:它原本写死 `~/.wraith/...`,而那在 Windows 上
+        // 既不是用户看得懂的位置,也不是模型能塞进 cmd.exe 的路径。
+        append(prompt, applyConfigDir(repository.loadRequired("capabilities.md")));
         append(prompt, repository.loadRequired("personalities/calm.md"));
         append(prompt, applyVariables(repository.loadRequired(mode.resourcePath()), ctx));
         append(prompt, repository.loadRequired("approvals/" + approvalMode(ctx) + ".md"));
@@ -63,12 +65,18 @@ public class PromptAssembler {
     private static String runtimeContext(PromptMode mode) {
         ZoneId zone = ZoneId.systemDefault();
         return runtimeContext(LocalDate.now(zone).toString(), zone.toString(),
-                System.getProperty("os.name", ""), mode);
+                System.getProperty("os.name", ""), mode,
+                com.lyhn.wraith.config.ConfigPathDisplay.absoluteHome());
     }
 
-    /** 旧三参重载：不声明模式。保留给既有调用方与测试。 */
+    /** 旧三参重载：不声明模式、不报配置目录。保留给既有调用方与测试。 */
     static String runtimeContext(String date, String zone, String osName) {
-        return runtimeContext(date, zone, osName, null);
+        return runtimeContext(date, zone, osName, null, null);
+    }
+
+    /** 四参重载：声明模式但不报配置目录。 */
+    static String runtimeContext(String date, String zone, String osName, PromptMode mode) {
+        return runtimeContext(date, zone, osName, mode, null);
     }
 
     /**
@@ -87,7 +95,8 @@ public class PromptAssembler {
      * 历史里那段具体的话，就会对用户宣布「我注意到你当前处于 Plan 模式」—— 一句错的事实陈述。
      * 所以这里不仅要报现值，还要<b>显式作废历史里的模式说法</b>。
      */
-    static String runtimeContext(String date, String zone, String osName, PromptMode mode) {
+    static String runtimeContext(String date, String zone, String osName, PromptMode mode,
+                                 String configHome) {
         boolean win = com.lyhn.wraith.policy.sandbox.ShellCommand.isWindows(osName);
         StringBuilder sb = new StringBuilder("## Runtime Context\n\n");
         sb.append("- 当前日期: ").append(date).append('\n');
@@ -109,7 +118,26 @@ public class PromptAssembler {
         } else {
             sb.append("- `execute_command` 的 shell 是 **bash**。");
         }
+        if (configHome != null && !configHome.isBlank()) {
+            // 绝对路径,不含任何需要展开的记号。此前 prompt 里到处写 `~/.wraith`,模型照着塞进
+            // execute_command,而 Windows 那头是 cmd.exe —— `~` 不展开,于是拿到空结果,
+            // 对用户宣布「~/.wraith 为空」。一个存在且非空的目录被报成空的。
+            sb.append('\n');
+            sb.append("- Wraith 配置目录（绝对路径，可直接给工具用）: `").append(configHome).append("`。")
+                    .append("里面有 `config.json`（provider / 搜索 / 计价）、`mcp.json`、`skills/`、")
+                    .append("`memory/`、`snapshots/`、`tasks/`、`audit/`、`logs/`。");
+            if (win) {
+                sb.append("**不要写 `~/.wraith`** —— Windows 的 `cmd.exe` 不展开 `~`，")
+                        .append("查目录请用上面这个绝对路径（或 `%USERPROFILE%\\.wraith`）；")
+                        .append("列目录用 `dir`，不是 `ls`。");
+            }
+        }
         return sb.toString();
+    }
+
+    /** 把语料里的 {{configDir}} 换成本机真实的绝对配置目录。 */
+    private static String applyConfigDir(String template) {
+        return template.replace("{{configDir}}", com.lyhn.wraith.config.ConfigPathDisplay.absoluteHome());
     }
 
     private static String applyVariables(String template, PromptContext context) {

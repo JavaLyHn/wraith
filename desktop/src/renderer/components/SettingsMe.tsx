@@ -4,7 +4,9 @@ import { userAvatarGlyph } from '../lib/chatIdentity'
 
 export default function SettingsMe({ onOpenProviders }: { onOpenProviders: () => void }): JSX.Element {
   const { prefs, setProfile } = useSettings()
-  const [dataDir, setDataDir] = useState('~/.wraith')
+  // 占位曾写死 '~/.wraith':在 Windows 上先闪一个错的路径,而 appInfo() 失败时它会**留下来**
+  // ——「打开」按钮会去打开一个字面量 `~/.wraith`(必然失败)。真实值由 appInfo().dataDir 给。
+  const [dataDir, setDataDir] = useState('')
   const [model, setModel] = useState<string>('—')
 
   useEffect(() => {
@@ -40,9 +42,11 @@ export default function SettingsMe({ onOpenProviders }: { onOpenProviders: () =>
           <div className={row}>
             <span className="text-fg-muted">数据目录</span>
             <span className="flex items-center gap-2">
-              <span className="truncate text-fg-subtle">{dataDir}</span>
-              <button data-testid="me-open-dir" onClick={() => void window.wraith.openPath(dataDir)}
-                className="shrink-0 rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent">打开</button>
+              <span className="truncate text-fg-subtle">{dataDir || '读取中…'}</span>
+              {/* 没拿到真实路径就别让人点 —— 否则会去打开一个字面量占位路径,必然失败 */}
+              <button data-testid="me-open-dir" disabled={!dataDir}
+                onClick={() => void window.wraith.openPath(dataDir)}
+                className="shrink-0 rounded-lg border border-border px-2 py-1 text-2xs text-fg-muted hover:border-accent hover:text-accent disabled:cursor-not-allowed disabled:opacity-50">打开</button>
             </span>
           </div>
           <button data-testid="me-manage-providers" onClick={onOpenProviders}
