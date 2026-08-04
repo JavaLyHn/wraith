@@ -65,6 +65,23 @@
 | `renderer/components/Sidebar.tsx` | `ToolNav` 类型（`:100`）+ `TOOL_GROUPS`（`:112`）+ props 的 `onOpenXxx` |
 | `renderer/lib/panelActions.ts` | `PanelId` 联合类型 + `PANEL_LABELS` |
 | `renderer/App.tsx` | `view` 状态联合类型（`:187`）+ 渲染分支（`:1089` 起）+ 传 handler（`:1042` 起） |
+| `renderer/lib/commandPalette.ts` | `NAV_ITEMS` —— ⌘K「导航」组的注册表 |
+| `tool/ToolRegistry.java` | `open_panel` 的 `panels` 白名单 + 工具描述/参数描述里枚举的面板名 |
+| `resources/prompts/capabilities.md` | 「Wraith 产品能力」表格加一行 |
+
+> 前三处是「面板能不能打开」，后三处是**已交付的不变量**，漏了不会报错、只会静默退化，
+> 本次 final review 三条都中了：
+>
+> - 漏 `NAV_ITEMS` → 其余 11 个面板都能从 ⌘K 到达，只有新面板不行，用户当成 bug。
+>   `NAV_ITEMS.view` 从前是裸 `string`，tsc 抓不到；现已收紧成 `PanelId` 并加了一条
+>   编译期「每个 PanelId 都必须登记」断言，下次会直接编译失败。
+> - 漏 `open_panel` 白名单 → 模型传新 panel 只拿到「未知面板」，**动作卡永远不出现**，
+>   「聊天↔面板对等」被悄悄破掉。
+> - 漏 `capabilities.md` → agent 不知道这个面板存在；用户问「能不能存资料」时它甚至会
+>   按那段 prompt 去 `grep_code` 用户项目代码。
+>
+> 后两处要 `mvn package` + `cp` 到 `~/.wraith/wraith.jar` + 重启 App 才生效（纯 List /
+> 资源文件改动，不涉及逻辑），这个「Java 税」是加面板的固定成本，不是可选项。
 
 ### 2.3 可复用的既有能力
 
@@ -95,8 +112,8 @@
 | 字段 | 来源 |
 |---|---|
 | `name` | 文件名 |
-| `size` | `stat.size` |
-| `addedAt` | `stat.birthtime`；为 0 或无效时退回 `stat.mtime` |
+| `size` | `lstat.size` |
+| `addedAt` | `lstat.birthtime`；为 0 或无效时退回 `lstat.mtime` |
 | 类型图标 | 扩展名映射（渲染侧算，不落盘） |
 
 理由三条：
@@ -109,9 +126,19 @@
 
 ### 3.3 列目录规则
 
-- 只列**普通文件**，跳过子目录。
+- 只列**普通文件**，跳过子目录**与符号链接** —— 用 `lstat` 而非 `stat`（软链的 `lstat().isFile()` 为 false，自然跳过）。
 - 跳过 `.` 开头的隐藏文件（挡 `.DS_Store` 一类噪音）。
+- 跳过名字含反斜杠的文件（POSIX 上合法，从 Windows 拷来就能产生）。
 - 默认按 `addedAt` 倒序（最近放进来的在最上面）。
+
+**列举口径必须与 `resolveInVault`（§4.2）的「什么算库内条目」逐条对齐**，否则面板里会出现**看得见却删不掉**的死行 —— 列出来了，但 `open`/`reveal`/`remove` 三个动作全抛，用户只能去访达删。首版实现用了跟随软链的 `stat`，final review 实测复现了两个实例：
+
+| 条目 | 列表侧（曾） | 三个动作侧 | 用户看到 |
+|---|---|---|---|
+| 库内软链 → 库外文件 | `stat().isFile()` 为 true → 列出 | realpath 越界校验 → 抛 | 一行删不掉，点开还弹「路径越界」（听着像安全事故） |
+| 名字含反斜杠的普通文件 | 列出 | 名字合法性校验 → 抛 | 一行删不掉，报「非法文件名」 |
+
+两条各有一个用例钉在 `test/documents.test.ts` 里，且同时断言 `resolveInVault` 对同一个名字**确实是抛的** —— 这样两侧口径一旦再次分叉就会红。
 
 ### 3.4 重名消歧
 
@@ -159,7 +186,9 @@ interface AddResult { added: string[]; failed: { name: string; reason: string }[
 
 ### 4.2 入参是文件名，不是路径
 
-`remove` / `open` / `reveal` 一律只接**库内文件名**，主进程负责拼回绝对路径。渲染进程拿不到、也传不了任意路径。
+`remove` / `open` / `reveal` 一律只接**库内文件名**，主进程负责拼回绝对路径 —— 这三个（尤其 `remove`）是库内的破坏性/外泄面，渲染进程不该有能力对它们指定任意路径。
+
+⚠ 别把这句读成「整条 IPC 面都拿不到任意路径」：`documents:add` **本来就收渲染进程给的任意绝对路径**（拖拽必须如此），仓库既有的 `wraith:openPath` / `wraith:downloadCopy` 也早就接受任意路径。这里成立的是收窄后的那句：**库内的破坏性写操作只接受文件名。**
 
 主进程侧校验（`resolveInVault`），**顺序不可调换**：
 
@@ -191,21 +220,25 @@ interface AddResult { added: string[]; failed: { name: string; reason: string }[
 ### 5.2 面板布局
 
 ```
-┌─────────────────────────────────────────────┐
-│ ← 文档                    [🔍 搜索  ] [+ 添加] │
-├─────────────────────────────────────────────┤
-│ 📄  需求文档.pdf          2.4 MB   3 天前  ⋯ │
-│ 📝  API 设计.md            18 KB   昨天    ⋯ │
-│ 📊  竞品分析.xlsx         840 KB   刚刚    ⋯ │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ ← 文档                     [🔍 搜索  ] [+ 添加] │
+├──────────────────────────────────────────────┤
+│ 📄  需求文档.pdf          2.4 MB   3 天前      │   ← 未悬停:右侧留白
+│ 📝  API 设计.md            18 KB   昨天   🔍 🗑 │   ← 悬停:图标淡入
+│ 📊  竞品分析.xlsx         840 KB   刚刚       │
+└──────────────────────────────────────────────┘
 ```
 
 - 整个面板是 drop zone，拖到任意位置都收；拖拽悬停时整块高亮。
+  - 只在 `dataTransfer.types` 含 `Files` 时才亮 —— 拖选中的文本把整块点亮是个假承诺。
+  - `dragleave` 只在 `e.currentTarget === e.target` 时收起高亮，否则鼠标在文件行之间移动（`dragleave` 冒泡）会让高亮抖。两条都照 `Composer.tsx:230/237` 的既有写法。
 - **拖拽取磁盘路径必须走既有的 `window.wraith.pathForFile(file)`**（内部是 `webUtils.getPathForFile`）—— Electron 32 已移除 `File.path`，直接读会拿到 `undefined`。Composer 的附件拖拽用的就是这个。
-- `⋯` 菜单：打开 / 在访达中显示 / 删除。
-- 删除走二次确认（复用侧栏会话删除那种「再点一次确认」的就地模式，不弹 modal）。
+- 行内动作是**悬停淡入的图标**（打开 = 点文件名本身，定位 = `FolderSearch`，删除 = `Trash2`），不做 `⋯` 下拉菜单：
+  - 与侧栏会话行的既有交互一致（那里也是 hover 出图标 + 就地确认），不给应用多引入一套菜单模式；
+  - 只有三个动作，其中「打开」还落在文件名上，套一层菜单是多一次点击换来零收益。
+- 删除走二次确认：第一次点击把图标换成 ✓ 并变红，再点一次才真删（复用侧栏会话删除那种就地模式，不弹 modal）；鼠标移出列表即取消待确认态。
 - 空态：虚线框 + 「把文件拖进来，或点右上角添加」。
-- 搜索框在库内文件 ≤ 1 个时不显示（省掉多余 UI）。
+- 搜索框在库内文件 ≤ 1 个时不显示（省掉多余 UI），**但只要过滤词非空就照样渲染** —— 否则「3 个文件→输过滤词→删到只剩 1 个且不匹配」会把输入框卸载掉而 `query` 仍在生效，用户看到「没有匹配「xxx」」却无处可清，只能退出面板重进。
 
 ---
 
@@ -223,15 +256,22 @@ interface AddResult { added: string[]; failed: { name: string; reason: string }[
 | 打开失败（无默认程序） | inline 错误条 |
 | 名字校验不过（含分隔符等） | 主进程直接抛，渲染侧显示「非法文件名」 |
 
+两条实现约束：
+
+1. **`failed[].reason` 必须是中文。** 直接透传 Node 的 `err.message` 会得到 `ENOENT: no such file or directory, stat '/…'` 这种一整串英文 + 完整源路径，与同函数里已有的「暂不支持文件夹」不是一个口径。`documents.ts` 里的 `copyFailReason` 做 errno → 中文映射（ENOENT / EACCES / EPERM / ENOSPC / EISDIR），**未收录的 errno 保留原文** —— 罕见故障宁可原样透出也别吞掉（上表「磁盘写满」要的就是能查到 errno，故那条中文里也带着 `ENOSPC`）。
+2. **渲染侧显示前必须过 `ipcErrorText`。** `list`/`open`/`reveal`/`remove` 的错误全来自主进程 `throw`，经 `ipcRenderer.invoke` 回来后 message 被 Electron 套了一层 `Error invoking remote method '<channel>': Error: ` 前缀 —— 直接贴出来，上表里精心写的「文件已不存在」全都变成半截英文包装串。该函数是从 `automationLabels.saveErrorText` 里抽出来的共享件（那边现已复用它，不是两份正则）。反过来，`add` 的 `failed[].reason` 是**当数据回传**、本来就干净，**不要**给它套这个函数。
+
 ---
 
 ## 7. 测试
 
 | 测试文件 | 覆盖 |
 |---|---|
-| `test/documents.test.ts` | **路径逃逸拦截**（`../` 相对路径、绝对路径、库内软链指向库外）；**「文件不存在」与「路径越界」两条分支不混淆**；隐藏文件与子目录过滤；birthtime 为 0 时回退 mtime；重复添加走 `uniqueDownloadName` 不覆盖（消歧算法本身已由 `fileOpen.test.ts` 覆盖，此处只测接线） |
+| `test/documents.test.ts` | **路径逃逸拦截**（`../` 相对路径、绝对路径、库内软链指向库外）；**「文件不存在」与「路径越界」两条分支不混淆**；隐藏文件与子目录过滤；birthtime 为 0 时回退 mtime；重复添加走 `uniqueDownloadName` 不覆盖（消歧算法本身已由 `fileOpen.test.ts` 覆盖，此处只测接线）；**列举口径与 `resolveInVault` 对齐**（软链、含反斜杠的名字都不出现在列表里，见 §3.3）；`copyFailReason` 的 errno → 中文映射与「未收录 errno 保留原文」 |
+| `test/ipcError.test.ts` | `ipcErrorText` 剥 Electron IPC 前缀（含无第二层 `Error: ` 的形态）、无前缀原样透出、空消息走 fallback |
 | `test/documentsView.test.ts` | 搜索过滤（大小写不敏感）；默认倒序；大小格式化（B/KB/MB 边界）；扩展名→图标映射含未知扩展名兜底 |
-| `test/documentsPanel.test.tsx` | 空态渲染；列表渲染；删除二次确认（首次点击不触发删除）；添加失败时 inline 提示 |
+| `test/documentsPanel.test.tsx` | 空态渲染；列表渲染；删除二次确认（首次点击不触发删除）；添加失败时 inline 提示；主进程错误的 IPC 包装前缀被剥掉；过滤词非空时保留搜索框；拖拽只认 `Files` 且 `dragleave` 冒泡不熄灭高亮 |
+| `test/commandPalette.test.ts`（改） | 按 `action` **点名断言 12 个面板都能从 ⌘K 到达** —— 纯数量断言挡不住漏登记（改个数字就绿了） |
 | `test/sidebarToolGroups.test.tsx`（改） | 四组断言，「资料」组含文档项 |
 | `test/panelActions.test.ts`（改） | `documents` 在 `PANEL_LABELS` 内，`normalizePanel('documents')` 有效 |
 
@@ -249,7 +289,7 @@ interface AddResult { added: string[]; failed: { name: string; reason: string }[
 | 无索引文件 | `index.json` 存元数据 | 目录即真相源，无同步/损坏失败模式；这一版不需要标签备注 |
 | 纯 Electron 实现 | 走 Java app-server RPC | 改 Java 要 `mvn package` + `cp` 到 `~/.wraith/wraith.jar` + 重启 App 才生效，为「暂时就做存放」付这个税太早；目录契约保证将来接后端无需重构 |
 | 新增「资料」组 | 塞进「观察」组 | 前三组分类依据是「agent 怎么工作」，文档是「我的东西」，混入会让分类依据失效 |
-| IPC 传文件名 | 传绝对路径 | 渲染进程不该有能力指定任意路径，尤其对 `remove` |
+| **库内的破坏性写操作**（`remove`/`open`/`reveal`）只接文件名 | 一律传绝对路径 | 渲染进程不该有能力对库内条目指定任意路径，尤其对 `remove`。注意这条**只覆盖这三个**：`add` 收的就是渲染进程给的任意绝对路径（拖拽必须如此），`wraith:openPath` / `wraith:downloadCopy` 亦然 —— 写宽了会让后来人以为整条 IPC 面都有这个性质 |
 
 ---
 
