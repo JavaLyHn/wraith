@@ -88,6 +88,22 @@ git --version
 > ⚠️ **Node 是个例外：它既是构建依赖，也可能是运行时依赖。** 安装包捆绑 JRE，但**不捆绑 Node**。
 > 只要你打算用 `npx` 起 MCP server，装好的 App 也需要系统里有 Node —— 详见第 6 节「加 MCP server 报 `Cannot run program "npx"`」。不用 MCP 则完全不需要。
 
+#### 另外两个**可选**外部命令：`ollama` / `uvx`
+
+Windows **两个都不自带，安装包也不含**。但它们各自只服务一小块功能 —— **不装照样能正常用 wraith**，
+所以先看清「不装会失去什么」，再决定要不要装：
+
+| 命令 | 谁需要它 | 不装的后果 | 有没有替代 |
+|---|---|---|---|
+| `ollama` | **本机** embedding。用到的地方：`/index` 建代码索引、`/search` 语义检索、agent 的 `search_code` 工具、桌面「代码图谱」面板 | 建索引/检索时报连不上 `11434`。**内置工具里只有 `search_code` 一个受影响**，读写文件、grep、跑命令、任务、记忆全都照常 | **有**：embedding 后端改成云端（`openai` / `zhipu` / `glm`），一行配置，完全不需要 ollama |
+| `uvx` | 起 **Python 生态**的 MCP server。桌面「插件」推荐清单 10 项里有 **3 项**用它：Fetch、Git、Time | 这 3 项起不来，报 `Cannot run program "uvx"` | **有**：另外 7 项走 `npx`，只用它们就完全不需要 uv |
+
+装法与分诊见第 6 节的
+「[代码索引报连不上 11434](#代码索引报连不上-11434--没有-ollama-命令)」与
+「[加 MCP server 报 `Cannot run program "uvx"`](#加-mcp-server-报-cannot-run-program-uvx)」。
+
+> 这两个和 Node 的性质一样：**运行时依赖，不是构建时依赖**。缺它们不影响 `mvn` / `npm run dev` / 出包。
+
 ### 1.2 拉代码 —— ⚠ 必须切分支
 
 ```powershell
@@ -446,6 +462,8 @@ npm run dev
 | 设了环境变量但 App 不认 | 环境变量是进程启动时读的 | 重启 App；或直接改用图形界面配 |
 | `npm install` ERESOLVE 失败 | react peer 冲突 | 必须带 `--legacy-peer-deps` |
 | 加 MCP server 报 `Cannot run program "npx"` / `CreateProcess error=2` | **两个原因共用同一句错**：① 机器上没装 Node（Windows 不自带，安装包也不含）；② Node 有，但 Windows 上 npx 实际是 `npx.cmd`，`CreateProcess` 不做 `PATHEXT` 补全 | 先 `where.exe npx` 分诊：找不到 = ①，去装 Node 或改用 HTTP transport；列出两行 = ②，已修复，**重跑 `wraith-install`** 即可。见下方「加 MCP server 报 …」 |
+| 加 MCP server 报 `Cannot run program "uvx"` | **`uvx` 不属于 Node** —— 它是 [uv](https://docs.astral.sh/uv/)（Python 生态的包管理器）自带的命令，装 Node **不会**带来它。推荐清单 10 项里只有 Fetch / Git / Time 这 3 项用它 | `where.exe uvx` 分诊：找不到 = 装 uv（`winget install --id=astral-sh.uv -e`，或官方脚本），或干脆只用走 `npx` 的另外 7 项；能找到 = wraith 继承的是**旧 PATH**，**重启 wraith**。见下方「加 MCP server 报 `Cannot run program "uvx"`」 |
+| 建代码索引 / 语义检索报 `Failed to connect to localhost/[0:0:0:0:0:0:0:1]:11434` | 本机 embedding 后端（**ollama**）没装或没在跑。那串 IPv6 是**障眼法** —— Java 先试的是 `127.0.0.1`，真正的意思是那个端口上没人监听 | 先 `where.exe ollama` 分诊：找不到 = 没装（**内置工具里只有 `search_code` 依赖它**，可以装、可以改用云端 embedding、也可以干脆不建索引）；能找到 = 服务没起，从开始菜单启动 Ollama 或跑 `ollama serve`。见下方「代码索引报连不上 11434」 |
 | `npm install` 报错末尾有「**Log files were not written** ... `_logs`」 | **npm 缓存目录不可用**，与项目无关。连日志都落不下就是这个病的指纹，不管上面报 `EPERM` 还是 `ENOENT` | 见下方「npm 缓存目录不可用」——先 `npm config get cache` |
 | `EPERM ... mkdir '<某盘>\...\_cacache\...'` | 缓存目录**存在但不可写**。常见于把 npm 缓存搬到 Node 安装盘（如 `E:\nodejs\node_cache`），该目录归 Administrators | 同上，把 cache 改到 `%LOCALAPPDATA%` |
 | `ENOENT ... mkdir '<项目路径>\$env:...\_cacache\tmp'` | 缓存路径**不存在**，且被拼在了项目目录后 → 存进 `.npmrc` 的是个相对路径 | 在 cmd 里跑了 PowerShell 写法 `"$env:LOCALAPPDATA\..."`。改用 `"%LOCALAPPDATA%\..."`，并删掉误建的怪目录 |
@@ -852,6 +870,176 @@ npx 解析 npx.cmd 绝对路径     ← wraith 做的,毫秒级
 
 ---
 
+### 代码索引报连不上 11434 / 没有 `ollama` 命令
+
+典型报错（面板或 CLI）：
+
+```
+索引失败:embedding 后端探测失败:Failed to connect to localhost/[0:0:0:0:0:0:0:1]:11434
+```
+
+> 🔎 那串 `[0:0:0:0:0:0:0:1]` 是**障眼法**，不是原因。Java 会先试 `127.0.0.1`，
+> 这串 IPv6 回环只是最后一个尝试过的地址。真正的意思是：**那个端口上没有东西在监听。**
+
+**先分诊 —— 「没装」和「装了没起」修法完全不同：**
+
+```powershell
+where.exe ollama
+```
+
+| 输出 | 说明 | 去看 |
+|---|---|---|
+| `信息: 用提供的模式无法找到文件。` | **机器上没有 ollama** | 情况 A |
+| 列出 `...\ollama.exe` | 装了，只是服务没在跑 | 情况 B |
+
+> ⚠️ 这一步不能跳。后端给的提示里有一句「或在命令行跑 `ollama serve`」，
+> 那句话**假设你已经装了** —— 没装的机器照着敲只会得到
+> `'ollama' 不是内部或外部命令`，白绕一圈。
+
+---
+
+#### 情况 A：没装 ollama —— 先想清楚要不要装
+
+**wraith 只有一个内置工具（`search_code`）依赖它**。不需要语义检索的话，跳到「A3 不装」。
+
+**A1. 装 ollama（要本机跑、离线可用、不花钱）**
+
+以 [ollama.com/download/windows](https://ollama.com/download/windows) 为准，两种装法：
+
+```powershell
+# ① 官网下 OllamaSetup.exe，双击一路下一步(装完托盘会出现图标，服务自动起)
+# ② 或者用 winget
+winget install --id Ollama.Ollama -e
+```
+
+装完**新开一个终端**（旧终端读不到新 PATH），然后**拉一个 embedding 模型** —— 这一步不能省，
+装了 ollama 不等于有模型：
+
+```powershell
+ollama --version
+ollama pull nomic-embed-text        # wraith 的默认模型
+ollama list                         # 确认列出来了
+```
+
+| 模型 | 维度 | 说明 |
+|---|---|---|
+| `nomic-embed-text:latest` | 768 | **wraith 的默认值**，快 |
+| `bge-m3:latest` | 1024 | **中文明显更好**，代价是慢约 2.5 倍。索引里混中文注释/文档就选它 |
+
+> ⚠️ **换模型必须重建索引。** 维度不一样（768 ↔ 1024），拿新模型的查询向量去搜旧索引
+> 会直接报错；维度碰巧相同而模型不同则**不报错，但相关度全无意义**。
+> 桌面「代码图谱」面板的「测试连接」会替你把这种冲突指出来。
+
+验证服务活着：
+
+```powershell
+curl http://127.0.0.1:11434/api/version     # 返回 JSON 版本号，如 {"version":"0.x.y"}
+```
+
+或者浏览器打开 **根路径** `http://127.0.0.1:11434/` —— 那个页面才是显示 `Ollama is running` 的地方
+（`/api/version` 给的是 JSON，两者别混）。
+
+**A2. 不装 ollama，改用云端 embedding（最省事，不占本机资源）**
+
+桌面「代码图谱」面板 → embedding 后端表单，把 provider 换掉即可：
+
+| provider | 默认模型 | BASE URL 注意 |
+|---|---|---|
+| `openai` | `text-embedding-3-small` | OpenAI 兼容后端的 baseUrl **通常要带 `/v1`**（后端直接拼 `/embeddings`） |
+| `zhipu` / `glm` | `embedding-2` | 同上 |
+
+填完点**「测试连接」**再建索引 —— 那个按钮会当场告诉你维度、耗时，以及和现有索引兼不兼容。
+
+> 配错协议最典型的一条：provider 选 `openai` 却填了 ollama 的地址，
+> 于是打到 `/embeddings` 而 ollama 只认 `/api/embeddings`，回一句光秃秃的 `404 page not found`。
+> 后端会替你把这条 404 翻译成「路径不存在，检查 provider 与 baseUrl 是否配套」。
+
+**A3. 干脆不用语义检索**
+
+不建索引就不会触发 embedding。agent 仍然有 grep、读写文件、跑命令等全部其余工具，
+只是问「这个功能在哪实现的」时它得靠 grep 而不是向量检索。
+
+---
+
+#### 情况 B：装了 ollama，但服务没在跑
+
+```powershell
+# 从开始菜单启动 Ollama(托盘出现图标即可)，或者：
+ollama serve
+```
+
+`ollama serve` 会占住那个终端窗口，别关。跑完用上面那条 `curl` 验一下。
+
+> 端口不是 11434 的话（改过配置或被占用），把面板里的 BASE URL 一起改掉 ——
+> 后端提示里的验证命令用的是**你配置的那个端口**，不是写死的 11434。
+
+---
+
+### 加 MCP server 报 `Cannot run program "uvx"`
+
+典型报错：
+
+```
+连接失败: Cannot run program "uvx" (in directory "C:\Users\你"):
+CreateProcess error=2, 系统找不到指定的文件。
+```
+
+可能还跟着一句：
+
+```
+[wraith] 在当前进程的 PATH 上没有找到 uvx（也试过 PATHEXT 里的 .cmd/.exe 等后缀）。
+如果你确认已经装了它，最常见的原因是 wraith 启动时继承的是旧 PATH —— 重启 wraith 再试一次。
+```
+
+**这和上面 `npx` 那节是同一类问题，但 `uvx` 不属于 Node。** 它是 [uv](https://docs.astral.sh/uv/)（Astral 出的
+Python 包管理器）自带的命令 —— 装 Node **不会**带来 uvx。
+
+**谁会触发它**：桌面「插件」面板推荐清单里的 **Fetch / Git / Time** 这 3 项。
+其余 7 项（Filesystem、Memory、Sequential Thinking、Playwright、GitHub…）走 `npx`，与 uv 无关。
+
+先分诊：
+
+```powershell
+where.exe uvx
+```
+
+| 输出 | 说明 | 怎么办 |
+|---|---|---|
+| `信息: 用提供的模式无法找到文件。` | 没装 uv | 见下面 ① ② |
+| 列出 `...\uvx.exe` | 装了，但 wraith 继承的是旧 PATH | **重启 wraith**（App 或 CLI 都要重启，PATH 是进程启动时读的） |
+
+**① 装 uv（三种任选，以 [官方安装文档](https://docs.astral.sh/uv/getting-started/installation/) 为准）**
+
+```powershell
+# ① 官方安装脚本(不需要先有 Python)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# ② winget
+winget install --id=astral-sh.uv -e
+
+# ③ 已经有 Python 的话
+pip install uv
+```
+
+`uvx` 是 uv 自带的，装完就有。**新开一个终端**验证：
+
+```powershell
+uv --version
+where.exe uvx        # 期望列出 uvx.exe
+```
+
+然后**重启 wraith**（桌面 App 或 CLI）—— 已经在跑的进程读不到新 PATH。
+
+**② 不装 uv，只用 `npx` 那 7 项**
+
+推荐清单里 Fetch / Git / Time 之外的都不需要 uv。想要抓网页的能力，
+内置工具本来就有网页抓取（不经过 MCP）；想读 Git 仓库，agent 直接跑 `git` 命令即可。
+
+> **一个 server 起不来不影响别的。** MCP server 在后台并行启动、各自注册工具，
+> 起不来的那个只是自己在面板上标红，聊天和其余 server 照常。
+
+---
+
 ### Electron 二进制下载失败（证书 / 网络）
 
 典型报错：
@@ -1025,7 +1213,9 @@ profile 本身留在系统里不占资源，也不影响别的程序；真要删
 - **桌宠点击不抢焦仅 x64 精确** —— 走 koffi FFI 给窗口加 `WS_EX_NOACTIVATE`；ia32 上自动降级为 `focusable:false`，FFI 失败也会降级，不会崩。
 - **编辑器探测范围有限** —— 只按已知安装路径找 VS Code / VS Code Insiders / Cursor / Sublime Text / Notepad++；自定义安装目录、注册表安装不覆盖。
 - **安装包未签名** —— 每次大版本首次运行都会触发 SmartScreen。
-- **`npx` 形式的 MCP server 需要自己装 Node** —— Windows 不自带，wraith 安装包也只捆绑 JRE 不捆绑 Node。不是 bug；三条替代路线（装 Node / 换 `uvx` 等非 Node server / 改用 HTTP transport）见第 6 节。
+- **`npx` 形式的 MCP server 需要自己装 Node** —— Windows 不自带，wraith 安装包也只捆绑 JRE 不捆绑 Node。不是 bug；替代路线（装 Node / 改用 HTTP transport）见第 6 节。
+- **`uvx` 形式的 MCP server 需要自己装 uv** —— ⚠️ **`uvx` 不属于 Node 生态**，装了 Node 也不会有它（它是 [uv](https://docs.astral.sh/uv/) 自带的命令，Python 生态）。推荐清单里 Fetch / Git / Time 这 3 项用它，其余 7 项走 `npx`。装法与替代见第 6 节「加 MCP server 报 `Cannot run program "uvx"`」。
+- **本机语义检索需要自己装 ollama** —— 不装则 `/index` / `/search` / `search_code` 不可用；**内置工具里只有 `search_code` 一个受影响**，其余照常。可以改用云端 embedding（`openai` / `zhipu` / `glm`）完全绕开。见第 6 节「代码索引报连不上 11434」。
 
 ---
 

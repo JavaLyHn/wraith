@@ -21,6 +21,15 @@
 
 - [ ] 四项前置齐备
 
+**两个可选外部命令**(Windows 都不自带、安装包也不含;不装则对应功能不可用,**不影响其余验收**):
+
+| 检查 | 命令 | 缺了会怎样 |
+|---|---|---|
+| ollama | `where.exe ollama` | 建索引/语义检索报连不上 `11434`。**内置工具里只有 `search_code` 依赖它**;可改用云端 embedding 绕开 |
+| uv / uvx | `where.exe uvx` | MCP 推荐清单里 Fetch / Git / Time 这 3 项起不来(其余 7 项走 `npx`)。**`uvx` 不属于 Node 生态**,装了 Node 也不会有它 |
+
+- [ ] 已确认这两项的状态(装了 / 没装但知道影响面) —— 装法见 `docs/windows-usage.md` §1.1 与 §6 对应两节
+
 ---
 
 ## 1. 后端:构建与测试
@@ -344,6 +353,8 @@ npm run dist:win                        # 产物:desktop\release\*.exe
 - [ ] 沙箱把工作区授权给 AppContainer SID 时会**改文件 ACL**,面板里关掉沙箱**不会自动撤销**(撤销方式见 windows-usage.md §6.5)
 - [ ] 装在用户目录下的工具链(如 `%APPDATA%\npm`)AppContainer **读不到**,需手工 `icacls` 授权;`C:\Windows` 与 `C:\Program Files` 默认已开放
 - [ ] 工作区在**非 NTFS / 网络盘**上时 `icacls` 会失败 → 沙箱降级为无
+- [ ] **没装 ollama 时** `/index` `/search` `search_code` 不可用(报连不上 `11434`) —— 预期,不是 bug;其余内置工具照常,也可改用云端 embedding
+- [ ] **没装 uv 时** MCP 的 Fetch / Git / Time 起不来(报 `Cannot run program "uvx"`) —— 预期;⚠ 注意 `uvx` **不是** Node 带来的,装 Node 解决不了
 - [ ] 安装包**未签名**(根治需 Authenticode 证书)
 - [ ] GitHub Release 目前**只发了 mac 版**(v1.3.0 dmg/zip);Windows 版需自行 `dist:win`
 
