@@ -1299,16 +1299,19 @@ public class ToolRegistry {
 
     /** UI 意图工具:呈现「打开某功能面板」入口。纯校验、无副作用;桌面渲染层特判成动作卡。 */
     private void registerOpenPanelTool() {
+        // 与桌面渲染侧的 PanelId / PANEL_LABELS(desktop/src/renderer/lib/panelActions.ts)一一对应。
+        // 新增面板必须同步登记这里,否则模型传该 panel 只会拿到「未知面板」,动作卡永远不出现,
+        // 「聊天↔面板对等」这条已交付的不变量就被悄悄破掉了。
         List<String> panels = List.of(
                 "plugins", "automations", "im-gateway", "providers", "skills",
-                "memory", "snapshots", "tasks", "policy", "browser", "rag");
+                "memory", "snapshots", "tasks", "policy", "browser", "rag", "documents");
         tools.put("open_panel", new Tool(
                 "open_panel",
                 "在桌面对话中为用户呈现「打开某功能面板」的一键入口。当你引导用户去用 Wraith 的某个功能面板"
-                        + "(plugins=MCP / automations / im-gateway / providers / skills / memory / snapshots / tasks / policy / browser / rag)时调用。"
+                        + "(plugins=MCP / automations / im-gateway / providers / skills / memory / snapshots / tasks / policy / browser / rag / documents)时调用。"
                         + "仅呈现入口,不产生任何文件或命令副作用。",
                 createParameters(new Param("panel", "string",
-                        "面板 id:plugins(MCP)|automations|im-gateway|providers|skills|memory|snapshots|tasks|policy|browser|rag", true)),
+                        "面板 id:plugins(MCP)|automations|im-gateway|providers|skills|memory|snapshots|tasks|policy|browser|rag|documents", true)),
                 args -> {
                     String raw = args.get("panel");
                     String norm = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);

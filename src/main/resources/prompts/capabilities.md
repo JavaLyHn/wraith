@@ -17,3 +17,4 @@ Wraith 提供以下功能面板（桌面端左侧工具栏）：
 | **安全** | 沙箱 + 命令 / 路径围栏 + 审计日志 | 安全面板看策略状态 / 审计；可切沙箱（macOS Seatbelt）。这是 HITL + 围栏 + 审计，非容器沙箱。`open_panel(policy)` |
 | **浏览器** | 连本机 Chrome（CDP）驱动浏览 / 登录态任务 | 浏览器面板连接本机 Chrome；聊天里可 `browser_connect`。SPA / 需登录态用它。`open_panel(browser)` |
 | **代码检索** | 语义索引 / 搜索（RAG）+ 代码关系图 | 代码检索面板建索引 / 搜索 / graph；聊天里 `search_code` 语义检索。`open_panel(rag)` |
+| **文档** | 用户自己的资料库：文件存在 `{{configDir}}/documents/`，可添加 / 拖入 / 搜索 / 打开 / 定位 / 删除 | 文档面板点「添加」或把文件拖进面板；重名自动加序号不覆盖。`open_panel(documents)`。⚠ 这是「放我自己的资料」的地方，不是代码检索——问「Wraith 能不能帮我存资料 / 放文件」时指这里 |
