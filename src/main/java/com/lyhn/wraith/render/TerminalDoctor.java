@@ -50,8 +50,14 @@ public final class TerminalDoctor {
         lines.add("── 运行环境 ─────────────────────────────────────────");
         lines.add("  os.name          " + os);
         lines.add("  os.arch          " + System.getProperty("os.arch", "?"));
-        lines.add("  java.version     " + System.getProperty("java.version", "?")
-                + "   (JLine 的 ffm provider 需要 22+)");
+        lines.add("  java.version     " + System.getProperty("java.version", "?"));
+        lines.add("  java.vendor      " + System.getProperty("java.vendor", "?"));
+        lines.add("  java.vm.name     " + System.getProperty("java.vm.name", "?"));
+        Boolean na = TerminalBootstrap.nativeAccessEnabled();
+        lines.add("  native access    " + (na == null
+                ? "(该 JDK 没有这个概念)"
+                : (na ? "✅ 已启用" : "❌ 未启用   ← jni provider 会被 JLine 的前置检查挡住,"
+                        + "加 --enable-native-access=ALL-UNNAMED")));
         lines.add("  控制台编码       " + consoleEncoding
                 + (ConsoleSafeText.needsFallback(consoleEncoding)
                 ? "   ← 表示不了 emoji，输出会自动降级为 ASCII" : ""));

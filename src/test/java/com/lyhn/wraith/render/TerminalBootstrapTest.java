@@ -104,8 +104,55 @@ class TerminalBootstrapTest {
     void adviceExplainsWhyOnlyJniRemainsOnWindows() {
         String a = TerminalBootstrap.advice(dumb(true, List.of()), "Windows 11");
         assertTrue(a.contains("jni"), a);
-        assertTrue(a.contains("ffm") && a.contains("22"), a);
-        assertTrue(a.contains("stty"), a);
+        assertTrue(a.contains("ffm"), a);
+        // 措辞按实测改过两处:
+        //  · 原来说「ffm 要 JDK 22+」——真实原因是 jdk11 classifier 里 impl/ffm 一个 class 都没有,
+        //    与运行时 JDK 无关(用户 JDK 21 与我 JDK 26 都失败在同一处)
+        //  · 原来说「exec 要 stty」——用户 doctor 报告里 exec 的真实失败是
+        //    `Cannot run program "test"`,它探测 TTY 用的是 `test -t`
+        assertTrue(a.contains("test -t"), a);
+        assertFalse(a.contains("stty"), "别再说 stty,实测不是它: " + a);
+    }
+
+    @Test
+    @DisplayName("**认出 native access 被挡并给出确切修法** —— 这是用户那台机器上 jni 失败的真原因")
+    void adviceGivesTheNativeAccessFix() {
+        String a = TerminalBootstrap.advice(dumb(true, List.of(
+                "FINE: Unable to load jni provider:   <- UnsupportedOperationException: "
+                        + "Native access is not enabled for the current module: unnamed module @2d8e6db6")),
+                "Windows 11");
+        assertTrue(a.contains("--enable-native-access=ALL-UNNAMED"), a);
+        assertTrue(a.contains("wraith-install"), "要告诉用户重装短命令就能修: " + a);
+        assertTrue(a.contains("24"), "要说清 manifest 那条为什么没生效(JDK 24+ 才识别): " + a);
+        assertTrue(a.contains("可以修的"), a);
+    }
+
+    @Test
+    @DisplayName("没有 native access 那条日志时不要凭空给这个修法 —— 不知道就不说")
+    void adviceStaysSilentAboutNativeAccessWhenNotTheCause() {
+        String a = TerminalBootstrap.advice(dumb(true, List.of(
+                "FINE: Error creating jni based terminal:   <- UnsatisfiedLinkError: no jlinenative")),
+                "Windows 11");
+        assertFalse(a.contains("--enable-native-access"), a);
+    }
+
+    @Test
+    @DisplayName("blockedByNativeAccess 只认那句确切原文")
+    void blockedByNativeAccessMatchesExactMarker() {
+        assertTrue(TerminalBootstrap.blockedByNativeAccess(List.of(
+                "x Native access is not enabled for the current module: unnamed module")));
+        assertFalse(TerminalBootstrap.blockedByNativeAccess(List.of("Error creating jni based terminal")));
+        assertFalse(TerminalBootstrap.blockedByNativeAccess(null));
+        assertFalse(TerminalBootstrap.blockedByNativeAccess(java.util.Arrays.asList((String) null)));
+    }
+
+    @Test
+    @DisplayName("nativeAccessEnabled() 不抛,且三种取值都合法(null = 该 JDK 没这个概念)")
+    void nativeAccessEnabledNeverThrows() {
+        Boolean v = TerminalBootstrap.nativeAccessEnabled();
+        assertTrue(v == null || v || !v);
+        // 实测(mac JDK 26 Homebrew):裸 classpath 是 false,加 --enable-native-access 变 true,
+        // java -jar 走 manifest 的 Enable-Native-Access 也是 true —— 那就是 mac 上 jni 能用的原因。
     }
 
     @Test

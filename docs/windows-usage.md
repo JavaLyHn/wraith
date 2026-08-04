@@ -888,16 +888,58 @@ npx 解析 npx.cmd 绝对路径     ← wraith 做的,毫秒级
 | `??` 开头 | 中文 Windows 控制台码页是 GBK/936，`⚠`(U+26A0) 与变体选择符**不在 GBK 里**，各降一个 `?` | 是，已修（输出自动降级为 `[!]` 这类 ASCII） |
 | 「不支持 ANSI」 | **这句话本身是错的。** 判据把「JLine 拿到了 DumbTerminal」当成了「终端不解释 ANSI」，而这两件事无关 | 是，已修（改判据 + 改措辞） |
 | 输入命令不管用 | `DumbTerminal` **没有 raw mode** → 行编辑、Tab 补全、历史、Ctrl-R 全部失灵。这才是真正的功能损失 | 根因在 JLine provider，见下 |
+| 输入中文后回显成 `???`（输入 `nihao` 正常） | 同一个根因：`DumbTerminal` 读输入走的是控制台码页，中文被读坏。**ASCII 正常、中文坏**就是这个病的指纹 | 修好 `jni` provider 一并解决（原生终端用 `ReadConsoleW` 读宽字符，不经过码页） |
 
 **为什么 Windows 上容易降级**：JLine 4.0 的 provider 默认顺序是 `ffm,jni,exec`，而
 
 | provider | 状况 |
 |---|---|
 | `ffm` | 依赖用的是 `jline:4.0.0:jdk11` classifier，里头 `impl/ffm` **一个 class 都没有**（实测；对照 `jni` 15 个、`exec` 6 个）→ 永远不可用，与运行时 JDK 版本无关。已在代码里显式关掉，不再产生噪音日志 |
-| `exec` | 需要 `stty`，Windows 一般没有 |
+| `exec` | 探测 TTY 要跑 `test -t`，而 Windows 没有 `test.exe`（实测报 `Cannot run program "test"`） |
 | `jni` | 自带原生库（`jlinenative.dll`，x86/x64/arm64 都在 jar 里）→ **Windows 上唯一的路** |
 
 所以 `jni` 一失败就只剩 dumb。
+
+#### 已确证的一个 `jni` 失败原因：native access 没启用
+
+用户实测的 doctor 报告里是这一行：
+
+```
+Unable to load jni provider: ... UnsupportedOperationException:
+  Native access is not enabled for the current module: unnamed module @2d8e6db6
+```
+
+JLine 的 `JniTerminalProvider` **构造器里有个前置检查**：反射调 `Module.isNativeAccessEnabled()`，
+返回 false 就直接抛，于是 Windows 上唯一可用的 provider 加载不了。
+
+那个方法是 **JDK 22+** 才有的，**但 GraalVM 把它回移到了更早版本**（JLine 源码注释里明写了）。
+所以一台 **GraalVM JDK 21** 会落进最难受的中间地带：
+
+| | 情况 |
+|---|---|
+| `Module.isNativeAccessEnabled()` | **有**（GraalVM 回移）→ 检查会执行 |
+| jar manifest 的 `Enable-Native-Access: ALL-UNNAMED` | **不认**（那是 JDK 24+ 才读的）→ 检查结果是 false |
+
+结果就是「检查生效但授权手段不生效」。（对照：mac 上 JDK 26 走 `java -jar` 时 manifest 生效，
+`isNativeAccessEnabled()` 为 true，jni 正常 —— 这就是同一份代码在 mac 上没事的原因。）
+
+**修法：启动时加 `--enable-native-access=ALL-UNNAMED`。**
+
+```powershell
+# 用短命令的话,重装一次就好(wraith.cmd 已会自动探测并加上)
+powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
+
+# 手动跑 jar 时自己加
+java --enable-native-access=ALL-UNNAMED -jar %USERPROFILE%\.wraith\wraith.jar
+```
+
+> **为什么不无条件加**：普通 OpenJDK 21 **不认**这个选项，加了会 `Unrecognized option` 直接起不来。
+> 所以 `wraith.cmd` 会**探测一次**（跑一次 `java --enable-native-access=ALL-UNNAMED -version`），
+> 把答案缓存到 `%USERPROFILE%\.wraith\java-flags.txt`，之后启动零开销。
+> **换过 JDK 就删掉那个文件**（或重跑 `wraith-install`，它会自动清）。
+
+改完再跑一次 `wraith terminal doctor`，`native access` 一行应该变成 `[ok] 已启用`，
+`原生终端控制` 也应该变成 `[ok] 有` —— 那时方向键 / Tab 补全 / 历史就都回来了。
 
 **先跑诊断**（新增子命令，对标 `wraith sandbox doctor`）：
 

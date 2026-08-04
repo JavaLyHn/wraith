@@ -46,7 +46,34 @@ rem CLI: hand the whole argument string to Java untouched.
 rem Exec'd directly on purpose - no PowerShell wrapper on this path, so the
 rem interactive REPL keeps the real console (stdin, raw mode, Ctrl-C) instead
 rem of a piped one.
-java -jar "%JAR%" %*
+rem
+rem  --enable-native-access=ALL-UNNAMED is required by JLine 4 on some JDKs.
+rem  JLine's JniTerminalProvider constructor reflectively calls
+rem  Module.isNativeAccessEnabled() and throws when it is false, so the jni
+rem  provider - the ONLY working one on Windows - never loads. The terminal then
+rem  degrades to DumbTerminal: no raw mode, so no arrow keys, no Tab completion,
+rem  no history, and non-ASCII input gets mangled on echo.
+rem  That method is JDK 22+, but GraalVM backported it - so a GraalVM JDK 21
+rem  enforces the check while NOT honouring the jar manifest's
+rem  Enable-Native-Access entry (that one is only read by JDK 24+).
+rem
+rem  The flag cannot be passed unconditionally: plain OpenJDK 21 rejects it as an
+rem  unrecognized option and refuses to start at all. So probe once, cache the
+rem  answer, and pay zero startup cost afterwards. Delete the cache file (or
+rem  re-run wraith-install) after switching JDKs. See wraith terminal doctor.
+set "FLAGFILE=%USERPROFILE%\.wraith\java-flags.txt"
+if exist "%FLAGFILE%" goto readflags
+java --enable-native-access=ALL-UNNAMED -version >nul 2>&1
+if errorlevel 1 goto writeempty
+echo --enable-native-access=ALL-UNNAMED> "%FLAGFILE%"
+goto readflags
+:writeempty
+rem  A single space keeps set /p from leaving JAVA_FLAGS undefined-but-stale.
+echo. > "%FLAGFILE%"
+:readflags
+set "JAVA_FLAGS="
+set /p JAVA_FLAGS=<"%FLAGFILE%"
+java %JAVA_FLAGS% -jar "%JAR%" %*
 exit /b %ERRORLEVEL%
 
 :desktop

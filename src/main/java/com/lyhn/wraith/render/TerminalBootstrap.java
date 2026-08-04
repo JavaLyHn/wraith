@@ -204,6 +204,51 @@ public final class TerminalBootstrap {
         }
     }
 
+    /**
+     * 本模块的 native access 是否启用；{@code null} = 该 JDK 没有这个概念。
+     *
+     * <p><b>这是 Windows 上 jni provider 失败的确切原因</b>（用户实测的 doctor 报告）：
+     * <pre>
+     * Unable to load jni provider: ... UnsupportedOperationException:
+     *   Native access is not enabled for the current module: unnamed module
+     * </pre>
+     * JLine 的 {@code JniTerminalProvider} 构造器里有个前置检查，反射调
+     * {@code Module.isNativeAccessEnabled()}（JDK 22+ 才有，<b>但 GraalVM 回移到了更早版本</b>），
+     * 返回 false 就抛。用户那台是 JDK 21.0.10 却抛了 —— 说明它回移了这个方法。
+     *
+     * <p>而 jar 的 manifest 里虽然写了 {@code Enable-Native-Access: ALL-UNNAMED}，
+     * 那是 <b>JDK 24+ 才识别</b>的属性，回移了检查却不认 manifest 的 JDK 就卡在中间。
+     *
+     * <p>实测（mac，JDK 26 Homebrew）：裸 classpath 跑是 {@code false}，
+     * 加 {@code --enable-native-access=ALL-UNNAMED} 变 {@code true}；
+     * 而 {@code java -jar} 走 manifest 时也是 {@code true} —— 这就是 mac 上 jni 能用的原因。
+     */
+    public static Boolean nativeAccessEnabled() {
+        try {
+            java.lang.reflect.Method m = Module.class.getMethod("isNativeAccessEnabled");
+            return (Boolean) m.invoke(TerminalBootstrap.class.getModule());
+        } catch (NoSuchMethodException noSuchConcept) {
+            return null;       // JDK < 22 且未回移：不存在这个限制
+        } catch (Throwable unexpected) {
+            return null;
+        }
+    }
+
+    /** 日志里出现的那句确切原因。 */
+    static final String NATIVE_ACCESS_MARKER = "Native access is not enabled";
+
+    static boolean blockedByNativeAccess(List<String> jlineLog) {
+        if (jlineLog == null) {
+            return false;
+        }
+        for (String line : jlineLog) {
+            if (line != null && line.contains(NATIVE_ACCESS_MARKER)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     static int jdkFeatureVersion() {
         try {
             return Runtime.version().feature();
@@ -232,9 +277,21 @@ public final class TerminalBootstrap {
         sb.append("   真正受影响的是**行编辑**：方向键 / Tab 补全 / 历史 / Ctrl-R 会失灵，"
                 + "或者按下去只显示乱码字符。\n");
         if (windows) {
-            sb.append("   Windows 上 JLine 只有一条路可走：ffm 要 JDK 22+（当前 JDK ")
-                    .append(jdkFeatureVersion()).append("），exec 要 stty（Windows 一般没有），")
+            // 「exec 要 stty」这句话改过:实测 exec 在 Windows 上失败的原因是
+            // `Cannot run program "test"` —— 它探测 TTY 用的是 `test -t`,而 Windows 没有 test.exe。
+            sb.append("   Windows 上 JLine 只有一条路可走：ffm 的实现类不在本构件里，")
+                    .append("exec 要跑 `test -t` 探测 TTY（Windows 没有 test.exe），")
                     .append("所以只剩自带原生库的 jni —— 它失败了。\n");
+        }
+        if (blockedByNativeAccess(d.jlineLog())) {
+            sb.append("   **这条是可以修的**：jni 被 JLine 的前置检查挡住了 —— 你的 JDK 回移了\n")
+                    .append("   `Module.isNativeAccessEnabled()`（GraalVM 会），而它返回 false。\n")
+                    .append("   修法：启动时加 `--enable-native-access=ALL-UNNAMED`\n")
+                    .append("     · 用短命令的话重装一次即可（已自动探测并加上）：wraith-install\n")
+                    .append("     · 手动：java --enable-native-access=ALL-UNNAMED -jar "
+                            + "%USERPROFILE%\\.wraith\\wraith.jar\n")
+                    .append("   （jar 的 manifest 里已有 Enable-Native-Access: ALL-UNNAMED，"
+                            + "但那是 JDK 24+ 才识别的）\n");
         }
         List<String> failures = providerFailures(d.jlineLog());
         if (!failures.isEmpty()) {

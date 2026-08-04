@@ -37,7 +37,11 @@ class TerminalDoctorTest {
         // 环境
         assertTrue(text.contains("os.name"), text);
         assertTrue(text.contains("java.version"), text);
-        assertTrue(text.contains("22"), "必须点出 ffm 需要 JDK 22+");
+        // vendor / vm.name 是分辨「是不是 GraalVM 回移了 isNativeAccessEnabled」的关键 ——
+        // 用户那台 JDK 21 抛了本该只在 22+ 出现的异常,没有这两行就没法判断
+        assertTrue(text.contains("java.vendor"), text);
+        assertTrue(text.contains("java.vm.name"), text);
+        assertTrue(text.contains("native access"), "必须报 native access 状态");
         assertTrue(text.contains("控制台编码"), text);
         // 关键环境变量(判 ANSI 证据用的那几个)
         for (String key : List.of("TERM", "WT_SESSION", "ConEmuANSI", "ANSICON",

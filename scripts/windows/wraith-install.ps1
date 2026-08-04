@@ -41,6 +41,17 @@ if ($already) {
   Write-Host "  ⚠ 当前这个终端窗口读不到新 PATH —— **新开一个**再用 wraith"
 }
 
+# ── 清掉 java 启动参数探测缓存 ───────────────────────────────────────────────
+# wraith.cmd 会探测一次 `--enable-native-access=ALL-UNNAMED` 能不能用并把答案缓存起来
+# (JLine 4 的 jni provider 在某些 JDK 上被 Module.isNativeAccessEnabled() 挡住,
+#  而这个选项在普通 OpenJDK 21 上又是无法识别的 —— 所以只能探测,不能硬加)。
+# 换过 JDK 之后旧答案就是错的,装的时候顺手清掉,下次启动重新探测。
+$flagFile = Join-Path $env:USERPROFILE '.wraith\java-flags.txt'
+if (Test-Path $flagFile) {
+  Remove-Item $flagFile -Force -ErrorAction SilentlyContinue
+  Write-Host 'wraith-install: 已清掉 java 启动参数缓存,下次启动会重新探测'
+}
+
 Write-Host ''
 Write-Host 'wraith-install: 完成。用法:'
 Write-Host '  wraith              终端 CLI'
