@@ -110,4 +110,8 @@ describe('config.default.json 的默认口径', () => {
       expect(all, k).toContain(k);
     }
   });
+  it('AI 判定阈值可配置，且模板默认值与代码里的模块常量一致（不留两套数字）', () => {
+    expect(typeof tpl.aiThreshold).toBe('number');
+    expect(tpl.aiThreshold).toBe(2);
+  });
 });

@@ -20,6 +20,7 @@
     "exclude": ["mirror","镜像","翻译","fanyi"]
   },
   "knowledgeRepoHints": ["awesome","cookbook","handbook","roadmap","tutorial","教程","面试"],
+  "aiThreshold": 2,
   "watchlist":  { "orgs": ["anthropics","openai","google","langchain-ai"], "users": [] },
   "tiers":      { "rising": 3000, "mid": 30000 },
   "topN": 5,

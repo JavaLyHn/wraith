@@ -34,13 +34,22 @@ describe('matchesKeyword', () => {
 });
 
 describe('scoreRepo', () => {
-  it('单个 topic 命中给 3 分', () => {
+  it('单个 topic 命中给 3 分，若该 topic 字符串本身也命中一个关键词则再叠加 1 分', () => {
+    // 'ai-agent' 本身命中 topics.agent，score 里的 3 分来自这里；但关键词干草堆现在也扫
+    // repo.topics，'agent' 这个关键词对 'ai-agent' 这个 topic 字符串一样满足词边界
+    // （前面是 '-'，后面是字符串末尾），所以再叠加 1 分，总分 4，不是纯 topic 的 3。
     const r = scoreRepo(repo({ topics: ['ai-agent'] }), CONFIG);
-    expect(r.score).toBe(3);
+    expect(r.score).toBe(4);
     expect(r.topicHits).toEqual(['ai-agent']);
+    expect(r.keywordHits).toEqual(['agent']);
   });
-  it('topic 分数上限 6，三个命中也只算 6', () => {
-    expect(scoreRepo(repo({ topics: ['ai-agent', 'agentic', 'mcp'] }), CONFIG).score).toBe(6);
+  it('topic 分数上限 6，三个命中最多算 6 分（本例另有 2 个关键词经由 topics 命中，一并叠加）', () => {
+    // topicHits 三个都命中，3*3=9 封顶到 6；关键词干草堆现在也扫 topics：'agent' 命中
+    // 'ai-agent'，'MCP' 命中 'mcp'（'agentic' 因为词边界不满足不会再重复命中 'agent'），
+    // keywordHits=['agent','MCP'] 两个，+2。总分 6+2=8。
+    const r = scoreRepo(repo({ topics: ['ai-agent', 'agentic', 'mcp'] }), CONFIG);
+    expect(r.score).toBe(8);
+    expect(r.keywordHits).toEqual(['agent', 'MCP']);
   });
   it('关键词只给弱信号，单个 1 分', () => {
     const r = scoreRepo(repo({ description: 'an LLM toolkit' }), CONFIG);
@@ -62,6 +71,16 @@ describe('scoreRepo', () => {
     const r = scoreRepo(repo({ topics: ['mcp'], description: 'Native MCP support included' }), CONFIG);
     expect(r.score).toBe(4);
     expect(r.keywordHits).toEqual(['MCP']);
+  });
+  it('关键词干草堆现在也扫 topics —— 真实数据里最重要的仓库反而打的 topic 最少，' +
+     '名字/简介里没提，但 topics 里字面写着关键词（例如 whisper.cpp 的 inference/transformer）',
+  () => {
+    // 没有任何 topic 命中 topics 表（topicHits=0），name/description/fullName 里也不含
+    // 关键词——分数完全来自 topics 数组里的字符串本身满足某个关键词的词边界。
+    const r = scoreRepo(repo({ topics: ['llm-toolkit'] }), CONFIG);
+    expect(r.topicHits).toEqual([]);
+    expect(r.keywordHits).toEqual(['LLM']);
+    expect(r.score).toBe(1);
   });
 });
 
@@ -103,14 +122,29 @@ describe('classify', () => {
     const r = classify(repo({ isFork: true, topics: ['ai-agent', 'mcp'] }), CONFIG);
     expect(r.kind).toBe('excluded');
   });
-  it('分数不足 3 判为 unrelated', () => {
+  it('分数不足 2（AI 阈值）判为 unrelated', () => {
     expect(classify(repo({ description: 'an LLM toolkit' }), CONFIG).kind).toBe('unrelated');
   });
-  it('刚好 3 分即算 AI 相关（阈值边界）', () => {
-    expect(classify(repo({ topics: ['mcp'] }), CONFIG).kind).toBe('ai');
+  it('topic 命中 + 该 topic 字符串自身又命中一个关键词，两者叠加后稳稳超过 AI 阈值 2', () => {
+    // 'mcp' 这个 topic 既命中 topics.spec（3 分），其字符串本身又满足关键词 MCP 的词边界
+    // （+1 分），合计 4 分——阈值降到 2 之后，这个输入已经不再"刚好卡线"，而是明显超阈值；
+    // 真正卡在新阈值上的边界另见下面两条 exactly-2 / exactly-1 的测试。
+    const r = classify(repo({ topics: ['mcp'] }), CONFIG);
+    expect(r.kind).toBe('ai');
+    expect(r.score).toBe(4);
   });
-  it('关键词凑满 3 分也算 AI 相关', () => {
+  it('关键词命中封顶 3 分（KEYWORD_CAP，与 AI 阈值 2 无关）同样算 AI 相关', () => {
     expect(classify(repo({ description: 'agent LLM eval' }), CONFIG).kind).toBe('ai');
+  });
+  it('恰好命中新阈值 2 分（两个关键词、零 topic）判为 ai（阈值边界）', () => {
+    const r = classify(repo({ description: 'an agent eval helper', topics: [] }), CONFIG);
+    expect(r.score).toBe(2);
+    expect(r.kind).toBe('ai');
+  });
+  it('恰好 1 分（差一分够不着新阈值 2）判为 unrelated（阈值边界另一侧）', () => {
+    const r = classify(repo({ description: 'an agent framework', topics: [] }), CONFIG);
+    expect(r.score).toBe(1);
+    expect(r.kind).toBe('unrelated');
   });
   it('AI 相关 + 知识类 → knowledge，不进主榜', () => {
     const r = classify(repo({ name: 'awesome-mcp', topics: ['mcp'] }), CONFIG);
