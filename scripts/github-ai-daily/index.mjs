@@ -189,20 +189,27 @@ async function fetchWatchlist(client, config, rows, windowFromMs, notes) {
   ])].filter(Boolean);
   const entries = [];
 
-  // 用户裁定：关注名单的条目也必须先过 classify —— 关注的是 org 而不是 org 的全部产出，
-  // 一份 AI 日报里不该出现 google/boringssl、openai/openai-ruby 这种东西。三类条目
-  // （release / new-repo / surge）一视同仁，只留 ai 与 knowledge。
+  // 关注名单的门槛**故意比主榜低**（用户裁定）：主榜要 score ≥ 3（AI_THRESHOLD），
+  // 这里只要 score ≥ watchlistMinScore（默认 1）。
   //
-  // ⚠ 已知代价（实测，不是推测）：`anthropics/claude-code` 与 `openai/codex` **一个 topic 都没打**，
-  // 简介也躲开了关键词表（"agentic" 过不了 `agent` 的词边界；codex 只命中 1 分，阈值是 3），
-  // 所以它们会被这道闸滤掉 —— 而它们恰恰是 spec §11「池外爆款会漏、靠 watchlist 兜」的正主。
-  // 所以滤掉「窗口内确实有动静」的条目时必须留痕：stderr 打全名单，报告里记一条带样本的汇总，
-  // 不许安静消失。口径归位的办法是往 config 的 keywords.include / topics 里补词，而不是在这儿开后门。
-  const droppedWithEvent = [];
+  // 为什么两套门槛不是随意为之：关注名单存在的意义，恰恰是兜住打分器兜不住的仓库
+  // （spec §11「池外爆款会漏，缓解手段是加进 watchlist」）。实测铁证 ——
+  // `anthropics/claude-code` **一个 topic 都没打**，简介里的 "agentic" 还差一个字母过不了
+  // `agent` 的词边界，score = 0；`openai/codex` score = 1。用主榜的 ≥3 去筛关注名单，
+  // 等于把这个机制最该抓住的两个目标一起筛掉。而噪声那一侧实测全是 0 分
+  // （openai-ruby / langchain-ai/terraform / google/xls…），所以 ≥1 这条低线足够把它们挡住。
+  //
+  // `excluded` 无条件拒：那条路在干真活 —— `google/boringssl` 的简介写着 "Mirror of BoringSSL"，
+  // 命中 exclude 规则，镜像仓库不该出现在任何榜上。`unrelated` 不再自动拒，只看分数。
+  const droppedByScore = [];
+  const droppedExcluded = [];
   const truncated = [];
+  const minScore = config.watchlistMinScore;
   const relevant = (fullName, repo) => {
-    if (['ai', 'knowledge'].includes(classify(repo, config).kind)) return true;
-    droppedWithEvent.push(fullName);
+    const { kind, score } = classify(repo, config);
+    if (kind === 'excluded') { droppedExcluded.push(`${fullName}（排除项）`); return false; }
+    if (score >= minScore) return true;
+    droppedByScore.push(`${fullName}（${score} 分）`);
     return false;
   };
   const reposPerOwner = config.watchlistReposPerOwner;
@@ -266,12 +273,18 @@ async function fetchWatchlist(client, config, rows, windowFromMs, notes) {
       + `（watchlistReposPerOwner）：${truncated.join('、')} 超出了这个数，更靠后的仓库若在窗口内`
       + '发过 release 会被漏掉，需要就把这个值调大');
   }
-  if (droppedWithEvent.length > 0) {
-    const uniq = [...new Set(droppedWithEvent)];
-    log(`[ghai] 关注名单被 classify 滤掉（窗口内有动静但判为不相关）${uniq.length} 条：${uniq.join('、')}`);
-    notes.push(`关注名单：${uniq.length} 个仓库窗口内有动静但被 classify 判为不相关，未列入`
-      + `（样本：${uniq.slice(0, 5).join('、')}${uniq.length > 5 ? ' 等' : ''}）`
-      + '；要让某类仓库进榜，往 config 的 topics / keywords.include 补词');
+  // 被挡掉又确实有窗口内动静的，不许安静消失。两类分开报：分数不够是**口径可调**的
+  // （补关键词或调 watchlistMinScore 就能放进来），排除项是镜像/归档，本来就不该报。
+  if (droppedExcluded.length > 0) {
+    const uniq = [...new Set(droppedExcluded)];
+    log(`[ghai] 关注名单命中排除规则（镜像/归档/黑名单词）${uniq.length} 条：${uniq.join('、')}`);
+  }
+  if (droppedByScore.length > 0) {
+    const uniq = [...new Set(droppedByScore)];
+    log(`[ghai] 关注名单分数不够（窗口内有动静但 < ${minScore} 分）${uniq.length} 条：${uniq.join('、')}`);
+    notes.push(`关注名单：${uniq.length} 个仓库窗口内有动静但 AI 相关性分数低于 `
+      + `watchlistMinScore=${minScore}，未列入（样本：${uniq.slice(0, 5).join('、')}`
+      + `${uniq.length > 5 ? ' 等' : ''}）；要放它们进来就往 config 的 keywords.include / topics 补词`);
   }
 
   const seen = new Set();

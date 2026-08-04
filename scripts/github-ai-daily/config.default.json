@@ -13,7 +13,8 @@
                     "deep-research","multimodal","vlm","claude-code"]
   },
   "keywords": {
-    "include": ["agent","LLM","RAG","MCP","prompt","inference","embedding","eval"],
+    "include": ["agent","agentic","LLM","RAG","MCP","prompt","inference","embedding","eval",
+                "claude","codex","copilot","gpt","transformer","diffusion"],
     "exclude": ["mirror","镜像","翻译","fanyi"]
   },
   "knowledgeRepoHints": ["awesome","cookbook","handbook","roadmap","tutorial","教程","面试"],
@@ -27,5 +28,6 @@
   "baselineMinAgeHours": 20,
   "contributorPoolTopRepos": 50,
   "contributorsPerRepo": 5,
-  "watchlistReposPerOwner": 20
+  "watchlistReposPerOwner": 20,
+  "watchlistMinScore": 1
 }
