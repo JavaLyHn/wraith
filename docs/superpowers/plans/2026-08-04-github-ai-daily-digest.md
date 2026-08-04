@@ -397,7 +397,14 @@ describe('classify', () => {
   it('AI 相关 + 知识类 → knowledge，不进主榜', () => {
     const r = classify(repo({ name: 'awesome-mcp', topics: ['mcp'] }), CONFIG);
     expect(r.kind).toBe('knowledge');
-    expect(r.score).toBe(3);
+    expect(r.score).toBe(4); // topic mcp 得 3 + 名字里词边界命中关键词 MCP 得 1
+  });
+  it('topic 与同名关键词各算一次 —— 两种信号刻意相加，不去重', () => {
+    // 守住这条语义：曾有实现为了凑分数偷偷加过「同名即去重」，那会把
+    // 「结构化 tag」与「简介里的自由文本」这两份独立证据抹成一份。
+    const r = scoreRepo(repo({ topics: ['mcp'], description: 'Native MCP support included' }), CONFIG);
+    expect(r.score).toBe(4);
+    expect(r.keywordHits).toEqual(['MCP']);
   });
   it('知识类但与 AI 无关 → unrelated（不进知识栏）', () => {
     expect(classify(repo({ name: 'awesome-cooking' }), CONFIG).kind).toBe('unrelated');
