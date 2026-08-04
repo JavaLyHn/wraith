@@ -66,7 +66,7 @@
   - `DEFAULT_DATA_DIR: string` —— `join(homedir(), '.wraith', 'reports', 'github-ai-daily')`
   - `class ConfigError extends Error` —— 带 `.path` 与 `.cause`
   - `mergeConfig(template: object, user: object): object` —— 纯函数。递归合并；**用户已有的键一律保留**（含值为 `null`/`0`/`false`/`[]`）；**数组整体替换，不合并**；模板独有的键补进来
-  - `loadConfig({ dataDir, templatePath, fs }): { config: object, path: string, createdFromTemplate: boolean }` —— `fs` 可注入（默认 `node:fs`）。目录不存在则递归创建；`config.json` 不存在则从模板复制并 `createdFromTemplate: true`；JSON 语法错误抛 `ConfigError`
+  - `loadConfig({ dataDir, templatePath }): { config: object, path: string, createdFromTemplate: boolean }` —— 直接用 `node:fs`，**不做 fs 注入**（磁盘测试走真实临时目录，注入假 fs 只会测得更浅）。目录不存在则递归创建；`config.json` 不存在则从模板复制并 `createdFromTemplate: true`；JSON 语法错误抛 `ConfigError`
 
 - [ ] **Step 1: 写 `config.default.json`**
 
