@@ -115,14 +115,14 @@
 
 ### 3.4 重名消歧
 
-目标名已存在时，在扩展名前插入 ` (n)`，n 从 1 递增到不冲突为止：
+**直接复用既有的 `uniqueDownloadName(existing, base)`**（`main/fileOpen.ts:28`，「下载副本」走的就是它，`test/fileOpen.test.ts:28` 已有测试覆盖）。目标名已存在时在扩展名前插入 ` (n)`，n 从 **2** 起递增：
 
 ```
-a.pdf → a (1).pdf → a (2).pdf
-无扩展名的 README → README (1)
+a.pdf → a (2).pdf → a (3).pdf
+无扩展名的 README → README (2)
 ```
 
-**绝不覆盖已有文件。**
+**绝不覆盖已有文件。** 序号从 2 而非 1 起是既有实现的既定行为，跟着它走以保持全应用一致，不为这一个面板另造一套。
 
 ---
 
@@ -201,6 +201,7 @@ interface AddResult { added: string[]; failed: { name: string; reason: string }[
 ```
 
 - 整个面板是 drop zone，拖到任意位置都收；拖拽悬停时整块高亮。
+- **拖拽取磁盘路径必须走既有的 `window.wraith.pathForFile(file)`**（内部是 `webUtils.getPathForFile`）—— Electron 32 已移除 `File.path`，直接读会拿到 `undefined`。Composer 的附件拖拽用的就是这个。
 - `⋯` 菜单：打开 / 在访达中显示 / 删除。
 - 删除走二次确认（复用侧栏会话删除那种「再点一次确认」的就地模式，不弹 modal）。
 - 空态：虚线框 + 「把文件拖进来，或点右上角添加」。
@@ -228,7 +229,7 @@ interface AddResult { added: string[]; failed: { name: string; reason: string }[
 
 | 测试文件 | 覆盖 |
 |---|---|
-| `test/documents.test.ts` | 重名消歧递增；**路径逃逸拦截**（`../` 相对路径、绝对路径、库内软链指向库外）；**「文件不存在」与「路径越界」两条分支不混淆**；隐藏文件与子目录过滤；birthtime 为 0 时回退 mtime；重复添加不覆盖 |
+| `test/documents.test.ts` | **路径逃逸拦截**（`../` 相对路径、绝对路径、库内软链指向库外）；**「文件不存在」与「路径越界」两条分支不混淆**；隐藏文件与子目录过滤；birthtime 为 0 时回退 mtime；重复添加走 `uniqueDownloadName` 不覆盖（消歧算法本身已由 `fileOpen.test.ts` 覆盖，此处只测接线） |
 | `test/documentsView.test.ts` | 搜索过滤（大小写不敏感）；默认倒序；大小格式化（B/KB/MB 边界）；扩展名→图标映射含未知扩展名兜底 |
 | `test/documentsPanel.test.tsx` | 空态渲染；列表渲染；删除二次确认（首次点击不触发删除）；添加失败时 inline 提示 |
 | `test/sidebarToolGroups.test.tsx`（改） | 四组断言，「资料」组含文档项 |
