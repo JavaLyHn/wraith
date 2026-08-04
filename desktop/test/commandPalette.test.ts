@@ -5,12 +5,24 @@ const sessions = [{ id: 's1', title: '总结论文' }, { id: 's2', title: '打�
 const projects = [{ path: '/x/wraith', name: 'wraith' } as never]
 
 describe('buildStaticItems', () => {
-  it('2 命令 + 11 导航 = 13 项,含 new/settings', () => {
+  it('2 命令 + 12 导航 = 14 项,含 new/settings', () => {
     const items = buildStaticItems()
-    expect(items).toHaveLength(13)
+    expect(items).toHaveLength(14)
     expect(items.filter(i => i.group === 'command').map(i => i.action)).toEqual(['new', 'settings'])
-    expect(items.filter(i => i.group === 'nav')).toHaveLength(11)
+    expect(items.filter(i => i.group === 'nav')).toHaveLength(12)
     expect(items.find(i => i.action === 'new')?.hint).toBe('⌘N')
+  })
+
+  // 「文档」面板首版漏登记 NAV_ITEMS:其余 11 个面板都能从 ⌘K 到达,只有它不行。
+  // 数量断言挡不住这种遗漏(改数字就绿了),所以按 action 点名断言。
+  it('每个功能面板都能从 ⌘K 到达(含最新加的 documents)', () => {
+    const navActions = buildStaticItems().filter(i => i.group === 'nav').map(i => i.action)
+    for (const panel of [
+      'plugins', 'automations', 'im-gateway', 'providers', 'skills', 'memory',
+      'snapshots', 'tasks', 'policy', 'browser', 'rag', 'documents',
+    ]) {
+      expect(navActions).toContain('view:' + panel)
+    }
   })
 })
 
@@ -20,7 +32,7 @@ describe('filterPalette', () => {
     const { groups, flat } = filterPalette('', sessions, projects, stat)
     expect(groups.map(g => g.title)).toEqual(['会话', '项目', '命令', '导航'])
     expect(flat[0]!.action).toBe('session:s1')
-    expect(flat.length).toBe(2 + 1 + 13)
+    expect(flat.length).toBe(2 + 1 + 14)
   })
   it('query 过滤会话 + 命令(不区分大小写 contains)', () => {
     const { groups } = filterPalette('招呼', sessions, projects, stat)

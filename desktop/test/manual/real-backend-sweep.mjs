@@ -123,14 +123,14 @@ try {
   })
 
   // ───────────────────────── C 面板可达性 ─────────────────────────
-  log('\n▶ C 11 个功能面板可达')
+  log('\n▶ C 12 个功能面板可达')
   const PANELS = [
     ['nav-plugins', 'plugins-back', 'MCP 插件'], ['nav-automations', 'automations-back', '自动化'],
     ['nav-im-gateway', 'im-back', 'IM 网关'], ['nav-providers', 'providers-back', 'Provider'],
     ['nav-skills', 'skills-back', '技能'], ['nav-memory', 'memory-back', '记忆'],
     ['nav-snapshots', 'snapshot-back', '快照'], ['nav-tasks', 'task-back', '后台任务'],
     ['nav-policy', 'policy-back', '安全'], ['nav-browser', 'browser-back', '浏览器'],
-    ['nav-rag', 'rag-back', '代码检索'],
+    ['nav-rag', 'rag-back', '代码检索'], ['nav-documents', 'documents-back', '文档'],
   ]
   for (const [nav, back, label] of PANELS) {
     await check(`C:${label}`, async () => {

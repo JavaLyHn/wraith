@@ -1,4 +1,5 @@
 import { filterSidebar, type SessionFilterItem } from './sidebarSearch'
+import type { PanelId } from './panelActions'
 import type { ProjectView } from '../../shared/types'
 
 export type PaletteGroup = 'session' | 'project' | 'command' | 'nav'
@@ -10,7 +11,12 @@ export interface PaletteItem {
   action: string       // 'session:<id>' | 'project:<path>' | 'new' | 'settings' | 'view:<view>'
 }
 
-const NAV_ITEMS: { view: string; label: string }[] = [
+/**
+ * ⌘K 的「导航」组 —— **每个功能面板都必须在这里登记一行**,否则该面板从 ⌘K 搜不到,
+ * 而其余面板都搜得到,用户只会当成 bug(「文档」面板首版就漏了这里)。
+ * label 用面板在 ⌘K 里的检索友好名,可以与侧栏/动作卡的 PANEL_LABELS 不同(如 插件 (MCP))。
+ */
+const NAV_ITEMS = [
   { view: 'plugins', label: '插件 (MCP)' },
   { view: 'automations', label: '自动化' },
   { view: 'im-gateway', label: 'IM 网关' },
@@ -22,7 +28,18 @@ const NAV_ITEMS: { view: string; label: string }[] = [
   { view: 'policy', label: '策略' },
   { view: 'browser', label: '浏览器' },
   { view: 'rag', label: 'RAG' },
-]
+  { view: 'documents', label: '文档' },
+] as const satisfies readonly { view: PanelId; label: string }[]
+
+/**
+ * 编译期兜底:漏登记任何一个 PanelId,下面这行就报错(而不是等用户发现 ⌘K 搜不到)。
+ * `view` 从前是裸 `string`,所以漏了「文档」tsc 也照过 —— 这就是那个缺口的补丁。
+ * 真要让某个面板故意不进 ⌘K,请从 Exclude 里显式排除它并写清理由。
+ */
+export type NavCoversEveryPanel =
+  Exclude<PanelId, (typeof NAV_ITEMS)[number]['view']> extends never ? true : never
+const _navCoversEveryPanel: NavCoversEveryPanel = true
+void _navCoversEveryPanel
 
 /** 固定命令 + 导航项(与查询无关)。 */
 export function buildStaticItems(): PaletteItem[] {
