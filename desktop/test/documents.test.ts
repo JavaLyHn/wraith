@@ -4,7 +4,7 @@ import os from 'os'
 import path from 'path'
 import {
   documentsDir, ensureDocumentsDir, listDocuments,
-  resolveInVault, addDocuments, removeDocument,
+  resolveInVault, addDocuments, removeDocument, copyFailReason,
 } from '../src/main/documents'
 
 let tmp: string
@@ -65,6 +65,30 @@ describe('listDocuments', () => {
 
   it('目录不存在时返回空数组而不是抛', async () => {
     expect(await listDocuments(path.join(tmp, 'nope'))).toEqual([])
+  })
+
+  // ── 列举口径必须与 resolveInVault 一致,否则会列出「看得见却删不掉」的死行 ──────
+  // final review 实测复现的两个实例:列出来的行,open/reveal/remove 三个动作全抛,
+  // 用户只能去访达删,而且点开时弹的是「路径越界」这种听着像安全事故的文案。
+
+  it('库内软链(指向库外文件)不出现在列表里 —— 否则它的三个动作全抛「路径越界」', async () => {
+    const outside = path.join(tmp, 'outside.txt')
+    await fs.promises.writeFile(outside, 'sensitive')
+    await fs.promises.symlink(outside, path.join(vault, '看起来很正常.txt'))
+    await fs.promises.writeFile(path.join(vault, 'real.md'), 'x')
+    const list = await listDocuments(vault)
+    expect(list.map(e => e.name)).toEqual(['real.md'])
+    // 同一个名字在 resolveInVault 那侧确实是抛的 —— 两处口径这才对上
+    expect(() => resolveInVault(vault, '看起来很正常.txt')).toThrow(/越界/)
+  })
+
+  it('名字含反斜杠的普通文件不出现在列表里 —— 否则它的三个动作全抛「非法文件名」', async () => {
+    // POSIX 上 \ 是合法文件名字符,从 Windows 拷来/拖进来就能产生
+    await fs.promises.writeFile(path.join(vault, 'a\\b.txt'), 'x')
+    await fs.promises.writeFile(path.join(vault, 'real.md'), 'x')
+    const list = await listDocuments(vault)
+    expect(list.map(e => e.name)).toEqual(['real.md'])
+    expect(() => resolveInVault(vault, 'a\\b.txt')).toThrow(/非法文件名/)
   })
 })
 
@@ -145,6 +169,38 @@ describe('addDocuments', () => {
     expect(r.added).toEqual(['good.md'])
     expect(r.failed).toHaveLength(1)
     expect(r.failed[0].name).toBe('ghost.md')
+    // 中文原因,而不是 `ENOENT: no such file or directory, stat '/…'` 那串带绝对路径的英文
+    expect(r.failed[0].reason).toBe('文件已不存在')
+    expect(r.failed[0].reason).not.toContain(tmp)
+  })
+})
+
+// spec §6 那张表写死了失败原因是「xxx 无读取权限」这类中文;
+// 直接透传 Node 的 err.message 会得到一整串英文 + 完整源路径,和同函数里已有的
+// 中文「暂不支持文件夹」也不是一个口径。
+describe('copyFailReason', () => {
+  const errno = (code: string): NodeJS.ErrnoException =>
+    Object.assign(new Error(`${code}: some raw node text, stat '/Users/x/y'`), { code })
+
+  it('常见 errno 映射成中文', () => {
+    expect(copyFailReason(errno('ENOENT'))).toBe('文件已不存在')
+    expect(copyFailReason(errno('EACCES'))).toBe('无读取权限')
+    expect(copyFailReason(errno('EPERM'))).toBe('无读取权限')
+    expect(copyFailReason(errno('EISDIR'))).toBe('暂不支持文件夹')
+  })
+
+  it('磁盘写满带上原始 errno(spec 明确要求这条能被查)', () => {
+    expect(copyFailReason(errno('ENOSPC'))).toBe('磁盘空间不足(ENOSPC)')
+  })
+
+  it('未收录的 errno 保留原文 —— 罕见故障宁可原样透出也别吞掉', () => {
+    expect(copyFailReason(errno('EMFILE'))).toContain('EMFILE')
+  })
+
+  it('无 code 的 Error / 非 Error 值都能给出字符串', () => {
+    expect(copyFailReason(new Error('炸了'))).toBe('炸了')
+    expect(copyFailReason('炸了')).toBe('炸了')
+    expect(copyFailReason(null)).toBe('null')
   })
 })
 
