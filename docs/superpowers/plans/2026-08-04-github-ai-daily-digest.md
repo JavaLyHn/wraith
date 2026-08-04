@@ -1743,6 +1743,185 @@ EOF
 
 ---
 
+## Task 10: 信噪比收尾与时间口径外置
+
+> **执行顺序：本任务在 Task 9 之前做。** 它改的是 `config.default.json` 的默认口径，而 Task 9 的 runbook 要按最终口径写。
+
+**背景（全部来自 Task 8 的真机数据，不是推测）：**
+
+- `Effect-TS/effect` 仅凭 topic `observability` 就拿满 3 分进了主榜 —— 它是 TypeScript 的 effect 系统库，与 AI 无关。`observability` / `evaluation` / `inference` / `memory` / `sandbox` 这几个词在 GitHub 上大量非 AI 仓库也在用，却和 `ai-agent` 同样值 3 分。
+- `isKnowledge` 的干草堆只有 name / description / fullName，**不含 topics**，而同一文件的 `isExcluded` 是含 topics 的。这个不对称让只打了 `tutorial` 类 tag、名字里没线索的教程仓库溜进主榜（Task 8 实测约 10 个，例如 `microsoft/generative-ai-for-beginners`）。
+- 用户要求：**所有时间设置都必须可改**。目前仍写死在源码里的时间常量有四处。
+
+**Files:**
+- Modify: `scripts/github-ai-daily/config.default.json`
+- Modify: `scripts/github-ai-daily/classify.mjs`（`isKnowledge` 的干草堆加上 topics）
+- Modify: `scripts/github-ai-daily/rank.mjs:1,81`（`STREAK_TTL_DAYS` → 参数）
+- Modify: `scripts/github-ai-daily/github.mjs:10,11`（`MAX_RETRIES` / `SEARCH_THROTTLE_MS` → 构造参数）
+- Modify: `scripts/github-ai-daily/index.mjs:34,35`（`WINDOW_NOMINAL_HOURS` / `WINDOW_TOLERANCE_HOURS` → 读配置；并把上面三个值从配置传进去）
+- Test: `desktop/test/githubAiDaily.classify.test.mjs`、`.rank.test.mjs`、`.github.test.mjs`、`.config.test.mjs`
+
+**Interfaces:**
+- Consumes: 已有的 `classify` / `updateStreaks` / `GitHubClient` 契约
+- Produces（全部向后兼容，默认值不变）：
+  - `updateStreaks(prev, rankedFullNames, todayISO, ttlDays = 30)` —— 第四参可选
+  - `new GitHubClient({ …, searchThrottleMs = 2100, maxRetries = 3 })` —— 两个新可选项
+  - `isKnowledge(repo, config)` 语义扩展：`repo.topics` 也参与提示词匹配
+  - `config.default.json` 新增 `streakTtlDays: 30`、`windowNominalHours: 24`、`windowToleranceHours: 1`、`searchThrottleMs: 2100`、`graphqlMaxRetries: 3`
+  - `config.default.json` 移除五个通用 topic：`observability` / `evaluation` / `inference`（engineering 组）、`memory`（context 组）、`sandbox`（security 组）。**保留** `evals` / `llm-serving` / `context-engineering` / `agent-security` 等 AI 专用词
+
+**不在本任务范围：** `BASELINE_MAX_ATTEMPTS = 3` 与 `COLD_START_FORK_CANDIDATES = 30` 留作常数 —— 它们不是时间口径，且都是 spec/brief 明文规定的数字。
+
+- [ ] **Step 1: 写失败的测试（四个文件各加一块）**
+
+`desktop/test/githubAiDaily.classify.test.mjs` —— 追加到 `describe('isKnowledge', …)` 与 `describe('classify', …)` 里：
+
+```js
+  it('提示词只出现在 topics 里也算知识类（教程仓常只打 tag，名字里没线索）', () => {
+    expect(isKnowledge(repo({ topics: ['awesome-list'], primaryLanguage: 'Python' }), CONFIG)).toBe(true);
+  });
+  it('topics 干草堆与 isExcluded 对称 —— 两者都看 topics', () => {
+    expect(isKnowledge(repo({ topics: ['cookbook'], primaryLanguage: 'Go' }), CONFIG)).toBe(true);
+    expect(isKnowledge(repo({ topics: ['ai-agent'], primaryLanguage: 'Go' }), CONFIG)).toBe(false);
+  });
+```
+
+```js
+  it('靠 topic 认出的教程仓进知识栏而不是主榜', () => {
+    const r = classify(repo({ topics: ['mcp', 'awesome-list'], primaryLanguage: 'Python' }), CONFIG);
+    expect(r.kind).toBe('knowledge');
+  });
+```
+
+`desktop/test/githubAiDaily.rank.test.mjs` —— 追加到 `describe('updateStreaks', …)`：
+
+```js
+  it('TTL 可配置：给 5 天时，6 天没上榜的清掉、正好 5 天的保留', () => {
+    const prev = { 'a/old': { days: 2, lastDate: '2026-07-29' },
+                   'a/edge': { days: 2, lastDate: '2026-07-30' } };
+    const s = updateStreaks(prev, [], '2026-08-04', 5);
+    expect(s['a/old']).toBeUndefined();
+    expect(s['a/edge']).toEqual({ days: 2, lastDate: '2026-07-30' });
+  });
+  it('不传 TTL 时沿用 30 天默认（旧调用不受影响）', () => {
+    const s = updateStreaks({ 'a/b': { days: 1, lastDate: '2026-07-20' } }, [], '2026-08-04');
+    expect(s['a/b']).toBeDefined();
+  });
+```
+
+`desktop/test/githubAiDaily.github.test.mjs` —— 新增一块：
+
+```js
+describe('节流与重试可配置', () => {
+  it('搜索节流用注入的 searchThrottleMs', async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = vi.fn(async () => jsonRes({ items: [], total_count: 0 }));
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep, searchThrottleMs: 500 });
+    await c.searchRepos('topic:mcp', { maxPages: 1 });
+    expect(sleep).toHaveBeenCalledWith(500);
+  });
+  it('maxRetries 给 1 时最多 2 次 fetch', async () => {
+    const fetchImpl = vi.fn(async () => jsonRes({ errors: [{ type: 'RATE_LIMITED' }] }));
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep: async () => {}, maxRetries: 1 });
+    await expect(c.graphql('query{}', {})).rejects.toThrow();
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+  it('都不传时沿用 2100ms / 3 次重试的默认', async () => {
+    const sleep = vi.fn(async () => {});
+    const fetchImpl = vi.fn(async () => jsonRes({ items: [], total_count: 0 }));
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep });
+    await c.searchRepos('topic:mcp', { maxPages: 1 });
+    expect(sleep).toHaveBeenCalledWith(2100);
+  });
+});
+```
+
+`desktop/test/githubAiDaily.config.test.mjs` —— 新增一块（直接断言随仓库走的模板，这是唯一允许放默认口径的文件）：
+
+```js
+describe('config.default.json 的默认口径', () => {
+  const tpl = JSON.parse(readFileSync(
+    new URL('../../scripts/github-ai-daily/config.default.json', import.meta.url), 'utf8'));
+
+  it('所有时间口径都在配置里', () => {
+    for (const k of ['streakTtlDays', 'windowNominalHours', 'windowToleranceHours',
+                     'searchThrottleMs', 'graphqlMaxRetries', 'baselineMinAgeHours',
+                     'snapshotRetainDays', 'activeWithinDays']) {
+      expect(typeof tpl[k], k).toBe('number');
+    }
+  });
+  it('通用词不再当强信号', () => {
+    const all = Object.values(tpl.topics).flat();
+    for (const g of ['observability', 'evaluation', 'inference', 'memory', 'sandbox']) {
+      expect(all, g).not.toContain(g);
+    }
+  });
+  it('AI 专用的近义词保留', () => {
+    const all = Object.values(tpl.topics).flat();
+    for (const k of ['evals', 'llm-serving', 'context-engineering', 'agent-security']) {
+      expect(all, k).toContain(k);
+    }
+  });
+});
+```
+
+- [ ] **Step 2: 跑四个测试文件确认失败**
+
+Run: `cd desktop && npx vitest run test/githubAiDaily.classify.test.mjs test/githubAiDaily.rank.test.mjs test/githubAiDaily.github.test.mjs test/githubAiDaily.config.test.mjs`
+Expected: 新增的断言全红（旧断言全绿）
+
+- [ ] **Step 3: 实现**
+
+- `classify.mjs`：把 `isKnowledge` 的干草堆从 `haystacks(repo)` 改成 `[...haystacks(repo), ...(repo.topics ?? [])]`，与 `isExcluded` 对称。语言判定（`null` / `Markdown`）那条保持不变。
+- `rank.mjs`：`updateStreaks(prev, rankedFullNames, todayISO, ttlDays = STREAK_TTL_DAYS)`，函数体里的常量引用改成参数。常量保留为**默认值**，不删。
+- `github.mjs`：构造函数解构里加 `searchThrottleMs = SEARCH_THROTTLE_MS`、`maxRetries = MAX_RETRIES`，存到 `this.*`，把三处 `MAX_RETRIES` 与一处 `SEARCH_THROTTLE_MS` 的引用换成实例字段。报错文案里的次数也要用实例值。
+- `index.mjs`：删掉 `WINDOW_NOMINAL_HOURS` / `WINDOW_TOLERANCE_HOURS` 两个常量，改从 `config` 读；构造 `GitHubClient` 时传 `searchThrottleMs: config.searchThrottleMs`、`maxRetries: config.graphqlMaxRetries`；调 `updateStreaks` 时传 `config.streakTtlDays`。**每一处都要能容忍配置缺键**（老用户的 `config.json` 不会自动长出新键 —— `mergeConfig` 只补缺失键，所以标量新键会被补上；但要写成 `config.x ?? <默认>` 以防用户显式写了 `null`）。
+- `config.default.json`：加五个新键、删五个通用 topic。
+
+- [ ] **Step 4: 跑测试确认通过**
+
+Run: 同 Step 2 的命令
+Expected: 全绿
+
+- [ ] **Step 5: 跑全量闸门**
+
+Run: `cd desktop && npm test && npm run typecheck`
+Expected: 全绿，测试数比基线 1084 增加
+
+- [ ] **Step 6: 眼验配置改动的实际效果（不许跑全量真机）**
+
+写一个一次性脚本（放 scratchpad，不进仓库），拿 Task 8 留在 scratchpad 里的快照，用**新旧两份配置**各跑一遍 `classify`，报出：主榜仓库数变化、被移出主榜转入知识栏的仓库清单（应能看到 `microsoft/generative-ai-for-beginners` 这类）、以及因删掉通用 topic 而掉出池子的仓库清单（应能看到 `Effect-TS/effect`）。把清单粘进报告。这是本任务唯一的效果证据。
+
+- [ ] **Step 7: 提交**
+
+```bash
+git add scripts/github-ai-daily/config.default.json scripts/github-ai-daily/classify.mjs \
+        scripts/github-ai-daily/rank.mjs scripts/github-ai-daily/github.mjs \
+        scripts/github-ai-daily/index.mjs \
+        desktop/test/githubAiDaily.classify.test.mjs desktop/test/githubAiDaily.rank.test.mjs \
+        desktop/test/githubAiDaily.github.test.mjs desktop/test/githubAiDaily.config.test.mjs
+git commit -m "$(cat <<'EOF'
+feat(ghai): 通用词不该和 ai-agent 一样值 3 分,时间口径也不该写死在源码里
+
+真机数据说话:Effect-TS/effect 仅凭 topic observability 就满了 3 分门槛进主
+榜,而它是 TypeScript 的 effect 系统库。observability/evaluation/inference/
+memory/sandbox 这五个词在 GitHub 上大量非 AI 仓库也在用,从默认配置里拿掉;
+evals、llm-serving、context-engineering 这类 AI 专用近义词保留。
+
+isKnowledge 的干草堆本来不含 topics,而同一文件的 isExcluded 含 —— 这个不
+对称让只打了 tag、名字里没线索的教程仓溜进主榜。补上,两者对称。
+
+剩下四处时间常量(streak TTL / 窗口标称与容差 / search 节流 / GraphQL 重试
+次数)全部搬进 config,默认值不变。用户的要求是「所有时间设置都能改」,写死
+在源码里的数字不算能改。
+
+Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
 ## Self-Review
 
 **Spec 覆盖检查：**
