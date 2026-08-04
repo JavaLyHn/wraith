@@ -77,25 +77,29 @@ export function mergePool(pool, found, todayISO, config) {
   return { pool: nextPool, added, dropped };
 }
 
-// 逐条查询执行 + 分类分流。单条查询失败只记 note、不中断 —— 一个 topic 挂了
-// 不该毁掉整次发现；classify() 之后 ai/knowledge 都要入池（知识类也需要日增数据
-// 才能出「知识类」报告栏），unrelated/excluded 直接丢弃、不进池。
-export async function discover(client, config, pool, todayISO) {
-  const queries = buildQueries(config, { todayISO });
+// 两个 discover* 入口共用的执行核心：逐条查询、按 fullName 去重、单条失败只记 note、
+// 不中断其余查询——一个 topic 挂了不该毁掉整次发现。此前 discover 与 discoverNewRepos
+// 各自维护一份几乎相同的循环，唯一的差异（记不记 note）恰好在最要紧的地方悄悄分叉；
+// 现在两者共享同一份循环 + 同一份错误可见性策略，不再有漂移的余地。
+async function runQueries(client, queries) {
   const notes = [];
-  const foundByName = new Map();
-
+  const results = new Map();
   for (const q of queries) {
     try {
-      const results = await client.searchRepos(q);
-      for (const repo of results) {
-        if (!foundByName.has(repo.fullName)) foundByName.set(repo.fullName, repo);
+      const repos = await client.searchRepos(q);
+      for (const repo of repos) {
+        if (!results.has(repo.fullName)) results.set(repo.fullName, repo);
       }
     } catch (err) {
       notes.push(`查询失败：${q} —— ${err.message}`);
     }
   }
+  return { results, notes };
+}
 
+// classify() 之后 ai/knowledge 都要入池（知识类也需要日增数据才能出「知识类」报告栏），
+// unrelated/excluded 直接丢弃、不进池。
+function splitByKind(foundByName, config) {
   const aiRepos = [];
   const knowledgeRepos = [];
   const poolCandidates = [];
@@ -110,34 +114,29 @@ export async function discover(client, config, pool, todayISO) {
     }
     // 'unrelated' / 'excluded'：丢弃，不进池
   }
+  return { aiRepos, knowledgeRepos, poolCandidates };
+}
 
+export async function discover(client, config, pool, todayISO) {
+  const queries = buildQueries(config, { todayISO });
+  const { results: foundByName, notes } = await runQueries(client, queries);
+  const { aiRepos, knowledgeRepos, poolCandidates } = splitByKind(foundByName, config);
   const { pool: nextPool, added, dropped } = mergePool(pool, poolCandidates, todayISO, config);
   return { pool: nextPool, added, dropped, aiRepos, knowledgeRepos, notes };
 }
 
 // 「首日开源」板独立于候选池：不写入/不依赖 pool 的 firstSeen 连续性，每天单纯问一遍
-// 「从 sinceISO 起新建的、已经有点星的仓库有哪些」。同样按 classify 过滤掉不相关/排除项，
-// 同样单条查询失败不拖累其余——只是这里没有 notes 出口，失败就跳过该条继续。
+// 「从 sinceISO 起新建的、已经有点星的仓库有哪些」。同样按 classify 过滤掉不相关/排除项。
+// notes 必须跟着 repos 一起返回——一次 07:00 无人值守的 cron 里，把失败吞进空数组会让
+// 「今天真的一个新仓库都没有」和「查询接口全挂了」变得无法区分；report.mjs 的
+// failures.notes 需要看到这些内容，console.error 在无人值守场景下没人能看见。
 export async function discoverNewRepos(client, config, sinceISO) {
   const queries = buildNewRepoQueries(config, { sinceISO });
-  const foundByName = new Map();
-
-  for (const q of queries) {
-    try {
-      const results = await client.searchRepos(q);
-      for (const repo of results) {
-        if (!foundByName.has(repo.fullName)) foundByName.set(repo.fullName, repo);
-      }
-    } catch {
-      // 单条查询失败：跳过，不中断其余查询。这个函数的返回类型固定为 Repo[]，
-      // 没有 notes 出口——真正需要感知失败时用 discover()。
-    }
-  }
-
-  const out = [];
+  const { results: foundByName, notes } = await runQueries(client, queries);
+  const repos = [];
   for (const repo of foundByName.values()) {
     const { kind } = classify(repo, config);
-    if (kind === 'ai' || kind === 'knowledge') out.push(repo);
+    if (kind === 'ai' || kind === 'knowledge') repos.push(repo);
   }
-  return out;
+  return { repos, notes };
 }

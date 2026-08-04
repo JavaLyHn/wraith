@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildQueries, buildNewRepoQueries, mergePool, discover }
+import { buildQueries, buildNewRepoQueries, mergePool, discover, discoverNewRepos }
   from '../../scripts/github-ai-daily/discover.mjs';
 
 const CONFIG = {
@@ -37,6 +37,10 @@ describe('buildNewRepoQueries', () => {
     expect(qs[0]).toContain('created:>=2026-08-03');
     expect(qs[0]).toContain('stars:>=5');
     expect(qs.some((q) => q.includes('stars:>=100'))).toBe(false);
+  });
+  it('配置为空时不产出裸查询（与 buildQueries 同一条约束）', () => {
+    expect(buildNewRepoQueries({ topics: {}, keywords: {}, newRepoMinStars: 5 },
+      { sinceISO: '2026-08-03' })).toEqual([]);
   });
 });
 
@@ -91,5 +95,35 @@ describe('discover', () => {
     const r = await discover(client, CONFIG, {}, '2026-08-04');
     expect(r.aiRepos.length).toBeGreaterThan(0);
     expect(r.notes.some((n) => n.includes('topic:mcp'))).toBe(true);
+  });
+});
+
+describe('discoverNewRepos', () => {
+  it('按 classify 过滤：AI/知识类保留，剔除的丢弃', async () => {
+    const client = { searchRepos: vi.fn(async (q) => {
+      if (q.startsWith('topic:ai-agent')) return [repo('new/agent'), repo('new/awesome', { name: 'awesome-thing' })];
+      if (q.startsWith('topic:agentic')) return [repo('new/fork', { isFork: true })];
+      return [];
+    }) };
+    const r = await discoverNewRepos(client, CONFIG, '2026-08-03');
+    expect(r.repos.map((x) => x.fullName).sort()).toEqual(['new/agent', 'new/awesome']);
+    expect(r.notes).toEqual([]);
+  });
+  it('全部查询失败：repos 为空，notes 非空且点名失败查询（否则和「今天真没有新库」无法区分）', async () => {
+    const client = { searchRepos: vi.fn(async () => { throw new Error('network down'); }) };
+    const r = await discoverNewRepos(client, CONFIG, '2026-08-03');
+    expect(r.repos).toEqual([]);
+    expect(r.notes.length).toBeGreaterThan(0);
+    expect(r.notes.every((n) => n.includes('查询失败'))).toBe(true);
+    expect(r.notes.some((n) => n.includes('network down'))).toBe(true);
+  });
+  it('部分查询失败：成功的结果保留，同时记一条 note', async () => {
+    const client = { searchRepos: vi.fn(async (q) => {
+      if (q.startsWith('topic:mcp')) throw new Error('boom');
+      return [repo('new/ok')];
+    }) };
+    const r = await discoverNewRepos(client, CONFIG, '2026-08-03');
+    expect(r.repos.map((x) => x.fullName)).toEqual(['new/ok']);
+    expect(r.notes.some((n) => n.includes('topic:mcp') && n.includes('boom'))).toBe(true);
   });
 });
