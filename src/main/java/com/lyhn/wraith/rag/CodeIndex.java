@@ -137,14 +137,21 @@ public class CodeIndex {
      * 索引小结。有任何失败时必须把「不完整」和首个失败原因说出来 —— 残缺索引最坏的形态是
      * 静默:面板显示「已索引 N 块」，用户以为搜得全，实际有一批代码永远搜不到。
      */
-    private static String summarize(VectorStore.IndexStats stats, EmbedOutcome embedded, int failedFileCount) {
+    private String summarize(VectorStore.IndexStats stats, EmbedOutcome embedded, int failedFileCount) {
         if (embedded.failedChunks == 0 && failedFileCount == 0) {
             return String.format("索引完成：%d 个代码块，%d 条关系", stats.chunkCount(), stats.relationCount());
         }
         String reason = embedded.firstError == null ? "" : "；首个失败原因：" + embedded.firstError;
-        return String.format("索引完成但不完整：%d 个代码块，%d 条关系（%d 个代码块向量化失败，涉及 %d 个文件失败，"
+        String base = String.format("索引完成但不完整：%d 个代码块，%d 条关系（%d 个代码块向量化失败，涉及 %d 个文件失败，"
                         + "这些代码搜不到，建议重试）%s",
                 stats.chunkCount(), stats.relationCount(), embedded.failedChunks, failedFileCount, reason);
+        // 索引**跑到一半**后端挂掉是另一条真实路径(开跑前的探测已在 Main.ragIndex 处理)。
+        // 那时用户看到的是同一个 IPv6 障眼法(「Failed to connect to localhost/[0:0:0:0:0:0:0:1]」),
+        // 同样会把人引去查 IPv6 —— 真实原因是服务没在跑。诊断附在原文**之后**、单独一段:
+        // 原文一律保留,「连接被拒」「401 key 错」「429 限流」是完全不同的事。
+        String hint = EmbeddingErrorHint.ofMessage(embeddingClient.getBaseUrl(),
+                embeddingClient.getProvider(), embedded.firstError);
+        return hint.isEmpty() ? base : base + "\n\n" + hint;
     }
 
     /** 阶段 2 的产出:成功条目 + 失败账目(谁失败了、失败了多少、第一条原因)。 */

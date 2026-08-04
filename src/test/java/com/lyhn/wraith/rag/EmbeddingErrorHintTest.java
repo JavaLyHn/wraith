@@ -95,8 +95,8 @@ class EmbeddingErrorHintTest {
     @DisplayName("坏 URL / null 不许抛 —— 诊断层崩了会盖掉真正的错误")
     void malformedInputsAreSafe() {
         assertEquals("", EmbeddingErrorHint.of(null, new ConnectException("Failed to connect to x")));
-        assertEquals("", EmbeddingErrorHint.of("not a url", null));
-        assertEquals("", EmbeddingErrorHint.of("", null));
+        assertEquals("", EmbeddingErrorHint.of("not a url", (Throwable) null));
+        assertEquals("", EmbeddingErrorHint.of("", (Throwable) null));
         // baseUrl 坏但异常是连接失败:至少不能抛
         EmbeddingErrorHint.of("http://[bad", new ConnectException("Failed to connect to x"));
     }
@@ -108,5 +108,62 @@ class EmbeddingErrorHintTest {
             String hint = EmbeddingErrorHint.of(url, new ConnectException("Failed to connect"));
             assertTrue(hint.contains("没在运行"), url + " 该按本机处理: " + hint);
         }
+    }
+
+    // ---- 只有消息字符串的重载(CodeIndex.EmbedOutcome.firstError 存的就是消息) ----
+
+    @Test
+    @DisplayName("消息重载:OkHttp 那句原文照样识别得出来")
+    void messageOverloadRecognizesOkHttpText() {
+        String hint = EmbeddingErrorHint.ofMessage(OLLAMA,
+                "Failed to connect to localhost/[0:0:0:0:0:0:0:1]:11434");
+        assertTrue(hint.contains("没在运行"), hint);
+        assertTrue(hint.contains("IPv6"), hint);
+    }
+
+    @Test
+    @DisplayName("消息重载:非连接失败一律闭嘴(429 / 读超时的消息 / null / 空串)")
+    void messageOverloadStaysQuietOtherwise() {
+        assertEquals("", EmbeddingErrorHint.ofMessage(OLLAMA, "Embedding API 请求失败 [429]: rate limited"));
+        assertEquals("", EmbeddingErrorHint.ofMessage(OLLAMA, "timeout"));
+        assertEquals("", EmbeddingErrorHint.ofMessage(OLLAMA, null));
+        assertEquals("", EmbeddingErrorHint.ofMessage(OLLAMA, ""));
+    }
+
+    @Test
+    @DisplayName("消息重载:404 模型没拉也识别")
+    void messageOverloadRecognizesMissingModel() {
+        assertTrue(EmbeddingErrorHint.ofMessage(OLLAMA,
+                        "Embedding API 请求失败 [404]: {\"error\":\"model \\\"bge-m3:latest\\\" not found, try pulling it first\"}")
+                .contains("ollama pull"));
+    }
+
+    @Test
+    @DisplayName("验证地址:端口用配置的那个,主机名规范成 127.0.0.1")
+    void verifyUrlKeepsThePortAndNormalizesTheHost() {
+        // 写死 11434 会叫人去查一个他没在用的端口(EmbeddingConfigWiringTest 就是这么红的)
+        String custom = EmbeddingErrorHint.of("http://localhost:9999", "ollama",
+                new ConnectException("Failed to connect"));
+        assertTrue(custom.contains("127.0.0.1:9999"), "端口该保真: " + custom);
+        assertFalse(custom.contains("11434"), "不该出现一个用户没配的端口: " + custom);
+    }
+
+    @Test
+    @DisplayName("provider 不是 ollama 的本机地址:不建议去起 ollama(可能是本机中转/自建服务)")
+    void nonOllamaLocalBackendGetsGenericAdvice() {
+        String hint = EmbeddingErrorHint.of("http://127.0.0.1:1", "openai",
+                new ConnectException("Failed to connect to /127.0.0.1:1"));
+        assertFalse(hint.contains("ollama serve"), "provider 是 openai,让人去起 ollama 是答错了: " + hint);
+        assertTrue(hint.contains("127.0.0.1:1"), hint);
+        assertTrue(hint.contains("openai"), "该点出当前 provider,便于对照: " + hint);
+    }
+
+    @Test
+    @DisplayName("provider 缺省(空)按 ollama 算 —— EmbeddingClient.of 的默认就是它")
+    void blankProviderDefaultsToOllama() {
+        assertTrue(EmbeddingErrorHint.of(OLLAMA, "", new ConnectException("Failed to connect"))
+                .contains("ollama serve"));
+        assertTrue(EmbeddingErrorHint.of(OLLAMA, null, new ConnectException("Failed to connect"))
+                .contains("ollama serve"));
     }
 }

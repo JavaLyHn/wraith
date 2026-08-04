@@ -33,10 +33,40 @@ public final class EmbeddingErrorHint {
      * @return 要插在原文之前的诊断；无话可说时返回 {@code ""}
      */
     public static String of(String baseUrl, Throwable error) {
+        return of(baseUrl, null, error);
+    }
+
+    /** 带 provider 的版本：只有 provider 真是 ollama 时才说 ollama 那套话。 */
+    public static String of(String baseUrl, String provider, Throwable error) {
         if (error == null) {
             return "";
         }
-        String msg = error.getMessage() == null ? "" : error.getMessage();
+        return build(baseUrl, provider, error.getMessage(), error instanceof ConnectException);
+    }
+
+    /**
+     * 只有消息字符串时用这个(名字与 of 不同是必须的:两者第二参都可为 null,同名会歧义)（{@code CodeIndex} 的 {@code EmbedOutcome.firstError} 存的就是消息）。
+     *
+     * <p><b>代价说清</b>：拿不到 {@code instanceof ConnectException} 这一路判据，只能靠
+     * 「消息以 {@code Failed to connect to} 开头」。OkHttp 的 {@code ConnectException} 消息
+     * 恒是这个前缀，所以真实场景覆盖得住；代价是别的库若抛出同样措辞会被误判 ——
+     * 而误判的后果只是多一句建议，不会盖掉原文。
+     */
+    public static String ofMessage(String baseUrl, String errorMessage) {
+        return build(baseUrl, null, errorMessage, false);
+    }
+
+    /** 带 provider 的消息版。 */
+    public static String ofMessage(String baseUrl, String provider, String errorMessage) {
+        return build(baseUrl, provider, errorMessage, false);
+    }
+
+    private static String build(String baseUrl, String provider, String errorMessage,
+                                boolean connectException) {
+        String msg = errorMessage == null ? "" : errorMessage;
+        if (msg.isEmpty() && !connectException) {
+            return "";
+        }
 
         // 模型没拉过:服务是通的,别让人去启动服务
         if (msg.contains("not found, try pulling it first") || msg.contains("model not found")) {
@@ -46,20 +76,29 @@ public final class EmbeddingErrorHint {
         }
 
         // 只认「连不上」。读超时是「连上了但慢」,401/402/429 各有各的处理 —— 都不在这里说话。
-        boolean connectFailure = error instanceof ConnectException
-                || msg.startsWith("Failed to connect to");
+        boolean connectFailure = connectException || msg.startsWith("Failed to connect to");
         if (!connectFailure) {
             return "";
         }
 
         Host host = hostOf(baseUrl);
-        if (host.local) {
+        // 验证地址:**端口用配置的那个**(写死 11434 会叫人去查一个他没在用的端口),
+        // 而主机名规范成 127.0.0.1 —— `localhost` 正是引起这场混乱的那个名字,
+        // 用 IPv4 字面量验证才不带解析这个变量。
+        String verifyUrl = "http://" + host.verifyDisplay;
+        String ipv6Note = " 顺带一句：报错里若出现 `[0:0:0:0:0:0:0:1]`，那是 IPv6 回环地址，"
+                + "但它**不是**原因 —— Java 会先试 127.0.0.1，那串只是最后一个尝试过的地址。";
+        if (host.local && isOllama(provider)) {
             return "连不上本机的 embedding 服务（" + host.display + "）。最常见的原因是 "
                     + "**ollama 没在运行**：Windows 上从开始菜单启动 Ollama（托盘会出现图标），"
-                    + "或在命令行跑 `ollama serve`；用 `curl http://127.0.0.1:11434/api/version` "
-                    + "或浏览器打开 http://127.0.0.1:11434 验证（应显示 Ollama is running）。"
-                    + "顺带一句：原文里那个 `[0:0:0:0:0:0:0:1]` 是 IPv6 回环地址，"
-                    + "但它**不是**原因 —— Java 会先试 127.0.0.1，那串只是最后一个尝试过的地址。";
+                    + "或在命令行跑 `ollama serve`；用 `curl " + verifyUrl + "/api/version` "
+                    + "或浏览器打开 " + verifyUrl + " 验证（应显示 Ollama is running）。" + ipv6Note;
+        }
+        if (host.local) {
+            // provider 不是 ollama:可能是本机中转/自建服务,让人去起 ollama 就答错了
+            return "本机 " + host.display + " 上没有服务在监听。检查这个服务是否已启动、"
+                    + "端口与 BASE URL 是否写对（当前 provider 是 "
+                    + (provider == null || provider.isBlank() ? "未指定" : provider.trim()) + "）。" + ipv6Note;
         }
         if (!host.display.isEmpty()) {
             return "连不上 " + host.display + "。检查 BASE URL 是否写对、网络与防火墙是否放行；"
@@ -68,18 +107,30 @@ public final class EmbeddingErrorHint {
         return "";
     }
 
-    private record Host(String display, boolean local) {}
+    /** provider 为空按默认（ollama）算 —— {@code EmbeddingClient.of} 的缺省就是它。 */
+    private static boolean isOllama(String provider) {
+        if (provider == null || provider.isBlank()) {
+            return true;
+        }
+        return "ollama".equals(provider.trim().toLowerCase(Locale.ROOT));
+    }
+
+    /**
+     * @param display      给人看的 host:port（原样,来自配置）
+     * @param verifyDisplay 验证命令里用的 host:port（本机时主机名规范成 127.0.0.1）
+     */
+    private record Host(String display, String verifyDisplay, boolean local) {}
 
     /** 解析 baseUrl 的 host:port；解析不了就给空（宁可不说话，也不要说错）。 */
     private static Host hostOf(String baseUrl) {
         if (baseUrl == null || baseUrl.isBlank()) {
-            return new Host("", false);
+            return new Host("", "", false);
         }
         try {
             URI uri = URI.create(baseUrl.trim());
             String host = uri.getHost();
             if (host == null || host.isBlank()) {
-                return new Host("", false);
+                return new Host("", "", false);
             }
             int port = uri.getPort();
             String display = port > 0 ? host + ":" + port : host;
@@ -91,9 +142,11 @@ public final class EmbeddingErrorHint {
             boolean local = "localhost".equals(lower) || "127.0.0.1".equals(lower)
                     || "::1".equals(lower) || "0:0:0:0:0:0:0:1".equals(lower)
                     || lower.startsWith("127.");
-            return new Host(display, local);
+            String verifyHost = local ? "127.0.0.1" : host;
+            String verifyDisplay = port > 0 ? verifyHost + ":" + port : verifyHost;
+            return new Host(display, verifyDisplay, local);
         } catch (Exception malformed) {
-            return new Host("", false);
+            return new Host("", "", false);
         }
     }
 
