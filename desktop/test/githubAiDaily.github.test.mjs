@@ -44,6 +44,20 @@ describe('parseTrendingHtml', () => {
   it('GitHub 改版导致抓不到时返回空数组，不抛（兜底路径不该拖垮主链路）', () => {
     expect(parseTrendingHtml('<html>redesigned</html>')).toEqual([]);
   });
+  it('真实页面：<h2> 里 <a> 前有 <svg>、href 前有别的属性、href 带查询串，照样抽得出来', () => {
+    const REAL_HTML = `
+      <article class="Box-row">
+        <h2 class="h3 lh-condensed">
+          <svg class="octicon octicon-repo" aria-hidden="true" height="16" viewBox="0 0 16 16" width="16"><path></path></svg>
+          <a class="Link" data-view-component="true" href="/foo/bar?utm_source=trending">
+            foo /
+            bar
+          </a>
+        </h2>
+        <span class="d-inline-block float-sm-right">7 stars today</span>
+      </article>`;
+    expect(parseTrendingHtml(REAL_HTML)).toEqual([{ fullName: 'foo/bar', starsToday: 7 }]);
+  });
 });
 
 describe('parseRateLimitReset', () => {
@@ -89,6 +103,12 @@ describe('GitHubClient.graphql', () => {
     const fetchImpl = vi.fn(async () => jsonRes({ data: { rateLimit: { cost: 1 } } }));
     await new GitHubClient({ token: FAKE, fetchImpl, sleep: async () => {} }).graphql('query{}', {});
     expect(fetchImpl.mock.calls[0][1].headers.Authorization).toBe(`Bearer ${FAKE}`);
+  });
+  it('200 但只有 errors、没有 data（查询校验错误）时抛出携带 message 的错误，不误判 undefined', async () => {
+    const fetchImpl = vi.fn(async () => jsonRes({ errors: [{ message: 'Field "bogus" doesn\'t exist on type Query' }] }));
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep: async () => {} });
+    await expect(c.graphql('query{ bogus }', {})).rejects.toThrow(/bogus.*doesn't exist/);
+    expect(fetchImpl).toHaveBeenCalledTimes(1); // 非限流错误，不重试
   });
 });
 
@@ -167,5 +187,23 @@ describe('GitHubClient.searchRepos', () => {
     const c = new GitHubClient({ token: FAKE, fetchImpl, sleep: async () => {} });
     await c.searchRepos('topic:mcp', { maxPages: 10 });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+  it('非 2xx（比如 403 二级限流）要记 note，不能悄悄说成「查无结果」', async () => {
+    const fetchImpl = vi.fn(async () => jsonRes({ message: 'secondary rate limit' }, 403));
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep: async () => {} });
+    const repos = await c.searchRepos('topic:mcp', { maxPages: 3 });
+    expect(repos).toEqual([]);
+    expect(fetchImpl).toHaveBeenCalledTimes(1); // 出错就停，不接着翻页
+    expect(c.notes.some((n) => n.includes('403'))).toBe(true);
+  });
+});
+
+describe('GitHubClient.trendingRepos', () => {
+  it('HTTP 200 但解析出 0 条时要记 note——这是「返回 [] 不抛」这条兜底策略本身会悄悄失效的信号', async () => {
+    const fetchImpl = vi.fn(async () => ({ ok: true, status: 200, text: async () => '<html>redesigned</html>' }));
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep: async () => {} });
+    const result = await c.trendingRepos([]);
+    expect(result).toEqual([]);
+    expect(c.notes.some((n) => n.includes('0 条'))).toBe(true);
   });
 });

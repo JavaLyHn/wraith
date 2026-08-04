@@ -50,7 +50,11 @@ export function parseTrendingHtml(html) {
     if (!articles) return [];
     const out = [];
     for (const block of articles) {
-      const hrefMatch = block.match(/<h2[^>]*>\s*<a\s+href="\/([^"]+)"/);
+      // 真实 trending 页面在 <h2> 里 <a> 前常有 <svg class="octicon...">，且 <a> 上
+      // href 前面常还有别的属性（class、data-view-component 等）；两种偏离任一种都会让
+      // 严格锚定「<h2> 后紧跟 <a href=」的写法抓空。用 [\s\S]*? 跨过插入的标签，
+      // 用 <a\b[^>]*href= 跨过 href 前面的其他属性；[^"?]+ 顺手把查询串也剥掉。
+      const hrefMatch = block.match(/<h2[^>]*>[\s\S]*?<a\b[^>]*href="\/([^"?]+)/);
       const starsMatch = block.match(/([\d,]+)\s+stars\s+today/);
       if (!hrefMatch || !starsMatch) continue;
       out.push({
@@ -191,6 +195,13 @@ export class GitHubClient {
       const rateLimited = Array.isArray(parsed?.errors)
         && parsed.errors.some((e) => e?.type === 'RATE_LIMITED');
       if (res.ok && !rateLimited) {
+        // 查询校验错误 / 节点数超限等，GitHub 回的是 200 + errors[] + 没有 data。
+        // 这不是限流,重试没用;必须在这里截住,否则 return undefined 会让调用方
+        // （比如 batchRepoSnapshots 的 data['r0']）炸出一句不知所云的 TypeError，
+        // 真正的 GraphQL 错误信息反而被吞掉。
+        if (parsed?.data == null && Array.isArray(parsed?.errors) && parsed.errors.length > 0) {
+          throw new Error(`GraphQL 查询错误：${parsed.errors[0]?.message ?? '（错误对象没有 message 字段）'}`);
+        }
         const cost = parsed?.data?.rateLimit?.cost;
         if (typeof cost === 'number') this.cost.graphqlPoints += cost;
         return parsed.data;
@@ -205,6 +216,20 @@ export class GitHubClient {
     }
     // 不可达：循环要么 return，要么 throw。
     throw new Error('GraphQL 请求失败');
+  }
+
+  // 三条 REST 路径（forksSince/contributors/searchRepos）共用的取数+计数+报错口。
+  // 非 2xx 时不抛：记一条 note 并返回 null，调用方据此决定「就地停」还是「返回已收集的部分」——
+  // 这样一次 403/422 不会被误判成「查无结果」而悄悄吞掉，也不会因为半途出错就丢光已经拿到的数据。
+  // counterKey 区分 search 与其余 REST：两者是不同的速率限额桶，report.mjs 也是分开渲染的。
+  async _restFetch(url, { counterKey = 'restRequests' } = {}) {
+    const res = await this.fetchImpl(url, { headers: authHeaders(this.token, { Accept: REST_ACCEPT }) });
+    this.cost[counterKey] += 1;
+    if (!res.ok) {
+      this.notes.push(`REST 请求失败（HTTP ${res.status}）：${url}`);
+      return null;
+    }
+    return res;
   }
 
   // 100 个 fullName 一批，alias 用「这次调用里的全局下标」，跨批不重置。
@@ -250,8 +275,10 @@ export class GitHubClient {
     let count = 0;
     for (let page = 1; ; page += 1) {
       const url = `${REST_BASE}/repos/${fullName}/forks?sort=newest&per_page=100&page=${page}`;
-      const res = await this.fetchImpl(url, { headers: authHeaders(this.token, { Accept: REST_ACCEPT }) });
-      this.cost.restRequests += 1;
+      const res = await this._restFetch(url);
+      // 非 2xx：_restFetch 已经记了 note，就地停在已经数到的位置而不是让调用方误以为
+      // 这仓库真的只有这么多 fork（比如 403 被当成「翻到头了」，报告里悄悄少报）。
+      if (!res) break;
       const items = await res.json();
       if (!Array.isArray(items) || items.length === 0) break;
       let hitOld = false;
@@ -267,9 +294,8 @@ export class GitHubClient {
 
   async contributors(fullName, top) {
     const url = `${REST_BASE}/repos/${fullName}/contributors?per_page=${top}&anon=false`;
-    const res = await this.fetchImpl(url, { headers: authHeaders(this.token, { Accept: REST_ACCEPT }) });
-    this.cost.restRequests += 1;
-    if (!res.ok) return [];
+    const res = await this._restFetch(url);
+    if (!res) return [];
     const items = await res.json();
     if (!Array.isArray(items)) return [];
     return items.slice(0, top).map((c) => c.login).filter(Boolean);
@@ -282,8 +308,11 @@ export class GitHubClient {
       await this.sleep(SEARCH_THROTTLE_MS);
       const url = `${REST_BASE}/search/repositories?q=${encodeURIComponent(q)}`
         + `&sort=stars&order=desc&per_page=100&page=${page}`;
-      const res = await this.fetchImpl(url, { headers: authHeaders(this.token, { Accept: REST_ACCEPT }) });
-      this.cost.searchRequests += 1;
+      const res = await this._restFetch(url, { counterKey: 'searchRequests' });
+      // 非 2xx（比如 403 二级限流、422 非法查询）：_restFetch 已经记了 note，
+      // 就此停止翻页——绝不能把它并入「items 为空」分支，否则报告会把
+      // 「搜索接口出错」误读成「AI 相关新仓库今天恰好一个都没有」。
+      if (!res) break;
       const body = await res.json();
       const items = body?.items ?? [];
       if (items.length === 0) break;
@@ -305,7 +334,15 @@ export class GitHubClient {
           continue;
         }
         const html = await res.text();
-        out.push(...parseTrendingHtml(html));
+        const parsed = parseTrendingHtml(html);
+        // 200 但解析出 0 条：多半是 GitHub 又改版了，parseTrendingHtml 抓空。
+        // 「返回 []、不抛」正是让这种情况可能悄悄发生的原因，所以必须留痕，
+        // 否则冷启动兜底路径死掉都没人知道，报告只是安静地缺一节。
+        if (parsed.length === 0) {
+          this.notes.push(`trending 页面解析出 0 条（${lang ?? '全部语言'}）：` +
+            'HTTP 200 但没抓到任何仓库，可能是 GitHub 改版，parseTrendingHtml 需要跟进');
+        }
+        out.push(...parsed);
       } catch (e) {
         this.notes.push(`trending 抓取异常（${lang ?? '全部语言'}）：${e.message}`);
       }
