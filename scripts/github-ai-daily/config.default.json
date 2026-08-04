@@ -1,5 +1,7 @@
 {
   "topics": {
+    "core":        ["ai","artificial-intelligence","llm","generative-ai","genai","huggingface",
+                    "machine-learning","deep-learning","nlp","computer-vision"],
     "agent":       ["ai-agent","agents","agentic","multi-agent","autonomous-agents",
                     "agent-framework","coding-agent","computer-use","browser-use","swe-agent"],
     "engineering": ["llmops","rag","retrieval-augmented-generation","embeddings",
