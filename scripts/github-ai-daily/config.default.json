@@ -25,5 +25,7 @@
   "activeWithinDays": 90,
   "snapshotRetainDays": 400,
   "baselineMinAgeHours": 20,
-  "contributorPoolTopRepos": 50
+  "contributorPoolTopRepos": 50,
+  "contributorsPerRepo": 5,
+  "watchlistReposPerOwner": 20
 }

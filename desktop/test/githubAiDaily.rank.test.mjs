@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { diffRepos, tierOf, growthRate, topBy, diffFollowers, attributeStars, updateStreaks }
-  from '../../scripts/github-ai-daily/rank.mjs';
+import {
+  diffRepos, tierOf, growthRate, topBy, diffFollowers, attributeStars, updateStreaks,
+  applyNewRepoDeltas,
+} from '../../scripts/github-ai-daily/rank.mjs';
 
 const repo = (fullName, stars, forks, over = {}) => ({
   fullName, owner: fullName.split('/')[0], ownerType: 'User', name: fullName.split('/')[1],
@@ -92,6 +94,73 @@ describe('attributeStars', () => {
     expect(out[0]).toMatchObject({ owner: 'acme', starDelta: 50 });
     expect(out[0].repos).toEqual(['acme/one', 'acme/two']);
     expect(out[1]).toMatchObject({ owner: 'other', starDelta: 40 });
+  });
+});
+
+describe('applyNewRepoDeltas', () => {
+  // 窗口 = 2026-08-03T00:00Z 起
+  const WINDOW_FROM = Date.parse('2026-08-03T00:00:00Z');
+  const IN = '2026-08-03T12:00:00Z';    // 窗口内新建
+  const OUT = '2026-08-02T12:00:00Z';   // 窗口外新建（日期粒度查询会捞到这种）
+  const newNames = new Set(['new/in', 'new/out']);
+  const row = (fullName, createdAt, starDelta, forkDelta, growth = 0.5) => ({
+    repo: repo(fullName, 3000, 40, { createdAt }), starDelta, forkDelta, growth,
+  });
+
+  // 四格真值表：(窗口内/窗口外) × (starDelta 为 null / 非 null)
+  it('① 窗口内新建 + 无基线可比 → 日增 = 存量（精确值），growth 置 null', () => {
+    const r = row('new/in', IN, null, null);
+    applyNewRepoDeltas([r], newNames, WINDOW_FROM);
+    expect(r.starDelta).toBe(3000);
+    expect(r.forkDelta).toBe(40);
+    expect(r.growth).toBeNull();
+  });
+
+  it('② 窗口内新建 + starDelta 已被 Trending 填过 → 保留该值，但 growth 仍必须置 null', () => {
+    // 这是曾经漏掉的那格：starsToday ≈ 存量，growthRate 会算出 stars/1 = 300000%
+    const r = row('new/in', IN, 2900, null);
+    applyNewRepoDeltas([r], newNames, WINDOW_FROM);
+    expect(r.starDelta).toBe(2900);        // 不覆盖已有的真实日增
+    expect(r.forkDelta).toBe(40);          // fork 仍是精确回填
+    expect(r.growth).toBeNull();           // ← 承重断言：新库不许上增速榜
+  });
+
+  it('③ 窗口外新建 + 无基线可比 → 一个字段都不动（不猜）', () => {
+    const r = row('new/out', OUT, null, null);
+    applyNewRepoDeltas([r], newNames, WINDOW_FROM);
+    expect(r.starDelta).toBeNull();
+    expect(r.forkDelta).toBeNull();
+    expect(r.growth).toBe(0.5);
+  });
+
+  it('④ 窗口外新建 + 已有真实日增 → 一个字段都不动', () => {
+    const r = row('new/out', OUT, 12, 3);
+    applyNewRepoDeltas([r], newNames, WINDOW_FROM);
+    expect(r.starDelta).toBe(12);
+    expect(r.forkDelta).toBe(3);
+    expect(r.growth).toBe(0.5);
+  });
+
+  it('不在新库名单里的仓库不受影响，哪怕它也是窗口内新建的', () => {
+    const r = row('pool/x', IN, null, null);
+    applyNewRepoDeltas([r], newNames, WINDOW_FROM);
+    expect(r.starDelta).toBeNull();
+    expect(r.growth).toBe(0.5);
+  });
+
+  it('createdAt 解析不出来 → 当窗口外处理，不猜', () => {
+    const r = row('new/in', 'not-a-date', null, null);
+    applyNewRepoDeltas([r], newNames, WINDOW_FROM);
+    expect(r.starDelta).toBeNull();
+    expect(r.growth).toBe(0.5);
+  });
+
+  it('置了 null 的 growth 会被 topBy 过滤掉 —— 新库确实进不了增速榜', () => {
+    const fresh = row('new/in', IN, 2900, null);
+    const normal = { repo: repo('pool/y', 1000, 10), starDelta: 50, forkDelta: 2, growth: 0.05 };
+    applyNewRepoDeltas([fresh, normal], newNames, WINDOW_FROM);
+    const board = topBy([fresh, normal], (r) => r.growth, 5);
+    expect(board.map((r) => r.repo.fullName)).toEqual(['pool/y']);
   });
 });
 

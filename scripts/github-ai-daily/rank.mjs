@@ -13,6 +13,28 @@ export function diffRepos(current, baseline) {
   return rows;
 }
 
+// 窗口内新建的仓库：它的 star/fork 全是窗口内攒出来的，所以「日增 = 存量」不是估算而是
+// 精确值。但「涨幅」对这种仓库没有意义 —— 窗口起点时它还不存在，分母为 0，`growthRate`
+// 会算出 stars/1 这种天文数字，一个 3000 星的新库就能顶掉整张增速榜。
+//
+// 所以 `growth = null` 必须**无条件**执行，不能只在 starDelta 还是 null 时才做：冷启动路
+// 径下 Trending 会先把 starDelta 填成 starsToday（≈ 存量），那恰恰是最容易爆的一种输入。
+// 曾经写成嵌在 starDelta === null 分支里，真机上只因为当天交叉命中的都是 ≥12k 星的老仓库
+// 才没炸出来。
+//
+// rows 就地改写。windowFromMs 是窗口起点的毫秒时间戳；createdAt 解析不出来、或早于窗口
+// 起点的（日期粒度的 created:>= 查询会捞到最多 48h 前建的库），一律不动 —— 不猜。
+export function applyNewRepoDeltas(rows, newNames, windowFromMs) {
+  for (const row of rows) {
+    if (!newNames.has(row.repo.fullName)) continue;
+    const created = Date.parse(row.repo.createdAt);
+    if (!Number.isFinite(created) || created < windowFromMs) continue;
+    row.growth = null;
+    if (row.starDelta === null || row.starDelta === undefined) row.starDelta = row.repo.stars;
+    if (row.forkDelta === null || row.forkDelta === undefined) row.forkDelta = row.repo.forks;
+  }
+}
+
 export function tierOf(stars, tiers) {
   if (stars < tiers.rising) return 'rising';
   if (stars < tiers.mid) return 'mid';

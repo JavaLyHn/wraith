@@ -19,7 +19,8 @@ import {
   listSnapshots, pickBaseline, pruneSnapshots, readSnapshot, windowHours, writeSnapshot,
 } from './snapshot.mjs';
 import {
-  attributeStars, diffFollowers, diffRepos, growthRate, tierOf, topBy, updateStreaks,
+  applyNewRepoDeltas, attributeStars, diffFollowers, diffRepos, growthRate, tierOf, topBy,
+  updateStreaks,
 } from './rank.mjs';
 import { renderJson, renderMarkdown } from './report.mjs';
 
@@ -33,9 +34,7 @@ const DAY_MS = 86_400_000;
 const WINDOW_NOMINAL_HOURS = 24;
 const WINDOW_TOLERANCE_HOURS = 1;
 const BASELINE_MAX_ATTEMPTS = 3;    // 坏快照最多往回退 3 份（spec §8）
-const COLD_START_FORK_CANDIDATES = 30;
-const CONTRIBUTORS_PER_REPO = 5;    // spec §5：人物池扩充的上界靠这个数字钉死
-const WATCHLIST_REPOS_PER_OWNER = 20;
+const COLD_START_FORK_CANDIDATES = 30;   // brief Step 1 第 8 条明文规定的数字，不是本层自选的口径
 
 // 进度日志一律走 stderr：stdout 的最后一行留给报告绝对路径，Task 9 的 automation
 // prompt 靠那一行找报告，别的东西不许挤进去。
@@ -148,36 +147,40 @@ async function applyColdStart(client, config, rows, now, notes) {
     + '（按 star 日增、其次存量排序），这批之外的仓库本期没有 fork 日增');
 }
 
-// 窗口内新建的仓库：它的 star/fork 全是窗口内攒的，所以「日增 = 存量」是精确值而非估算。
-// 但从 0 起步谈不上「涨幅」（分母为 0），growth 置 null 让它退出增速榜，只留在首日开源榜。
-function applyNewRepoDeltas(rows, newNames, windowFromMs) {
-  for (const row of rows) {
-    if (!newNames.has(row.repo.fullName)) continue;
-    if (row.starDelta !== null) continue;              // 有基线可比 → 用真实做差，不覆盖
-    const created = Date.parse(row.repo.createdAt);
-    if (!Number.isFinite(created) || created < windowFromMs) continue; // 窗口外建的，不猜
-    row.starDelta = row.repo.stars;
-    row.forkDelta = row.repo.forks;
-    row.growth = null;
-  }
-}
+// ---- 关注名单（spec §7）：不看是否上榜，一律单独报；但必须先过 classify ----
 
-// ---- 关注名单（spec §7）：不看是否上榜，一律单独报 ----
+// 除了 nameWithOwner/createdAt/releases，还要把 classify() 读的那几个字段一起取回来 ——
+// 关注名单的候选可能根本不在候选池里（这正是它存在的意义：spec §11 的「池外爆款会漏」由它兜），
+// 所以不能拿池内快照去分类。这里只列 classify() 真正读的字段，不重建整个 Repo 形状。
+const WATCHLIST_REPO_FIELDS = 'nameWithOwner name description createdAt isFork isArchived '
+  + 'primaryLanguage{name} repositoryTopics(first:20){nodes{topic{name}}} '
+  + 'releases(first:1, orderBy:{field:CREATED_AT,direction:DESC}){nodes{tagName name publishedAt}}';
 
-function buildWatchlistQuery(logins) {
+function buildWatchlistQuery(logins, reposPerOwner) {
   const varDecls = [];
   const fields = [];
   const variables = {};
   logins.forEach((login, idx) => {
     varDecls.push(`$w${idx}:String!`);
     fields.push(`w${idx}: repositoryOwner(login:$w${idx}) { login `
-      + `repositories(first:${WATCHLIST_REPOS_PER_OWNER}, privacy:PUBLIC, isFork:false, `
-      + 'orderBy:{field:PUSHED_AT,direction:DESC}) { nodes { nameWithOwner createdAt '
-      + 'releases(first:1, orderBy:{field:CREATED_AT,direction:DESC}) { nodes { tagName name publishedAt } } } } }');
+      + `repositories(first:${reposPerOwner}, privacy:PUBLIC, isFork:false, `
+      + 'orderBy:{field:PUSHED_AT,direction:DESC}) { totalCount nodes { '
+      + `${WATCHLIST_REPO_FIELDS} } } }`);
     variables[`w${idx}`] = login;
   });
   return { query: `query(${varDecls.join(',')}) { rateLimit{cost} ${fields.join(' ')} }`, variables };
 }
+
+// GraphQL 节点 → classify() 能吃的最小 Repo 形状。
+const watchlistNodeToRepo = (node) => ({
+  fullName: node.nameWithOwner,
+  name: node.name,
+  description: node.description ?? null,
+  topics: (node.repositoryTopics?.nodes ?? []).map((n) => n.topic.name),
+  primaryLanguage: node.primaryLanguage?.name ?? null,
+  isFork: node.isFork,
+  isArchived: node.isArchived,
+});
 
 async function fetchWatchlist(client, config, rows, windowFromMs, notes) {
   const logins = [...new Set([
@@ -186,28 +189,59 @@ async function fetchWatchlist(client, config, rows, windowFromMs, notes) {
   ])].filter(Boolean);
   const entries = [];
 
+  // 用户裁定：关注名单的条目也必须先过 classify —— 关注的是 org 而不是 org 的全部产出，
+  // 一份 AI 日报里不该出现 google/boringssl、openai/openai-ruby 这种东西。三类条目
+  // （release / new-repo / surge）一视同仁，只留 ai 与 knowledge。
+  //
+  // ⚠ 已知代价（实测，不是推测）：`anthropics/claude-code` 与 `openai/codex` **一个 topic 都没打**，
+  // 简介也躲开了关键词表（"agentic" 过不了 `agent` 的词边界；codex 只命中 1 分，阈值是 3），
+  // 所以它们会被这道闸滤掉 —— 而它们恰恰是 spec §11「池外爆款会漏、靠 watchlist 兜」的正主。
+  // 所以滤掉「窗口内确实有动静」的条目时必须留痕：stderr 打全名单，报告里记一条带样本的汇总，
+  // 不许安静消失。口径归位的办法是往 config 的 keywords.include / topics 里补词，而不是在这儿开后门。
+  const droppedWithEvent = [];
+  const truncated = [];
+  const relevant = (fullName, repo) => {
+    if (['ai', 'knowledge'].includes(classify(repo, config).kind)) return true;
+    droppedWithEvent.push(fullName);
+    return false;
+  };
+  const reposPerOwner = config.watchlistReposPerOwner;
+
   if (logins.length > 0) {
     // 这一节是锦上添花：查挂了不该毁掉已经拿到手的整期数据，所以整段包 try。
     try {
-      const { query, variables } = buildWatchlistQuery(logins);
+      const { query, variables } = buildWatchlistQuery(logins, reposPerOwner);
       const data = await client.graphql(query, variables);
       logins.forEach((login, idx) => {
         const owner = data?.[`w${idx}`];
         if (!owner) { notes.push(`关注名单里的 ${login} 查不到（改名或不存在？）`); return; }
-        for (const node of owner.repositories?.nodes ?? []) {
+        const nodes = owner.repositories?.nodes ?? [];
+        const totalCount = owner.repositories?.totalCount;
+        // 截断必须留痕：`orderBy PUSHED_AT DESC` + `first:N` 意味着只看得见最近推送的 N 个仓库，
+        // 一个 google 体量的组织后面还有几千个，窗口内的 release 会被悄悄漏掉。spec §7 要求
+        // 「窗口内有新 release 一律单独报」，做不到就得让人看见做不到，而不是装作没有。
+        // 攒起来最后合成一条 —— 每个关注对象各记一条的话，天天四行同样的话，很快就没人看了。
+        if (typeof totalCount === 'number' && totalCount > nodes.length) {
+          truncated.push(`${login}（${totalCount} 个仓库）`);
+        }
+        for (const node of nodes) {
+          // 先算「窗口内有没有动静」，再过 classify —— 顺序反了就数不出被滤掉多少条。
+          const events = [];
           const rel = node.releases?.nodes?.[0];
           const relAt = rel?.publishedAt ? Date.parse(rel.publishedAt) : NaN;
           if (Number.isFinite(relAt) && relAt >= windowFromMs) {
-            entries.push({
-              fullName: node.nameWithOwner,
+            events.push({
               kind: 'release',
               detail: `窗口内发布 ${rel.tagName}${rel.name && rel.name !== rel.tagName ? `（${rel.name}）` : ''}`,
             });
           }
           const createdAt = Date.parse(node.createdAt);
           if (Number.isFinite(createdAt) && createdAt >= windowFromMs) {
-            entries.push({ fullName: node.nameWithOwner, kind: 'new-repo', detail: `窗口内新建（${node.createdAt}）` });
+            events.push({ kind: 'new-repo', detail: `窗口内新建（${node.createdAt}）` });
           }
+          if (events.length === 0) continue;
+          if (!relevant(node.nameWithOwner, watchlistNodeToRepo(node))) continue;
+          for (const e of events) entries.push({ fullName: node.nameWithOwner, ...e });
         }
       });
     } catch (e) {
@@ -217,10 +251,27 @@ async function fetchWatchlist(client, config, rows, windowFromMs, notes) {
 
   // 组织不进人物榜（spec §5），它们的动静就报在这儿：池内属于关注对象的仓库按 star 日增取前几。
   const watched = new Set(logins.map((l) => l.toLowerCase()));
-  const surges = topBy(rows.filter((r) => watched.has(String(r.repo.owner).toLowerCase()) && r.starDelta > 0),
-    (r) => r.starDelta, config.topN);
+  const surges = topBy(
+    rows.filter((r) => watched.has(String(r.repo.owner).toLowerCase())
+      && r.starDelta > 0 && relevant(r.repo.fullName, r.repo)),
+    (r) => r.starDelta,
+    config.topN,
+  );
   for (const row of surges) {
     entries.push({ fullName: row.repo.fullName, kind: 'surge', detail: `本期 +${row.starDelta} ⭐（存量 ${row.repo.stars}）` });
+  }
+
+  if (truncated.length > 0) {
+    notes.push(`关注名单只看每个关注对象最近推送的 ${reposPerOwner} 个仓库`
+      + `（watchlistReposPerOwner）：${truncated.join('、')} 超出了这个数，更靠后的仓库若在窗口内`
+      + '发过 release 会被漏掉，需要就把这个值调大');
+  }
+  if (droppedWithEvent.length > 0) {
+    const uniq = [...new Set(droppedWithEvent)];
+    log(`[ghai] 关注名单被 classify 滤掉（窗口内有动静但判为不相关）${uniq.length} 条：${uniq.join('、')}`);
+    notes.push(`关注名单：${uniq.length} 个仓库窗口内有动静但被 classify 判为不相关，未列入`
+      + `（样本：${uniq.slice(0, 5).join('、')}${uniq.length > 5 ? ' 等' : ''}）`
+      + '；要让某类仓库进榜，往 config 的 topics / keywords.include 补词');
   }
 
   const seen = new Set();
@@ -316,13 +367,21 @@ async function run(argv) {
     win.degraded = true;
     win.note = '首次运行（或基线全损）：没有可比的前一日快照。star 日增只来自 Trending 页'
       + '「stars today」的交叉命中，fork 日增来自 forks 精确回溯，follower 日增 T+1 起才有。';
-    await applyColdStart(client, config, rows, now, notes);
+    // 这一步在写快照之前，却要打 1 次 HTML + 最多 30 次分页 REST。它是**尽力而为**的补数：
+    // 让它的传输层异常冒出去就等于「一次网络抽风 → 今天的快照没写成 → 明天还是冷启动 →
+    // 后天报一个 48h 退化窗口」，一次抖动赔三天。所以整段包住，失败只留痕。
+    try {
+      await applyColdStart(client, config, rows, now, notes);
+    } catch (e) {
+      notes.push(`冷启动补数失败：${e.message} —— 本期 star/fork 日增基本为空，`
+        + '但快照已照常落盘，明天起就有真实基线可比');
+    }
   }
 
   const windowFromMs = baseline ? baseline.at.getTime() : now.getTime() - DAY_MS;
   applyNewRepoDeltas(rows, new Set(newRepos.map((r) => r.fullName)), windowFromMs);
 
-  // 6b. 人物池：上界 = 池内 User owner 去重 + contributorPoolTopRepos × CONTRIBUTORS_PER_REPO
+  // 6b. 人物池：上界 = 池内 User owner 去重 + contributorPoolTopRepos × contributorsPerRepo
   const logins = new Set();
   for (const repo of currentRepos.values()) {
     if (repo.ownerType === 'User' && repo.owner) logins.add(repo.owner);
@@ -332,12 +391,20 @@ async function run(argv) {
   if (topRepoN > 0) {
     const forContributors = topBy(rows, (r) => r.starDelta, topRepoN);
     log(`[ghai] 人物池扩充：对本期 star 日增前 ${forContributors.length} 个仓库取 contributors……`);
-    for (const row of forContributors) {
-      for (const login of await client.contributors(row.repo.fullName, CONTRIBUTORS_PER_REPO)) {
-        // Bot 账号在 GraphQL 里是 Bot 类型，user(login:) 查它一律返回 null，
-        // 放进去只会把「失败用户数」撑成一堆假失败。
-        if (!login.endsWith('[bot]')) logins.add(login);
+    // 与冷启动补数同理：这也是写快照之前的尽力而为的扩充（上界 =
+    // contributorPoolTopRepos × contributorsPerRepo 次 REST），不该因为一次传输层抖动
+    // 就把当天的快照连坐掉。
+    try {
+      for (const row of forContributors) {
+        for (const login of await client.contributors(row.repo.fullName, config.contributorsPerRepo)) {
+          // Bot 账号在 GraphQL 里是 Bot 类型，user(login:) 查它一律返回 null，
+          // 放进去只会把「失败用户数」撑成一堆假失败。
+          if (!login.endsWith('[bot]')) logins.add(login);
+        }
       }
+    } catch (e) {
+      notes.push(`人物池 contributors 扩充中断：${e.message} —— 人物池只剩池内 owner，`
+        + '快照照常落盘');
     }
   }
   log(`[ghai] 批量取 follower：${logins.size} 人（池内 owner ${ownerCount} + contributors 扩充）……`);
@@ -388,20 +455,26 @@ async function run(argv) {
     ).map(({ repo, ...f }) => f)
     : null;
   // 归因榜同样是人物榜：组织不进（spec §5），它们的动静归关注名单栏。
-  const attribution = attributeStars(rows).filter((a) => a.ownerType === 'User').slice(0, config.topN);
+  // `ownerType` 只用来过滤，不能带进 model —— ReportModel 里这一节只声明 {owner,starDelta,repos}。
+  const attribution = attributeStars(rows)
+    .filter((a) => a.ownerType === 'User')
+    .slice(0, config.topN)
+    .map(({ ownerType, ...a }) => a);
   const watchlist = await fetchWatchlist(client, config, rows, windowFromMs, notes);
 
   const ranked = [...new Set([
     ...stars.rising, ...stars.mid, ...stars.giant, ...stars.growth,
     ...forks, ...newReposBoard, ...knowledge,
   ].map((r) => r.repo.fullName))];
+  // 只在内存里算；落盘要等报告真的写成（见下），否则渲染一失败，今天照样被计入
+  // 每个仓库的「第 N 天在榜」，明天的天数就凭空多了一天。
   const streaks = updateStreaks(readJsonFile(streaksPath, {}, 'streaks.json', notes), ranked, todayISO);
-  writeJsonFile(streaksPath, streaks);
 
   // 10. 渲染 → 落盘 → 清理超期快照
   const model = {
     window: win,
-    pool: { repos: currentRepos.size, users: users.size },
+    // 「监控池」= 池子本身的规模；currentRepos 还多含当天的首日新库，不是池子。
+    pool: { repos: poolNames.size, users: users.size },
     cost: { ...client.cost },
     failures: { repos: repoFailures.length, users: userFailures.length, notes: [...notes, ...client.notes] },
     stars,
@@ -413,11 +486,24 @@ async function run(argv) {
     streaks,
   };
 
+  // 两份都先渲染成字符串再落盘：`renderJson` 抛在 `renderMarkdown` 之后的话，
+  // 磁盘上会留下一份新 .md 配一份隔日的旧 .json，比两份都没有更难排查。
   const mdPath = join(dataDir, `${todayISO}.md`);
-  writeFileSync(mdPath, renderMarkdown(model));
-  writeFileSync(join(dataDir, `${todayISO}.json`), renderJson(model));
-  const pruned = pruneSnapshots(snapDir, now, config.snapshotRetainDays);
-  if (pruned.length > 0) log(`[ghai] 清理超期快照 ${pruned.length} 份`);
+  const jsonPath = join(dataDir, `${todayISO}.json`);
+  const md = renderMarkdown(model);
+  const json = renderJson(model);
+  writeFileSync(mdPath, md);
+  writeFileSync(jsonPath, json);
+  writeJsonFile(streaksPath, streaks);   // 报告落盘成功了，今天才算「在榜」
+
+  // 清理是收尾杂务：unlinkSync 撞上 EPERM/EBUSY 不该让一次已经成功的运行退成失败码 ——
+  // 那会变成「报告明明写好了，automation 却报错」，正是本脚本最想避免的错配。
+  try {
+    const pruned = pruneSnapshots(snapDir, now, config.snapshotRetainDays);
+    if (pruned.length > 0) log(`[ghai] 清理超期快照 ${pruned.length} 份`);
+  } catch (e) {
+    log(`[ghai] 清理超期快照失败（不影响本期报告）：${e.message}`);
+  }
   log(`[ghai] 取数成本：GraphQL ${client.cost.graphqlPoints} 点 · Search ${client.cost.searchRequests} 次`
     + ` · REST ${client.cost.restRequests} 次`);
 
