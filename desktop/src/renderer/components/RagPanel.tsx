@@ -5,6 +5,7 @@ import { embeddingDefaults, staleIndexWarning, indexSummaryLines, relationHint,
   scopeMismatchWarning, scopeEffectNote, scopeSummaryLine } from '../lib/ragView'
 import { embeddingTestLines, embeddingTestTone, embeddingTestToneClass, embeddingTestTitle, embeddingTestTitleClass } from '../lib/embeddingTestView'
 import { parseIndexProgress, indexProgressView, indexCompositionBars } from '../lib/indexProgressView'
+import { egoGraph } from '../lib/egoGraph'
 import type { IndexProgress } from '../lib/indexProgressView'
 
 type Draft = { provider: string; model: string; baseUrl: string; apiKey: string }
@@ -25,6 +26,8 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   const [graphName, setGraphName] = useState('')
   const [relations, setRelations] = useState<RagRelation[] | null>(null)
   const [graphBusy, setGraphBusy] = useState(false)
+  // 未解析的调用目标默认折叠(实测 calls 的目标 100% 是裸方法名,展开就是一团 get/put/append)
+  const [showUnresolved, setShowUnresolved] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   // 上一次索引的明细。此前建完只留一句「已索引 N 块 · M 关系」——用户原话「没有结果展示」。
   const [lastIndex, setLastIndex] = useState<RagIndexResult | null>(null)
@@ -79,6 +82,10 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   const scopeLine = lastIndex ? scopeSummaryLine(lastIndex) : null
   const pv = progress ? indexProgressView({ ...progress, startedAtMs, nowMs }) : null
   const compBars = lastIndex ? indexCompositionBars(lastIndex) : []
+  const GW = 460, GH = 300
+  const ego = relations && relations.length > 0
+    ? egoGraph(graphName.trim(), relations, { width: GW, height: GH, maxNeighbors: 14, showUnresolved })
+    : null
 
   // 订阅索引实时进度(后端 CodeIndex.ProgressListener → writer.notify rag.index.progress)
   useEffect(() => {
@@ -162,11 +169,14 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
     finally { setSearchBusy(false) }
   }, [query])
 
-  const doGraph = useCallback(async (): Promise<void> => {
-    if (!graphName.trim()) return
+  /** 传 name 时以它为中心重查(点节点导航);不传则用输入框里的值。 */
+  const doGraph = useCallback(async (name?: string): Promise<void> => {
+    const target = (name ?? graphName).trim()
+    if (!target) return
+    if (name) setGraphName(name)
     setGraphBusy(true); setError(null)
     try {
-      const r = await window.wraith.ragGraph(graphName.trim())
+      const r = await window.wraith.ragGraph(target)
       if (r.error) { setError('图谱查询失败:' + r.error); setRelations([]) } else setRelations(r.relations)
     } catch (err) { setError((err as Error).message) }
     finally { setGraphBusy(false) }
@@ -398,11 +408,50 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
         </div>
         {relations !== null && (
           relations.length === 0 ? <div className="text-3xs text-fg-subtle">无关系(先建索引,或换个名字)</div> : (
-            <div className="flex flex-col gap-1 font-mono text-3xs text-fg-muted">
-              {relations.map((rel, i) => (
-                <div key={i}>{rel.fromName} ─[{rel.relationType}]→ {rel.toName || '?'}</div>
-              ))}
-            </div>
+            <>
+              {ego && (
+                <div data-testid="rag-ego-graph" className="mb-2 rounded-lg border border-border bg-surface/40 p-2">
+                  <svg viewBox={`0 0 ${GW} ${GH}`} className="h-auto w-full" role="img"
+                    aria-label={`${ego.center.label} 的一跳邻居`}>
+                    {ego.edges.map((e, i) => (
+                      <line key={i} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2}
+                        className={e.className} strokeWidth={1}
+                        strokeDasharray={e.dashed ? '3 3' : undefined} />
+                    ))}
+                    {ego.nodes.map((n) => (
+                      <g key={n.id} className="cursor-pointer" onClick={() => void doGraph(n.label)}>
+                        <title>{`${n.label}  (${n.direction === 'out' ? '→' : '←'} ${n.relation})`}</title>
+                        <circle cx={n.x} cy={n.y} r={4} className={n.className}
+                          strokeWidth={n.resolved ? 0 : 1} strokeDasharray={n.resolved ? undefined : '2 2'} />
+                        <text x={n.x} y={n.y - 8} textAnchor="middle"
+                          className="fill-fg-muted text-[9px]">{n.short}</text>
+                      </g>
+                    ))}
+                    <circle cx={ego.center.x} cy={ego.center.y} r={6} className="fill-accent" />
+                    <text x={ego.center.x} y={ego.center.y + 18} textAnchor="middle"
+                      className="fill-fg text-[10px] font-bold">{ego.center.short}</text>
+                  </svg>
+                  {/* 截断量与折叠量都必须说出来 —— 静默截断会被读成「就这么多」 */}
+                  <div data-testid="rag-ego-note" className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-3xs text-fg-subtle">
+                    <span>点节点可跳过去看它的邻居</span>
+                    {ego.truncated > 0 && <span className="text-warn">还有 {ego.truncated} 个邻居未画（超出 14 个上限）</span>}
+                    {ego.hiddenUnresolved > 0 && (
+                      <button onClick={() => setShowUnresolved(true)} className="text-accent underline">
+                        另有 {ego.hiddenUnresolved} 个调用目标是裸方法名（未做符号解析），已折叠 · 展开
+                      </button>
+                    )}
+                    {showUnresolved && (
+                      <button onClick={() => setShowUnresolved(false)} className="text-accent underline">收起未解析目标</button>
+                    )}
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-col gap-1 font-mono text-3xs text-fg-muted">
+                {relations.map((rel, i) => (
+                  <div key={i}>{rel.fromName} ─[{rel.relationType}]→ {rel.toName || '?'}</div>
+                ))}
+              </div>
+            </>
           )
         )}
       </div>
