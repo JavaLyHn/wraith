@@ -58,6 +58,11 @@ describe('scoreRepo', () => {
   it('简介为 null 不炸', () => {
     expect(scoreRepo(repo({ description: null }), CONFIG).score).toBe(0);
   });
+  it('topic 与同名关键词各算一次 —— 两种信号刻意相加，不去重', () => {
+    const r = scoreRepo(repo({ topics: ['mcp'], description: 'Native MCP support included' }), CONFIG);
+    expect(r.score).toBe(4);
+    expect(r.keywordHits).toEqual(['MCP']);
+  });
 });
 
 describe('isExcluded', () => {
@@ -103,7 +108,7 @@ describe('classify', () => {
   it('AI 相关 + 知识类 → knowledge，不进主榜', () => {
     const r = classify(repo({ name: 'awesome-mcp', topics: ['mcp'] }), CONFIG);
     expect(r.kind).toBe('knowledge');
-    expect(r.score).toBe(3);
+    expect(r.score).toBe(4); // topic mcp 得 3 + 名字里词边界命中关键词 MCP 得 1
   });
   it('知识类但与 AI 无关 → unrelated（不进知识栏）', () => {
     expect(classify(repo({ name: 'awesome-cooking' }), CONFIG).kind).toBe('unrelated');

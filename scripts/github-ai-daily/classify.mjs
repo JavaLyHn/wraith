@@ -25,9 +25,8 @@ const haystacks = (repo) => [repo.name ?? '', repo.description ?? '', repo.fullN
 export function scoreRepo(repo, config) {
   const wanted = new Set(allTopics(config).map((t) => t.toLowerCase()));
   const topicHits = (repo.topics ?? []).filter((t) => wanted.has(String(t).toLowerCase()));
-  const topicHitsLower = new Set(topicHits.map((t) => String(t).toLowerCase()));
   const keywordHits = (config.keywords?.include ?? [])
-    .filter((k) => !topicHitsLower.has(k.toLowerCase()) && haystacks(repo).some((h) => matchesKeyword(h, k)));
+    .filter((k) => haystacks(repo).some((h) => matchesKeyword(h, k)));
   const score = Math.min(topicHits.length * TOPIC_POINTS, TOPIC_CAP)
               + Math.min(keywordHits.length * KEYWORD_POINTS, KEYWORD_CAP);
   return { score, topicHits, keywordHits };
