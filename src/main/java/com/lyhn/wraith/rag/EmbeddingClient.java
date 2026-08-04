@@ -274,6 +274,11 @@ public class EmbeddingClient {
         return provider;
     }
 
+    /** 后端地址。诊断用（{@link EmbeddingErrorHint} 要靠它区分本机与远端）。 */
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
     public String getModel() {
         return model;
     }

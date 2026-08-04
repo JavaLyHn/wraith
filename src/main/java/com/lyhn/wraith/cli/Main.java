@@ -1943,7 +1943,13 @@ public class Main {
                             String detail = ex.getMessage() == null || ex.getMessage().isBlank()
                                     ? ex.getClass().getSimpleName() : ex.getMessage();
                             if (detail.length() > 300) detail = detail.substring(0, 300) + "…";
-                            return java.util.Map.of("error", "embedding 后端探测失败:" + detail);
+                            // 诊断插在**原文之前**,不替换它。OkHttp 那句
+                            // 「Failed to connect to localhost/[0:0:0:0:0:0:0:1]:11434」技术上没错,
+                            // 但那个 IPv6 地址是障眼法 —— 会把人引去查 IPv6,而真实原因是没在运行。
+                            String hint = com.lyhn.wraith.rag.EmbeddingErrorHint.of(ec.getBaseUrl(), ex);
+                            return java.util.Map.of("error", hint.isEmpty()
+                                    ? "embedding 后端探测失败:" + detail
+                                    : hint + "\n\n原始错误:" + detail);
                         }
                         try {
                             // 索引进度经 writer 推 rag.index.progress 事件(writer 线程安全;桌面面板订阅显示)
