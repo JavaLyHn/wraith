@@ -97,4 +97,39 @@ describe('RagPanel 索引范围', () => {
     // 也不该把这个当成面板级错误弹出来 —— 老后端不支持不是用户的问题
     expect(screen.queryByText(/not implemented/)).toBeNull()
   })
+
+  /**
+   * 用户实测踩到的:后端是旧 jar 时,`configGetRagScope` 静默失败(设计如此,为兼容),
+   * 但 checkbox 仍然可点 —— 于是点下去吃到一句生的
+   * `Error invoking remote method 'wraith:configSetRagScope': method not found: config.setRagScope`。
+   *
+   * **get 已经失败就已经知道后端不支持**,那时候就该把开关禁掉并说清怎么修,
+   * 而不是让用户点一下再看一句它读不懂的话。
+   */
+  it('后端不支持时:开关**禁用** + 给出可行动提示,点了也不发 RPC', async () => {
+    const w = mockWraith({ excludeTests: false, excludeDocs: false }, baseStatus)
+    w.configGetRagScope = vi.fn(async () => { throw new Error('method not found: config.getRagScope') })
+    render(<RagPanel onBack={() => {}} />)
+
+    const t = await screen.findByTestId('rag-scope-tests') as HTMLInputElement
+    await waitFor(() => expect(t.disabled).toBe(true))
+    expect((screen.getByTestId('rag-scope-docs') as HTMLInputElement).disabled).toBe(true)
+
+    // 提示必须可行动:说清是后端旧了,以及怎么修
+    const hint = screen.getByTestId('rag-scope-unsupported').textContent ?? ''
+    expect(hint).toMatch(/后端|jar/)
+    expect(hint).toMatch(/重启|重新打包|更新/)
+
+    // 禁用了还点(直接派发 change),也不该发出写请求
+    fireEvent.click(t)
+    expect(w.configSetRagScope).not.toHaveBeenCalled()
+  })
+
+  it('后端支持时不显示那条提示,开关可用', async () => {
+    mockWraith({ excludeTests: false, excludeDocs: false }, baseStatus)
+    render(<RagPanel onBack={() => {}} />)
+    const t = await screen.findByTestId('rag-scope-tests') as HTMLInputElement
+    await waitFor(() => expect(t.disabled).toBe(false))
+    expect(screen.queryByTestId('rag-scope-unsupported')).toBeNull()
+  })
 })

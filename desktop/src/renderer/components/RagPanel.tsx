@@ -29,6 +29,10 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
   const [testBusy, setTestBusy] = useState(false)
   // 索引范围。默认两个都关 = 行为与引入开关前一致。
   const [scope, setScope] = useState<RagScopeView>({ excludeTests: false, excludeDocs: false })
+  // 后端支不支持范围设置。**get 失败就等于知道不支持** —— 那时必须把开关禁掉,
+  // 否则用户点一下会吃到一句生的「method not found: config.setRagScope」。
+  // 用户实测踩过这个:jar 是旧的,面板却让他点。
+  const [scopeSupported, setScopeSupported] = useState(true)
 
   const loadCfg = useCallback(async (): Promise<void> => {
     try {
@@ -41,18 +45,24 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
     try { setStatus(await window.wraith.ragStatus()) } catch (err) { setError((err as Error).message) }
   }, [])
   const loadScope = useCallback(async (): Promise<void> => {
-    // 旧 jar 没有这条 RPC —— 拿不到就保持默认关,不把面板整块打挂
-    try { setScope(await window.wraith.configGetRagScope()) } catch { /* 老后端:保持默认 */ }
+    // 旧 jar 没有这条 RPC —— 拿不到就保持默认关、并**把开关禁掉**,不把面板整块打挂
+    try {
+      setScope(await window.wraith.configGetRagScope())
+      setScopeSupported(true)
+    } catch {
+      setScopeSupported(false)
+    }
   }, [])
   /** 勾选即写盘,但**不重建索引** —— 重建是一次整库扫描,不该由一次勾选触发。 */
   const saveScope = useCallback(async (next: RagScopeView): Promise<void> => {
+    if (!scopeSupported) return   // 禁用态下不该发请求;这里再兜一层,防止绕过 disabled
     setScope(next)
     try {
       await window.wraith.configSetRagScope(next)
       // 重拉 status:范围不符提示要**立刻**出现,而不是等下次进面板
       void loadStatus()
     } catch (err) { setError((err as Error).message) }
-  }, [loadStatus])
+  }, [loadStatus, scopeSupported])
 
   useEffect(() => { void loadCfg(); void loadStatus(); void loadScope() }, [loadCfg, loadStatus, loadScope])
 
@@ -215,16 +225,28 @@ export default function RagPanel({ onBack }: { onBack: () => void }): JSX.Elemen
         {/* 2. 索引范围 */}
         <div className={sectionHead}>索引范围</div>
         <div className="mb-5">
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-fg">
+          <label className={`flex items-center gap-2 text-xs ${scopeSupported ? 'cursor-pointer text-fg' : 'cursor-not-allowed text-fg-subtle'}`}>
             <input type="checkbox" data-testid="rag-scope-tests" checked={scope.excludeTests}
+              disabled={!scopeSupported}
               onChange={(e) => void saveScope({ ...scope, excludeTests: e.target.checked })} />
             排除测试文件
           </label>
-          <label className="mt-1.5 flex cursor-pointer items-center gap-2 text-xs text-fg">
+          <label className={`mt-1.5 flex items-center gap-2 text-xs ${scopeSupported ? 'cursor-pointer text-fg' : 'cursor-not-allowed text-fg-subtle'}`}>
             <input type="checkbox" data-testid="rag-scope-docs" checked={scope.excludeDocs}
+              disabled={!scopeSupported}
               onChange={(e) => void saveScope({ ...scope, excludeDocs: e.target.checked })} />
             排除文档（.md / docs/，但保留 skills 下的 md）
           </label>
+          {/* 后端旧了就说清怎么修,而不是让人点一下再看一句读不懂的 RPC 错误 */}
+          {!scopeSupported && (
+            <div data-testid="rag-scope-unsupported"
+              className="mt-2 rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-2xs leading-relaxed text-fg-muted">
+              ⚠ 当前后端（jar）还不支持索引范围设置，开关已禁用。修法：重新打包
+              <span className="font-mono"> mvn package </span>
+              并把 <span className="font-mono">target/wraith-1.0-SNAPSHOT.jar</span> 覆盖到
+              <span className="font-mono"> ~/.wraith/wraith.jar</span>，然后完全退出并重启桌面端。
+            </div>
+          )}
           {/* 两个开关效果**方向相反**,只写「可能影响检索质量」会让人以为「都勾上更干净」 */}
           <div className="mt-2 text-3xs leading-relaxed text-fg-subtle">{scopeEffectNote()}</div>
         </div>
