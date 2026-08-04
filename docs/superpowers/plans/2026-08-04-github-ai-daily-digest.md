@@ -1447,7 +1447,7 @@ EOF
   - `buildNewRepoQueries(config, { sinceISO }): string[]` —— 带 `created:>=sinceISO` 与 `stars:>=newRepoMinStars`
   - `mergePool(pool, found, todayISO, config): { pool, added: string[], dropped: string[] }` —— **纯函数**。`pool` 形如 `{ [fullName]: { firstSeen, lastActive } }`；`found` 是 `Repo[]`；超过 `activeWithinDays` 未活跃的踢出
   - `discover(client, config, pool, todayISO): Promise<{ pool, added, dropped, aiRepos: Repo[], knowledgeRepos: Repo[], notes: string[] }>` —— `notes` 收集单条查询的失败说明（见下方 Step 3 约束）
-  - `discoverNewRepos(client, config, sinceISO): Promise<Repo[]>`
+  - `discoverNewRepos(client, config, sinceISO): Promise<{ repos: Repo[], notes: string[] }>` —— 必须和 `discover` 一样把失败说明带出来。返回裸 `Repo[]` 会让「全部查询失败」和「昨天确实没有新库」变得无法区分，而 spec §8 要求失败计数进报告尾部、Task 5 的 `ReportModel` 也已有 `failures.notes` 位置接它
 
 - [ ] **Step 1: 写失败的测试**
 
