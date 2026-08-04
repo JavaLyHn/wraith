@@ -41,12 +41,14 @@ export default function DocumentsPanel({ onBack }: { onBack: () => void }): JSX.
     setBusy(true)
     try {
       const r = paths ? await window.wraith.documents.add(paths) : await window.wraith.documents.add()
-      // 先刷新列表,再落 error——load() 成功时会自带 setError(null),顺序反了会把这里的失败提示冲掉
+      // 先刷新列表,再按需落 error——load() 会自带成功清空/失败落错误;
+      // 只有 r.failed.length > 0 时才用 add 的失败摘要覆盖,否则保留 load() 自己的结果
+      // (不能无条件覆盖:那样会把 load() 这次重载失败的提示悄悄冲掉,参见 task-4 review finding①)
       await load()
-      setError(r.failed.length
-        ? `${r.added.length} 个成功,${r.failed.length} 个失败:` +
-          r.failed.map(f => `${f.name}(${f.reason})`).join('、')
-        : null)
+      if (r.failed.length) {
+        setError(`${r.added.length} 个成功,${r.failed.length} 个失败:` +
+          r.failed.map(f => `${f.name}(${f.reason})`).join('、'))
+      }
     } catch (err) { setError((err as Error).message) }
     finally { setBusy(false) }
   }, [load])

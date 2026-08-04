@@ -103,4 +103,36 @@ describe('DocumentsPanel', () => {
     fireEvent.click(screen.getByTestId('documents-back'))
     expect(onBack).toHaveBeenCalled()
   })
+
+  // review finding①:add 本身全部成功(failed 为空),但 doAdd 触发的这次 list() 复检失败;
+  // 该错误不应被 add 的「无失败」结果悄悄冲掉
+  it('add 无失败项但随之触发的 list 复检失败时,仍 inline 显示该错误', async () => {
+    let listCalls = 0
+    const d = mockWraith({
+      list: vi.fn(async () => {
+        listCalls += 1
+        if (listCalls === 1) return DOCS
+        throw new Error('复检失败')
+      }),
+      add: vi.fn(async () => ({ added: ['新文件.pdf'], failed: [] })),
+    })
+    render(<DocumentsPanel onBack={() => {}} />)
+    await waitFor(() => expect(d.list).toHaveBeenCalledTimes(1))
+    fireEvent.click(screen.getByTestId('documents-add'))
+    await waitFor(() => expect(screen.getByTestId('documents-error').textContent).toContain('复检失败'))
+  })
+
+  // review finding②(plan-mandated 补测):拖拽必须走 pathForFile 取磁盘路径,
+  // 而不是直接读 File 对象或 undefined —— Electron 32 已移除 File.path
+  it('拖拽文件时通过 pathForFile 取路径,再把路径数组传给 documents.add', async () => {
+    const d = mockWraith()
+    const pathForFile = vi.fn((f: File) => `/tmp/dropped/${f.name}`)
+    ;(window as unknown as { wraith: Record<string, unknown> }).wraith.pathForFile = pathForFile
+    const { container } = render(<DocumentsPanel onBack={() => {}} />)
+    await waitFor(() => expect(d.list).toHaveBeenCalled())
+    const file = new File(['x'], 'dropped.pdf')
+    fireEvent.drop(container.firstChild as Element, { dataTransfer: { files: [file] } })
+    await waitFor(() => expect(d.add).toHaveBeenCalledWith(['/tmp/dropped/dropped.pdf']))
+    expect(pathForFile).toHaveBeenCalledWith(file)
+  })
 })
