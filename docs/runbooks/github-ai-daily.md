@@ -2,97 +2,120 @@
 
 每天自动产出「昨日 AI 领域 star 涨最多 / fork 涨最多 / 涨粉最多的人」的报告，投递到你选的渠道。
 
-- **脚本**：`scripts/github-ai-daily/index.mjs`（零依赖，Node 22+）
-- **数据与报告**：`~/.wraith/reports/github-ai-daily/`
-- **配置**：`~/.wraith/reports/github-ai-daily/config.json`（首次运行自动从模板生成）
+- **脚本**：`scripts/github-ai-daily/index.mjs`（零依赖，Node 22+，mac/Windows 通用）
+- **数据与报告**：`<repo>/.ghai/`（**放项目内**是为了让面板任务的 `read_file` 够得着，见 §1；已进 `.gitignore`）
+- **配置**：`<repo>/.ghai/config.json`（首次运行自动从模板生成）
 
 ---
 
-## 1. 为什么是两个定时任务，不是一个
+## 1. 为什么取数不挂在自动化面板里
 
-`execute_command` 这个工具**硬编码 60 秒超时**（`ToolRegistry.java:67`，`DEFAULT_COMMAND_TIMEOUT_SECONDS = 60`，没有任何系统属性能覆盖它），而本脚本真机实测一次要跑 **25 分钟以上**。
+面板任务的 `execute_command` **跑在沙箱内**，而这脚本干的两件事恰好都被沙箱挡住：
 
-所以不能让 agent 直接前台跑脚本——每天都会在第 60 秒被强杀。
-
-拆成两个任务：
-
-| | 任务甲：抢起来 | 任务乙：出日报 |
+| 沙箱规则 | 出处 | 撞在哪 |
 |---|---|---|
-| 干什么 | 把脚本丢到后台，立刻返回 | 读今天的报告，中文点评，投递 |
-| 耗时 | < 1 秒 | 几十秒（一次 LLM 调用） |
-| 撞不撞 60 秒 | 不撞 | 不撞 |
+| `(deny network*)` | `SeatbeltProfile.java:43`，`AutomationRunner.java:153` 传的 `wraith.sandbox.network` 默认 `off` | 脚本整个工作就是调 GitHub API |
+| 写只放行 `WORKSPACE` 与 `TMPDIR` | `SeatbeltProfile.java:27-30` | 数据目录若在项目外，一个字节也写不进去 |
+| `execute_command` 硬超时 60 秒 | `ToolRegistry.java:67` | 一次取数 25 分钟以上 |
 
-## 2. 任务甲：后台启动
+（Windows 走 AppContainer，`(deny network*)` 语义一致。）
 
-**Schedule**：daily，时刻自选（见 §4）
-**Workspace**：`/Users/aa00945/Desktop/wraith`
-**Approval**：`default` = DENY，仅 `execute_command` = ALLOW
-**deliverTo**：不用选（这个任务没有可投递的内容）
+所以职责这样切，两边各干各擅长的：
 
-**Prompt**（原样粘贴，不要改动那条命令）：
+| | 取数（25 分钟、要联网、要写盘） | 出日报（几十秒、只读、要投递） |
+|---|---|---|
+| 谁来跑 | **系统调度**：macOS launchd / Windows 任务计划程序 | **wraith 自动化面板** |
+| 为什么 | 不进沙箱，网络与写盘都正常 | 面板天生擅长：点评 + 多渠道投递 |
+| 用什么工具 | 直接跑 node | **只用 `read_file`**（进程内 Java 工具，不经沙箱、跨平台、不撞 60 秒） |
 
+**关键设计**：数据目录放在**项目内**（`<repo>/.ghai/`）。`read_file` 受 `PathGuard(projectPath)`
+约束，只能读项目内的文件 —— 数据在项目里，面板任务就完全不需要 `execute_command`，
+审批可以保持全 DENY。`.ghai/` 已进 `.gitignore`。
+
+## 2. 装取数任务（选你的系统）
+
+**macOS：**
+
+```bash
+cd <repo>/scripts/github-ai-daily/install
+./install-macos.sh          # 默认每天 06:00；改时间：./install-macos.sh 05 30
 ```
-把 GitHub AI 日报的取数脚本丢到后台跑起来，然后立刻结束这一轮，不要等它跑完。
-执行这一条命令，原样执行、不要改写：
 
-mkdir -p ~/.wraith/reports/github-ai-daily && nohup node /Users/aa00945/Desktop/wraith/scripts/github-ai-daily/index.mjs >> ~/.wraith/reports/github-ai-daily/run.log 2>&1 &
+**Windows（普通 PowerShell，不需要管理员）：**
 
-命令返回后直接回报「已在后台启动」即可，不要再跑别的命令去查看进度。
+```powershell
+cd <repo>\scripts\github-ai-daily\install
+.\install-windows.ps1                 # 默认每天 06:00
+.\install-windows.ps1 -At "05:30"
 ```
 
-### 那个重定向是承重的，不是为了好看
+两个脚本都会：定位 node 与 gh、建好 `<repo>/.ghai/`、注册每日任务、把 stdout/stderr 追加到
+`<repo>/.ghai/run.log`。卸载分别是 `--uninstall` 与 `-Uninstall`。
 
-`>> run.log 2>&1` 必须留着。不重定向的话，后台子进程会继续持有从父进程继承来的 stdout 管道，Java 那边的 `Process.waitFor(60, SECONDS)` 会一直等到管道关闭——于是你以为放了后台，实际照样撞 60 秒超时。
+装完立刻验一次（不用等到明早）：
 
-**已实测**：带重定向时外层命令 0 秒返回，子进程活到跑完并把日志写全。
+```bash
+# macOS
+launchctl kickstart -k gui/$(id -u)/com.lyhn.wraith.ghai && tail -f <repo>/.ghai/run.log
+```
+```powershell
+# Windows
+Start-ScheduledTask -TaskName WraithGithubAiDaily; Get-Content <repo>\.ghai\run.log -Wait
+```
 
-## 3. 任务乙：出日报
+**launchd 的 PATH 极简，`gh` 不在里面** —— 安装脚本已经把 node 与 gh 所在目录显式写进 plist 的
+`PATH`。如果你换了 node/gh 的安装方式，重跑一次安装脚本让它重新探测。
 
-**Schedule**：daily，时刻自选，**必须晚于任务甲超过一次完整运行的时长**（见 §4）
-**Workspace**：`/Users/aa00945/Desktop/wraith`
-**Approval**：`default` = DENY，仅 `execute_command` = ALLOW
-**deliverTo**：在桌面「自动化」面板里勾（飞书 / QQ / 桌面，随时改）
+## 3. 建出日报的自动化任务
 
-**Prompt**：
+在桌面「自动化」面板新建，四个字段这样填：
+
+- **名称**：GitHub AI 日报
+- **项目**：选**装了取数任务的那个仓库目录**（必须一致，否则 `read_file` 够不着 `.ghai/`）
+- **频率**：每天，**时刻晚于取数任务超过一次完整运行的时长**（见 §4）
+- **结果投递**：勾你想要的（桌面通知 / QQ / 微信 / 企业微信 / 飞书，随时改）
+- **高级·工具调用审批**：保持**默认拒绝**即可。这个 prompt 只用 `read_file`，不需要放行任何工具
+
+**Prompt（原样粘贴）：**
 
 ```
 读今天的 GitHub AI 日报并点评。
 
-先执行：cat ~/.wraith/reports/github-ai-daily/$(date +%Y-%m-%d).md
+用 read_file 读取项目内的 .ghai/<今天日期>.md，日期格式是 YYYY-MM-DD。
+如果读不到，再用 read_file 读 .ghai/run.log，把最后 30 行贴出来，
+明确告诉我「今天没有报告」以及日志里的原因，然后结束 —— 不要编造任何榜单内容。
 
-如果文件不存在，说明取数脚本还没跑完或者失败了。这种情况下不要编造内容，
-执行 tail -30 ~/.wraith/reports/github-ai-daily/run.log 把最后的日志贴出来，
-明确告诉我「今天没有报告」以及日志里的原因，然后结束。
-
-如果文件存在：原样保留它的所有榜单和数字（一个数字都不要改、不要重算），
-在每张榜的后面用中文补三行点评，讲清楚 Top 3 为什么火、值不值得跟。
+如果读到了：原样保留它的所有榜单和数字，一个数字都不要改、不要重算。
+在每张榜后面用中文补三行点评，讲清楚 Top 3 为什么火、值不值得跟。
 最后把报告全文连同你的点评一起输出。
 ```
 
-**为什么强调「一个数字都不要改」**：榜单数字全部由脚本算出，不经模型，就是为了杜绝幻觉。模型只负责解读。
+**为什么强调「一个数字都不要改」**：榜单数字全部由脚本算出、不经模型，就是为了杜绝幻觉。
+模型只负责解读。
 
 ## 4. 时刻怎么定
 
-两个时刻都由你自己设，代码里没有写死任何时间。唯一的硬约束：
+两个时刻都由你自己设，代码里没写死任何时间。唯一的硬约束：
 
-> **任务乙的时刻 − 任务甲的时刻 > 一次完整运行的时长**
+> **出日报的时刻 − 取数的时刻 > 一次完整运行的时长**
 
 实测数据（用来估这个间隔）：
 
 | 项 | 实测值 |
 |---|---|
-| 完整一次运行 | **25 分钟以上**（当时词表 66 条查询；现已增到 71 条，会更久） |
+| 完整一次运行 | **25 分钟以上**（词表已增至 71 条查询，会更久） |
 | 其中「发现候选池」阶段 | 约 14 分钟 |
-| 为什么这么慢 | Search API 硬限 **30 次/分**，词表有 71 条查询、每条最多翻 3 页 |
-| GraphQL 消耗 | 约 66 点（额度 5000/小时，占 1.3%） |
+| 为什么这么慢 | Search API 硬限 **30 次/分**，71 条查询、每条最多翻 3 页 |
+| GraphQL 消耗 | 约 84 点（额度 5000/小时，占 1.7%） |
 
-**推荐**：任务甲 06:00，任务乙 07:00（留 60 分钟余量，是实测时长的两倍多）。
+**推荐**：取数 06:00、出日报 07:00（留 60 分钟余量，是实测时长的两倍多）。
 
-第一次跑完后，用 `run.log` 里的时间戳量一下你机器上的真实耗时，再决定要不要缩。**留余量比卡点重要**——间隔不够时任务乙只会读不到报告（它会明确告诉你，不会编），但你就白等一天。
+第一次跑完后用 `.ghai/run.log` 里的时间戳量一下你机器上的真实耗时再决定要不要缩。
+间隔不够时出日报那个任务只会读不到报告（它会明说，不会编），但你白等一天。
 
 ## 5. 配置：所有口径都在这里
 
-文件：`~/.wraith/reports/github-ai-daily/config.json`。改完下次运行生效，不用重启任何东西。
+文件：`<repo>/.ghai/config.json`。改完下次运行生效，不用重启任何东西。
 
 ### 决定「什么算 AI 项目」
 
@@ -166,8 +189,13 @@ mkdir -p ~/.wraith/reports/github-ai-daily && nohup node /Users/aa00945/Desktop/
 
 ### 常见症状
 
-**任务乙说「今天没有报告」**
-按顺序查：① 任务甲是不是没跑（看 `automation-runs.json`）；② 间隔够不够（§4）；③ `tail -50 run.log` 看脚本是不是退了非零码。
+**面板任务说「今天没有报告」**
+按顺序查：① 取数任务跑没跑 —— mac `launchctl print gui/$(id -u)/com.lyhn.wraith.ghai`、
+Windows `Get-ScheduledTaskInfo -TaskName WraithGithubAiDaily`；② 两个时刻的间隔够不够（§4）；
+③ 看 `.ghai/run.log` 末尾，脚本是不是退了非零码。
+
+**面板任务读不到文件，但 `.ghai/` 里明明有报告**
+面板任务的**项目**选错了。`read_file` 只能读所选项目目录内的文件，必须和装取数任务的仓库是同一个。
 
 **报告头部写着「窗口 48 小时」**
 这不是 bug，是降级提示：昨天漏跑了，所以基线是前天的快照，所有「日增」实际覆盖 48 小时。脚本刻意不把它折算成一天，也刻意不假装是 24 小时。
@@ -199,4 +227,6 @@ mkdir -p ~/.wraith/reports/github-ai-daily && nohup node /Users/aa00945/Desktop/
 - **涨粉榜只覆盖人物池**：池外的人涨粉再多也统计不到。人物池 = 池内仓库的 owner（只算 `User`，组织归关注名单栏）+ 涨得最多的前 N 个仓库的贡献者。
 - **Trending 兜底是 HTML 抓取**，GitHub 改版即失效。它只在冷启动路径上，失效后主链路不受影响，但报告里会明写「Trending 兜底不可用」。
 - **`stargazers` 接口对他人仓库返回 404**（实测），所以 star 日增没法零冷启动精确回溯，只能靠快照做差。哪天 GitHub 放开，这套可以大幅简化。
-- **一批 GraphQL 失败会丢掉整次运行**：约 44 个批次里任一批在 4 次尝试后仍失败就抛出。真机单次运行里观测到过 3 次真实 502/504 重试，所以这不是假设。目前的取舍是「宁可失败也不出空报告」。
+- **单批 GraphQL 失败已按批隔离**（2026-08-05 修）：某批耗尽重试只丢那一批并在报告里记 note；
+  但整批失败占比超过 `maxBatchFailureRatio`（默认 0.25）仍然抛错、不出报告 —— 容错不能滑成
+  「拿残缺数据出日报」。这条是真机撞出来的：首次运行 57 批里坏 1 批，赔掉了一整天。

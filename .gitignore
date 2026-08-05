@@ -45,3 +45,6 @@ test-results/
 
 # Isolated implementation worktrees
 .worktrees/
+
+# GitHub AI 日报的数据与报告（放项目内是为了让 automation 的 read_file 够得着,见 runbook）
+.ghai/
