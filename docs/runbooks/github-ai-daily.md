@@ -152,7 +152,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install-windows.ps1 -FromPan
 
 两个平台的脚本都会：读面板里那条日报任务的时刻、反推取数时刻、定位 node 与 gh、
 建好 `<repo>/.ghai/`、注册每日任务、把 stdout/stderr 追加到 `<repo>/.ghai/run.log`。
-卸载分别是 `--uninstall` 与 `-Uninstall`。
+卸载分别是 `--uninstall` 与 `-Uninstall` —— 但**那只摘掉取数任务这一半**，
+面板那条还得另外停，完整步骤见 **§8「关掉它」**。
 
 不想让它反推就手动指定：`./install-macos.sh 06 00` / `-At "06:00"`。
 
@@ -219,7 +220,7 @@ powershell -NoProfile -c "Get-Content 'D:\wraith\.ghai\run.log' -Wait"
 | 立刻跑一次 | `Start-ScheduledTask -TaskName WraithGithubAiDaily` | `schtasks /Run /TN WraithGithubAiDaily` |
 | 掐掉正在跑的那次 | `Stop-ScheduledTask -TaskName WraithGithubAiDaily` | `schtasks /End /TN WraithGithubAiDaily` |
 | 只改时刻（不重装） | `schtasks /Change /TN WraithGithubAiDaily /ST 06:15` | `schtasks /Change /TN WraithGithubAiDaily /ST 06:15` |
-| 卸载 | `... -File .\install-windows.ps1 -Uninstall` | `schtasks /Delete /TN WraithGithubAiDaily /F` |
+| 卸载（**只摘计划任务**，面板那条要另外停 → §8） | `... -File .\install-windows.ps1 -Uninstall` | `schtasks /Delete /TN WraithGithubAiDaily /F` |
 | 看日志（一次性） | `Get-Content D:\wraith\.ghai\run.log -Tail 50` | `type D:\wraith\.ghai\run.log` |
 | 跟着日志滚（`tail -f`） | `Get-Content D:\wraith\.ghai\run.log -Wait` | `powershell -NoProfile -c "Get-Content 'D:\wraith\.ghai\run.log' -Wait"` |
 | 设持久 token | `[Environment]::SetEnvironmentVariable("GITHUB_TOKEN","ghp_xxx","User")` | `setx GITHUB_TOKEN ghp_xxx` |
@@ -473,3 +474,46 @@ Windows 上重点看两行：**「上次运行结果」**（`0` 才是成功）�
 - **单批 GraphQL 失败已按批隔离**（2026-08-05 修）：某批耗尽重试只丢那一批并在报告里记 note；
   但整批失败占比超过 `maxBatchFailureRatio`（默认 0.25）仍然抛错、不出报告 —— 容错不能滑成
   「拿残缺数据出日报」。这条是真机撞出来的：首次运行 57 批里坏 1 批，赔掉了一整天。
+
+## 8. 关掉它
+
+**装是两步（§2 取数任务 + §3 面板任务），关也必须两步。**
+只跑卸载脚本＝只摘掉第一步：面板那条 cron 每天照样触发，`documents_read` 读到的是
+**昨天的报告**（或什么都读不到），于是照样点评、照样投递。这是这套接线最容易漏的一处 ——
+表面上「已经卸载了」，实际每天还在推。
+
+### ① 摘掉取数任务
+
+| 平台 | 命令 |
+|---|---|
+| **macOS** | `cd <repo>/scripts/github-ai-daily/install && ./install-macos.sh --uninstall` |
+| **Windows · PowerShell** | `powershell -NoProfile -ExecutionPolicy Bypass -File .\install-windows.ps1 -Uninstall` |
+| **Windows · cmd** | `schtasks /Delete /TN WraithGithubAiDaily /F` |
+
+三条都**只删调度项**，`<repo>/.ghai/`（含 `run.log` 与历史快照）一律保留 ——
+快照是 star 日增做差的唯一依据，删了等于把历史清零，所以脚本刻意不替你删。要删自己删。
+
+### ② 停掉面板任务
+
+到桌面「自动化」面板，把 §3 建的那条**停用或删除**。
+
+**没有 CLI 入口。** 面板任务存在 `~/.wraith/automations.json`（Java daemon 的
+`AutomationStore` 写的，见 `GatewayDaemon.java:56`）。要手改这个文件，必须在 daemon
+停着的时候改 —— 否则内存里的状态会把你的编辑盖回去。
+
+### ③ 确认真的关掉了
+
+| 平台 | 命令 | 关掉后应该看到 |
+|---|---|---|
+| macOS | `launchctl print gui/$(id -u)/com.lyhn.wraith.ghai` | `Could not find service` |
+| Windows · PowerShell | `Get-ScheduledTask -TaskName WraithGithubAiDaily` | 报「没有找到」 |
+| Windows · cmd | `schtasks /Query /TN WraithGithubAiDaily` | `系统找不到指定的文件` |
+
+> ⚠ **macOS：别拿「plist 在不在」当判断依据。** launchd 的配置是**加载时读进内存**的。
+> plist 被删掉、甚至被清成 0 字节之后，已加载的 job 仍然按内存里的旧配置继续触发，
+> 直到你 `bootout` 或者重新登录。
+>
+> 这是实测出来的，不是推测：本机遇到过 plist 已经是 0 字节，而
+> `launchctl print` 里那个 job 还活着、`Hour => 6 / Minute => 0` 的时刻照旧。
+> 反过来说也成立 —— **看到 `ls ~/Library/LaunchAgents/` 里文件还在，也不代表它还会跑**。
+> 唯一可信的判断是上表的 `launchctl print`。
