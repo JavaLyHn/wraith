@@ -59,11 +59,37 @@ public class SideGitManager {
         return createSnapshot(SnapshotPhase.PRE_RESTORE, turnId, summary);
     }
 
+    /**
+     * 写一张快照。
+     *
+     * <p>唯一的写入口，所以<b>陈旧锁自愈也只包在这里</b>：某个进程死在 add/commit 中途会把
+     * {@code index.lock} 留在 Side-Git 里，而在这之前<b>没有任何恢复路径</b> ——
+     * 之后每一轮、每一次重启都撞同一个锁，直到用户手工删文件
+     * （用户 Windows 实测就是这样，见 {@link SnapshotLockRecovery}）。
+     * 只在能确定那把锁是<b>死的</b>时才清；拿不准就把原异常照原样报上去。
+     */
     public synchronized TurnSnapshot createSnapshot(SnapshotPhase phase, String turnId, String summary)
             throws IOException, GitAPIException {
         if (!config.enabled()) {
             return null;
         }
+        try {
+            return writeSnapshot(phase, turnId, summary);
+        } catch (IOException | GitAPIException | RuntimeException first) {
+            Path staleLock = SnapshotLockRecovery.recoverableLock(first);
+            if (staleLock == null || !SnapshotLockRecovery.clear(staleLock)) {
+                throw first;
+            }
+            try {
+                return writeSnapshot(phase, turnId, summary);
+            } catch (IOException | GitAPIException | RuntimeException second) {
+                throw SnapshotLockRecovery.retryStillFailed(staleLock, second);
+            }
+        }
+    }
+
+    private TurnSnapshot writeSnapshot(SnapshotPhase phase, String turnId, String summary)
+            throws IOException, GitAPIException {
         try (Git git = openGit()) {
             git.add().addFilepattern(".").call();
             git.add().setUpdate(true).addFilepattern(".").call();

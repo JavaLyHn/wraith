@@ -14,6 +14,11 @@
 | ✅ | `jni` provider 被 `Module.isNativeAccessEnabled()` 挡住（JDK 21 回移了检查却不认 manifest；实测 Oracle JDK 21 就会） | 启动器探测一次 `--enable-native-access=ALL-UNNAMED` 并缓存 |
 | ✅ | GBK 控制台上 emoji 变 `??` | `ConsoleSafeText` + `SafeConsoleStream`（只拦文本，不拦 `write(byte[])`） |
 | ✅ | 不带换行的长 reasoning 被无限期吞掉 → 屏幕完全静止 | `REASONING_FLUSH_CHARS=120` 兜底 + `flushPartialLineIfLongerThan` |
+| ✅ | 快照失败只打 `e.getMessage()`，JGit 顶层消息什么都没说 | `SnapshotFailureReport`：展开 cause 链 + 只在能确定的形态上给建议 |
+| ✅ | 残留 `index.lock` 让快照**永久**失效（重启也不好） | `SnapshotLockRecovery`：>60s 没人动的锁自动清掉并重试一次；**已在 mac 上复现同一异常** |
+| ✅ | 正常退出丢掉排队中的 post-turn 快照（也是残留锁的产地） | `close()` 改 `shutdown()` + 等 3 秒；CLI 加 shutdown hook |
+| ✅ | 失败提示被挤进活动面板的进度条那一行，尾巴被重绘吃掉 | `Renderer.printNotice` → `InlineActivityDisplay.printAbove`（走面板同一个 monitor） |
+| ✅ | 符号表漏字符 → `👋 你好！` 退成 `? 你好！`（原 T5） | 表从 34 条补到 ~115 条（扫源码得知**有 100 种字符会进控制台**）+ 变体选择符按规则丢弃 + 自维护测试 |
 
 ## P0 — 已定位，未修
 
@@ -98,16 +103,44 @@ finally { snapshotAfterTurnAsync(...); }   // ← post-turn 是异步的(对的)
 
 ## P1
 
+### T8. 快照残留锁的**产生**只堵住了正常退出那条路
+
+`close()` 现在等 3 秒，CLI 也挂了 shutdown hook —— 但 **Ctrl+C 打在同步 pre-turn 中途**
+仍然会留锁（那时锁是主线程持有的，没有任何 Java 层能兜）。
+靠 `SnapshotLockRecovery` 下次自愈，代价是那一次快照丢失。真要堵死得让 pre-turn 也异步，
+或者给 `git add` 加超时 —— 都比现在这条路重，先记下。
+
+### T9. 一个进程里可能有**多个** `SideGitManager` 指向同一个 Side-Git
+
+`SideGitManager` 的所有方法都是 `synchronized`，但那是**按实例**的锁。
+而 `ToolRegistry` 的字段初始化每次都 `SnapshotService.forProject(...)`，
+`PlanExecuteAgent` / `AgentOrchestrator` / `runHeadlessTaskAt` 又各自 `new ToolRegistry()` ——
+同一个项目在一个进程里出现两个 manager 是可能的，那时 `synchronized` 是 no-op。
+
+**目前没有证据表明它真的撞过**（写入口只有 `runTurn` 和 restore，交互式 CLI 里只有一条）。
+所以没动手 —— 但这正是记忆里那条「`openDefault` 每次新实例 → per-instance synchronized 是 no-op」
+的同一个形状，值得在真撞上之前改成按 `gitDir` 的类级锁。
+
 ### T4. `wraith terminal doctor` 没显示 `java-flags.txt` 的状态
 
 那个缓存文件直接决定启动时加不加 `--enable-native-access`，但报告里没有它。
 换过 JDK 而没重跑 `wraith-install` 时，用户看不出「缓存过期了」。
 
-### T5. `ConsoleSafeText` 的符号表覆盖不全
+### ~~T5. `ConsoleSafeText` 的符号表覆盖不全~~ —— ✅ 已修
 
-用户实测里 `👋 再见!` 变成 `? 再见!`（表里没有 `👋`）。降级成 `?` 不算错（周围文字保住了），
-但常用 emoji 应该都有 ASCII 等价物。做法：把仓库里所有输出用到的 emoji 扫一遍补进表里，
-并加一条测试断言「源码里出现的 emoji 都在表内」。
+扫 `src/main/java` 的**字符串字面量**（排除注释行）得到硬数字：**100 种字符会进控制台
+而 GBK 编不了**，表里当时只有 20 来个。补到 ~115 条，另外加了一条规则：
+
+> **变体选择符 / ZWJ / 肤色修饰符按规则丢弃，不逐个穷举。**
+> `⚠️` 是两个码点，各退一个 `?` 才成了 `??`。表里写 `"⚠️"`/`"⚠"` 两条能挡住已知的，
+> 但任何**没进表**的 emoji 带上修饰符就又多吐一个 `?`。
+
+守卫是一条自维护测试：扫源码字面量，凡 `render(ch, GBK)` 结果<b>整个就是 `?`</b> 的都算漏。
+判据不能写 `contains("?")` —— `🔍 → [?]` 是合法等价物，那样会自己咬自己（第一版就踩了）。
+突变验证：从表里去掉 `👋`，测试立刻点名 `U+1F44B 👋 (TuiBootstrap.java)`。
+
+spinner 的盲文点阵 `⠋⠙⠹…` 刻意映成 `| / - \` 四帧循环 —— 全退成 `?` 会让它看着**停住了**，
+而 spinner 唯一的作用就是证明「还在动」。进度条 `▰▱` 同理映成 `#-`，否则看不出进度。
 
 ### T6. mac 上 `--enable-native-access` 没有对应的处理
 

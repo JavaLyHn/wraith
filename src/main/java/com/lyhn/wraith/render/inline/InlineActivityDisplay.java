@@ -128,6 +128,33 @@ final class InlineActivityDisplay implements AutoCloseable {
         renderLocked();
     }
 
+    /**
+     * 在面板<b>上方</b>输出若干行，然后把面板重新画在下面。
+     *
+     * <p>面板有自己的 250ms 重绘线程，别的线程直接往 stdout/stderr 写就会撞进它正在写的那一行
+     * （用户 Windows 实测：快照失败提示被挤进 {@code ▰▱▱… 1%} 那行，尾巴还被下一次重绘吃掉）。
+     * 所以这里走和重绘同一个 monitor：先擦掉面板占的行，把提示当正常输出打出去（成为滚动历史），
+     * 再重画面板。
+     */
+    synchronized void printAbove(String text) {
+        if (closed || text == null || text.isEmpty()) {
+            return;
+        }
+        synchronized (renderLock) {
+            PrintWriter writer = terminalWriter();
+            clearRenderedArea(writer);
+            renderedRows = 0;   // 已经擦掉了;若不清零,下面 renderLocked 会再往上跑一次
+            for (String line : text.split("\n", -1)) {
+                writer.print(line);
+                writer.print(AnsiSeq.CLEAR_TO_EOL);
+                writer.print('\n');
+            }
+            writer.flush();
+            terminal.flush();
+        }
+        renderLocked();   // 面板不 active 时它自己会 no-op
+    }
+
     synchronized void end() {
         if (closed) {
             return;

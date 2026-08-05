@@ -363,6 +363,13 @@ public class Main {
             hitlToolRegistry.setSkillContextBuffer(skillContextBuffer);
 
             Agent reactAgent = new Agent(llmClient, hitlToolRegistry);
+            // 快照失败提示必须走渲染器:活动面板有自己的重绘线程,直接 println 会被挤进
+            // 「▰▱▱… 1%」那一行,连「怎么关掉」都读不全(用户 Windows 实测)。
+            hitlToolRegistry.setSnapshotNoticeSink(renderer::printNotice);
+            // 退出时给排队中的 post-turn 快照几秒写完。否则 daemon 写入线程被 JVM 直接带走,
+            // index.lock 留在 Side-Git 里 —— 那正是这把锁最初的来处。
+            Runtime.getRuntime().addShutdownHook(new Thread(
+                    () -> hitlToolRegistry.getSnapshotService().close(), "wraith-snapshot-shutdown"));
             reactAgent.setPricingTable(new com.lyhn.wraith.context.PricingTable(config.getPricing()));
             reactAgent.setExternalContextSupplier(mcpServerManager::resourceIndexForPrompt);
             reactAgent.setSkillRegistry(skillRegistry);

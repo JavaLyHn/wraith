@@ -470,6 +470,8 @@ npm run dev
 | `ENOENT ... mkdir '<项目路径>\$env:...\_cacache\tmp'` | 缓存路径**不存在**，且被拼在了项目目录后 → 存进 `.npmrc` 的是个相对路径 | 在 cmd 里跑了 PowerShell 写法 `"$env:LOCALAPPDATA\..."`。改用 `"%LOCALAPPDATA%\..."`，并删掉误建的怪目录 |
 | `npm warn cleanup ... rmdir 'node_modules\...'` / `npm warn tar TAR_ENTRY_ERROR ...` | 都是**次生现象**不是病因 —— 安装中途挂了，回滚删不掉半成品 / 解压到一半断了 | 别对着它排查。看 `npm error` 那几行的 `path`，解决后删干净 `node_modules` 重装 |
 | `npm error path ...\node_modules\electron` + `RequestError: unable to verify the first certificate` | npm 包已下完，卡在 **electron postinstall 下载 Electron 二进制**（约 100MB，不走 registry，直连 GitHub Releases）。TLS 证书链验证失败，通常是杀软/企业网关拆 HTTPS | 见下方「Electron 二进制下载失败」——先设 `ELECTRON_MIRROR` |
+| 每轮都刷 `pre-turn 快照失败` / `post-turn 快照失败`，且**重启也不好** | Side-Git 里留了一把死锁（`index.lock`）。某个进程死在 `git add` 中途就会留下它 —— 而在修好之前**没有恢复路径**，之后每一轮、每一次重启都撞同一把锁 | **已修**：超过 60 秒没人动过的锁会被自动清掉并重试。跑新 jar 即可，不必手动删。仍报错的话看提示里的 cause 链——那已经不是锁的问题了 |
+| 快照提示被挤进 `▰▱▱… 1%` 那一行，尾巴还缺一截 | 活动面板有自己的 250ms 重绘线程，提示以前直接写 stderr，撞进了它正在写的那行 | **已修**：提示改走面板同一个出口，插在面板上方 |
 | 「用应用打开」找不到编辑器 | 只按已知安装路径探测 | 见下方已知限制 |
 | 文件操作偶发 `AccessDeniedException` | 杀软 / 索引器短暂占用目标文件 | 已内置 5 次有界重试（20/40/60/80ms）。**若仍失败请记下报错栈** —— 那说明占用超过 200ms，是需要调大退避的真实信号，不要当 flake 重跑了事 |
 
@@ -984,6 +986,46 @@ wraith terminal doctor
 > **`dumb` 下现在保留什么、放弃什么**：认了 ANSI 就保留颜色、思考面板、diff、工具块折叠；
 > 但**不开常驻状态栏** —— `DumbTerminal.getSize()` 来自 env `COLUMNS`/`LINES`，没有就是 `(80,24)` 兜底，
 > 按错的行数设 scroll region 会把状态栏画到屏幕中间或裁掉正文，那比没有状态栏糟得多。
+
+---
+
+### 每轮都报「快照失败」，重启也不好
+
+**一句话指纹**：每次发消息都夹两行，且**换终端、重启机器都一样**：
+
+```
+[!] pre-turn 快照失败：JGitInternalException: Exception caught during execution of add command
+  ← LockFailedException: Cannot lock C:\Users\你\.wraith\snapshots\...\.git\index.
+```
+
+**先解释快照是什么**：wraith 每轮对话前后各存一张「Side-Git」快照，用的是一个**完全独立**的
+git 仓库 —— `gitDir` 在 `%USERPROFILE%\.wraith\snapshots\<项目哈希>\`，而 worktree 指向你的项目根。
+所以它**不碰你自己的 `.git`**：不占你的 index、不产生你能看见的 commit、`git status` 里什么都不多。
+`/snapshot` 看列表，`/restore N` 回滚到最近第 N 轮之前。
+
+**为什么会"全都"失败**：写入线程是 daemon 线程，JVM 一退就没了，`finally` 里的解锁不会跑；
+所以只要有一次进程死在 `git add` 中途（Ctrl+C、直接关窗口、任务管理器结束进程），
+`index.lock` 就留在那儿。而在修好之前**没有任何恢复路径** —— 之后每一轮、每一次重启都撞它。
+
+| 现象 | 真实原因 | 是不是 bug |
+|---|---|---|
+| 一直失败，重启无效 | 残留的 `index.lock` 没人清 | 是，**已修**：超过 60 秒没人动过的锁会自动清掉并重试一次 |
+| 正常退出后那一轮的收尾快照丢了 | 关服务时 `shutdownNow()` 把排队中的 post-turn 直接丢掉 | 是，**已修**：退出时最多等 3 秒让它写完 |
+| 提示被挤进 `▰▱▱… 1%` 那一行，尾巴缺一截 | 活动面板有自己的 250ms 重绘线程，提示以前直写 stderr | 是，**已修**：改走面板同一个出口 |
+| 报错第一行只有 `Exception caught during execution of add command` | 那是 JGit 的顶层消息，**什么信息都没有**，真原因在 cause 里 | 是，已修（现在打完整 cause 链 + 可行动建议） |
+
+**跑新 jar 就好，不必手动删文件。** 若清完锁仍失败，提示会明确写「陈旧的锁已经自动清掉了」——
+那就说明问题不在锁上，看 cause 链原文。最常见的剩余原因是**同一个项目上开着两个 wraith**
+（比如桌面端和 CLI 同时跑），关掉一个即可。
+
+**相关开关**：
+
+| 开关 | 作用 |
+|---|---|
+| `WRAITH_SNAPSHOT_ENABLED=false` | 干脆关掉快照 |
+| `WRAITH_SNAPSHOT_STALE_LOCK_SECONDS=<秒>` | 多久算「死锁」，默认 60。实测一次快照最慢约 8 秒，**别调得比它小** |
+| `WRAITH_SNAPSHOT_EXCLUDES=a,b` | 追加排除目录（默认已含 `target` / `node_modules` / `dist` / `release` 等） |
+| `/snapshot clean` | 清掉当前项目的整个快照目录 |
 
 ---
 

@@ -248,6 +248,19 @@ public final class InlineRenderer implements Renderer {
         }
     }
 
+    /** 系统提示走面板同一个 monitor,才不会撞进它正在重绘的那一行。 */
+    @Override
+    public void printNotice(String text) {
+        if (text == null || text.isEmpty()) {
+            return;
+        }
+        if (activityDisplay == null || closed) {
+            Renderer.super.printNotice(text);
+            return;
+        }
+        activityDisplay.printAbove(text);
+    }
+
     /**
      * 绑定当前交互循环使用的 JLine LineReader。
      *

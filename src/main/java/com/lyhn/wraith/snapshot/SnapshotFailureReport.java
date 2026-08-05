@@ -107,6 +107,12 @@ public final class SnapshotFailureReport {
         if (all.contains("no space left") || all.contains("磁盘空间不足")) {
             return "**磁盘空间不足**。快照目录默认在 ~/.wraith/snapshots，可用 /snapshot clean 清理。";
         }
+        // 这条必须排在 index.lock 之前:清过锁仍失败时,整条链里同样含 "cannot lock",
+        // 落到下面那条就会叫用户去删一个**刚刚已经被删掉**的文件。
+        if (all.contains(SnapshotLockRecovery.ALREADY_CLEARED.toLowerCase(Locale.ROOT))) {
+            return "陈旧的锁**已经自动清掉了**，重试仍失败 —— 问题不在那把锁上，看下面的原文。"
+                    + "若同一个项目上还开着另一个 wraith（比如桌面端和 CLI 同时跑），关掉一个再试。";
+        }
         if (all.contains("index.lock") || all.contains("cannot lock")) {
             return "Side-Git 的 index 被锁住了。多半是上一次快照被强杀留下的 index.lock，"
                     + "删掉 ~/.wraith/snapshots/<项目>/*/index.lock 再试。";

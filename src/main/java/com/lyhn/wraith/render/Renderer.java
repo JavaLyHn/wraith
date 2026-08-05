@@ -86,6 +86,22 @@ public interface Renderer extends AutoCloseable {
         endThinking();
     }
 
+    /**
+     * 在活动面板<b>上方</b>插一行系统提示。
+     *
+     * <p>为什么需要这个口子：活动面板有自己的 250ms 重绘线程，别的线程直接
+     * {@code System.err.println} 会撞进它正在写的那一行。用户 Windows 实测就是这样 ——
+     * <pre>▰▱▱▱…▱ 1%[!] pre-turn 快照失败：…enabled?</pre>
+     * 提示被挤进了进度条那一行，尾巴还被下一次重绘覆盖掉（连「怎么关掉」都没读全）。
+     *
+     * <p>默认实现直接打 stderr（无面板的渲染器本来就没有这个问题）。
+     */
+    default void printNotice(String text) {
+        if (text != null && !text.isEmpty()) {
+            System.err.println(text);
+        }
+    }
+
     /** 当前渲染器希望 LineReader 使用的左侧输入提示。 */
     default String inputPrompt() {
         return "> ";

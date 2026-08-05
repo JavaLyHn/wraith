@@ -118,6 +118,8 @@ public class ToolRegistry {
     private LspManager lspManager = new LspManager(projectPath);
     private SnapshotService snapshotService = SnapshotService.forProject(Path.of(projectPath));
     private boolean customSnapshotService;
+    /** null = 用 SnapshotService 自己的默认出口(stderr)。 */
+    private java.util.function.Consumer<String> snapshotNoticeSink;
     private volatile String currentProvider = "";
     private volatile String currentModel = "";
     private com.lyhn.wraith.context.curator.CurationSink curationSink =
@@ -173,7 +175,21 @@ public class ToolRegistry {
         if (!customSnapshotService) {
             this.snapshotService.close();
             this.snapshotService = SnapshotService.forProject(Path.of(projectPath));
+            // 换项目会**换掉整个 SnapshotService**,提示出口必须跟着搬过去 ——
+            // 否则快照失败又静默退回 stderr,把活动面板那一行撞花(而且不报错,没人会发现)。
+            this.snapshotService.setNoticeSink(snapshotNoticeSink);
         }
+    }
+
+    /**
+     * 快照失败提示的出口，交互式 CLI 会把它指向渲染器。
+     *
+     * <p>记在 registry 上而不是只设给当前的 service：{@link #setProjectPath} 会整个换掉
+     * SnapshotService，只设一次的话换完就丢了。
+     */
+    public void setSnapshotNoticeSink(java.util.function.Consumer<String> sink) {
+        this.snapshotNoticeSink = sink;
+        this.snapshotService.setNoticeSink(sink);
     }
 
     /**

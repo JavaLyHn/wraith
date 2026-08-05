@@ -425,6 +425,57 @@ class InlineRendererTest {
         }
     }
 
+    /**
+     * 用户 Windows 实测的原样输出 —— 快照失败提示被<b>挤进活动面板的进度条那一行</b>：
+     * <pre>
+     *     ▰▱▱▱▱▱▱… 1%[!] pre-turn 快照失败：JGitInternalException: …
+     *    （…或 -Dwraith.snapshot.enabled?
+     * </pre>
+     * 末尾的 {@code =false）} 还被下一次重绘覆盖掉，<b>连「怎么关掉」都没读全</b>。
+     *
+     * <p>根因是面板有自己的 250ms 重绘线程，别的线程直接 {@code println} 不走它的 monitor。
+     * 修法：{@code printNotice} → {@code InlineActivityDisplay.printAbove}，
+     * 先擦掉面板占的行、把提示当正常输出打完（成为滚动历史），再把面板重画在下面。
+     */
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("**系统提示不能被挤进面板那一行** —— 整段要完整,且以换行收尾")
+    void printNoticeDoesNotCollideWithTheActivityPanel() {
+        Terminal terminal = Mockito.mock(Terminal.class);
+        Mockito.when(terminal.getType()).thenReturn("xterm-256color");
+        Mockito.when(terminal.getSize()).thenReturn(new Size(120, 40));
+        ByteArrayOutputStream sink = new ByteArrayOutputStream();
+        PrintWriter writer = new PrintWriter(new OutputStreamWriter(sink, StandardCharsets.UTF_8), true);
+        Mockito.when(terminal.writer()).thenReturn(writer);
+        Mockito.doAnswer(invocation -> {
+            writer.flush();
+            return null;
+        }).when(terminal).flush();
+
+        InlineRenderer renderer = new InlineRenderer(terminal,
+                new PrintStream(sink, true, StandardCharsets.UTF_8));
+        try {
+            renderer.start();
+            renderer.beginActivity("准备本轮", "保存快照 / 装配上下文");
+            sink.reset();
+
+            String notice = "⚠️ pre-turn 快照失败：LockFailedException: Cannot lock …index\n"
+                    + "   （不想要快照可以关掉：设 WRAITH_SNAPSHOT_ENABLED=false）";
+            renderer.printNotice(notice);
+
+            String emitted = sink.toString(StandardCharsets.UTF_8);
+            assertTrue(emitted.contains("pre-turn 快照失败"), emitted);
+            assertTrue(emitted.contains("WRAITH_SNAPSHOT_ENABLED=false）"),
+                    "整段必须完整落地,尾巴不能被吃掉: " + emitted);
+            int noticeEnd = emitted.indexOf("WRAITH_SNAPSHOT_ENABLED=false）");
+            int panelAfter = emitted.indexOf("准备本轮", noticeEnd);
+            assertTrue(panelAfter > noticeEnd, "面板要重画在提示**之后**: " + emitted);
+            assertTrue(emitted.substring(noticeEnd, panelAfter).contains("\n"),
+                    "提示与面板之间必须有换行,否则就是那次挤在一行的原样复现: " + emitted);
+        } finally {
+            renderer.close();
+        }
+    }
+
     @org.junit.jupiter.api.Test
     @org.junit.jupiter.api.DisplayName("WRAITH_NO_STATUSBAR 只关状态栏,不该连思考面板一起关")
     void noStatusBarPropertyDoesNotKillThinkingPanel() {
