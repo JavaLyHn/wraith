@@ -162,7 +162,7 @@ Start-ScheduledTask -TaskName WraithGithubAiDaily; Get-Content <repo>\.ghai\run.
 | `streakTtlDays` | 30 | 「连续在榜 N 天」的记录多久没上榜就清掉 |
 | `windowNominalHours` / `windowToleranceHours` | 24 / 1 | 窗口偏离标称值超过容差就在报告头部标「退化」 |
 | `baselineMinAgeHours` | 20 | 至少多久之前的快照才能当基线 |
-| `snapshotRetainDays` | 400 | 快照保留天数（gzip 后约 200KB/天） |
+| `snapshotRetainDays` | 400 | 快照保留天数。**实测 896 KB/天**（gzip 后），400 天≈358 MB；只用于「和昨天做差」与「连续在榜天数」，**90 天≈81 MB / 30 天≈27 MB 完全够用** |
 | `searchThrottleMs` | 2100 | Search 请求间隔。**别调小**，30 次/分是 GitHub 的硬限 |
 | `graphqlMaxRetries` | 3 | GraphQL 限流/5xx 的重试次数 |
 | `contributorPoolTopRepos` | 50 | 从涨得最多的前 N 个仓库里扒贡献者补进人物池；设 0 关闭 |
