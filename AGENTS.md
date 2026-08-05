@@ -177,11 +177,25 @@ src/main/java/com/lyhn/wraith/
 
 `AGENTS.md` / `README.md` / `ROADMAP.md`（仅状态变化时）
 
+> **2026-08-05 起文档分了工，别再往 README 里堆。** README 只放
+> 「这是什么 / 怎么上手 / 产品形态截图 / 常用命令速查 / 常见问题」；
+> 开发流程进 `docs/development.md`、开发史进 `docs/evolution.md`、
+> **CLI 全部命令进 `docs/cli-manual.md`**、Windows 首次上手进 `docs/windows-quickstart.md`。
+> 判断放哪的标准很简单：**第一次来的人需要，就进 README；只有改代码的人需要，就进 docs/**。
+
 ### 2. 改命令入口 → 联动
 
-`Main.java` + `CliCommandParser.java` + 测试 + `README.md` + `AGENTS.md`
+`Main.java`（`slashCommandHints` 提示表）+ `CliCommandParser.java`（真实 dispatch）
++ 测试 + **`docs/cli-manual.md`**（全部命令的家）+ `README.md`（只有进了速查表才要动）+ `AGENTS.md`
 
 未识别的 `/xxx` 在 CLI 层直接报"未知命令"，不回退给 Agent。
+
+> **提示表漏一条 = 这个功能不存在。** 命令敲得动但 Tab 补不出来、`/` 菜单里也没有，
+> 用户不可能发现它 —— `/memory pending`（自动记忆提取的**唯一** CLI 入口）就这么隐身过一段时间。
+> `SlashCommandDiscoverabilityTest` 现在守着这条：它按**严格字面量**比对 parser 认的命令与提示表，
+> 漏一条就变红。豁免名单只收纯别名（`/mem*` / `/ctx`），不收「暂时懒得写」。
+> （第一版判据写成「首个词相同就算覆盖」，结果 `/memory pending` 被 `/memory` 顶掉 ——
+> 那正是要抓的漏项却被自己的宽松判据放过了。别再改回族覆盖。）
 
 ### 3. 改 Plan 审阅交互 → 联动
 

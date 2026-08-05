@@ -2,11 +2,15 @@
 
 > 从 **`git clone` 一路到能对话**的完整步骤。每步都给了**预期产出**，不对就停下看第 6 节。
 >
-> 仓库里另有两份 Windows 文档，分工不同，**别拿错**：
+> **第一次用的人先看 [`windows-quickstart.md`](windows-quickstart.md)** —— 那份一屏读完，
+> 每条命令都给了 cmd 与 PowerShell 两种写法。本文是**详版 + 排障手册**，卡住了再回来查。
+>
+> 仓库里另有三份 Windows 文档，分工不同，**别拿错**：
 >
 > | 文档 | 是什么 | 什么时候看 |
 > |---|---|---|
-> | 本文 `windows-usage.md` | **从零到跑起来 + 怎么用** | 你要用 wraith |
+> | [`windows-quickstart.md`](windows-quickstart.md) | **一屏读完的首次上手**（含 cmd/PS 双写） | 你第一次装 |
+> | 本文 `windows-usage.md` | **详版 + 30+ 条排障对照表** | 你卡住了 / 想知道为什么 |
 > | [`windows-release.md`](windows-release.md) | 出包与发布 runbook | 你要出一个可分发的安装包 |
 > | [`windows-dev.md`](windows-dev.md) | 逐条**验收清单**（124 勾） | 你要验证这个端口有没有做对 |
 >
@@ -23,15 +27,29 @@
 >
 > 在 cmd 里敲 `powershell` 回车即可切换（目录不变）。
 >
-> **两者最容易咬人的差异**：
+> **两者全部会咬人的差异**（本文命令按 PowerShell 写；下面的关键步骤都另附了 cmd 写法）：
 >
 > | 用途 | PowerShell | cmd |
 > |---|---|---|
 > | 环境变量取值 | `$env:LOCALAPPDATA` | `%LOCALAPPDATA%` |
+> | 设临时环境变量 | `$env:FOO = "v"` | `set FOO=v`（**等号两边不要空格**） |
+> | 设永久环境变量 | `[Environment]::SetEnvironmentVariable("FOO","v","User")` | `setx FOO "v"` |
 > | 删目录 | `Remove-Item -Recurse -Force x` | `rmdir /s /q x` |
-> | 设环境变量 | `$env:FOO = "v"` | `set FOO=v` |
+> | 切目录 | `Set-Location x` 或 `cd x` | `cd x` |
+> | 判断文件存在 | `Test-Path x` | `dir x` |
+> | 找命令位置 | `Get-Command npx` / `where.exe npx` | `where.exe npx` |
+> | 串联两条命令 | `a; b`（**5.1 不支持 `&&`**，7+ 支持） | `a && b` |
+> | 跑 `.ps1` | `.\x.ps1`（被策略拦就用下面那句） | `powershell -ExecutionPolicy Bypass -File x.ps1` |
+> | 看 PATH | `$env:PATH -split ';'` | `echo %PATH%` |
+> | 结束进程 | `Stop-Process -Name java -Force` | `taskkill /IM java.exe /F` |
 >
-> 尤其注意第一行：在 cmd 里跑带 `$env:` 的命令**不会报错**，而是把 `$env:LOCALAPPDATA` 当普通字符串原样传下去 —— 比如 `npm config set cache "$env:LOCALAPPDATA\npm-cache"` 会真的把缓存设到一个叫 `$env:LOCALAPPDATA` 的目录。静默走偏，比报错难查。
+> **两条最容易静默走偏的**：
+>
+> 1. 在 cmd 里跑带 `$env:` 的命令**不会报错**，而是把 `$env:LOCALAPPDATA` 当普通字符串传下去 ——
+>    比如 `npm config set cache "$env:LOCALAPPDATA\npm-cache"` 会真的把缓存设到一个叫
+>    `$env:LOCALAPPDATA` 的目录里。静默走偏，比报错难查。
+> 2. 在 **PowerShell 5.1**（Windows 自带那个）里跑 `a && b` 会报
+>    `标记"&&"不是此版本中的有效语句分隔符`。换成 `a; b`。
 
 ---
 
@@ -306,19 +324,29 @@ type "%USERPROFILE%\.env"
 
 配好后重启 `npm run dev`。控制台不再出现「尚未配置任何模型」、首页也不再显示引导条，就说明装上了。
 
-### ③ PowerShell 环境变量
+### ③ 环境变量（cmd 与 PowerShell 写法完全不同）
 
 ⚠ README 快速开始里写的是 `export GLM_API_KEY=...` —— 那是 bash 语法，**在 PowerShell 和 cmd 里都不存在**。Windows 上要这样写：
 
+**PowerShell**
+
 ```powershell
-# 只对当前 PowerShell 会话有效（关掉窗口就没了）
+# 只对当前会话有效（关掉窗口就没了）
 $env:GLM_API_KEY = "你的key"
 
 # 永久写入当前用户（新开的进程才读得到，已开的 App 要重启）
 [Environment]::SetEnvironmentVariable('GLM_API_KEY', '你的key', 'User')
 ```
 
-cmd.exe 里则是 `set GLM_API_KEY=你的key`（当前窗口）／`setx GLM_API_KEY "你的key"`（永久）。
+**cmd**
+
+```bat
+REM 只对当前窗口有效。等号两边不要空格 —— 写成 set K = v 会连空格一起存进变量名
+set GLM_API_KEY=你的key
+
+REM 永久写入当前用户（新开的窗口才读得到）
+setx GLM_API_KEY "你的key"
+```
 
 > 注意环境变量是**进程启动时**读的。从开始菜单启动的 App 不会看到你之后才设的变量 —— 设完要重启 App。这也是为什么**推荐走 ① 图形界面**：改完即时生效，不牵扯进程环境。
 
@@ -499,8 +527,17 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
 
 **③ PATH 到底进去没有？** 新终端里：
 
+**PowerShell**
+
 ```powershell
 $env:Path -split ';' | Select-String wraith
+where.exe wraith
+```
+
+**cmd**
+
+```bat
+echo %PATH%
 where.exe wraith
 ```
 
@@ -565,6 +602,8 @@ where.exe wraith
 ```powershell
 # 应该没有任何输出(纯 ASCII);有输出说明是旧版
 Select-String -Path scripts\windows\*.cmd -Pattern '[^\x00-\x7F]' -Encoding Byte
+# cmd 里没有等价的一行写法,用 findstr 只能近似:
+#   findstr /R /C:"[^ -~]" scripts\windows\*.cmd
 ```
 
 约束由 `WindowsLauncherScriptTest`（`.cmd` 纯 ASCII + CRLF + 委派契约）与
@@ -603,6 +642,9 @@ npm error Log files were not written due to an error writing to the directory: <
 npm config get cache
 
 # ② 改到用户目录(必定有写权限;写入 %USERPROFILE%\.npmrc,不需要管理员)
+#    ⚠ 这一行**只能在 PowerShell 里跑**。cmd 里要写成:
+#      npm config set cache "%LOCALAPPDATA%\npm-cache"
+#    在 cmd 里照抄下面这句不会报错,而是真的建一个叫 $env:LOCALAPPDATA 的目录
 npm config set cache "$env:LOCALAPPDATA\npm-cache"
 
 # ③ ⚠ 必须验证 —— 输出要是以盘符开头的绝对路径
@@ -806,7 +848,14 @@ where.exe npx        # 找出真身,通常有 npx 和 npx.cmd 两行
 **调超时**（首次装包慢的话）：
 
 ```powershell
+# PowerShell
 $env:WRAITH_MCP_INITIALIZE_TIMEOUT_SECONDS = "180"
+npm run dev
+```
+
+```bat
+REM cmd
+set WRAITH_MCP_INITIALIZE_TIMEOUT_SECONDS=180
 npm run dev
 ```
 
@@ -1272,6 +1321,7 @@ setx ELECTRON_BUILDER_BINARIES_MIRROR "https://npmmirror.com/mirrors/electron-bu
 mkdir empty_tmp
 robocopy empty_tmp node_modules /MIR
 Remove-Item -Recurse -Force node_modules, empty_tmp
+# cmd 里最后一行写成: rmdir /s /q node_modules empty_tmp
 ```
 
 ```cmd
