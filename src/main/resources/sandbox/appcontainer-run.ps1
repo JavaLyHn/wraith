@@ -262,6 +262,22 @@ try {
     # AppContainer 的令牌被严格削过,默认 DACL 的匿名管道它可能读写被拒。
     # 漏了这一步的症状是「命令跑完了但一个字都没输出」,极难归因。
     $pipeSec = New-Object System.IO.Pipes.PipeSecurity
+
+    # ⚠ 创建者自己也必须在 DACL 里,而且这一条不能省。
+    #
+    # `New-Object PipeSecurity` 是**空 DACL**,而显式安全描述符会**整体替换默认 DACL**。
+    # CreatePipe 建完服务端还要打开另一端,那一步**要过访问检查** —— DACL 里没有创建者
+    # 就是 ERROR_ACCESS_DENIED,.NET 翻成 UnauthorizedAccessException(「对路径的访问被拒绝」)。
+    #
+    # 漏了它的真实症状(用户 Windows 11 实测):四条探针**全部** exit=252,
+    # 第二条给出 `使用"4"个参数调用".ctor"时发生异常:"对路径的访问被拒绝。"` ——
+    # 那个 4 参 .ctor 就是下面的 AnonymousPipeServerStream。AppContainer 进程根本没起来,
+    # 于是「授权给 AppContainer」这个本意也一起落空。
+    $meSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    $pipeSec.AddAccessRule((New-Object System.IO.Pipes.PipeAccessRule(
+        $meSid, [System.IO.Pipes.PipeAccessRights]::FullControl,
+        [System.Security.AccessControl.AccessControlType]::Allow)))
+
     $acSid   = New-Object System.Security.Principal.SecurityIdentifier($sid)
     $pipeSec.AddAccessRule((New-Object System.IO.Pipes.PipeAccessRule(
         $acSid, [System.IO.Pipes.PipeAccessRights]::FullControl,

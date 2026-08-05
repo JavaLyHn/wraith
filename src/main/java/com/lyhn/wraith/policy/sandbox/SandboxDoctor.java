@@ -148,29 +148,63 @@ public final class SandboxDoctor {
                 p.destroyForcibly();
                 return new Result(false, "超时（" + PROBE_TIMEOUT_SECONDS + "s）");
             }
-            boolean succeeded = p.exitValue() == 0;
-
-            if (probe.outputMustContain() != null) {
-                boolean got = out.contains(probe.outputMustContain());
-                if (!got) {
-                    // 这是最有价值的一条诊断:退出码 0 但没有输出,几乎必然是管道 DACL 的问题
-                    return new Result(false, succeeded
-                            ? "退出码 0 但没拿到输出 —— 多半是管道未授权给 AppContainer"
-                            : "命令失败，exit=" + p.exitValue());
-                }
-            }
-            if (succeeded == probe.expectSuccess()) {
-                return new Result(true, probe.expectSuccess() ? "通过" : "已被拦截（符合预期）");
-            }
-            return new Result(false, probe.expectSuccess()
-                    ? "本应成功却失败了，exit=" + p.exitValue() + trimmed(out)
-                    : "本应被拦截却成功了 —— 该围栏没有生效");
+            return verdict(probe, p.exitValue(), out);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return new Result(false, "被中断");
         } catch (Exception e) {
             return new Result(false, "启动失败: " + e.getMessage());
         }
+    }
+
+    /**
+     * 发射器自身失败的退出码下界。
+     *
+     * <p>{@code appcontainer-run.ps1} 约定：透传子进程退出码，<b>自身</b>失败用 ≥250
+     * （250 profile 创建/解析 · 251 ACL 授权 · 252 管道或进程创建 · 253 参数）。
+     */
+    private static final int LAUNCHER_FAILURE_FLOOR = 250;
+
+    /** 发射器诊断行的前缀。Seatbelt 那侧没有 ≥250 那套码，只能靠这个认。 */
+    private static final String LAUNCHER_DIAG_PREFIX = "[sandbox] ";
+
+    /**
+     * 把「退出码 + 输出」翻成结论。
+     *
+     * <p><b>这里最关键的一条：「期望失败」的探针不能把「沙箱自己没起来」当成「围栏生效」。</b>
+     *
+     * <p>用户 Windows 11 实测过这个坑：四条探针<b>全部</b> exit=252（发射器的
+     * 「管道或进程创建失败」），AppContainer 根本没起来，可后两条「期望失败」的
+     * 却报「已被拦截（符合预期）」—— 因为旧判据是 {@code succeeded == expectSuccess()}，
+     * 对期望失败的探针而言任何非零码都算通过。
+     *
+     * <p>于是一个<b>完全没工作的沙箱</b>能拿到「写围栏与断网均已生效」的结论。
+     * 那比没有这个工具更糟：它给的是假的安全感，而这套体检存在的全部意义就是不给假绿。
+     *
+     * <p>抽成静态纯函数是为了能测 —— 真跑一次探针要起进程、要有沙箱，
+     * 而这里要验的恰恰是「沙箱起不来时怎么判」。
+     */
+    static Result verdict(Probe probe, int exitCode, String out) {
+        String text = out == null ? "" : out;
+        boolean launcherBroke = exitCode >= LAUNCHER_FAILURE_FLOOR || text.contains(LAUNCHER_DIAG_PREFIX);
+        if (launcherBroke) {
+            return new Result(false, "沙箱发射器自己没起来（exit=" + exitCode + "）——"
+                    + "这条判不了，不能当成围栏生效" + trimmed(text));
+        }
+
+        boolean succeeded = exitCode == 0;
+        if (probe.outputMustContain() != null && !text.contains(probe.outputMustContain())) {
+            // 这是最有价值的一条诊断:退出码 0 但没有输出,几乎必然是管道 DACL 的问题
+            return new Result(false, succeeded
+                    ? "退出码 0 但没拿到输出 —— 多半是管道未授权给 AppContainer"
+                    : "命令失败，exit=" + exitCode + trimmed(text));
+        }
+        if (succeeded == probe.expectSuccess()) {
+            return new Result(true, probe.expectSuccess() ? "通过" : "已被拦截（符合预期）");
+        }
+        return new Result(false, probe.expectSuccess()
+                ? "本应成功却失败了，exit=" + exitCode + trimmed(text)
+                : "本应被拦截却成功了 —— 该围栏没有生效");
     }
 
     private static String trimmed(String out) {
