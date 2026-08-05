@@ -61,10 +61,21 @@ if (-not $hasGh -and -not $userTok -and -not $userTok2) {
 }
 
 if ($FromPanel) {
-  $panel = Join-Path $env:APPDATA "wraith-desktop\automations.json"
-  if (-not (Test-Path $panel)) {
-    throw "读不到面板配置：$panel`n先在桌面「自动化」面板建好日报任务（prompt 写「生成今天的 GitHub AI 日报」），再回来跑本脚本。"
+  # 面板任务的**真实**存储:Java daemon 的 AutomationStore(GatewayDaemon.java:56 —— ~/.wraith)。
+  # 第二条是迁移前的遗留文件:桌面启动时做过一次性迁移(index.ts «Part C»),迁完保留作备份、
+  # 不再更新。原来这里只读那一条,后果在两种机器上不同:全新 Windows 上文件根本不存在(直接 throw),
+  # 老机器上则**读到一份冻结的旧列表**——后者更坏,它会静默算出一个错的取数时刻。
+  # 顺序不能反:遗留文件在老机器上一直存在,先读它就永远轮不到真的那份。
+  $panelCandidates = @(
+    (Join-Path $env:USERPROFILE ".wraith\automations.json"),
+    (Join-Path $env:APPDATA "wraith-desktop\automations.json")
+  )
+  $panel = $panelCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+  if (-not $panel) {
+    throw ("读不到面板配置。找过这些位置：`n  " + ($panelCandidates -join "`n  ") +
+           "`n先在桌面「自动化」面板建好日报任务（prompt 写「生成今天的 GitHub AI 日报」），再回来跑本脚本。")
   }
+  Write-Host "读面板配置：$panel"
   $tasks = (Get-Content $panel -Raw -Encoding UTF8 | ConvertFrom-Json).tasks
   # 认哪一条：名字或 prompt 里同时提到 github 与「日报/daily」。找不到或找到多条都要说清楚，不许瞎猜。
   $hit = @($tasks | Where-Object {
