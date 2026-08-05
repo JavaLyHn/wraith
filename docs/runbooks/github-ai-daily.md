@@ -8,6 +8,62 @@
 
 ---
 
+## 0. 前置依赖
+
+只要两样：**Node 22+** 和**一个 GitHub token**。token 有两种拿法，二选一。
+
+### Node
+
+| 平台 | 装法 | 验 |
+|---|---|---|
+| macOS | `brew install node` | `node -v` ≥ v22 |
+| Windows | `winget install OpenJS.NodeJS.LTS` | 新开一个 PowerShell 再 `node -v`（装完要重开窗口，PATH 才刷新） |
+
+### token 方式一：gh CLI（推荐）
+
+脚本会调 `gh auth token`，不需要你手工保管密钥。
+
+| 平台 | 装法 |
+|---|---|
+| macOS | `brew install gh` |
+| Windows | `winget install GitHub.cli`（或去 https://cli.github.com 下 MSI） |
+
+装完都要登录一次：
+
+```
+gh auth login
+```
+
+选 `GitHub.com` → `HTTPS` → `Login with a web browser`，浏览器里贴一次一次性代码即可。
+验：`gh auth status` 显示 `✓ Logged in`。
+
+**只读公开数据，不需要任何特殊 scope**，默认给的就够。
+
+### token 方式二：环境变量（不想装 gh 就用这个）
+
+去 https://github.com/settings/tokens 生成一个 classic token，**不用勾任何 scope**
+（本脚本只读公开仓库）。然后：
+
+**Windows —— 必须设成「用户级持久变量」，不能只在当前窗口 `$env:` 一下：**
+
+```powershell
+[Environment]::SetEnvironmentVariable("GITHUB_TOKEN", "ghp_xxx", "User")
+```
+
+**为什么不能用 `$env:GITHUB_TOKEN="ghp_xxx"`**：那只对当前 PowerShell 窗口有效。
+任务计划程序是另起进程，**看不到**它，于是每天 06:00 都会以退出码 2 失败。
+设成 `"User"` 之后新开的窗口和计划任务才都能看到；**已经开着的窗口要重开**。
+
+**macOS**：launchd 同理看不到 shell 里 export 的变量。所以 mac 上**建议直接用 gh 方式**
+—— 安装脚本已经把 gh 所在目录写进 plist 的 PATH。若坚持用 token，要自己往
+`~/Library/LaunchAgents/com.lyhn.wraith.ghai.plist` 的 `EnvironmentVariables` 里加一条。
+**本项目的规矩是 token 绝不落进任何仓库内文件**，所以安装脚本不会替你写这一条。
+
+### 取值优先级
+
+`GITHUB_TOKEN` → `GH_TOKEN` → `gh auth token`。三条都拿不到就退出码 2，
+stderr 会告诉你跑 `gh auth login`。**token 值不会出现在任何日志、报告或错误信息里。**
+
 ## 1. 为什么取数不挂在自动化面板里
 
 面板任务的 `execute_command` **跑在沙箱内**，而这脚本干的两件事恰好都被沙箱挡住：
