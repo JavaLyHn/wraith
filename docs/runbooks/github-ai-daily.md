@@ -93,14 +93,14 @@ stderr 会告诉你跑 `gh auth login`。**token 值不会出现在任何日志�
 **macOS：**
 
 ```bash
-cd <repo>/scripts/github-ai-daily/install
+cd /path/to/wraith/scripts/github-ai-daily/install
 ./install-macos.sh          # 默认每天 06:00；改时间：./install-macos.sh 05 30
 ```
 
 **Windows（普通 PowerShell，不需要管理员）：**
 
 ```powershell
-cd <repo>\scripts\github-ai-daily\install
+cd D:\wraith\scripts\github-ai-daily\install
 .\install-windows.ps1                 # 默认每天 06:00
 .\install-windows.ps1 -At "05:30"
 ```
@@ -112,11 +112,11 @@ cd <repo>\scripts\github-ai-daily\install
 
 ```bash
 # macOS
-launchctl kickstart -k gui/$(id -u)/com.lyhn.wraith.ghai && tail -f <repo>/.ghai/run.log
+launchctl kickstart -k gui/$(id -u)/com.lyhn.wraith.ghai && tail -f "$REPO/.ghai/run.log"
 ```
 ```powershell
 # Windows
-Start-ScheduledTask -TaskName WraithGithubAiDaily; Get-Content <repo>\.ghai\run.log -Wait
+Start-ScheduledTask -TaskName WraithGithubAiDaily; Get-Content "$Repo\.ghai\run.log" -Wait
 ```
 
 **launchd 的 PATH 极简，`gh` 不在里面** —— 安装脚本已经把 node 与 gh 所在目录显式写进 plist 的
@@ -127,18 +127,20 @@ Start-ScheduledTask -TaskName WraithGithubAiDaily; Get-Content <repo>\.ghai\run.
 完整一次运行 25–31 分钟，拿它当第一次测试太亏。用仓库自带的精简配置先把**整条链路**
 （发现 → 新库 → 快照 → 人物 → 出报告）跑通，实测 **85 秒、GraphQL 3 点、Search 3 次**：
 
-**macOS / Linux：**
+**macOS / Linux**（第一行改成你的仓库路径，其余原样粘）：
 ```bash
+REPO=/Users/you/Desktop/wraith
 SMOKE=/tmp/ghai-smoke && mkdir -p $SMOKE
-cp <repo>/scripts/github-ai-daily/install/config.smoke.json $SMOKE/config.json
-node <repo>/scripts/github-ai-daily/index.mjs --data-dir $SMOKE
+cp $REPO/scripts/github-ai-daily/install/config.smoke.json $SMOKE/config.json
+node $REPO/scripts/github-ai-daily/index.mjs --data-dir $SMOKE
 ```
 
-**Windows PowerShell：**
+**Windows PowerShell**（同上，只改第一行）：
 ```powershell
+$Repo  = "D:\wraith"
 $Smoke = "$env:TEMP\ghai-smoke"; New-Item -ItemType Directory -Force $Smoke | Out-Null
-Copy-Item <repo>\scripts\github-ai-daily\install\config.smoke.json "$Smoke\config.json"
-node <repo>\scripts\github-ai-daily\index.mjs --data-dir $Smoke
+Copy-Item "$Repo\scripts\github-ai-daily\install\config.smoke.json" "$Smoke\config.json"
+node "$Repo\scripts\github-ai-daily\index.mjs" --data-dir $Smoke
 ```
 
 **通过的标准**：退出码 0，`$Smoke` 下出现 `<今天>.md`，报告里有榜单条目，头部写着
