@@ -230,3 +230,69 @@ describe('节流与重试可配置', () => {
     expect(sleep).toHaveBeenCalledWith(2100);
   });
 });
+
+// 2026-08-04 首次真机运行的死因：5693 个仓库切成 57 批，其中**一批**撞上 GitHub 瞬时 502、
+// 耗尽 4 次尝试后异常冒出整个方法，把另外 56 批的成功结果、当天快照、当天报告一起赔掉了。
+// （当时额度还剩 4953/5000，纯粹是对面抽风。）下面四条守住「按批隔离 + 占比上限」。
+describe('整批失败要被隔离，但不能滑成「拿残缺数据出报告」', () => {
+  const okNode = (alias) => ({
+    nameWithOwner: `acme/${alias}`, owner: { login: 'acme', __typename: 'Organization' },
+    name: alias, description: 'd', stargazerCount: 10, forkCount: 2, watchers: { totalCount: 1 },
+    primaryLanguage: { name: 'Python' }, isFork: false, isArchived: false,
+    pushedAt: '2026-08-03T00:00:00Z', createdAt: '2026-01-01T00:00:00Z',
+    repositoryTopics: { nodes: [] },
+  });
+
+  // 第 failAt 批（1-based）持续 502，其余批正常返回。
+  // 按**批次**判定而不是按第几次 fetch：graphql() 会对 502 重试 3 次，按调用次数判定的话
+  // 重试就绕过去了，那批反而会成功 —— 这个坑我踩过一次。
+  const clientFailingBatch = (failAt, extra = {}) => {
+    const fetchImpl = vi.fn(async (_url, init) => {
+      const body = JSON.parse(init.body);
+      const firstAlias = body.query.match(/[ru](\d+):/);
+      const batchNo = firstAlias ? Math.floor(Number(firstAlias[1]) / 100) + 1 : 0;
+      if (batchNo === failAt) return jsonRes({ message: 'Bad gateway' }, 502);
+      const data = { rateLimit: { cost: 1 } };
+      for (const [, a] of body.query.matchAll(/(r\d+):\s*repository/g)) data[a] = okNode(a);
+      for (const [, a] of body.query.matchAll(/(u\d+):\s*user/g)) data[a] = { login: a, followers: { totalCount: 7 } };
+      return jsonRes({ data });
+    });
+    return new GitHubClient({ token: FAKE, fetchImpl, sleep: async () => {}, ...extra });
+  };
+
+  it('5 批里坏 1 批：另外 4 批照常返回，坏掉那批全员进 failures 并记 note', async () => {
+    const names = Array.from({ length: 500 }, (_, i) => `acme/r${i}`);
+    const c = clientFailingBatch(2);
+    const { repos, failures } = await c.batchRepoSnapshots(names);
+    expect(repos.size).toBe(400);              // 4 批 × 100 活下来
+    expect(failures).toHaveLength(100);        // 坏掉那批全员记账
+    expect(failures).toContain('acme/r100');   // 第 2 批的头一个
+    expect(repos.has('acme/r0')).toBe(true);   // 第 1 批没受牵连
+    expect(repos.has('acme/r400')).toBe(true); // 第 5 批也没有
+    expect(c.notes.some((n) => n.includes('第 2 批'))).toBe(true);
+  });
+
+  it('全线崩：占比 100% 超过上限，仍然抛错让编排层退非零码、不写报告', async () => {
+    const names = Array.from({ length: 500 }, (_, i) => `acme/r${i}`);
+    const fetchImpl = vi.fn(async () => jsonRes({ message: 'Bad gateway' }, 502));
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep: async () => {} });
+    await expect(c.batchRepoSnapshots(names)).rejects.toThrow(/失败比例过高/);
+  });
+
+  it('占比边界：4 批坏 1 批=25%，上限 0.25 时放行、上限 0.2 时抛错', async () => {
+    const names = Array.from({ length: 400 }, (_, i) => `acme/r${i}`);
+    const pass = await clientFailingBatch(2, { maxBatchFailureRatio: 0.25 }).batchRepoSnapshots(names);
+    expect(pass.repos.size).toBe(300);
+    await expect(clientFailingBatch(2, { maxBatchFailureRatio: 0.2 }).batchRepoSnapshots(names))
+      .rejects.toThrow(/失败比例过高/);
+  });
+
+  it('人物快照同样按批隔离', async () => {
+    const logins = Array.from({ length: 500 }, (_, i) => `u${i}`);
+    const c = clientFailingBatch(3);
+    const { users, failures } = await c.batchUserFollowers(logins);
+    expect(users.size).toBe(400);
+    expect(failures).toHaveLength(100);
+    expect(c.notes.some((n) => n.includes('人物快照'))).toBe(true);
+  });
+});
