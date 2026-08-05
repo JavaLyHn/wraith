@@ -154,10 +154,32 @@ powershell -NoProfile -ExecutionPolicy Bypass -File install-windows.ps1 -FromPan
 建好 `<repo>/.ghai/`、注册每日任务、把 stdout/stderr 追加到 `<repo>/.ghai/run.log`。
 卸载分别是 `--uninstall` 与 `-Uninstall`。
 
-**⚠ 改了面板时刻，要重跑一次安装脚本**，取数时刻不会自己跟着动。这是「面板为唯一真相」
-这个选择的代价：换来的是你平时只需要记一个时间。
-
 不想让它反推就手动指定：`./install-macos.sh 06 00` / `-At "06:00"`。
+
+### 改了面板时刻怎么办
+
+| 平台 | 行为 |
+|---|---|
+| **Windows**（`-FromPanel` 装的） | **自动跟随，什么都不用做** |
+| Windows（`-At` 手动装的） | 不跟随 —— 你明确指定的时刻不该被悄悄改掉 |
+| macOS | **要重跑一次 `./install-macos.sh --from-panel`** |
+
+Windows 上任务实际调的是 `run-daily.ps1`，它每天开跑前先读一次面板：时刻变了就
+`schtasks /Change` 改掉自己的触发器，顺带重新解析 node 路径（所以 node 升级换目录
+也不会断）。对时失败绝不挡取数 —— 面板文件读不到、`schtasks` 改不动，都只往
+`run.log` 记一行然后照常取数。
+
+> **改动是明天生效的。** 今天这次已经被触发了，改的是下一次。把面板时刻**往后**调
+> 没有影响（取数早跑完了）；**往前**调的那一天，面板任务会如实说「今天的日报还没
+> 生成」，第二天自愈。这是自同步这条路的固有代价 —— 换来的是你再也不用碰安装脚本。
+
+不想等到明天验证同步逻辑对不对，跑这条（几秒钟，只对时不取数）：
+
+```
+powershell -NoProfile -ExecutionPolicy Bypass -File D:\wraith\scripts\github-ai-daily\install\run-daily.ps1 -LeadMinutes 45 -SyncOnly
+```
+
+它会打出「时刻一致（08:15），无需调整」或者「取数时刻 08:15 → 07:00」。
 
 装完立刻验一次（不用等到明早）：
 
