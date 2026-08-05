@@ -278,12 +278,16 @@ public final class PorcelainV2Parser {
 
     /**
      * `1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>` —— 路径前固定 8 个字段。
-     * `2` 记录（重命名）在路径位置是 `<path>\t<origPath>`，取前半即新路径。
+     * `2` 记录（重命名/复制）比 `1` **多一个 `<X><score>` 字段**（如 `R100`），
+     * 路径前是 9 个字段，位置是 `<path>\t<origPath>`，取前半即新路径。
+     * 两种记录字段数不同，**沿用同一个 limit=9 会把 score 吞进路径**。
      */
     private static GitStatus.FileEntry entry(String line) {
-        String[] parts = line.split(" ", 9);
+        boolean renamedOrCopied = line.startsWith("2 ");
+        String[] parts = line.split(" ", renamedOrCopied ? 10 : 9);
         String xy = parts.length > 1 ? parts[1] : "..";
-        String path = parts.length > 8 ? parts[8] : "";
+        int pathIdx = renamedOrCopied ? 9 : 8;
+        String path = parts.length > pathIdx ? parts[pathIdx] : "";
         int tab = path.indexOf('\t');
         if (tab >= 0) path = path.substring(0, tab);
         return new GitStatus.FileEntry(path, xy, !xy.isEmpty() && xy.charAt(0) != '.');
@@ -459,7 +463,7 @@ Expected: `Tests run: 1, Failures: 0, Errors: 0`
 - [ ] **Step 7: 跑全部并确认绿**
 
 Run: `mvn -q -DskipTests=false -Dtest=PorcelainV2ParserTest test`
-Expected: `Tests run: 11, Failures: 0, Errors: 0`
+Expected: `Tests run: 10, Failures: 0, Errors: 0`（本节共 10 个 @Test）
 
 - [ ] **Step 8: RED 证明（本仓库硬要求）**
 
