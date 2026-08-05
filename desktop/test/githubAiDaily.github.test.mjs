@@ -296,3 +296,28 @@ describe('整批失败要被隔离，但不能滑成「拿残缺数据出报告�
     expect(c.notes.some((n) => n.includes('人物快照'))).toBe(true);
   });
 });
+
+// fetch 抛出（DNS/连接重置/undici 的 "fetch failed"）和 fetch 返回 5xx 是两类事件，
+// 但对我们同样该重试。原来只处理了后者：异常直接冲出重试循环、一次都不重试。
+// 真机首跑就是这么丢掉一整批 100 个仓库的（报告里那条「第 10 批取数失败：fetch failed」）。
+describe('传输层异常也要重试，不能只认 HTTP 状态码', () => {
+  it('fetch 抛出后重试，最终成功', async () => {
+    const fetchImpl = vi.fn()
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(jsonRes({ data: { rateLimit: { cost: 1 }, ok: true } }));
+    const sleep = vi.fn(async () => {});
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep });
+    const data = await c.graphql('query{}', {});
+    expect(data.ok).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+  });
+
+  it('一直抛就用尽预算后报错，且错误信息带上原因', async () => {
+    const fetchImpl = vi.fn(async () => { throw new TypeError('fetch failed'); });
+    const c = new GitHubClient({ token: FAKE, fetchImpl, sleep: async () => {} });
+    await expect(c.graphql('query{}', {})).rejects.toThrow(/fetch failed/);
+    expect(fetchImpl).toHaveBeenCalledTimes(4); // 首次 + 3 次重试
+  });
+});
