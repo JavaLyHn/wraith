@@ -42,12 +42,17 @@ fi
 # launchd 起的进程 PATH 极简，gh 不在里面 —— 而 resolveToken 要靠 gh auth token。
 # 所以把当前 shell 里 gh 所在的目录显式塞进 plist 的 PATH。
 GH_BIN="$(command -v gh || true)"
-if [ -z "$GH_BIN" ]; then
-  echo "找不到 gh CLI。脚本靠 \`gh auth token\` 拿 token（也可改用 GITHUB_TOKEN 环境变量）。" >&2
-  echo "装一个：brew install gh && gh auth login" >&2
+EXTRA_PATH="$(dirname "$NODE_BIN")"
+if [ -n "$GH_BIN" ]; then
+  EXTRA_PATH="$EXTRA_PATH:$(dirname "$GH_BIN")"
+elif [ -z "${GITHUB_TOKEN:-}" ] && [ -z "${GH_TOKEN:-}" ]; then
+  # 两条取 token 的路都没有 —— 现在拦住，好过每天 06:00 静默退码 2。
+  echo "拿不到 GitHub token。二选一：" >&2
+  echo "  1) brew install gh && gh auth login      （推荐，本脚本会把 gh 目录写进 plist 的 PATH）" >&2
+  echo "  2) 自己往 plist 的 EnvironmentVariables 里加 GITHUB_TOKEN" >&2
+  echo "     —— 注意 launchd 看不到你 shell 里 export 的变量，且本项目规矩是 token 不落仓库内文件。" >&2
   exit 1
 fi
-EXTRA_PATH="$(dirname "$NODE_BIN"):$(dirname "$GH_BIN")"
 
 mkdir -p "$DATA_DIR" "$HOME/Library/LaunchAgents"
 

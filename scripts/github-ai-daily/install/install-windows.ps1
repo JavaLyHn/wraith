@@ -32,9 +32,21 @@ $node = (Get-Command node -ErrorAction SilentlyContinue)
 if (-not $node) { throw "找不到 node。装一个再来：winget install OpenJS.NodeJS.LTS" }
 if (-not (Test-Path $Script)) { throw "找不到取数脚本：$Script" }
 
-# 脚本靠 `gh auth token` 拿 token（也可改用 GITHUB_TOKEN 环境变量）。
-if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-  throw "找不到 gh CLI。装一个：winget install GitHub.cli，然后 gh auth login"
+# token 两条路二选一：gh CLI，或用户级持久环境变量。
+# 只查「用户级」而不是当前会话的 $env:——计划任务是另起进程，看不到你在窗口里临时设的值，
+# 那会变成每天 06:00 静默退码 2。现在就拦住。
+$hasGh    = [bool](Get-Command gh -ErrorAction SilentlyContinue)
+$userTok  = [Environment]::GetEnvironmentVariable("GITHUB_TOKEN", "User")
+$userTok2 = [Environment]::GetEnvironmentVariable("GH_TOKEN", "User")
+if (-not $hasGh -and -not $userTok -and -not $userTok2) {
+  # 字面量 here-string(@' 而非 @")：可扩展版本会把里面的 $env:GITHUB_TOKEN 真的展开，
+  # 等于把 token 原样打进报错信息 —— 本项目的红线是 token 绝不出现在任何输出里。
+  throw @'
+拿不到 GitHub token。二选一：
+  1) winget install GitHub.cli  然后  gh auth login        （推荐）
+  2) [Environment]::SetEnvironmentVariable("GITHUB_TOKEN","ghp_xxx","User")
+     必须是 "User" 级持久变量。只在当前窗口 $env:GITHUB_TOKEN=... 计划任务看不到。
+'@
 }
 
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
