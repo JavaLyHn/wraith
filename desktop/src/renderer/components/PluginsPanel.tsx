@@ -3,6 +3,7 @@ import { ArrowLeft } from 'lucide-react'
 import type { McpServerView, McpResourceView, BuiltinToolView, SearchStatusView } from '../../shared/types'
 import McpServerForm, { type McpFormValue, type McpPrefill } from './McpServerForm'
 import { BUILTIN_CAPABILITIES, RECOMMENDED_MCP } from '../lib/pluginShowcase'
+import { unaddedRecommendations } from '../lib/recommendedMcpFilter'
 import { capabilityReadiness, readinessBadgeClass } from '../lib/capabilityReadiness'
 import { joinBuiltinTools } from '../lib/builtinCapabilityDetail'
 import ToolDetailRow from './ToolDetailRow'
@@ -74,6 +75,9 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
   }, [])
 
   const current = selected !== OVERVIEW ? (servers.find(s => s.name === selected) ?? null) : null
+
+  // 推荐区只列**还没装的**:装过的再摆一个「＋ 添加」,点下去只会撞重名。
+  const unadded = unaddedRecommendations(servers)
 
   // 选中值为 'builtin:<id>' 哨兵时,解析出对应内置能力(否则 null)。
   const selectedBuiltin = selected.startsWith('builtin:')
@@ -254,8 +258,13 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
               <section>
                 <div className="mb-1 text-sm font-bold text-fg">推荐 MCP · 一键添加</div>
                 <div className="mb-3 text-2xs text-fg-subtle">选一个 → 自动预填命令,补好路径 / 密钥再保存。</div>
+                {unadded.length === 0 ? (
+                  <div data-testid="mcp-rec-all-added" className="rounded-lg border border-border px-3 py-2 text-2xs text-fg-subtle">
+                    推荐的 {RECOMMENDED_MCP.length} 个都已经添加了。想装别的用左下角「＋ 添加 MCP」。
+                  </div>
+                ) : (
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-                  {RECOMMENDED_MCP.map(m => (
+                  {unadded.map(m => (
                     <div key={m.id} className="flex flex-col rounded-lg border border-border p-3">
                       <div className="flex items-center gap-2">
                         <span className="text-base leading-none">{m.icon}</span>
@@ -273,6 +282,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                     </div>
                   ))}
                 </div>
+                )}
               </section>
             </div>
           ) : (
