@@ -135,8 +135,27 @@ class PorcelainV2ParserTest {
 
     @Test
     void unrecognizedRemoteUrlIsLeftAlone() {
-        // 本地路径与自建协议：猜错比不动更糟
+        // 本地路径：没有 scheme，原样返回
         assertEquals("/srv/git/proj", PorcelainV2Parser.normalizeRemoteUrl("/srv/git/proj"));
-        assertEquals("host/a/b", PorcelainV2Parser.normalizeRemoteUrl("ssh://git@host/a/b.git"));
+
+        // file://：带 scheme，但不在 ssh/https/http/git 四个已知前缀里，必须整串原样返回，
+        // 一个字符都不能改。回归钉子：早前的实现会把这里的冒号当成 scp 式 host:path
+        // 分隔符去替换，把 file:///srv/repo.git 搅成 file////srv/repo。
+        assertEquals("file:///srv/repo.git",
+                PorcelainV2Parser.normalizeRemoteUrl("file:///srv/repo.git"));
+
+        // perforce://：自建协议，同理没人规定它长什么样，猜错比不动更糟
+        assertEquals("perforce://depot/main/proj",
+                PorcelainV2Parser.normalizeRemoteUrl("perforce://depot/main/proj"));
+    }
+
+    @Test
+    void sshUrlWithExplicitPortKeepsPortColonIntact() {
+        // 回归钉子：ssh:// 是已识别前缀，要规范化（剥协议、剥用户名、剥 .git）；
+        // 但 host:22 这个冒号是端口分隔符，不是 scp 式 host:path 分隔符，不能被替换成 '/'。
+        // 这条专门与上面 unrecognizedRemoteUrlIsLeftAlone 分开钉，
+        // 防止将来为了修「未知 scheme 原样返回」而误伤已知 scheme 的正常规范化路径。
+        assertEquals("host:22/a/b",
+                PorcelainV2Parser.normalizeRemoteUrl("ssh://git@host:22/a/b.git"));
     }
 }

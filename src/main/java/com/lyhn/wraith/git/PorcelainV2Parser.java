@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,6 +30,11 @@ public final class PorcelainV2Parser {
     private static final Pattern AB = Pattern.compile("^# branch\\.ab \\+(\\d+) -(\\d+)$");
     private static final Pattern SHORTSTAT_INS = Pattern.compile("(\\d+) insertion");
     private static final Pattern SHORTSTAT_DEL = Pattern.compile("(\\d+) deletion");
+
+    /** 通用 URI scheme 前缀：字母开头，后面跟字母数字或 {@code +.-}，再跟 {@code ://}。 */
+    private static final Pattern SCHEME = Pattern.compile("^([A-Za-z][A-Za-z0-9+.\\-]*)://");
+    /** {@code normalizeRemoteUrl} 认识、会剥掉的四个前缀；其余带 scheme 的一律原样返回。 */
+    private static final Set<String> KNOWN_SCHEMES = Set.of("ssh", "https", "http", "git");
 
     private PorcelainV2Parser() {}
 
@@ -133,14 +139,26 @@ public final class PorcelainV2Parser {
      * <p>真机抓到的是 {@code git@github.com:JavaLyHn/wraith.git} —— SSH 形式。
      * 直接展示原样太吵（协议、用户名、.git 后缀都是噪音），所以统一规范化。
      * <b>认不出来的形态原样返回</b>（本地路径、自建协议）：猜错比不动更糟。
+     *
+     * <p><b>为什么先单独判断 scheme 再决定要不要剥</b>：下面的 scp 式冒号替换
+     * （{@code :(?=\D) → /}）只认「{@code host:path}」这种<i>没有</i> scheme 的形态。
+     * 如果一个 URL 带着未知 scheme（如 {@code file://}、{@code ftp://}、自建
+     * {@code perforce://}）直接往下走，scheme 自己那个冒号会被当成 host:path 的
+     * 分隔符替换掉，把整串 URL 搅烂（{@code file:///srv/repo.git} 会变成
+     * {@code file////srv/repo}）。所以：认出已知 scheme 才剥前缀继续规范化；
+     * 认出未知 scheme 就立刻原样返回，一个字符都不改——绝不能落进冒号替换那一步。
      */
     public static String normalizeRemoteUrl(String raw) {
         if (raw == null || raw.isBlank()) return "";
         String s = raw.trim();
-        if (s.startsWith("ssh://")) s = s.substring("ssh://".length());
-        else if (s.startsWith("https://")) s = s.substring("https://".length());
-        else if (s.startsWith("http://")) s = s.substring("http://".length());
-        else if (s.startsWith("git://")) s = s.substring("git://".length());
+        Matcher schemeMatch = SCHEME.matcher(s);
+        if (schemeMatch.find()) {
+            if (KNOWN_SCHEMES.contains(schemeMatch.group(1).toLowerCase())) {
+                s = s.substring(schemeMatch.end());
+            } else {
+                return s;   // 未知 scheme：原样返回，不参与后续任何改写
+            }
+        }
         int at = s.indexOf('@');
         int slash = s.indexOf('/');
         // 只在 @ 出现在第一个 / 之前时才当用户名剥掉，否则可能是路径里的 @
