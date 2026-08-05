@@ -34,6 +34,25 @@ const EXIT_NETWORK = 3;
 // 打上这个标记，收尾处就不再糊一屏调用栈 —— 栈只对真正没预料到的异常有价值。
 const operational = (err) => Object.assign(err, { operational: true });
 
+/**
+ * 把攒下的 notes 打到 stderr —— 只在**抛错、不会写报告**的路径上调。
+ *
+ * <p>正常路径里 notes 随报告出（`failures.notes`），那里更完整也更好读。这个函数存在
+ * 是因为「取数整体失败」恰恰是最需要诊断、却唯一拿不到报告的场景。
+ *
+ * <p>全量打，不截断：一次 07:00 无人值守的 cron 出了事，第二天能看到的只有 run.log。
+ */
+function dumpNotes(notes, client) {
+  const all = [...(notes ?? []), ...(client?.notes ?? [])];
+  if (all.length === 0) {
+    process.stderr.write('[ghai] 诊断：一条失败记录都没有 —— '
+      + '说明查询本身跑通了、只是没匹配到任何仓库（检查 config.json 的 topics/keywords 是不是空的）\n');
+    return;
+  }
+  process.stderr.write(`[ghai] 诊断（${all.length} 条）：\n`);
+  for (const n of all) process.stderr.write(`  - ${n}\n`);
+}
+
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 const BASELINE_MAX_ATTEMPTS = 3;    // 坏快照最多往回退 3 份（spec §8）
@@ -362,12 +381,19 @@ async function run(argv) {
   // 5. 快照取数：池内全部 + 新库
   const targets = [...new Set([...Object.keys(pool), ...newRepos.map((r) => r.fullName)])];
   if (targets.length === 0) {
+    // notes 平时只随报告出（failures.notes），可这条路径**根本走不到写报告**——
+    // 于是每条「查询失败：<query> —— <原因>」都被静默丢掉,用户拿到的是一句
+    // 「看上面的 stderr 有没有 403」而 stderr 上一个字都没有。真机上就这么撞的:
+    // 0 个仓库 + 退码 3 + 零线索,只能靠猜是限流还是网络还是 token。
+    // 诊断信息必须在**它唯一还活着的时刻**打出来。
+    dumpNotes(notes, client);
     throw operational(new Error('候选池与新库都是空的，没有任何仓库可取数'
-      + '（Search 发现是不是全失败了？看上面的 stderr 里有没有 403/限流）'));
+      + '（Search 发现全失败了 —— 具体原因见上面的「诊断」几行）'));
   }
   log(`[ghai] 批量取仓库快照：${targets.length} 个……`);
   const { repos: currentRepos, failures: repoFailures } = await client.batchRepoSnapshots(targets);
   if (currentRepos.size === 0) {
+    dumpNotes(notes, client);   // 同上：这条路径也不会写报告，notes 不打就永远看不到
     throw operational(new Error(`${targets.length} 个仓库一个都没取到，本期没有任何可报的数据`));
   }
   log(`[ghai] 仓库快照完成：成功 ${currentRepos.size} / 失败 ${repoFailures.length}`);
