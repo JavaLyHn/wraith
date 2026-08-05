@@ -11,13 +11,14 @@ import {
   classifyGatewayStderr,
   classifyGatewayStatusLine,
   parseQqFlushedLine,
+  JVM_UTF8_FLAGS,
 } from '../src/main/gatewayManager'
 
 describe('resolveGatewayCommand', () => {
   it('defaults to java -jar <jar> gateway', () => {
     expect(resolveGatewayCommand({}, '/j/wraith.jar')).toEqual({
       cmd: 'java',
-      args: ['-jar', '/j/wraith.jar', 'gateway'],
+      args: [...JVM_UTF8_FLAGS, '-jar', '/j/wraith.jar', 'gateway'],
     })
   })
   it('honors WRAITH_GATEWAY_CMD override', () => {
@@ -29,7 +30,7 @@ describe('resolveGatewayCommand', () => {
   it('packaged → 捆绑 java + 捆绑 jar + gateway', () => {
     expect(resolveGatewayCommand({}, '/j/wraith.jar', { resourcesPath: '/R' }, 'darwin')).toEqual({
       cmd: path.join('/R', 'runtime', 'bin', 'java'),
-      args: ['-jar', path.join('/R', 'wraith.jar'), 'gateway'],
+      args: [...JVM_UTF8_FLAGS, '-jar', path.join('/R', 'wraith.jar'), 'gateway'],
     })
   })
   it('packaged + win32 → java.exe', () => {
@@ -42,20 +43,51 @@ describe('resolveGatewayCommand', () => {
       args: ['x'],
     })
   })
+
+  // 真机(中文 Windows)上整片网关日志变成 `����Ŀ��΢��ɨ���ά��`:JVM 的 stdout 不是
+  // 控制台时按平台默认编码(GBK)写,这边一律按 UTF-8 解码。日志读不了 = 后面任何故障
+  // 都没法诊断,所以这几个 flag 是硬要求,不是「优化」。
+  it('-D 编码 flag 必须在 -jar **之前** —— 排在后面会被当成程序参数,JVM 根本不认', () => {
+    const { args } = resolveGatewayCommand({}, '/j/wraith.jar')
+    for (const flag of JVM_UTF8_FLAGS) {
+      expect(args.indexOf(flag)).toBeGreaterThanOrEqual(0)
+      expect(args.indexOf(flag)).toBeLessThan(args.indexOf('-jar'))
+    }
+  })
+  it('五个属性名一个都不能少 —— 覆盖 JDK 17 / 18 / 19+ 三代不同的属性名', () => {
+    const { args } = resolveGatewayCommand({}, '/j/wraith.jar')
+    expect(args).toContain('-Dfile.encoding=UTF-8')       // JDK 17 及以前的默认编码
+    expect(args).toContain('-Dsun.stdout.encoding=UTF-8') // JDK 8–18 的名字
+    expect(args).toContain('-Dstdout.encoding=UTF-8')     // JDK 19+ 扶正后的名字
+  })
+  it('覆写路径不塞 -D —— WRAITH_GATEWAY_CMD 是「整条命令由你说了算」的逃生口', () => {
+    const { args } = resolveGatewayCommand({ WRAITH_GATEWAY_CMD: 'foo gw' }, '/j.jar')
+    expect(args.some(a => a.startsWith('-D'))).toBe(false)
+  })
 })
 
 describe('resolveBindCommand', () => {
   it('appends bind to the gateway command', () => {
     expect(resolveBindCommand({}, '/j/wraith.jar')).toEqual({
       cmd: 'java',
-      args: ['-jar', '/j/wraith.jar', 'gateway', 'bind'],
+      args: [...JVM_UTF8_FLAGS, '-jar', '/j/wraith.jar', 'gateway', 'bind'],
     })
   })
   it('packaged → 捆绑 java + 捆绑 jar + gateway bind', () => {
     expect(resolveBindCommand({}, '/j/wraith.jar', { resourcesPath: '/R' }, 'darwin')).toEqual({
       cmd: path.join('/R', 'runtime', 'bin', 'java'),
-      args: ['-jar', path.join('/R', 'wraith.jar'), 'gateway', 'bind'],
+      args: [...JVM_UTF8_FLAGS, '-jar', path.join('/R', 'wraith.jar'), 'gateway', 'bind'],
     })
+  })
+  // 二维码提示、「绑定成功」这些中文全是 bind 命令打的 —— 派生路径丢了 flag
+  // 等于乱码只修好一半,而恰恰是绑定这一步最需要看清楚输出。
+  it('bind / bind-weixin 都继承 UTF-8 flag（派生自同一个 resolve）', () => {
+    for (const { args } of [
+      resolveBindCommand({}, '/j/wraith.jar'),
+      resolveBindWeixinCommand({}, '/j/wraith.jar', undefined, 'D:\\ws'),
+    ]) {
+      expect(args.slice(0, JVM_UTF8_FLAGS.length)).toEqual(JVM_UTF8_FLAGS)
+    }
   })
 })
 
@@ -131,13 +163,13 @@ describe('resolveBindWeixinCommand', () => {
   it('appends bind-weixin to the gateway command', () => {
     expect(resolveBindWeixinCommand({}, '/j/wraith.jar')).toEqual({
       cmd: 'java',
-      args: ['-jar', '/j/wraith.jar', 'gateway', 'bind-weixin'],
+      args: [...JVM_UTF8_FLAGS, '-jar', '/j/wraith.jar', 'gateway', 'bind-weixin'],
     })
   })
   it('appends --workspace when provided', () => {
     expect(resolveBindWeixinCommand({}, '/j.jar', undefined, '/ws')).toEqual({
       cmd: 'java',
-      args: ['-jar', '/j.jar', 'gateway', 'bind-weixin', '--workspace', '/ws'],
+      args: [...JVM_UTF8_FLAGS, '-jar', '/j.jar', 'gateway', 'bind-weixin', '--workspace', '/ws'],
     })
   })
 })

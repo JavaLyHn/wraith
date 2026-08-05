@@ -9,9 +9,32 @@ import type { GatewayBindPhase, GatewayEvent, GatewayStatus } from '../shared/ga
 // ─────────────────────────────────────────────────────────────────────────
 
 /**
+ * 强制 JVM 把 stdout/stderr 写成 UTF-8。
+ *
+ * <p>网关那些进度行(二维码提示、绑定成功、失效告警)都是 `System.out.println` 的中文。
+ * JVM 被 spawn 时 stdout 不是控制台,于是按**平台默认编码**写 —— 中文 Windows 上是
+ * GBK。而这边 readline 一律按 UTF-8 解码,GBK 字节在 UTF-8 里大多是非法序列,
+ * 于是整片日志变成 `����Ŀ��΢��ɨ���ά��` 这种替换符。真机上就这么撞的,
+ * 而**日志读不了 = 后面任何故障都没法诊断**,所以这条修在最前面。
+ *
+ * <p>五个属性覆盖不同 JDK 世代,多余的会被当成普通系统属性忽略,无副作用:
+ * `file.encoding` 管 JDK 17 及以前的默认;`sun.std*.encoding` 是 JDK 8–18 的名字;
+ * `std*.encoding` 是 JDK 19+ 扶正后的名字。用户机上 JDK 版本未知,所以全给。
+ */
+export const JVM_UTF8_FLAGS = [
+  '-Dfile.encoding=UTF-8',
+  '-Dsun.stdout.encoding=UTF-8',
+  '-Dsun.stderr.encoding=UTF-8',
+  '-Dstdout.encoding=UTF-8',
+  '-Dstderr.encoding=UTF-8',
+]
+
+/**
  * 常驻网关命令。默认 `java -jar ~/.wraith/wraith.jar gateway`;
  * 可用 WRAITH_GATEWAY_CMD 覆盖(空格分割,首 token 为 cmd)。
  * 优先级:WRAITH_GATEWAY_CMD 覆写 > packaged(捆绑 java+jar)> dev(系统 java + defaultJar)。
+ *
+ * bind / bind-weixin 等一次性命令都从这里派生,所以 UTF-8 只需在这一处加。
  */
 export function resolveGatewayCommand(
   env: NodeJS.ProcessEnv,
@@ -21,6 +44,7 @@ export function resolveGatewayCommand(
 ): { cmd: string; args: string[] } {
   const override = env['WRAITH_GATEWAY_CMD']
   if (override && override.trim().length > 0) {
+    // 覆写是「整条命令由你说了算」的逃生口,不往里塞我们的 -D —— 要加自己加
     const tokens = override.trim().split(/\s+/)
     const [cmd, ...args] = tokens
     return { cmd: cmd!, args }
@@ -30,10 +54,10 @@ export function resolveGatewayCommand(
     const javaBin = platform === 'win32' ? 'java.exe' : 'java'
     return {
       cmd: path.join(packaged.resourcesPath, 'runtime', 'bin', javaBin),
-      args: ['-jar', path.join(packaged.resourcesPath, 'wraith.jar'), 'gateway'],
+      args: [...JVM_UTF8_FLAGS, '-jar', path.join(packaged.resourcesPath, 'wraith.jar'), 'gateway'],
     }
   }
-  return { cmd: 'java', args: ['-jar', defaultJar, 'gateway'] }
+  return { cmd: 'java', args: [...JVM_UTF8_FLAGS, '-jar', defaultJar, 'gateway'] }
 }
 
 /** 绑定命令 = 网关命令 + `bind`。 */
