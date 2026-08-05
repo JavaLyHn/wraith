@@ -192,11 +192,25 @@ export class GitHubClient {
   async graphql(query, variables) {
     const body = JSON.stringify({ query, variables });
     for (let attempt = 0; attempt <= this.maxRetries; attempt += 1) {
-      const res = await this.fetchImpl(GRAPHQL_URL, {
-        method: 'POST',
-        headers: authHeaders(this.token, { 'Content-Type': 'application/json' }),
-        body,
-      });
+      // fetch **抛出**（DNS 挂了/连接重置/undici 的 "fetch failed"）和 fetch **返回 5xx**
+      // 是两类完全不同的事件,但对我们同样是「重试一下多半就好了」。原来只处理了后者:
+      // 异常会直接冲出整个循环、一次都不重试。真机首跑就是这么丢掉一整批 100 个仓库的
+      // （报告里那条 "第 10 批取数失败：fetch failed"）。
+      let res;
+      try {
+        res = await this.fetchImpl(GRAPHQL_URL, {
+          method: 'POST',
+          headers: authHeaders(this.token, { 'Content-Type': 'application/json' }),
+          body,
+        });
+      } catch (e) {
+        if (attempt === this.maxRetries) {
+          throw new Error(`GraphQL 请求失败（${e.message}），已用尽 ${this.maxRetries} 次重试`);
+        }
+        this.log(`[github] GraphQL 连接异常（${e.message}），退避重试（第 ${attempt + 1} 次）`);
+        await this.sleep(parseRateLimitReset(null, this.now()));
+        continue;
+      }
       let parsed = {};
       try { parsed = await res.json(); } catch { parsed = {}; }
       const rateLimited = Array.isArray(parsed?.errors)
