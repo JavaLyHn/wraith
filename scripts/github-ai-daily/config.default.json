@@ -124,6 +124,7 @@
   "newRepoMinStars": 5,
   "activeWithinDays": 90,
   "snapshotRetainDays": 400,
+  "copyReportTo": "~/.wraith/documents",
   "baselineMinAgeHours": 20,
   "contributorPoolTopRepos": 50,
   "contributorsPerRepo": 5,

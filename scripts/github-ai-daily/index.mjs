@@ -8,7 +8,8 @@
 //   0 成功 / 1 配置（含参数）错误 / 2 token 错误 / 3 取数整体失败
 // 失败路径上**绝不写报告文件** —— 每天早上 7 点准时投一份看着正常的空报告，
 // 比明着失败糟糕得多。
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { loadConfig, ConfigError, DEFAULT_DATA_DIR } from './config.mjs';
@@ -521,6 +522,22 @@ async function run(argv) {
   writeFileSync(mdPath, md);
   writeFileSync(jsonPath, json);
   writeJsonFile(streaksPath, streaks);   // 报告落盘成功了，今天才算「在榜」
+
+  // 顺带往「文档」资料库放一份：那个面板以目录为唯一真相源(readdir 现算,不建索引),
+  // 所以塞一个真文件进去就会出现在左侧列表里。必须是真拷贝——面板用 lstat,软链会被跳过。
+  // 纯锦上添花：拷不过去只记一句，绝不让一次成功的取数退成失败。
+  const copyTo = config.copyReportTo;
+  if (copyTo) {
+    const destDir = copyTo.startsWith('~') ? join(homedir(), copyTo.slice(1)) : copyTo;
+    try {
+      mkdirSync(destDir, { recursive: true });
+      // 库是平铺的,名字必须自带辨识度,否则一堆 2026-08-05.md 谁也认不出是什么。
+      copyFileSync(mdPath, join(destDir, `GitHub-AI-日报-${todayISO}.md`));
+      log(`[ghai] 已放一份到文档资料库：${destDir}`);
+    } catch (e) {
+      log(`[ghai] 放入文档资料库失败（不影响本期报告）：${e.message}`);
+    }
+  }
 
   // 清理是收尾杂务：unlinkSync 撞上 EPERM/EBUSY 不该让一次已经成功的运行退成失败码 ——
   // 那会变成「报告明明写好了，automation 却报错」，正是本脚本最想避免的错配。
