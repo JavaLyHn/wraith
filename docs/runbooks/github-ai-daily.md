@@ -3,7 +3,7 @@
 每天自动产出「昨日 AI 领域 star 涨最多 / fork 涨最多 / 涨粉最多的人」的报告，投递到你选的渠道。
 
 - **脚本**：`scripts/github-ai-daily/index.mjs`（零依赖，Node 22+，mac/Windows 通用）
-- **数据与报告**：`<repo>/.ghai/`（**放项目内**是为了让面板任务的 `read_file` 够得着，见 §1；已进 `.gitignore`）
+- **数据与报告**：`<repo>/.ghai/`（已进 `.gitignore`）；报告另拷一份进文档资料库供面板任务读，见 §1
 - **配置**：`<repo>/.ghai/config.json`（首次运行自动从模板生成）
 
 ---
@@ -17,7 +17,7 @@
 | 平台 | 装法 | 验 |
 |---|---|---|
 | macOS | `brew install node` | `node -v` ≥ v22 |
-| Windows | `winget install OpenJS.NodeJS.LTS` | 新开一个 PowerShell 再 `node -v`（装完要重开窗口，PATH 才刷新） |
+| Windows | `winget install OpenJS.NodeJS.LTS` | **新开一个**窗口再 `node -v`（PowerShell / cmd 都行；装完必须重开窗口，PATH 才刷新） |
 
 ### token 方式一：gh CLI（推荐）
 
@@ -44,15 +44,31 @@ gh auth login
 去 https://github.com/settings/tokens 生成一个 classic token，**不用勾任何 scope**
 （本脚本只读公开仓库）。然后：
 
-**Windows —— 必须设成「用户级持久变量」，不能只在当前窗口 `$env:` 一下：**
+**Windows —— 必须设成「用户级持久变量」，不能只在当前窗口设一下：**
 
+PowerShell：
 ```powershell
 [Environment]::SetEnvironmentVariable("GITHUB_TOKEN", "ghp_xxx", "User")
 ```
 
-**为什么不能用 `$env:GITHUB_TOKEN="ghp_xxx"`**：那只对当前 PowerShell 窗口有效。
-任务计划程序是另起进程，**看不到**它，于是每天 06:00 都会以退出码 2 失败。
-设成 `"User"` 之后新开的窗口和计划任务才都能看到；**已经开着的窗口要重开**。
+cmd：
+```cmd
+setx GITHUB_TOKEN ghp_xxx
+```
+
+（`setx` 默认写的就是用户级，正是我们要的。它有 1024 字符上限，GitHub token 远没这么长。）
+
+**为什么不能用 `$env:GITHUB_TOKEN="ghp_xxx"`（PowerShell）或 `set GITHUB_TOKEN=ghp_xxx`（cmd）**：
+那两个都只对当前窗口有效。任务计划程序是另起进程，**看不到**它们，于是每天到点都以退出码 2 失败。
+用上面两条写成持久变量之后，新开的窗口和计划任务才都能看到；**已经开着的窗口要重开**
+（`setx` 连自己那个窗口都不刷新，这是它的既定行为，不是出错）。
+
+验一下写进去没有 —— **必须新开窗口**：
+
+| shell | 命令 |
+|---|---|
+| PowerShell | `[Environment]::GetEnvironmentVariable("GITHUB_TOKEN","User")` |
+| cmd | `reg query HKCU\Environment /v GITHUB_TOKEN` |
 
 **macOS**：launchd 同理看不到 shell 里 export 的变量。所以 mac 上**建议直接用 gh 方式**
 —— 安装脚本已经把 gh 所在目录写进 plist 的 PATH。若坚持用 token，要自己往
@@ -82,7 +98,7 @@ stderr 会告诉你跑 `gh auth login`。**token 值不会出现在任何日志�
 |---|---|---|
 | 谁来跑 | **系统调度**：macOS launchd / Windows 任务计划程序 | **wraith 自动化面板** |
 | 为什么 | 不进沙箱，网络与写盘都正常 | 面板天生擅长：点评 + 多渠道投递 |
-| 用什么工具 | 直接跑 node | **只用 `read_file`**（进程内 Java 工具，不经沙箱、跨平台、不撞 60 秒） |
+| 用什么工具 | 直接跑 node | **只用 `documents_read`**（进程内 Java 工具，不经沙箱、跨平台、不撞 60 秒） |
 
 **关键设计**：报告除了落在 `<repo>/.ghai/`，还会**多拷一份进文档资料库**
 （`~/.wraith/documents/`，由 `copyReportTo` 控制）。面板任务用 `documents_read` 读它 ——
@@ -109,35 +125,92 @@ cd /path/to/wraith/scripts/github-ai-daily/install
 ./install-macos.sh --from-panel        # 提前量改成 60 分钟：--from-panel 60
 ```
 
-**Windows（普通 PowerShell，不需要管理员）：**
+**Windows（不需要管理员）：**
 
+安装器本身是 PowerShell 脚本，但**两个 shell 都能启动它** —— cmd 用户不用先切到 PowerShell。
+
+PowerShell：
 ```powershell
 cd D:\wraith\scripts\github-ai-daily\install
-.\install-windows.ps1 -FromPanel                     # 提前量：-LeadMinutes 60
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install-windows.ps1 -FromPanel
 ```
 
-两个脚本都会：读面板里那条日报任务的时刻、反推取数时刻、定位 node 与 gh、
+cmd：
+```cmd
+cd /d D:\wraith\scripts\github-ai-daily\install
+powershell -NoProfile -ExecutionPolicy Bypass -File install-windows.ps1 -FromPanel
+```
+
+> **两个必踩的坑，先说在前面：**
+>
+> 1. **cmd 里跨盘符必须 `cd /d`。** 光写 `cd D:\wraith` 会「看起来什么都没发生」——
+>    当前盘符还在 C:，后面所有相对路径全错。
+> 2. **PowerShell 里直接 `.\install-windows.ps1` 可能被执行策略拦下**
+>    （报「因为在此系统上禁止运行脚本」）。上面统一用 `powershell -ExecutionPolicy Bypass -File`
+>    起，两个 shell 写法一致，也绕开这条。想一劳永逸就
+>    `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`。
+
+两个平台的脚本都会：读面板里那条日报任务的时刻、反推取数时刻、定位 node 与 gh、
 建好 `<repo>/.ghai/`、注册每日任务、把 stdout/stderr 追加到 `<repo>/.ghai/run.log`。
 卸载分别是 `--uninstall` 与 `-Uninstall`。
 
 **⚠ 改了面板时刻，要重跑一次安装脚本**，取数时刻不会自己跟着动。这是「面板为唯一真相」
 这个选择的代价：换来的是你平时只需要记一个时间。
 
-不想让它反推就手动指定：`./install-macos.sh 06 00` / `.\install-windows.ps1 -At "06:00"`。
+不想让它反推就手动指定：`./install-macos.sh 06 00` / `-At "06:00"`。
 
 装完立刻验一次（不用等到明早）：
 
+macOS：
 ```bash
-# macOS
 launchctl kickstart -k gui/$(id -u)/com.lyhn.wraith.ghai && tail -f "$REPO/.ghai/run.log"
 ```
+
+Windows PowerShell：
 ```powershell
-# Windows
-Start-ScheduledTask -TaskName WraithGithubAiDaily; Get-Content "$Repo\.ghai\run.log" -Wait
+Start-ScheduledTask -TaskName WraithGithubAiDaily
+Get-Content "D:\wraith\.ghai\run.log" -Wait
+```
+
+Windows cmd：
+```cmd
+schtasks /Run /TN WraithGithubAiDaily
+powershell -NoProfile -c "Get-Content 'D:\wraith\.ghai\run.log' -Wait"
 ```
 
 **launchd 的 PATH 极简，`gh` 不在里面** —— 安装脚本已经把 node 与 gh 所在目录显式写进 plist 的
 `PATH`。如果你换了 node/gh 的安装方式，重跑一次安装脚本让它重新探测。
+
+## 2.1 Windows 命令对照：PowerShell ↔ cmd
+
+`Start-ScheduledTask` / `Get-ScheduledTask` 这些是 **PowerShell 的 cmdlet，cmd 里没有** ——
+在 cmd 里敲会报「不是内部或外部命令」，那不是出了故障，只是走错了门。cmd 的对应工具是
+`schtasks`（它在 PowerShell 里也能用，所以下表右列是两个 shell 通用的）。
+
+| 要做什么 | PowerShell | cmd（PowerShell 里同样可用） |
+|---|---|---|
+| 进目录（跨盘符） | `cd D:\wraith` | `cd /d D:\wraith` |
+| 装 / 重装取数任务 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\install-windows.ps1 -FromPanel` | `powershell -NoProfile -ExecutionPolicy Bypass -File install-windows.ps1 -FromPanel` |
+| **任务在不在** | `Get-ScheduledTask -TaskName WraithGithubAiDaily` | `schtasks /Query /TN WraithGithubAiDaily` |
+| 看状态 / 上次结果 / 下次运行 | `Get-ScheduledTaskInfo -TaskName WraithGithubAiDaily` | `schtasks /Query /TN WraithGithubAiDaily /V /FO LIST` |
+| 看现在定的是几点 | `(Get-ScheduledTask -TaskName WraithGithubAiDaily).Triggers` | 同上，看输出里的「下次运行时间」 |
+| 立刻跑一次 | `Start-ScheduledTask -TaskName WraithGithubAiDaily` | `schtasks /Run /TN WraithGithubAiDaily` |
+| 掐掉正在跑的那次 | `Stop-ScheduledTask -TaskName WraithGithubAiDaily` | `schtasks /End /TN WraithGithubAiDaily` |
+| 只改时刻（不重装） | `schtasks /Change /TN WraithGithubAiDaily /ST 06:15` | `schtasks /Change /TN WraithGithubAiDaily /ST 06:15` |
+| 卸载 | `... -File .\install-windows.ps1 -Uninstall` | `schtasks /Delete /TN WraithGithubAiDaily /F` |
+| 看日志（一次性） | `Get-Content D:\wraith\.ghai\run.log -Tail 50` | `type D:\wraith\.ghai\run.log` |
+| 跟着日志滚（`tail -f`） | `Get-Content D:\wraith\.ghai\run.log -Wait` | `powershell -NoProfile -c "Get-Content 'D:\wraith\.ghai\run.log' -Wait"` |
+| 设持久 token | `[Environment]::SetEnvironmentVariable("GITHUB_TOKEN","ghp_xxx","User")` | `setx GITHUB_TOKEN ghp_xxx` |
+
+### 报错对照
+
+| 报错 | 在哪个 shell | 什么意思 |
+|---|---|---|
+| `Start-ScheduledTask : 系统找不到指定的文件`（`HRESULT 0x80070002`） | PowerShell | **任务不存在** —— 安装那步没成功。回 §2 看安装脚本的输出 |
+| `'Start-ScheduledTask' 不是内部或外部命令` | cmd | 走错门了，cmd 没这个 cmdlet。用 `schtasks /Run /TN ...` |
+| `错误: 系统找不到指定的文件。`（`schtasks /Query` 报的） | 两者皆可 | 同第一条：任务不存在 |
+| `无法加载文件 ...install-windows.ps1，因为在此系统上禁止运行脚本` | PowerShell | 执行策略拦的。用 `powershell -ExecutionPolicy Bypass -File` 起 |
+| `cd` 敲完盘符没变 | cmd | 忘了 `/d` |
 
 ## 2.5 先冒烟测一次（85 秒，别等 25 分钟才发现装错了）
 
@@ -160,8 +233,21 @@ Copy-Item "$Repo\scripts\github-ai-daily\install\config.smoke.json" "$Smoke\conf
 node "$Repo\scripts\github-ai-daily\index.mjs" --data-dir $Smoke
 ```
 
-**通过的标准**：退出码 0，`$Smoke` 下出现 `<今天>.md`，报告里有榜单条目，头部写着
-「首次运行」和 follower「T+1 起可用」。测完把 `$Smoke` 删掉即可，它和正式数据目录无关。
+**Windows cmd**（同上，只改第一行）：
+```cmd
+set REPO=D:\wraith
+set SMOKE=%TEMP%\ghai-smoke
+mkdir "%SMOKE%" 2>nul
+copy "%REPO%\scripts\github-ai-daily\install\config.smoke.json" "%SMOKE%\config.json"
+node "%REPO%\scripts\github-ai-daily\index.mjs" --data-dir "%SMOKE%"
+echo 退出码=%ERRORLEVEL%
+```
+
+（`mkdir` 在目录已存在时会报错，`2>nul` 是把那句噪声吞掉，不是在掩盖问题。
+cmd 里看退出码用 `%ERRORLEVEL%`，PowerShell 里用 `$LASTEXITCODE`。）
+
+**通过的标准**：退出码 0，冒烟目录下出现 `<今天>.md`，报告里有榜单条目，头部写着
+「首次运行」和 follower「T+1 起可用」。测完把那个目录删掉即可，它和正式数据目录无关。
 
 ### ⚠ 精简配置为什么每个组都写成了 `[]`
 
@@ -178,7 +264,7 @@ node "$Repo\scripts\github-ai-daily\index.mjs" --data-dir $Smoke
 - **项目**：**选哪个都行** —— 报告走文档资料库，`documents_read` 不受项目边界约束
 - **频率**：每天，**时刻由你定** —— 这是整件事唯一需要你决定的时间，取数时刻由安装脚本按它反推（§2）
 - **结果投递**：勾你想要的（桌面通知 / QQ / 微信 / 企业微信 / 飞书，随时改）
-- **高级·工具调用审批**：保持**默认拒绝**即可。这个 prompt 只用 `read_file`，不需要放行任何工具
+- **高级·工具调用审批**：保持**默认拒绝**即可。这个 prompt 只用 `documents_read` / `load_skill`，两个都是只读工具，不设审批闸，不需要你放行任何东西
 
 **Prompt：**
 
@@ -186,8 +272,9 @@ node "$Repo\scripts\github-ai-daily\index.mjs" --data-dir $Smoke
 生成今天的 GitHub AI 日报
 ```
 
-就这一句。**「怎么做」不写在 prompt 里，写在 skill 里** ——
-仓库自带一个 project skill：`.wraith/skills/github-ai-daily/SKILL.md`。
+就这一句。**「怎么做」不写在 prompt 里，写在 skill 里** —— `github-ai-daily` 是一个
+**内置 skill**（打在 jar 里：`src/main/resources/skills/github-ai-daily/SKILL.md`，
+首次运行时释放到 `~/.wraith/skills-cache/`），所以**不需要你在项目里放任何文件**。
 
 wraith 会把每个 skill 的名字与触发场景注入提示词，模型看到「生成今天的 github 日报」
 就自己去 `load_skill('github-ai-daily')`，拿到完整指引（去哪读、读不到怎么办、
@@ -195,10 +282,16 @@ wraith 会把每个 skill 的名字与触发场景注入提示词，模型看到
 
 这样做的好处：
 - **prompt 回归人话**，你以后在聊天里随口问「今天 GitHub 上有什么新项目」也能触发同一套流程
-- **指引跟着仓库走**，两个平台同一份，改一次两边都生效，不用去面板里改 prompt
+- **项目选哪个都行**，因为 skill 是内置的、报告在文档资料库里，两者都不受项目边界约束
+- **指引跟着版本走**，两个平台同一份，升级一次两边都生效，不用去面板里改 prompt
 - `load_skill` 不是危险工具，**不需要放行任何审批**
 
-想改点评的口味（比如"只讲和 agent 有关的"），直接编辑那个 SKILL.md，不用动面板。
+> **⚠ jar 必须是新的。** `documents_read` / `documents_list` 和这个内置 skill 是一起加进来的。
+> 如果某台机器上跑的还是旧 jar，模型会去调一个不存在的工具。Windows 上先确认
+> `%USERPROFILE%\.wraith\wraith.jar`（或你的打包版）是 `c0e285c` 之后构建的。
+
+想改点评的口味（比如"只讲和 agent 有关的"），在桌面「技能」面板里覆盖同名 skill
+即可 —— 用户级 / 项目级都会盖过内置那份，不用改仓库。
 
 ## 4. 时刻怎么定
 
@@ -298,9 +391,20 @@ wraith 会把每个 skill 的名字与触发场景注入提示词，模型看到
 ### 常见症状
 
 **面板任务说「今天没有报告」**
-按顺序查：① 取数任务跑没跑 —— mac `launchctl print gui/$(id -u)/com.lyhn.wraith.ghai`、
-Windows `Get-ScheduledTaskInfo -TaskName WraithGithubAiDaily`；② 两个时刻的间隔够不够（§4）；
+按顺序查：① 取数任务跑没跑；② 两个时刻的间隔够不够（§4）；
 ③ 看 `.ghai/run.log` 末尾，脚本是不是退了非零码。
+
+第①步各平台的命令：
+
+| 平台 / shell | 命令 |
+|---|---|
+| macOS | `launchctl print gui/$(id -u)/com.lyhn.wraith.ghai` |
+| Windows PowerShell | `Get-ScheduledTaskInfo -TaskName WraithGithubAiDaily` |
+| Windows cmd | `schtasks /Query /TN WraithGithubAiDaily /V /FO LIST` |
+
+Windows 上重点看两行：**「上次运行结果」**（`0` 才是成功）和**「下次运行时间」**。
+如果这条命令本身报「系统找不到指定的文件」，说明任务压根没装上，回 §2；
+`'Start-ScheduledTask' 不是内部或外部命令` 则只是在 cmd 里用了 PowerShell 的 cmdlet，见 §2.1。
 
 **面板任务说读不到，但 `.ghai/` 里明明有报告**
 先确认 `.ghai/config.json` 里的 `copyReportTo` 没被设成 `null` —— 面板任务读的是**文档资料库**
@@ -320,7 +424,8 @@ Windows `Get-ScheduledTaskInfo -TaskName WraithGithubAiDaily`；② 两个时刻
 说明基线快照被人为改过（例如测试时伪造过）。删掉 `snapshots/` 下可疑的那份，让它重新自然积累。
 
 **磁盘涨得快**
-`snapshotRetainDays` 调小。gzip 后约 200KB/天，默认 400 天约 80MB。
+`snapshotRetainDays` 调小。**实测 gzip 后 896 KB/天**（不是早先估的 200 KB，差 4.5 倍），
+默认 400 天约 358 MB；90 天≈81 MB、30 天≈27 MB 都够用（见 §5）。
 
 ### 有用的开关
 
