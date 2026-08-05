@@ -91,5 +91,5 @@ echo
 echo "立刻跑一次验证： launchctl kickstart -k gui/$(id -u)/$LABEL"
 echo "看它在不在：     launchctl print gui/$(id -u)/$LABEL | head -20"
 echo
-echo "接着在 wraith 桌面「自动化」面板建一个任务，项目选 $REPO，"
+echo "接着在 wraith 桌面「自动化」面板建一个任务，项目选 ${REPO}，"
 echo "prompt 用 docs/runbooks/github-ai-daily.md 里给的那段（只用 read_file，不碰沙箱）。"
