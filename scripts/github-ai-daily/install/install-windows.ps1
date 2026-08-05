@@ -121,13 +121,18 @@ $inner   = '"{0}" "{1}" --data-dir "{2}" >> "{3}" 2>&1' -f $node.Source, $Script
 $action    = New-ScheduledTaskAction -Execute "cmd.exe" -Argument ('/c "' + $inner + '"') -WorkingDirectory $Repo
 
 # -At 收 DateTime。直接喂字符串能不能过取决于**当前区域设置**怎么解析「06:15」——
-# 这台机器行不代表下一台行,而装错时刻是静默的(任务照建,只是每天在错的点跑)。
-# 显式按不变文化解析,顺便把 -At "6:00" 这种单位数小时也收下;解析不了当场报错。
-$atParsed = [datetime]::MinValue
-$okAt = [datetime]::TryParseExact($At, @('HH:mm', 'H:mm'),
-          [Globalization.CultureInfo]::InvariantCulture,
-          [Globalization.DateTimeStyles]::None, [ref]$atParsed)
-if (-not $okAt) { throw "时刻格式不对：$At（要 HH:mm，例如 06:15）" }
+# 这台机器行不代表下一台行,而失败方式很坏:任务照建,只是每天在错的点跑。
+#
+# 这里**刻意不用 [datetime]::TryParseExact**。第一版用了,当场炸在合法输入 08:15 上:
+# @('HH:mm','H:mm') 是 Object[],PowerShell 的重载解析没挑 String[] 那个版本,
+# 而是把数组拼成单个字符串 "HH:mm H:mm" 去当一个格式串匹配 —— 永远匹配不上。
+# 与其和重载解析斗智(得写 [string[]]$fmts 才稳),不如根本不进那扇门:
+# 自己正则拆成两个整数,再让 Get-Date 组装。没有文化、没有重载、没有解析。
+if ($At -notmatch '^(\d{1,2}):(\d{2})$') { throw "时刻格式不对：$At（要 HH:mm，例如 06:15）" }
+$atH = [int]$Matches[1]
+$atM = [int]$Matches[2]
+if ($atH -gt 23 -or $atM -gt 59) { throw "时刻超出范围：$At" }
+$atParsed  = Get-Date -Hour $atH -Minute $atM -Second 0 -Millisecond 0
 $trigger   = New-ScheduledTaskTrigger -Daily -At $atParsed
 # 关键几项：不插电也跑、跑之前不必空闲、允许跑满（默认 3 天上限足够，25 分钟的活不会被腰斩）。
 $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
