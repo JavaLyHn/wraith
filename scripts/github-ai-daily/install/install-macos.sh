@@ -26,6 +26,18 @@ if [ "${1:-}" = "--uninstall" ]; then
   exit 0
 fi
 
+# 仓库根是按本脚本自身位置推断的 —— 在 git worktree 或任何副本里跑,会把每日任务
+# 静默指到那个副本上,而副本随时可能被清理。这坑我自己踩过一次,所以拦一下。
+case "$REPO" in
+  */.git/worktrees/*|*/.claude/worktrees/*)
+    echo "⚠ 检测到你在 worktree 里运行：$REPO" >&2
+    echo "  每日任务会被指向这个临时目录,它一旦被清理任务就断了。" >&2
+    echo "  请到主仓库目录再跑一次本脚本。" >&2
+    echo "  确实想这么装就加 --force-worktree。" >&2
+    [ "${3:-}" = "--force-worktree" ] || exit 1
+    ;;
+esac
+
 HOUR="${1:-06}"
 MINUTE="${2:-00}"
 

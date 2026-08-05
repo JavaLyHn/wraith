@@ -28,6 +28,11 @@ if ($Uninstall) {
   exit 0
 }
 
+# 仓库根按脚本自身位置推断：在 worktree/副本里跑会把每日任务静默指到临时目录。
+if ($Repo -match '\\\.git\\worktrees\\|\\\.claude\\worktrees\\') {
+  throw "检测到你在 worktree 里运行：$Repo`n每日任务会被指向这个临时目录，它一旦被清理任务就断了。请到主仓库目录再跑一次。"
+}
+
 $node = (Get-Command node -ErrorAction SilentlyContinue)
 if (-not $node) { throw "找不到 node。装一个再来：winget install OpenJS.NodeJS.LTS" }
 if (-not (Test-Path $Script)) { throw "找不到取数脚本：$Script" }
