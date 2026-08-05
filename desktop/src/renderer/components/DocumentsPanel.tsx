@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
-  ArrowLeft, FolderOpen, Plus, Search, Trash2, Check, FolderSearch,
+  ArrowLeft, FolderOpen, Plus, RefreshCw, Search, Trash2, Check, FolderSearch,
   FileText, FileSpreadsheet, FileImage, FileType, File as FileIcon,
 } from 'lucide-react'
 import type { DocEntry } from '../../shared/types'
@@ -29,6 +29,10 @@ export default function DocumentsPanel({ onBack }: { onBack: () => void }): JSX.
   const [dragOver, setDragOver] = useState(false)
   // 删除二次确认:记住当前待确认的文件名(同侧栏会话删除的就地确认,不弹 modal)
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
+  // 手动刷新:资料库是个普通目录,文件可能由 App 之外的东西放进来(比如 GitHub AI 日报
+  // 那个每天 06:00 的定时脚本就是直接往目录里拷)。列表只在挂载时 load 一次,没有这个按钮
+  // 就只能切走面板再切回来才看得见新文件。
+  const [refreshing, setRefreshing] = useState(false)
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -38,6 +42,11 @@ export default function DocumentsPanel({ onBack }: { onBack: () => void }): JSX.
   }, [])
 
   useEffect(() => { void load() }, [load])
+
+  const doRefresh = useCallback(async (): Promise<void> => {
+    setRefreshing(true)
+    try { await load() } finally { setRefreshing(false) }
+  }, [load])
 
   /** 入库并把失败项汇总成一条 inline 提示。paths 为空 → 走系统选择器。 */
   const doAdd = useCallback(async (paths?: string[]): Promise<void> => {
@@ -121,6 +130,11 @@ export default function DocumentsPanel({ onBack }: { onBack: () => void }): JSX.
               />
             </div>
           )}
+          <button data-testid="documents-refresh" disabled={busy || refreshing}
+            onClick={() => void doRefresh()} title="刷新列表"
+            className="flex items-center rounded-lg bg-fg/5 p-1.5 text-fg hover:bg-fg/10 hover:text-accent disabled:opacity-50">
+            <RefreshCw className={`h-3.5 w-3.5 shrink-0${refreshing ? ' animate-spin' : ''}`} strokeWidth={1.5} />
+          </button>
           <button data-testid="documents-add" disabled={busy} onClick={() => void doAdd()}
             className="flex items-center gap-1.5 rounded-lg bg-fg/5 px-3 py-1.5 text-xs text-fg hover:bg-fg/10 hover:text-accent disabled:opacity-50">
             <Plus className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />添加

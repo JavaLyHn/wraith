@@ -216,3 +216,44 @@ describe('DocumentsPanel', () => {
     expect(pathForFile).toHaveBeenCalledWith(file)
   })
 })
+
+// 资料库是个普通目录，文件可能由 App 之外的东西放进来（GitHub AI 日报那个定时脚本
+// 就是直接往目录里拷）。列表只在挂载时 load 一次，所以必须有手动刷新。
+describe('DocumentsPanel 刷新', () => {
+  it('点刷新会重新拉列表，并渲染出新出现的文件', async () => {
+    let round = 0
+    const docs = mockWraith({
+      list: vi.fn(async () => {
+        round += 1
+        return round === 1
+          ? DOCS
+          : [...DOCS, { name: 'GitHub-AI-日报-2026-08-05.md', size: 8_882, addedAt: Date.now() }]
+      }),
+    })
+    render(<DocumentsPanel onBack={() => {}} />)
+    await waitFor(() => expect(screen.getByTestId('documents-row-需求文档.pdf')).toBeTruthy())
+    expect(screen.queryByText('GitHub-AI-日报-2026-08-05.md')).toBeNull()
+
+    fireEvent.click(screen.getByTestId('documents-refresh'))
+    await waitFor(() => expect(screen.getByText('GitHub-AI-日报-2026-08-05.md')).toBeTruthy())
+    expect(docs.list).toHaveBeenCalledTimes(2)
+  })
+
+  it('刷新失败时落错误提示，不把已有列表清空', async () => {
+    let round = 0
+    mockWraith({
+      list: vi.fn(async () => {
+        round += 1
+        if (round > 1) throw new Error('boom')
+        return DOCS
+      }),
+    })
+    render(<DocumentsPanel onBack={() => {}} />)
+    await waitFor(() => expect(screen.getByTestId('documents-row-需求文档.pdf')).toBeTruthy())
+
+    fireEvent.click(screen.getByTestId('documents-refresh'))
+    // ipcErrorText 会把真实原因透上来（fallback 只在原因为空时才用），断言原因更有价值
+    await waitFor(() => expect(screen.getByText(/boom/)).toBeTruthy())
+    expect(screen.getByTestId('documents-row-需求文档.pdf')).toBeTruthy()
+  })
+})
