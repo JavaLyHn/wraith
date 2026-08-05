@@ -233,15 +233,21 @@ Copy-Item "$Repo\scripts\github-ai-daily\install\config.smoke.json" "$Smoke\conf
 node "$Repo\scripts\github-ai-daily\index.mjs" --data-dir $Smoke
 ```
 
-**Windows cmd**（同上，只改第一行）：
+**Windows cmd**（把 `D:\wraith` 换成你的仓库路径，四处都要换）：
 ```cmd
-set REPO=D:\wraith
-set SMOKE=%TEMP%\ghai-smoke
-mkdir "%SMOKE%" 2>nul
-copy "%REPO%\scripts\github-ai-daily\install\config.smoke.json" "%SMOKE%\config.json"
-node "%REPO%\scripts\github-ai-daily\index.mjs" --data-dir "%SMOKE%"
+mkdir "%TEMP%\ghai-smoke" 2>nul
+copy "D:\wraith\scripts\github-ai-daily\install\config.smoke.json" "%TEMP%\ghai-smoke\config.json"
+node "D:\wraith\scripts\github-ai-daily\index.mjs" --data-dir "%TEMP%\ghai-smoke"
 echo 退出码=%ERRORLEVEL%
 ```
+
+> **cmd 这段为什么把路径写死、不用 `set REPO=...`**：
+> **cmd 遇到未定义变量不报错，原样留着当字面量。** 真机上撞过 ——
+> 只粘了最后一行（或中间换了个窗口），`REPO` 没设，于是 node 去找
+> `D:\wraith\%REPO%\scripts\github-ai-daily\index.mjs`，报 `MODULE_NOT_FOUND`，
+> 错误信息里那个 `%REPO%` 一闪而过很容易看漏。PowerShell 里 `$Repo` 未定义会
+> 展开成空串，路径变成 `\scripts\...`，同样安静。
+> `%TEMP%` 是系统内置的，不受这条影响，所以留着。
 
 （`mkdir` 在目录已存在时会报错，`2>nul` 是把那句噪声吞掉，不是在掩盖问题。
 cmd 里看退出码用 `%ERRORLEVEL%`，PowerShell 里用 `$LASTEXITCODE`。）
