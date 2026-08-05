@@ -27,9 +27,33 @@ public final class IntroAnimation {
     private static final String RESET = ESC + "[0m";
     private static final String HIDE_CURSOR = ESC + "[?25l";
     private static final String SHOW_CURSOR = ESC + "[?25h";
-    private static final int FRAME_MS = 38;
-    private static final int REVEAL_STEPS = 12;
-    private static final int[] SWAY = {2, 1, 0, -1, -2, -1, 0, 1, 0};
+    /**
+     * 帧间隔。用户实测反馈「开屏动画非常快」——改前是 38ms × 约 33 帧 ≈ 1.25 秒，
+     * 一眨眼就过去了，字标还没看清就没了。
+     *
+     * <p>放到 46ms（≈22fps，仍然流畅）并把帧数加到约 48 帧，总时长 ≈ 2.2 秒。
+     * <b>没有再往上加</b>：CLI 的开场动画是在给启动期（MCP / skill 装配）打掩护的，
+     * 长过实际启动耗时就变成纯粹的等待，比太快更烦人。按任意键仍可立刻跳过。
+     */
+    private static final int FRAME_MS = 46;
+
+    /** 字标逐列显现的步数。12 → 18：这是全片最该被看清的一段，之前扫得太快。 */
+    private static final int REVEAL_STEPS = 18;
+
+    /** 摆动序列。尾部多一个 0 让它稳下来，而不是甩到一半就切走。 */
+    private static final int[] SWAY = {2, 1, 0, -1, -2, -1, 0, 1, 0, 0};
+
+    /**
+     * 节奏用的停顿帧数（重复上一帧）。
+     *
+     * <p>匀速播完所有帧会显得机械。在三个转折点各停一下，动画才有「呼吸」：
+     * 扫描线扫完 → 铺满整屏 → 字标显现完成。停顿靠重复帧实现，
+     * 不必给每帧单独配时长，架构不动。
+     */
+    private static final int HOLD_AFTER_SCAN = 1;
+    private static final int HOLD_AFTER_FILL = 2;
+    private static final int HOLD_AFTER_REVEAL = 3;
+    private static final int HOLD_AT_END = 4;
 
     /** 逐帧画面;每帧是 height() 行的原始字符(无 ANSI),每行列宽 ≤ cols。空字符串表示空行。 */
     public static List<List<String>> frames(int cols) {
@@ -55,6 +79,7 @@ public final class IntroAnimation {
             }
             frames.add(f);
         }
+        hold(frames, HOLD_AFTER_SCAN);
         // 1b) 满宽横线从中线向上、下两侧逐帧铺满整块画布,再整屏淡出,过渡到字标显现
         int reach = Math.max(mid, h - 1 - mid);
         for (int r = 0; r <= reach; r++) {
@@ -72,16 +97,32 @@ public final class IntroAnimation {
             dim.add(repeat('▒', w));
         }
         frames.add(dim);
+        hold(frames, HOLD_AFTER_FILL);
         // 2) 字标自左向右逐列显现
         for (int s = 1; s <= REVEAL_STEPS; s++) {
             int reveal = (int) Math.ceil(width * (double) s / REVEAL_STEPS);
             frames.add(reveal(art, basePad, Math.min(reveal, width)));
         }
+        hold(frames, HOLD_AFTER_REVEAL);
         // 3) 左右摆动后回正(末帧 = 居中字标)
         for (int off : SWAY) {
             frames.add(sway(art, basePad, off, width, w));
         }
+        // 末尾停住:让居中的字标在切到 banner 前真正被看见。
+        // **必须是重复末帧** —— IntroAnimationFramesTest 钉住了「末帧 = 居中字标」。
+        hold(frames, HOLD_AT_END);
         return frames;
+    }
+
+    /** 重复末帧 n 次,制造停顿。列表为空时什么都不做。 */
+    private static void hold(List<List<String>> frames, int n) {
+        if (frames.isEmpty()) {
+            return;
+        }
+        List<String> last = frames.get(frames.size() - 1);
+        for (int i = 0; i < n; i++) {
+            frames.add(last);
+        }
     }
 
     private static List<String> blank(int h) {

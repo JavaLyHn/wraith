@@ -983,9 +983,19 @@ public class Main {
                 }
                 SnapshotService snapshotService = reactAgent.getToolRegistry().getSnapshotService();
                 renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, snapshotMode));
-                String response = runWithCancelSupport(terminal,
-                        ui,
-                        () -> snapshotService.runTurn(snapshotMode, taskInput, runTask::call));
+                // 提交后到模型开口之间有一段**同步**准备期:SnapshotService.runTurn 先做
+                // pre-turn 快照(post-turn 才是异步的),大仓库要好几秒。pty 实测这段是
+                // 8.26 秒完全静止,用户读作「发消息无响应」——所以先把活动面板点起来,
+                // Agent 的 beginThinking 随后平滑接管。详见 TurnPreparationNotice。
+                Runnable endPreparation = com.lyhn.wraith.render.TurnPreparationNotice.begin(renderer, ui);
+                String response;
+                try {
+                    response = runWithCancelSupport(terminal,
+                            ui,
+                            () -> snapshotService.runTurn(snapshotMode, taskInput, runTask::call));
+                } finally {
+                    endPreparation.run();
+                }
                 if (!"react".equals(snapshotMode)) {
                     renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));
                 }

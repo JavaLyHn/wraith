@@ -213,8 +213,12 @@ public final class TerminalBootstrap {
      *   Native access is not enabled for the current module: unnamed module
      * </pre>
      * JLine 的 {@code JniTerminalProvider} 构造器里有个前置检查，反射调
-     * {@code Module.isNativeAccessEnabled()}（JDK 22+ 才有，<b>但 GraalVM 回移到了更早版本</b>），
-     * 返回 false 就抛。用户那台是 JDK 21.0.10 却抛了 —— 说明它回移了这个方法。
+     * {@code Module.isNativeAccessEnabled()}（JDK 22+ 才有），返回 false 就抛。
+     *
+     * <p><b>归因纠正过一次</b>：JLine 源码注释说「GraalVM backported it」，我据此推断用户那台是
+     * GraalVM。实测 doctor 报告是 {@code java.vendor = Oracle Corporation} /
+     * {@code java.vm.name = Java HotSpot(TM) 64-Bit Server VM} —— <b>Oracle JDK 21 自己也回移了</b>。
+     * 所以「哪个发行版会回移」不可靠，只能实测；这也是 doctor 必须打 vendor / vm.name 的理由。
      *
      * <p>而 jar 的 manifest 里虽然写了 {@code Enable-Native-Access: ALL-UNNAMED}，
      * 那是 <b>JDK 24+ 才识别</b>的属性，回移了检查却不认 manifest 的 JDK 就卡在中间。
@@ -285,7 +289,8 @@ public final class TerminalBootstrap {
         }
         if (blockedByNativeAccess(d.jlineLog())) {
             sb.append("   **这条是可以修的**：jni 被 JLine 的前置检查挡住了 —— 你的 JDK 回移了\n")
-                    .append("   `Module.isNativeAccessEnabled()`（GraalVM 会），而它返回 false。\n")
+                    .append("   `Module.isNativeAccessEnabled()`（实测 Oracle JDK 21 就会），"
+                            + "而它返回 false。\n")
                     .append("   修法：启动时加 `--enable-native-access=ALL-UNNAMED`\n")
                     .append("     · 用短命令的话重装一次即可（已自动探测并加上）：wraith-install\n")
                     .append("     · 手动：java --enable-native-access=ALL-UNNAMED -jar "

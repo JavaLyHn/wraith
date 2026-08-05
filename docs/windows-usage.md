@@ -912,8 +912,13 @@ Unable to load jni provider: ... UnsupportedOperationException:
 JLine 的 `JniTerminalProvider` **构造器里有个前置检查**：反射调 `Module.isNativeAccessEnabled()`，
 返回 false 就直接抛，于是 Windows 上唯一可用的 provider 加载不了。
 
-那个方法是 **JDK 22+** 才有的，**但 GraalVM 把它回移到了更早版本**（JLine 源码注释里明写了）。
-所以一台 **GraalVM JDK 21** 会落进最难受的中间地带：
+那个方法是 **JDK 22+** 才有的，但**有些发行版把它回移到了更早版本**。
+JLine 的源码注释只提了 GraalVM，而用户实测那台是
+`java.vendor = Oracle Corporation` / `java.vm.name = Java HotSpot(TM) 64-Bit Server VM`
+—— **Oracle JDK 21 自己也回移了**。所以「哪个发行版会回移」不可靠，只能实测
+（这就是 `wraith terminal doctor` 必须打 `java.vendor` / `java.vm.name` 的理由）。
+
+于是一台 **JDK 21** 会落进最难受的中间地带：
 
 | | 情况 |
 |---|---|
