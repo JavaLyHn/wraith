@@ -84,9 +84,18 @@ stderr 会告诉你跑 `gh auth login`。**token 值不会出现在任何日志�
 | 为什么 | 不进沙箱，网络与写盘都正常 | 面板天生擅长：点评 + 多渠道投递 |
 | 用什么工具 | 直接跑 node | **只用 `read_file`**（进程内 Java 工具，不经沙箱、跨平台、不撞 60 秒） |
 
-**关键设计**：数据目录放在**项目内**（`<repo>/.ghai/`）。`read_file` 受 `PathGuard(projectPath)`
-约束，只能读项目内的文件 —— 数据在项目里，面板任务就完全不需要 `execute_command`，
-审批可以保持全 DENY。`.ghai/` 已进 `.gitignore`。
+**关键设计**：报告除了落在 `<repo>/.ghai/`，还会**多拷一份进文档资料库**
+（`~/.wraith/documents/`，由 `copyReportTo` 控制）。面板任务用 `documents_read` 读它 ——
+那是进程内 Java 工具，**既不过命令沙箱、也不受 `PathGuard` 的项目边界约束**。
+
+于是面板任务：不需要 `execute_command`（审批可全 DENY）、**项目选哪个都行**、
+两个平台行为一致。
+
+> 早先的设计是让面板任务用 `read_file` 读 `<repo>/.ghai/`，那样**项目必须选 wraith 仓库**。
+> 想过用 `execute_command` + `cat` 绕开，但那条路两个平台不一致：macOS 的 Seatbelt profile
+> 打底 `(allow default)` 读得到，Windows 的 AppContainer 是能力制、只授予 workspace，读不到。
+> 所以补了 `documents_read` 这个跨项目只读工具 —— 资料库本来就是「跨项目的知识存放处」，
+> 在此之前却只有桌面 UI 读得到、agent 读不到。
 
 ## 2. 装取数任务（选你的系统）
 
@@ -166,7 +175,7 @@ node "$Repo\scripts\github-ai-daily\index.mjs" --data-dir $Smoke
 在桌面「自动化」面板新建，四个字段这样填：
 
 - **名称**：GitHub AI 日报
-- **项目**：选**装了取数任务的那个仓库目录**（必须一致，否则 `read_file` 够不着 `.ghai/`）
+- **项目**：**选哪个都行** —— 报告走文档资料库，`documents_read` 不受项目边界约束
 - **频率**：每天，**时刻由你定** —— 这是整件事唯一需要你决定的时间，取数时刻由安装脚本按它反推（§2）
 - **结果投递**：勾你想要的（桌面通知 / QQ / 微信 / 企业微信 / 飞书，随时改）
 - **高级·工具调用审批**：保持**默认拒绝**即可。这个 prompt 只用 `read_file`，不需要放行任何工具
@@ -293,8 +302,10 @@ wraith 会把每个 skill 的名字与触发场景注入提示词，模型看到
 Windows `Get-ScheduledTaskInfo -TaskName WraithGithubAiDaily`；② 两个时刻的间隔够不够（§4）；
 ③ 看 `.ghai/run.log` 末尾，脚本是不是退了非零码。
 
-**面板任务读不到文件，但 `.ghai/` 里明明有报告**
-面板任务的**项目**选错了。`read_file` 只能读所选项目目录内的文件，必须和装取数任务的仓库是同一个。
+**面板任务说读不到，但 `.ghai/` 里明明有报告**
+先确认 `.ghai/config.json` 里的 `copyReportTo` 没被设成 `null` —— 面板任务读的是**文档资料库**
+（`~/.wraith/documents/`）里那份拷贝，不是 `.ghai/` 里的原件。让 agent 跑一次 `documents_list`
+就能看出库里到底有没有。
 
 **报告头部写着「窗口 48 小时」**
 这不是 bug，是降级提示：昨天漏跑了，所以基线是前天的快照，所有「日增」实际覆盖 48 小时。脚本刻意不把它折算成一天，也刻意不假装是 24 小时。

@@ -3,8 +3,6 @@
 .wraith/*
 !.wraith/
 !.wraith/WRAITH.md
-# project skill 要跟着仓库走(两个平台通用),所以从上面那条 .wraith/* 里放行
-!.wraith/skills/
 WRAITH.local.md
 
 # 编译输出

@@ -64,6 +64,7 @@ public final class SkillBuiltinExtractor {
                     "SKILL.md",
                     "references/testing-anti-patterns.md"
             )),
+            new BuiltinSkillSpec("github-ai-daily", List.of("SKILL.md")),
             new BuiltinSkillSpec("verification-before-completion", List.of("SKILL.md")),
             new BuiltinSkillSpec("receiving-code-review", List.of("SKILL.md")),
             new BuiltinSkillSpec("requesting-code-review", List.of(
