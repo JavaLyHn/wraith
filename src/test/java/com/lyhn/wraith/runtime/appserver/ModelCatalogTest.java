@@ -109,12 +109,27 @@ class ModelCatalogTest {
 
     // ── Test: result() structure is well-formed ──────────────────────────────
 
+    /**
+     * 结构测试：**候选表显式注入**，不走 {@code ProviderResolver.candidates(config)}。
+     *
+     * <p>原先这条用的是单参重载，于是间接依赖了 {@code ambientEnvVarNames()} 读的真实环境：
+     * 规则是「{@code defaultProvider} 仅当它拿得到 key 才进候选」，而这里的 config **没有 key**。
+     * 结果是它只在「开发机仓库根恰好有一份带 DeepSeek key 的 {@code .env}」时才绿 ——
+     * 在干净 worktree 里 candidates 为空、{@code default} 是 {@code ""}，当场变红。
+     *
+     * <p>这条断言是被 {@code 54c1856}（default 改报「有效默认」而非 config 里的死字段）
+     * 留下的：行为改了，断言没跟着改，而环境恰好掩盖了它。
+     *
+     * <p>本节标题写的是「result() structure is well-formed」——**结构**测试不该依赖默认解析。
+     * 默认解析本身由 {@code ProviderResolverTest} 覆盖。
+     */
     @Test
     void resultHasExpectedTopLevelKeys() {
         WraithConfig config = new WraithConfig();
         config.setDefaultProvider("deepseek");
 
-        Map<String, Object> result = ModelCatalog.result(config, "deepseek", "deepseek-chat", false);
+        Map<String, Object> result = ModelCatalog.result(
+                config, "deepseek", "deepseek-chat", false, java.util.List.of("deepseek"));
 
         assertTrue(result.containsKey("current"), "result 应含 current");
         assertTrue(result.containsKey("default"), "result 应含 default");
@@ -126,6 +141,14 @@ class ModelCatalogTest {
         assertEquals("deepseek", current.get("provider"));
         assertEquals("deepseek-chat", current.get("model"));
         assertEquals("deepseek", result.get("default"));
+    }
+
+    /** 候选表为空时 {@code default} 必须是空串而不是 null —— 桌面侧直接读，不判空。 */
+    @Test
+    void defaultIsEmptyStringWhenNoCandidates() {
+        Map<String, Object> result = ModelCatalog.result(
+                new WraithConfig(), "deepseek", "deepseek-chat", false, java.util.List.of());
+        assertEquals("", result.get("default"));
     }
 
     // ── Test: fallback flag appears when fallback=true ───────────────────────
