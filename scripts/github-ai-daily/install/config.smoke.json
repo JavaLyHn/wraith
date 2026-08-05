@@ -1,0 +1,14 @@
+{
+  "topics": { "agent": ["ai-agent"], "context": [], "core": [], "ecosystem": [],
+              "engineering": [], "security": [], "spec": [] },
+  "keywords": { "include": [], "exclude": ["mirror"] },
+  "knowledgeRepoHints": ["awesome"],
+  "watchlist": { "orgs": ["anthropics"], "users": [] },
+  "tiers": { "rising": 3000, "mid": 30000 },
+  "topN": 3, "minStars": 8000, "newRepoMinStars": 2000,
+  "activeWithinDays": 30, "snapshotRetainDays": 7, "baselineMinAgeHours": 20,
+  "contributorPoolTopRepos": 0, "contributorsPerRepo": 5,
+  "aiThreshold": 2, "watchlistMinScore": 1, "watchlistReposPerOwner": 3,
+  "streakTtlDays": 30, "windowNominalHours": 24, "windowToleranceHours": 1,
+  "searchThrottleMs": 2100, "graphqlMaxRetries": 3, "maxBatchFailureRatio": 0.25
+}

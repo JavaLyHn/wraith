@@ -66,6 +66,35 @@ Start-ScheduledTask -TaskName WraithGithubAiDaily; Get-Content <repo>\.ghai\run.
 **launchd 的 PATH 极简，`gh` 不在里面** —— 安装脚本已经把 node 与 gh 所在目录显式写进 plist 的
 `PATH`。如果你换了 node/gh 的安装方式，重跑一次安装脚本让它重新探测。
 
+## 2.5 先冒烟测一次（85 秒，别等 25 分钟才发现装错了）
+
+完整一次运行 25–31 分钟，拿它当第一次测试太亏。用仓库自带的精简配置先把**整条链路**
+（发现 → 新库 → 快照 → 人物 → 出报告）跑通，实测 **85 秒、GraphQL 3 点、Search 3 次**：
+
+**macOS / Linux：**
+```bash
+SMOKE=/tmp/ghai-smoke && mkdir -p $SMOKE
+cp <repo>/scripts/github-ai-daily/install/config.smoke.json $SMOKE/config.json
+node <repo>/scripts/github-ai-daily/index.mjs --data-dir $SMOKE
+```
+
+**Windows PowerShell：**
+```powershell
+$Smoke = "$env:TEMP\ghai-smoke"; New-Item -ItemType Directory -Force $Smoke | Out-Null
+Copy-Item <repo>\scripts\github-ai-daily\install\config.smoke.json "$Smoke\config.json"
+node <repo>\scripts\github-ai-daily\index.mjs --data-dir $Smoke
+```
+
+**通过的标准**：退出码 0，`$Smoke` 下出现 `<今天>.md`，报告里有榜单条目，头部写着
+「首次运行」和 follower「T+1 起可用」。测完把 `$Smoke` 删掉即可，它和正式数据目录无关。
+
+### ⚠ 精简配置为什么每个组都写成了 `[]`
+
+`config.smoke.json` 里 `topics` 的七个组只有 `agent` 有值、其余全是空数组 —— **这是必须的，
+不能靠省略**。配置合并的规则是「数组整体替换、**缺失的键从模板补齐**」，`topics` 是对象，
+所以你省掉哪个组，模板就把哪个组原样补回来。第一次写这个冒烟配置时我只写了一个组，
+结果它照样跑了 60 条查询、两分钟还没出发现阶段。
+
 ## 3. 建出日报的自动化任务
 
 在桌面「自动化」面板新建，四个字段这样填：
