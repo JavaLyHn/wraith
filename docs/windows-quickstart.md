@@ -12,7 +12,7 @@
 
 - [0. 我该走哪条路](#0-我该走哪条路)
 - [1. 要装什么](#1-要装什么)
-- [2. 拉代码 —— 必须切分支](#2-拉代码--必须切分支)
+- [2. 拉代码](#2-拉代码)
 - [3. 三条路线](#3-三条路线)
 - [4. 配一个模型](#4-配一个模型)
 - [5. cmd 与 PowerShell 对照表](#5-cmd-与-powershell-对照表)
@@ -80,29 +80,23 @@ winget install --id=astral-sh.uv -e       # 想用那 3 个 MCP 才装
 
 ---
 
-## 2. 拉代码 —— 必须切分支
+## 2. 拉代码
 
 **cmd 与 PowerShell 相同：**
 
 ```
 git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
-git checkout feat/windows-parity-block1
 ```
 
-确认分支对了：
+> **不需要切分支。** Windows 对等的全部代码已于 **2026-08-05 合入 `main`** ——
+> clone 下来就是最新的。
+>
+> 若你看到旧文档（或旧的截图 / 聊天记录）让你 `git checkout feat/windows-parity-block1`，
+> 那是合并之前的说法。那条分支仍然存在、且与 `main` 指向**同一个提交**，
+> 切过去不会错，只是没必要。
 
-```
-git branch --show-current
-```
-
-期望输出 `feat/windows-parity-block1`。
-
-> ⚠️ **`git checkout` 那步不能省。** Windows 的活还没合进 `main` —— `main` 上**一个 Windows 专属文件
-> 都没有**（没有自绘窗控、没有 `dev-win.ps1`、没有 NSIS 打包配置）。停在 `main` 上照样能构建出东西，
-> 但拿到的是**没有任何 Windows 对等**的版本，**而且不会有任何报错提示你走错了**。
-
-再确认一次（这个文件在，就说明分支对了）：
+确认 Windows 专属文件在（在 = 代码完整）：
 
 <table>
 <tr><th>cmd</th><th>PowerShell</th></tr>

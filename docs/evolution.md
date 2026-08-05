@@ -302,7 +302,7 @@ v16.1 抽出 `Renderer` 接口 + 三个实现：
 
 **`wraith sandbox doctor`**：四条探针**真跑**，不是看配置。其中两条是**「期望失败」**——工作区外写、联网。前两条绿只说明沙箱没碍事，只有这两条被拦住，才说明它真在拦。这是把验证能力交到用户手里的唯一办法（作者没有 Windows 机器，Win32 调用序列 / 管道 DACL / icacls 授权 / 工具链可读性全部只能在真机验出来）。
 
-> ⚠️ **沙箱会修改工作区的文件 ACL**（授权给 AppContainer SID），**在面板里关掉沙箱不会自动撤销**。撤销方式见 [`docs/windows-usage.md`](docs/windows-usage.md) §6.5。
+> ⚠️ **沙箱会修改工作区的文件 ACL**（授权给 AppContainer SID），**在面板里关掉沙箱不会自动撤销**。撤销方式见 [`windows-usage.md`](windows-usage.md) §6.5。
 
 ---
 

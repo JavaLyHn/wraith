@@ -103,18 +103,18 @@ echo 'alias wraith="java -jar ~/.wraith/wraith.jar"' >> ~/.zshrc && source ~/.zs
 ```powershell
 git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
-git checkout feat/windows-parity-block1        # ⚠ 不能省，见下
 
 powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
 # 装完必须【新开一个终端】，然后：wraith 起 CLI / wraith -d 起桌面 dev / wraith -h 看用法
 ```
 
-> ⚠️ **`git checkout` 那步不能省。** Windows 的活还没合进 `main` —— `main` 上**一个
-> Windows 专属文件都没有**（没有自绘窗控、没有 `dev-win.ps1`、没有 NSIS 打包配置）。
-> 停在 `main` 上照样构建得出来，但拿到的是没有任何 Windows 对等的版本，
-> **而且不会有任何报错提示你走错了**。
+> **不需要切分支了。** Windows 对等的全部代码（自绘窗控、`dev-win.ps1`、NSIS 打包、
+> AppContainer 沙箱）已于 2026-08-05 合入 `main`，clone 下来就是最新的。
+> 旧文档若让你 `git checkout feat/windows-parity-block1`，那是合并之前的说法 ——
+> 那条分支仍然存在且与 `main` 同一个提交，切过去不会错，只是没必要。
 >
-> Windows 桌面对等**代码已完成、尚未在真机验证完毕**。
+> ⚠️ 但**「代码完成」不等于「验证完成」**：Windows 桌面对等**尚未在真机全部验证完毕**
+> （AppContainer 沙箱、NSIS 安装包、桌宠 FFI 这几块只能在真 Windows 上验）。
 
 ---
 
@@ -417,8 +417,9 @@ Windows 的完整排障对照表（30+ 条）在 [`docs/windows-usage.md`](docs/
 以及长期记忆的自动提取（候选待批）、上下文分级压缩、桌面「文档」资料库、
 自我认知与聊天↔面板能力对等。
 
-**Windows 桌面对等六块代码已完成，尚未在真机全部验证完毕** ——
-`main` 上没有任何 Windows 专属文件，Windows 用户须切到 `feat/windows-parity-block1`。
+**Windows 桌面对等六块已于 2026-08-05 合入 `main`**（clone 即最新，不必切分支），
+但**尚未在真机全部验证完毕** —— AppContainer 沙箱、NSIS 安装包、桌宠 FFI
+这几块只能在真 Windows 上验。
 
 已知限制：
 

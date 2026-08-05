@@ -59,11 +59,11 @@ git --version
 ```powershell
 git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
-git checkout feat/windows-parity-block1
 git log -1 --oneline        # 记下这个 commit，后面建 tag 要用
 ```
 
-- [ ] 分支是 `feat/windows-parity-block1`（**不是 main** —— Windows 的活还没合 main）
+- [ ] 分支是 `main`。**2026-08-05 起 Windows 的活已合入 main**，不必再切
+      `feat/windows-parity-block1`（那条分支仍在，与 main 同一个提交）
 
 ---
 
@@ -182,7 +182,7 @@ git push origin v1.4.0-beta.1
 
 ```powershell
 gh release create v1.4.0-beta.1 `
-  --target feat/windows-parity-block1 `
+  --target main `
   --title "Wraith v1.4.0-beta.1 (Windows)" `
   --prerelease `
   --notes-file docs\release-notes-1.4.0-beta.1.md `
@@ -191,8 +191,10 @@ gh release create v1.4.0-beta.1 `
 
 要点：
 
-- **`--prerelease` 必须带。** 这是第一个 Windows 包，也是第一个从未合 main 的分支出的包，不能占 Latest（会盖掉给 mac 用户的 v1.3.0）。
-- **`--target feat/windows-parity-block1`** —— 这个分支没合 main，不指定的话 gh 会挂到默认分支上。
+- **`--prerelease` 必须带。** 这是第一个 Windows 包，尚未在真机全部验证完毕，不能占 Latest（会盖掉给 mac 用户的 v1.3.0）。
+- **`--target main`** —— 2026-08-05 起 Windows 的活已在 main 上。此前这里写的是
+  `--target feat/windows-parity-block1`（当时那条分支没合 main，不指定 gh 会挂错分支）；
+  合并之后指 main 才对。
 - **资产名有空格**，命令行里必须加引号。
 - **资产上传偶发 i/o timeout**，重试即可：
   ```powershell

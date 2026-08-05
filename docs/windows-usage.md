@@ -56,7 +56,7 @@
 ## 0. 全程一眼
 
 ```
-前置(JDK17/Maven[/Node])  →  git clone  →  ⚠ 切到 feat/windows-parity-block1
+前置(JDK17/Maven[/Node])  →  git clone  →  (main 就是最新,不必切分支)     
                                               │
               ┌───────────────────────────────┼───────────────────────────────┐
         路线 A 开发态                    路线 B 装包                    路线 C 只用命令行
@@ -122,15 +122,18 @@ Windows **两个都不自带，安装包也不含**。但它们各自只服务�
 
 > 这两个和 Node 的性质一样：**运行时依赖，不是构建时依赖**。缺它们不影响 `mvn` / `npm run dev` / 出包。
 
-### 1.2 拉代码 —— ⚠ 必须切分支
+### 1.2 拉代码
 
 ```powershell
 git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
-git checkout feat/windows-parity-block1
 ```
 
-**这一步不能省。** Windows 的活还没合进 `main` —— `main` 上**一个 Windows 专属文件都没有**（没有自绘窗控、没有 `dev-win.ps1`、没有 NSIS 打包配置）。停在 `main` 上你能把项目构建出来，但拿到的是一个没有任何 Windows 对等的东西，而且不会有任何报错提示你走错了。
+**不需要切分支。** Windows 对等的全部代码（自绘窗控、`dev-win.ps1`、NSIS 打包配置、AppContainer 沙箱）已于 **2026-08-05 合入 `main`** —— clone 下来就是最新的。
+
+> 本文早前的版本要求 `git checkout feat/windows-parity-block1`，那是合并之前的说法。那条分支仍然存在、且与 `main` 指向**同一个提交**，切过去不会错，只是没必要。
+>
+> ⚠️ 但**「代码合入」不等于「验证完成」**：AppContainer 沙箱、NSIS 安装包、桌宠 FFI 这几块只能在真 Windows 上验，尚未全部验完。本文按代码实际行为编写。
 
 > **这里用的是 HTTPS，不是 SSH。** 本仓库是公开的，HTTPS 拉取不需要任何认证配置。
 > 若你改用 `git@github.com:...` 而报 `ssh: connect to host github.com port 22: Connection refused`，
@@ -149,8 +152,7 @@ git checkout feat/windows-parity-block1
 确认一下：
 
 ```powershell
-git branch --show-current      # 期望 feat/windows-parity-block1
-dir desktop\scripts\dev-win.ps1   # 这个文件在，就说明分支对了
+dir desktop\scripts\dev-win.ps1   # 这个文件在，就说明代码是完整的
 ```
 
 ---
@@ -1444,8 +1446,6 @@ CLI 与桌面 App **共用同一套 Java 内核**：同一份配置、同一份�
 ```powershell
 git clone https://github.com/JavaLyHn/wraith.git
 cd wraith
-git checkout feat/windows-parity-block1      # 仍然要切,理由见下
-
 # 二选一 ——
 # ① 装短命令(推荐):构建 + 装 jar + 把 wraith 挂上 PATH,一步到位
 powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
