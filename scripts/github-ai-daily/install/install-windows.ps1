@@ -6,12 +6,18 @@
 # 的 60 秒硬超时。所以取数交给任务计划程序，wraith 那边只负责读报告、点评、投递。
 #
 # 用法（普通 PowerShell 即可，不需要管理员）：
-#   .\install-windows.ps1                # 默认每天 06:00
-#   .\install-windows.ps1 -At "05:30"
+#   .\install-windows.ps1 -FromPanel              # 推荐：读面板里日报任务的时刻，自动提前 45 分钟取数
+#   .\install-windows.ps1 -FromPanel -LeadMinutes 60
+#   .\install-windows.ps1 -At "05:30"             # 手动指定
 #   .\install-windows.ps1 -Uninstall
+#
+# 为什么推荐 -FromPanel：时刻该由你在面板里定一次，而不是两个地方各记一个、还要自己
+# 算间隔。取数必须早于面板任务超过一次完整运行时长（实测 31 分钟）。
 
 param(
   [string]$At = "06:00",
+  [switch]$FromPanel,          # 推荐：面板为唯一真相，取数时刻自动反推
+  [int]$LeadMinutes = 45,      # 取数要早于面板任务多少分钟（实测一次完整运行 31 分钟）
   [switch]$Uninstall
 )
 
@@ -52,6 +58,30 @@ if (-not $hasGh -and -not $userTok -and -not $userTok2) {
   2) [Environment]::SetEnvironmentVariable("GITHUB_TOKEN","ghp_xxx","User")
      必须是 "User" 级持久变量。只在当前窗口 $env:GITHUB_TOKEN=... 计划任务看不到。
 '@
+}
+
+if ($FromPanel) {
+  $panel = Join-Path $env:APPDATA "wraith-desktop\automations.json"
+  if (-not (Test-Path $panel)) {
+    throw "读不到面板配置：$panel`n先在桌面「自动化」面板建好日报任务（prompt 写「生成今天的 GitHub AI 日报」），再回来跑本脚本。"
+  }
+  $tasks = (Get-Content $panel -Raw -Encoding UTF8 | ConvertFrom-Json).tasks
+  # 认哪一条：名字或 prompt 里同时提到 github 与「日报/daily」。找不到或找到多条都要说清楚，不许瞎猜。
+  $hit = @($tasks | Where-Object {
+    $t = "$($_.name) $($_.prompt)"
+    $t -match '(?i)github' -and $t -match '(?i)日报|daily'
+  })
+  if ($hit.Count -ne 1) {
+    $names = ($tasks | ForEach-Object { if ($_.name) { $_.name } else { "(无名)" } }) -join " / "
+    throw "从面板反推失败：匹配到 $($hit.Count) 条日报任务。面板里现有：$names`n也可以手动指定：.\install-windows.ps1 -At `"06:00`""
+  }
+  $panelAt = if ($hit[0].schedule.time) { $hit[0].schedule.time } else { $hit[0].schedule.at }
+  if ($panelAt -notmatch '^\d{1,2}:\d{2}$') { throw "面板任务的时刻读不出来：$panelAt" }
+  $ph, $pm = $panelAt -split ':'
+  # 减提前量，跨零点回绕到前一天同一时刻
+  $total = (([int]$ph * 60 + [int]$pm - $LeadMinutes) % 1440 + 1440) % 1440
+  $At = "{0:d2}:{1:d2}" -f [math]::Floor($total / 60), ($total % 60)
+  Write-Host "面板日报任务在 $panelAt，提前 $LeadMinutes 分钟取数 → $At"
 }
 
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
