@@ -78,9 +78,14 @@ public final class InlineRenderer implements Renderer {
         this.statusBar = TerminalCapabilities.supportsScrollRegion(terminal)
                 ? new BottomStatusBar(terminal, out)
                 : null;
-        this.activityDisplay = statusBar == null
-                ? null
-                : new InlineActivityDisplay(terminal, out, statusBar);
+        // 思考面板**不依赖**状态栏,所以不再跟着 statusBar 一起为 null。
+        // 改之前是 `statusBar == null ? null : new InlineActivityDisplay(..., statusBar)`,
+        // 而那个 statusBar 参数在 InlineActivityDisplay 里根本没被用过 —— 假耦合。
+        // 后果是终端一降级(dumb / 行数 < 5 / WRAITH_NO_STATUSBAR=true)就连 spinner 和
+        // reasoning 的即时显示一起没了,只能落到 Agent 里「攒够 120 字符才 flush」的兜底路上。
+        // 状态栏要 scroll region(要准确行数),思考面板只要能写 ANSI —— 两个条件不该合并。
+        // InlineRenderer 本身只在 supportsAnsi 时才被创建(见 RendererFactory),所以这里无条件建。
+        this.activityDisplay = new InlineActivityDisplay(terminal, out);
         this.blockRegistry = new BlockRegistry();
         this.stream = createTranscriptStream(out);
     }

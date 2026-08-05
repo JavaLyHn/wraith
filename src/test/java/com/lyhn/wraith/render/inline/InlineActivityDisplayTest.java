@@ -28,8 +28,7 @@ class InlineActivityDisplayTest {
                 null, false, 3200L, "thinking"));
 
         try (InlineActivityDisplay display = new InlineActivityDisplay(terminal,
-                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8),
-                statusBar)) {
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8))) {
             display.begin("Thinking");
             display.appendThinking("trying to read file");
             terminal.writer().flush();
@@ -73,8 +72,7 @@ class InlineActivityDisplayTest {
         statusBar.update(StatusInfo.idle("glm-5.1", 200_000L, false));
 
         try (InlineActivityDisplay display = new InlineActivityDisplay(terminal,
-                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8),
-                statusBar)) {
+                new PrintStream(new ByteArrayOutputStream(), true, StandardCharsets.UTF_8))) {
             // no begin() called, panel is idle
             display.refreshIfActive();
             terminal.writer().flush();

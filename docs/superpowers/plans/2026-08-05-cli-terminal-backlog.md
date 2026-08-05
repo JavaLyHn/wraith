@@ -28,26 +28,43 @@
 
 先查清 `beginTurn` 和 `beginTask` 的意图差别，再决定删哪个。
 
-### T2. 「思考面板」被和 scroll region 绑死
+### ~~T2. 「思考面板」被和 scroll region 绑死~~ —— ✅ 已修（是**假耦合**，5 行）
+
+原来的写法：
 
 ```java
-// InlineRenderer 构造器
 statusBar       = supportsScrollRegion(terminal) ? new BottomStatusBar(...) : null;
-activityDisplay = statusBar == null ? null : new InlineActivityDisplay(...);
-supportsThinkingPanel() → activityDisplay != null      // ← 等价于 supportsScrollRegion
+activityDisplay = statusBar == null ? null : new InlineActivityDisplay(..., statusBar);
+supportsThinkingPanel() → activityDisplay != null      // ⇐ 等价于 supportsScrollRegion
 ```
 
-**思考面板不需要 scroll region。** 现在终端一降级（dumb、或 rows<5、或
-`WRAITH_NO_STATUSBAR=true`）就连思考面板一起没了，reasoning 只能落到 Agent 里
-「攒够 120 字符才 flush」的兜底路上 —— 那是兜底，不是应有的体验。
+**动手前先查了那个 `statusBar` 参数被用在哪 —— 答案是「没有」**：
+`InlineActivityDisplay` 313 行里它只出现在构造器签名上，没有字段、没有一处引用，
+而且早就有一个 2 参构造器 `this(terminal, renderLock, null)`。
+所以这不是「需要重构的耦合」，是**一个死参数误导了调用方**。
 
-对照：桌面端 `EventStreamRenderer.supportsThinkingPanel()` 硬编码 `true`，所以桌面端不受影响。
-**这正是「桌面端不卡、CLI 卡」的结构性原因。**
+两者的前提本来不同：
 
-修法方向：让 `InlineActivityDisplay` 不依赖 `BottomStatusBar`（或提供一个不占 scroll region 的
-降级实现），把两个能力解耦。**注意这是我上一版 `supportsScrollRegion` 在 dumb 时返回 false
-所加重的** —— 那个改动本身是对的（尺寸不可信时画 scroll region 更糟），
-但不该连带关掉思考面板。
+| | 需要什么 |
+|---|---|
+| 底部状态栏 | scroll region（DECSTBM）→ **准确的行数** |
+| 思考面板 | 只用 `\n` / `CLEAR_TO_EOL` 原地擦重画 → **能写 ANSI 就够** |
+
+**实际后果**（这才是它值得修的理由）：终端一降级就连 spinner 和 reasoning 的即时显示
+一起没了，只能落到 `Agent` 里「攒够 120 字符才 flush」的兜底路上。触发条件有三个，
+其中第三个最讽刺 —— **用户只想关状态栏，丢掉的却是「知道它在动」**：
+
+1. 终端降级成 dumb
+2. 行数 < 5 或列数 < 20
+3. 显式 `WRAITH_NO_STATUSBAR=true` / `-Dwraith.no.statusbar=true`
+
+修法：删掉那个死参数，`activityDisplay` 无条件创建
+（`InlineRenderer` 本身只在 `supportsAnsi` 时才被 `RendererFactory` 创建，所以安全）。
+两条测试钉住：dumb 终端上 / `WRAITH_NO_STATUSBAR=true` 时思考面板都必须还在；
+变异（退回假耦合）确认两条都变红。
+
+> 附带收益：`TurnPreparationNotice`（T3）也靠 `supportsActivityPanel()`，
+> 所以降级终端上的准备期反馈从「一行静态文字」升级回「带 spinner 的活动面板」。
 
 ### ~~T3. 提交到首个 token 之间没有任何活动指示~~ —— ✅ 已修
 

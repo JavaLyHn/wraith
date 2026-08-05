@@ -388,4 +388,66 @@ class InlineRendererTest {
             renderer.close();
         }
     }
+
+    /**
+     * <b>思考面板不该跟着状态栏一起消失。</b>
+     *
+     * <p>改之前 {@code InlineRenderer} 写的是
+     * {@code activityDisplay = statusBar == null ? null : new InlineActivityDisplay(..., statusBar)}，
+     * 而那个 {@code statusBar} 参数在 {@code InlineActivityDisplay} 里<b>根本没被用过</b>
+     * （没字段、没引用）——纯粹的假耦合。
+     *
+     * <p>后果很实在：终端一降级（dumb / 行数 &lt; 5 / 显式 {@code WRAITH_NO_STATUSBAR=true}）
+     * 就连 spinner 和 reasoning 的即时显示一起没了，只能落到 {@code Agent} 里
+     * 「攒够 120 字符才 flush」的兜底路上。用户只想关状态栏，丢的却是「知道它在动」。
+     *
+     * <p>两者的前提本来不同：状态栏要 scroll region（DECSTBM，需要<b>准确行数</b>），
+     * 思考面板只用 {@code \n} / {@code CLEAR_TO_EOL} 原地擦重画，能写 ANSI 就够。
+     */
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("**没有状态栏时思考面板仍在** —— 两者前提不同,不该绑在一起")
+    void thinkingPanelSurvivesWithoutStatusBar() {
+        org.jline.terminal.Terminal dumb = org.mockito.Mockito.mock(org.jline.terminal.Terminal.class);
+        org.mockito.Mockito.when(dumb.getType()).thenReturn("dumb");
+        org.mockito.Mockito.when(dumb.getSize()).thenReturn(new org.jline.terminal.Size(120, 40));
+        java.io.ByteArrayOutputStream sink = new java.io.ByteArrayOutputStream();
+        try (InlineRenderer r = new InlineRenderer(dumb,
+                new java.io.PrintStream(sink, true, java.nio.charset.StandardCharsets.UTF_8))) {
+            // 前提:这台终端确实拿不到 scroll region(所以没有状态栏)
+            org.junit.jupiter.api.Assertions.assertFalse(
+                    TerminalCapabilities.supportsScrollRegion(dumb),
+                    "前提不成立:这个 mock 应该是拿不到 scroll region 的");
+            // 而思考面板/活动面板必须仍然可用
+            org.junit.jupiter.api.Assertions.assertTrue(r.supportsThinkingPanel(),
+                    "没有状态栏就没有思考面板 —— 那正是要修的假耦合");
+            org.junit.jupiter.api.Assertions.assertTrue(r.supportsActivityPanel(),
+                    "活动面板同理:TurnPreparationNotice 靠它,否则准备期只剩一行静态文字");
+        }
+    }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("WRAITH_NO_STATUSBAR 只关状态栏,不该连思考面板一起关")
+    void noStatusBarPropertyDoesNotKillThinkingPanel() {
+        String saved = System.getProperty("wraith.no.statusbar");
+        System.setProperty("wraith.no.statusbar", "true");
+        try {
+            org.jline.terminal.Terminal t = org.mockito.Mockito.mock(org.jline.terminal.Terminal.class);
+            org.mockito.Mockito.when(t.getType()).thenReturn("xterm-256color");
+            org.mockito.Mockito.when(t.getSize()).thenReturn(new org.jline.terminal.Size(120, 40));
+            java.io.ByteArrayOutputStream sink = new java.io.ByteArrayOutputStream();
+            try (InlineRenderer r = new InlineRenderer(t,
+                    new java.io.PrintStream(sink, true, java.nio.charset.StandardCharsets.UTF_8))) {
+                org.junit.jupiter.api.Assertions.assertFalse(
+                        TerminalCapabilities.supportsScrollRegion(t), "前提:开关应该关掉了状态栏");
+                org.junit.jupiter.api.Assertions.assertTrue(r.supportsThinkingPanel(),
+                        "用户只想关状态栏,不是要连思考过程一起关掉");
+            }
+        } finally {
+            if (saved == null) {
+                System.clearProperty("wraith.no.statusbar");
+            } else {
+                System.setProperty("wraith.no.statusbar", saved);
+            }
+        }
+    }
 }

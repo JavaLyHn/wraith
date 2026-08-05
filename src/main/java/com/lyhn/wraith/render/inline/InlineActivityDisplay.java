@@ -43,11 +43,19 @@ final class InlineActivityDisplay implements AutoCloseable {
     private int frame;
     private int renderedRows;
 
+    /**
+     * <p><b>2026-08-05 删掉了一个 {@code BottomStatusBar statusBar} 参数。</b>
+     * 它从来只出现在构造器签名上 —— 没有字段、没有一处使用。但 {@code InlineRenderer}
+     * 据此写成了 {@code statusBar == null ? null : new InlineActivityDisplay(..., statusBar)}，
+     * 于是「有没有底部状态栏」决定了「有没有思考面板」，而这两件事本来无关：
+     * 状态栏要 scroll region（DECSTBM，需要<b>准确的行数</b>），
+     * 而本类只用 {@code \n} / {@code CLEAR_TO_EOL} 原地擦重画，只要终端能写 ANSI 就行。
+     *
+     * <p>那个假耦合的实际后果：终端一降级（dumb / 行数 &lt; 5 / 显式
+     * {@code WRAITH_NO_STATUSBAR=true}）就连 spinner 和 reasoning 的即时显示一起没了 ——
+     * 用户只想关状态栏，结果丢的是「知道它在动」这件事。
+     */
     InlineActivityDisplay(Terminal terminal, PrintStream renderLock) {
-        this(terminal, renderLock, null);
-    }
-
-    InlineActivityDisplay(Terminal terminal, PrintStream renderLock, BottomStatusBar statusBar) {
         this.terminal = terminal;
         this.renderLock = renderLock;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
