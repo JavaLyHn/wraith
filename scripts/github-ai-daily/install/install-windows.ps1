@@ -13,15 +13,23 @@
 #
 # 为什么推荐 -FromPanel：时刻该由你在面板里定一次，而不是两个地方各记一个、还要自己
 # 算间隔。取数必须早于面板任务超过一次完整运行时长（实测 31 分钟）。
+#
+# **-FromPanel 装出来的任务会自己跟着面板走**：任务实际调的是 run-daily.ps1，它每天
+# 开跑前先读一次面板、发现时刻变了就改掉自己的触发器（第二天生效）。所以以后你在面板
+# 里改时刻，不用再回来重跑本脚本。用 -At 手动指定装的则不跟随 —— 你明确指定的时刻
+# 不该被悄悄改掉。
 
 param(
   [string]$At = "06:00",
-  [switch]$FromPanel,          # 推荐：面板为唯一真相，取数时刻自动反推
+  [switch]$FromPanel,          # 推荐：面板为唯一真相，取数时刻自动反推 + 每天自同步
   [int]$LeadMinutes = 45,      # 取数要早于面板任务多少分钟（实测一次完整运行 31 分钟）
   [switch]$Uninstall
 )
 
 $ErrorActionPreference = "Stop"
+
+# 反推逻辑与 run-daily.ps1 共用同一份，见 _panel.ps1 头注释。
+. (Join-Path $PSScriptRoot "_panel.ps1")
 
 $TaskName = "WraithGithubAiDaily"
 $Repo     = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
@@ -61,64 +69,29 @@ if (-not $hasGh -and -not $userTok -and -not $userTok2) {
 }
 
 if ($FromPanel) {
-  # 面板任务的**真实**存储:Java daemon 的 AutomationStore(GatewayDaemon.java:56 —— ~/.wraith)。
-  # 第二条是迁移前的遗留文件:桌面启动时做过一次性迁移(index.ts «Part C»),迁完保留作备份、
-  # 不再更新。原来这里只读那一条,后果在两种机器上不同:全新 Windows 上文件根本不存在(直接 throw),
-  # 老机器上则**读到一份冻结的旧列表**——后者更坏,它会静默算出一个错的取数时刻。
-  # 顺序不能反:遗留文件在老机器上一直存在,先读它就永远轮不到真的那份。
-  $panelCandidates = @(
-    (Join-Path $env:USERPROFILE ".wraith\automations.json"),
-    (Join-Path $env:APPDATA "wraith-desktop\automations.json")
-  )
-  $panel = $panelCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-  if (-not $panel) {
-    throw ("读不到面板配置。找过这些位置：`n  " + ($panelCandidates -join "`n  ") +
-           "`n先在桌面「自动化」面板建好日报任务（prompt 写「生成今天的 GitHub AI 日报」），再回来跑本脚本。")
-  }
-  Write-Host "读面板配置：$panel"
-  $tasks = (Get-Content $panel -Raw -Encoding UTF8 | ConvertFrom-Json).tasks
-  # 认哪一条：名字或 prompt 里同时提到 github 与「日报/daily」。找不到或找到多条都要说清楚，不许瞎猜。
-  $hit = @($tasks | Where-Object {
-    $t = "$($_.name) $($_.prompt)"
-    $t -match '(?i)github' -and $t -match '(?i)日报|daily'
-  })
-  if ($hit.Count -ne 1) {
-    $names = ($tasks | ForEach-Object { if ($_.name) { $_.name } else { "(无名)" } }) -join " / "
-    throw "从面板反推失败：匹配到 $($hit.Count) 条日报任务。面板里现有：$names`n也可以手动指定：.\install-windows.ps1 -At `"06:00`""
-  }
-  $panelAt = if ($hit[0].schedule.time) { $hit[0].schedule.time } else { $hit[0].schedule.at }
-  if ($panelAt -notmatch '^\d{1,2}:\d{2}$') { throw "面板任务的时刻读不出来：$panelAt" }
-  $ph, $pm = $panelAt -split ':'
-  # 减提前量，跨零点回绕到前一天同一时刻
-  $total = (([int]$ph * 60 + [int]$pm - $LeadMinutes) % 1440 + 1440) % 1440
-  # [int] 这个转换不是装饰:[math]::Floor() 返回 **Double**,而 `d2` 是整数专用的格式
-  # 说明符,喂给 Double 会抛「格式说明符无效」—— 真机首跑就死在这一行。
-  # 也别图省事写成 [int]($total / 60):PowerShell 的 `/` 对两个整数产出 Double,
-  # 再 [int] 走的是**银行家舍入**,210/60=3.5 会进成 4(而不是 3),时刻直接算错一小时。
-  # 必须先 Floor 再转 int。
-  $hh = [int][math]::Floor($total / 60)
-  $mm = $total % 60
-  $At = '{0:d2}:{1:d2}' -f $hh, $mm
-  Write-Host "面板日报任务在 $panelAt，提前 $LeadMinutes 分钟取数 → $At"
+  # 反推逻辑在 _panel.ps1 里，与 run-daily.ps1 每天自同步时用的是**同一份**。
+  # 两个调用点各写一遍的话，装出来 08:15、第二天自己又对成别的，任务会来回抖。
+  $derived = Get-FetchTimeFromPanel $LeadMinutes
+  Write-Host "读面板配置：$($derived.PanelPath)"
+  $At = $derived.FetchAt
+  Write-Host "面板日报任务在 $($derived.PanelAt)，提前 $LeadMinutes 分钟取数 → $At"
 }
 
 New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 
-# 用 cmd /c 包一层做输出重定向：任务计划程序本身不提供 stdout 落盘。
-# >> 追加而不是覆盖，这样多天的日志能连起来看。
 $logPath = Join-Path $DataDir "run.log"
-$inner   = '"{0}" "{1}" --data-dir "{2}" >> "{3}" 2>&1' -f $node.Source, $Script, $DataDir, $logPath
 
-# 外面**必须**再套一对引号(`/c "«inner»"`,即 cmd /c ""A" "B" …" 那个经典写法)。
-# cmd /? 里的规则:当 /c 后面的串引号多于两个时,它会**剥掉第一个和最后一个引号**。
-# 不套外层的话被剥的就是 node 路径两边那对,于是
-#     "C:\Program Files\nodejs\node.exe" "…index.mjs" …
-# 变成
-#     C:\Program Files\nodejs\node.exe" "…index.mjs" …
-# cmd 去执行 `C:\Program` —— 每天 06:15 静默失败。winget 装的 node 正好就落在
-# 「Program Files」这个带空格的目录里,所以这不是理论风险。
-# 套上外层之后被剥掉的是那对多余的,inner 原样送进 cmd。
-$action    = New-ScheduledTaskAction -Execute "cmd.exe" -Argument ('/c "' + $inner + '"') -WorkingDirectory $Repo
+# 任务调的是 run-daily.ps1，不是直接调 node —— 多这一层换来「面板改时刻第二天自动
+# 对齐」「node 换路径不会断」（详见 run-daily.ps1 的头注释）。node 路径与日志重定向
+# 都挪进去由它在**运行时**处理，所以这里不再需要 cmd /c 那套引号杂技。
+#
+# -NoSync：安装时用 -At 手动指定的话，没有「面板真相」可跟，跟了反而会把用户
+# 明确指定的时刻改掉。只有 -FromPanel 装出来的任务才自同步。
+$runner   = Join-Path $PSScriptRoot "run-daily.ps1"
+$syncArg  = if ($FromPanel) { "-LeadMinutes $LeadMinutes" } else { "-NoSync" }
+$psArgs   = '-NoProfile -ExecutionPolicy Bypass -File "{0}" {1}' -f $runner, $syncArg
+
+$action    = New-ScheduledTaskAction -Execute "powershell.exe" -Argument $psArgs -WorkingDirectory $Repo
 
 # -At 收 DateTime。直接喂字符串能不能过取决于**当前区域设置**怎么解析「06:15」——
 # 这台机器行不代表下一台行,而失败方式很坏:任务照建,只是每天在错的点跑。
@@ -144,6 +117,13 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Se
 Write-Host "已安装：$TaskName"
 Write-Host "  每天 $At 取数 → $DataDir"
 Write-Host "  日志：$logPath"
+if ($FromPanel) {
+  Write-Host "  自同步：已开启 —— 以后在面板改时刻，第二天自动对齐，不用再跑本脚本"
+  Write-Host "          验证同步（几秒钟，不取数）："
+  Write-Host "          powershell -NoProfile -ExecutionPolicy Bypass -File `"$runner`" -LeadMinutes $LeadMinutes -SyncOnly"
+} else {
+  Write-Host "  自同步：未开启（用 -At 手动指定的时刻不会被改动）。想跟随面板就改用 -FromPanel"
+}
 Write-Host ""
 Write-Host "立刻跑一次验证（一次完整取数约 31 分钟）："
 Write-Host "  PowerShell:  Start-ScheduledTask -TaskName $TaskName"
