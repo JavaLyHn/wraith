@@ -19,6 +19,11 @@ public record SnapshotConfig(
             "target",
             "node_modules",
             "dist",
+            // electron-builder 的输出目录。原来只排了 dist,而桌面端产物落在 release/
+            // (含 .app / .exe / 解包后的 asar,几百 MB,里面还有超长路径)——
+            // 每轮 git add . 都要遍历它,在 Windows 上是 AddCommand 失败的头号嫌疑。
+            "release",
+            ".claude/worktrees",
             ".idea",
             "*.class",
             "*.jar"

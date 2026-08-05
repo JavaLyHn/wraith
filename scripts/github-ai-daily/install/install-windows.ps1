@@ -1,4 +1,4 @@
-# GitHub AI 日报 · Windows 取数任务安装（任务计划程序）
+﻿# GitHub AI 日报 · Windows 取数任务安装（任务计划程序）
 #
 # 为什么取数不挂在 wraith 的自动化面板里：面板任务的 execute_command 跑在沙箱内
 # （Windows 走 AppContainer，与 macOS 的 (deny network*) 语义一致），写也受限；

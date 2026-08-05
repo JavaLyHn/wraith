@@ -51,8 +51,13 @@ class PowerShellBomTest {
                     .filter(p -> p.getFileName().toString().endsWith(".ps1"))
                     .filter(p -> {
                         String s = p.toString().replace('\\', '/');
+                        // `/.claude/` 是后加的:那底下有 **git worktree**(其它分支的工作区)。
+                        // 全量测试因此扫到了 feat+github-ai-daily 分支里一个无 BOM 的 .ps1 并变红 ——
+                        // 那不是本分支的文件,本分支也没追踪它,这条测试管不着它。
+                        // (WindowsLauncherScriptTest 一开始就排了 /.claude/,这份老测试漏了。)
                         return !s.contains("/target/") && !s.contains("/node_modules/")
-                                && !s.contains("/.git/") && !s.contains("/dist/")
+                                && !s.contains("/.git/") && !s.contains("/.claude/")
+                                && !s.contains("/dist/")
                                 && !s.contains("/release/") && !s.contains("/out/");
                     })
                     .forEach(out::add);

@@ -12,6 +12,14 @@ public class SnapshotService implements AutoCloseable {
     private final SideGitManager manager;
     private final ExecutorService executor;
     private volatile Future<?> lastAsyncTask;
+    /**
+     * 上一次报过的失败指纹。
+     *
+     * <p>快照失败**不阻塞对话**（异常被 catch 住），但它会**每轮刷两行**（pre + post）。
+     * 用户 Windows 实测截图里就是这样：一次问答里两条 `[!]` 夹在正文中间。
+     * 同一个原因只报第一次，后续压成一行短提示 —— 既不掩盖问题，也不淹没正文。
+     */
+    private volatile String lastReportedFailure;
 
     public SnapshotService(SideGitManager manager) {
         this.manager = manager;
@@ -43,8 +51,9 @@ public class SnapshotService implements AutoCloseable {
         }
         try {
             manager.preTurnSnapshot(turnId, summary);
+            lastReportedFailure = null;   // 恢复正常了,下次再坏要重新完整报一次
         } catch (Exception e) {
-            System.err.println("⚠️ pre-turn 快照失败: " + e.getMessage());
+            reportFailure("pre-turn", e);
         }
     }
 
@@ -55,10 +64,28 @@ public class SnapshotService implements AutoCloseable {
         lastAsyncTask = executor.submit(() -> {
             try {
                 manager.postTurnSnapshot(turnId, summary);
+                lastReportedFailure = null;
             } catch (Exception e) {
-                System.err.println("⚠️ post-turn 快照失败: " + e.getMessage());
+                reportFailure("post-turn", e);
             }
         });
+    }
+
+    /**
+     * 报告一次快照失败。
+     *
+     * <p>第一次把<b>完整 cause 链</b>与可行动建议都打出来（JGit 的顶层消息
+     * {@code Exception caught during execution of add command} 什么信息都没有，
+     * 真正的原因在 cause 里）；同一原因再犯只打一行短的，避免每轮两行淹没正文。
+     */
+    private void reportFailure(String phase, Throwable error) {
+        String fingerprint = SnapshotFailureReport.chain(error);
+        if (fingerprint.equals(lastReportedFailure)) {
+            System.err.println("⚠️ " + phase + " 快照仍在失败（原因同上）");
+            return;
+        }
+        lastReportedFailure = fingerprint;
+        System.err.println(SnapshotFailureReport.describe(phase, error));
     }
 
     public List<TurnSnapshot> listSnapshots(int limit) throws Exception {
