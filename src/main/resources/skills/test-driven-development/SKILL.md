@@ -2,7 +2,7 @@
 name: test-driven-development
 description: |
   实现任何功能或修 bug、写实现代码之前使用:先写测试、看它失败、再写最少代码让它通过。
-  触发场景:准备实现功能/修 bug、动实现代码之前。先 load_skill。
+  触发场景:用户说「用 TDD 写 / 先写测试 / 测试驱动 / 红绿重构 / 先写个失败的测试 / 怎么写好测试 / 测试怎么设计」、或准备实现功能/修 bug 动实现代码之前。先 load_skill。
 version: "1.0.0"
 author: Wraith
 tags: [process, testing, tdd]

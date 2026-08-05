@@ -58,15 +58,17 @@ class SkillIndexFormatterTest {
     }
 
     @Test
-    void capsAtTwentySkills() {
+    void capsAtEnabledSkillsLimit() {
+        int limit = SkillIndexFormatter.MAX_ENABLED_SKILLS;
         List<Skill> many = new ArrayList<>();
-        for (int i = 0; i < 25; i++) {
+        for (int i = 0; i < limit + 5; i++) {
             many.add(mockSkill(String.format("skill-%02d", i), "desc " + i, Skill.Source.USER));
         }
         String out = SkillIndexFormatter.format(many);
         assertTrue(out.contains("skill-00"));
-        assertTrue(out.contains("skill-19"));
-        assertFalse(out.contains("skill-20"), "超过 20 个时按字典序前 20 应被保留");
+        assertTrue(out.contains(String.format("skill-%02d", limit - 1)));
+        assertFalse(out.contains(String.format("skill-%02d", limit)),
+                "超过上限时按字典序前 " + limit + " 个应被保留");
     }
 
     @Test

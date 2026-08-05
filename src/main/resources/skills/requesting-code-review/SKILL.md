@@ -2,7 +2,7 @@
 name: requesting-code-review
 description: |
   完成任务、实现重大功能、或合并前使用:派一个代码评审子 agent,在问题扩散前抓住它,核实工作是否满足要求。
-  触发场景:做完一个任务/功能、准备合并前想让人(子 agent)过一遍代码时。先 load_skill。
+  触发场景:用户说「帮我 review 一下 / 代码审查 / 看看代码有没有问题 / 合并前检查一下 / 帮我过一遍 / code review / PR 前审查」、或做完一个任务/功能准备合并时。先 load_skill。
 version: "1.0.0"
 author: Wraith
 tags: [process, review, quality]

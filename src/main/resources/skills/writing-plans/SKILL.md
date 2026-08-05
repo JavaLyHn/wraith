@@ -2,7 +2,7 @@
 name: writing-plans
 description: |
   当你拿到一份 spec 或多步骤任务的需求、动代码之前使用:把任务拆成「假设执行者对本代码库零上下文」也能照做的、有序、可测试的小步计划。
-  触发场景:有了 spec/需求,准备实现一个多步骤任务时。先 load_skill。
+  触发场景:用户说「写个实现计划 / 拆解任务 / 帮我规划步骤 / 怎么分步实现 / 列个开发计划 / 把需求拆成任务」、或有了 spec/需求准备实现多步骤任务时。先 load_skill。
 version: "1.0.0"
 author: Wraith
 tags: [process, planning, spec]

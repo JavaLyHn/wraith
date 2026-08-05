@@ -7,16 +7,16 @@ import java.util.List;
  *
  * 预算约束（命中即截断 + stderr 警告）：
  * - 单条 description ≤ 500 codepoint
- * - 启用 skill 数 ≤ 20（按 name 字典序保留前 20）
- * - 总段大小 ≤ 4096 字符
+ * - 启用 skill 数 ≤ 32（按 name 字典序保留前 32）
+ * - 总段大小 ≤ 8192 字符
  *
  * 注入位置：每个 Agent / SubAgent 的 system prompt 末尾，独立段。
  */
 public final class SkillIndexFormatter {
 
     public static final int MAX_DESCRIPTION_CODEPOINTS = 500;
-    public static final int MAX_ENABLED_SKILLS = 20;
-    public static final int MAX_INDEX_BYTES = 4096;
+    public static final int MAX_ENABLED_SKILLS = 32;
+    public static final int MAX_INDEX_BYTES = 8192;
 
     private SkillIndexFormatter() {
     }

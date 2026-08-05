@@ -214,6 +214,7 @@ tags: [process, debugging]
 - **`references/root-cause-tracing.md`** —— 沿调用栈反向追到原始触发
 - **`references/defense-in-depth.md`** —— 找到根因后在多层加校验
 - **`references/condition-based-waiting.md`** —— 用「条件轮询」替代任意超时
+- **`references/feedback-loop.md`** —— 难 bug/性能回归优先建一条紧的 pass/fail 反馈循环（整合自 Matt Pocock diagnosing-bugs）
 
 **相关技能:** test-driven-development(建失败测试)、verification-before-completion(声称成功前验证)。
 

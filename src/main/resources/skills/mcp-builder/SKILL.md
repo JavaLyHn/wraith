@@ -2,7 +2,7 @@
 name: mcp-builder
 description: |
   构建高质量 MCP(Model Context Protocol)服务的指南:通过设计良好的工具,让 LLM 与外部服务交互。构建 MCP 服务、集成外部 API 时使用(Python FastMCP 或 Node/TypeScript SDK)。
-  触发场景:用户想「建一个 MCP 服务 / 把某 API 接成 MCP / 给 agent 加外部能力」时。先 load_skill。
+  触发场景:用户说「建一个 MCP server / 把这个 API 接入 MCP / 写个 MCP 工具 / 怎么做 MCP 服务 / tool 怎么定义 / MCP 最佳实践 / 给 agent 加个外部能力 / 用 TypeScript 还是 Python 写 MCP」时。先 load_skill。
 version: "1.0.0"
 author: Wraith
 tags: [mcp, integration, tools]

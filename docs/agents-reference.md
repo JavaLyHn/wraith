@@ -170,7 +170,7 @@ scheme 白名单(http/https) / 主机黑名单(localhost/loopback/link-local/sit
 
 - 三层加载：jar 内置 < 用户级 ~/.wraith/skills/ < 项目级 .wraith/skills/
 - frontmatter：name(必填) / description(必填,<=500) / version / author / tags
-- system prompt 索引段注入到三处提示词末尾，上限 20 个 / 4KB
+- system prompt 索引段注入到三处提示词末尾，上限 32 个 / 8KB
 - load_skill 工具把 SKILL.md 正文(5KB 截断)写入 SkillContextBuffer
 - buffer 一次性消费，最多 3 个 skill body
 

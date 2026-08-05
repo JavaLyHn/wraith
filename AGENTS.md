@@ -158,8 +158,10 @@ src/main/java/com/lyhn/wraith/
 
 ### Skill
 
-- system prompt 索引段注入三处提示词，上限 20 个 / 4KB
+- system prompt 索引段注入三处提示词，上限 32 个 / 8KB
 - `load_skill` → SkillContextBuffer → 下一轮 user message 前置注入
+- 内置 skill 当前 23 个：web-access + 16 个流程/方法论/领域(brainstorming / writing-plans / systematic-debugging / test-driven-development / verification-before-completion / receiving-code-review / requesting-code-review / mcp-builder / skill-creator / github-ai-daily / code-refactoring / git-workflow / typescript-patterns / performance-optimization / documentation-writing / security-review) + 6 个改写自 Matt Pocock skills(codebase-design / domain-modeling / prototype / grilling / research / handoff)
+- Matt Pocock 的 `disable-model-invocation` / `argument-hint` 语义在 Wraith **不实现**：Wraith 的 `load_skill` 本就是模型按触发场景自主调用，`Skill` 记录不消费这两个字段；改写时把触发范围写进 description，避免误触发即可。重叠 skill(tdd/code-review/resolving-merge-conflicts/writing-great-skills/diagnosing-bugs) 不重复引入——diagnosing-bugs 的 feedback-loop 技法已合并进 `systematic-debugging/references/feedback-loop.md`。
 
 ### 桌面宠物（Pets）
 
