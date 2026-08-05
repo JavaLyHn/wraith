@@ -132,6 +132,13 @@ java -jar ~/.wraith/wraith.jar
 
 ## 5. 全部命令
 
+敲一个 `/` 就会把它们列出来，方向键选、Tab 补全：
+
+![/ 命令菜单](images/cli-commands.png)
+
+<sub>截图在 Windows 上取（列表较长，图里只到 `/quit`）。**下面的表格才是权威清单** ——
+截图会随构建落后于代码，而这些表是照 `CliCommandParser` 的真实 dispatch 写的。</sub>
+
 命令**大小写不敏感**。带 `<>` 的是必填参数，带 `[]` 的可省。
 
 ### 5.1 对话与会话

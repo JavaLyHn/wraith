@@ -169,6 +169,13 @@ wraith
 
 ![Wraith CLI 启动](docs/images/cli-intro.gif)
 
+敲一个 `/` 就列出全部命令，方向键选、Tab 补全：
+
+![Wraith CLI 的 / 命令菜单](docs/images/cli-commands.png)
+
+<sub>这张在 **Windows** 上截取。菜单内容随构建变化（新命令会加进来），
+**权威清单看 [终端使用手册](docs/cli-manual.md#5-全部命令)**。</sub>
+
 一轮完整对话 —— 思考过程实时流出、工具调用可折叠展开、diff 就地显示：
 
 ![Wraith CLI 一轮完整对话](docs/images/cli-turn.png)
