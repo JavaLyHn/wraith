@@ -1165,6 +1165,19 @@ ipcMain.handle('wraith:configGetSearch', async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.getSearch', {})
 })
+// 写搜索后端。此前**只有读没有写** —— 卡片只能指着 CLI 的 /config search,
+// 用户问「这个不是必须要 cli 才能配置吧」。校验与落盘语义都在后端的 SearchConfigRules,
+// 与 /config search 同一份(否则桌面能存进 CLI 认为非法的配置)。
+ipcMain.handle('wraith:configSetSearch', async (_e, cfg: { provider: string; apiKey: string; baseUrl: string }) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.setSearch', cfg)
+})
+// 「测试连接」:发一次真实搜索。传的是**表单草稿**(不写盘),apiKey 空=后端沿用已存。
+// 后端那支是 dispatchAsync 的,所以这次请求不会占住 app-server 的 reader 线程。
+ipcMain.handle('wraith:configTestSearch', async (_e, cfg: { provider: string; apiKey: string; baseUrl: string }) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('config.testSearch', cfg)
+})
 // 模型计价(转发 config.getPricing / config.setPricing RPC)
 ipcMain.handle('wraith:configGetPricing', async () => {
   if (!client) throw new Error('Backend not connected')

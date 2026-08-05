@@ -1114,14 +1114,39 @@ public class ToolRegistry {
      * <p>此前面板上那个「需配置」是 {@code pluginShowcase.ts} 里写死的静态标注，
      * 配好了也永远是黄的 —— 用户于是问「明明能搜到了，为什么还显示这些黄色内容」。
      *
-     * <p>只回 {@code provider} 与 {@code ready} 两个字段：这是只读状态查询，不是配置回显，
-     * 任何 key 都不出现在回包里。所有 {@code isReady()} 实现都不发网络请求，可以同步调。
+     * <p><b>key 永不出现在回包里</b>，只回一个 {@code hasKey} 布尔。
+     * 加这个布尔的理由：桌面的配置表单不回填 key（回填等于把密钥送回渲染进程），
+     * 但它必须能区分「没配过」和「配过但我不给你看」—— 否则表单会显示成空的，
+     * 用户以为清空了，一保存就把好 key 覆盖没了。
+     * {@code baseUrl} 不是密钥（SearXNG 实例地址），可以回显，否则改端口时要重打一遍。
+     *
+     * <p>所有 {@code isReady()} 实现都不发网络请求，可以同步调。
      */
     public synchronized java.util.Map<String, Object> searchStatus() {
         SearchProvider provider = searchProvider();
-        return java.util.Map.of(
-                "provider", provider.name() == null ? "" : provider.name(),
-                "ready", provider.isReady());
+        java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+        out.put("provider", provider.name() == null ? "" : provider.name());
+        out.put("ready", provider.isReady());
+        // 已存的配置(用于表单回显),不是 provider 的实时状态 —— 所以单独读 config
+        com.lyhn.wraith.config.WraithConfig.SearchConfig saved = savedSearchConfig();
+        out.put("hasKey", saved != null && saved.getApiKey() != null && !saved.getApiKey().isBlank());
+        out.put("baseUrl", saved == null || saved.getBaseUrl() == null ? "" : saved.getBaseUrl());
+        out.put("savedProvider", saved == null || saved.getProvider() == null ? "" : saved.getProvider());
+        return out;
+    }
+
+    /**
+     * {@code ~/.wraith/config.json} 的 {@code search} 节；读不到就当没配。
+     *
+     * <p>吞异常的理由与 {@code SearchProviderFactory.resolveSettings} 一致：
+     * 配置文件坏了不该把状态查询带崩 —— 用户会看到「没配」，那是可行动的；一个堆栈不是。
+     */
+    private static com.lyhn.wraith.config.WraithConfig.SearchConfig savedSearchConfig() {
+        try {
+            return com.lyhn.wraith.config.WraithConfig.load().getSearch();
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 测试注入口（包可见）：避免为了验缓存行为去真连网。 */

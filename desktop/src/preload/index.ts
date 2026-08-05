@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, RagScopeView, SearchStatusView, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, RagScopeView, SearchStatusView, SearchTestResult, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
@@ -120,8 +120,12 @@ export interface WraithApi {
   configGetRagScope(): Promise<RagScopeView>
   /** 写索引范围设置。只写配置,不动索引 —— 改完要重建才生效 */
   configSetRagScope(scope: RagScopeView): Promise<{ ok: boolean }>
-  /** 搜索后端实时状态(只读,不回 key)——「能力概览」角标用 */
+  /** 搜索后端实时状态(只读,不回 key)——「能力概览」角标 + 表单回显用 */
   configGetSearch(): Promise<SearchStatusView>
+  /** 写搜索后端配置。apiKey 空=后端沿用已存;**换了 provider 则不继承**(一个 key 字段服务两家) */
+  configSetSearch(cfg: { provider: string; apiKey: string; baseUrl: string }): Promise<{ ok: boolean; error?: string }>
+  /** 「测试连接」:用表单草稿发一次真实搜索。不写盘;apiKey 空=后端沿用已存 */
+  configTestSearch(cfg: { provider: string; apiKey: string; baseUrl: string }): Promise<SearchTestResult>
   configGetPricing(): Promise<PricingListResult>
   configSetPricing(entries: PricingEntryView[]): Promise<{ ok: boolean; error?: string }>
   ragStatus(): Promise<RagStatus>
@@ -555,6 +559,12 @@ const wraith: WraithApi = {
   },
   configGetSearch() {
     return ipcRenderer.invoke('wraith:configGetSearch') as Promise<SearchStatusView>
+  },
+  configSetSearch(cfg) {
+    return ipcRenderer.invoke('wraith:configSetSearch', cfg) as Promise<{ ok: boolean; error?: string }>
+  },
+  configTestSearch(cfg) {
+    return ipcRenderer.invoke('wraith:configTestSearch', cfg) as Promise<SearchTestResult>
   },
   configGetPricing() {
     return ipcRenderer.invoke('wraith:configGetPricing') as Promise<PricingListResult>

@@ -1993,6 +1993,42 @@ public class Main {
                         // 这里就能立刻反映出来,不需要重启后端。
                         return registry.searchStatus();
                     }
+                    public java.util.Map<String, Object> searchSet(String provider, String apiKey, String baseUrl) {
+                        com.lyhn.wraith.web.SearchConfigRules.Violation violation =
+                                com.lyhn.wraith.web.SearchConfigRules.check(provider, apiKey, baseUrl);
+                        if (violation != null) {
+                            // 回 {ok:false,error} 而不是抛:表单要把这句话贴在字段旁边(同 pricingSet)
+                            return java.util.Map.of("ok", false, "error",
+                                    com.lyhn.wraith.web.SearchConfigRules.formMessage(violation, provider));
+                        }
+                        com.lyhn.wraith.config.WraithConfig cfg =
+                                com.lyhn.wraith.config.WraithConfig.load();
+                        com.lyhn.wraith.config.WraithConfig.SearchConfig search = cfg.getSearch();
+                        if (search == null) {
+                            search = new com.lyhn.wraith.config.WraithConfig.SearchConfig();
+                            cfg.setSearch(search);
+                        }
+                        // 与 /config search 同一份落盘语义(空=保留旧、换 provider 不继承旧 key)
+                        com.lyhn.wraith.web.SearchConfigRules.apply(search, provider, apiKey, baseUrl);
+                        cfg.save();
+                        // 第七次 snapshot-vs-live:不失效则本次会话仍用旧 provider ——
+                        // 表现是「存成功了但 agent 还说没配」。
+                        registry.invalidateSearchProvider();
+                        return java.util.Map.of("ok", true);
+                    }
+                    public java.util.Map<String, Object> searchTest(String provider, String apiKey, String baseUrl) {
+                        com.lyhn.wraith.config.WraithConfig.SearchConfig saved = null;
+                        try {
+                            saved = com.lyhn.wraith.config.WraithConfig.load().getSearch();
+                        } catch (Exception ignored) {
+                            // 配置读不出来就当没存过:测的是表单里那套,已存的只是 key 的回落来源
+                        }
+                        String effective = com.lyhn.wraith.web.SearchProbe.effectiveKey(
+                                saved == null ? "" : saved.getProvider(),
+                                saved == null ? "" : saved.getApiKey(),
+                                provider, apiKey);
+                        return com.lyhn.wraith.web.SearchProbe.probe(provider, effective, baseUrl);
+                    }
                     public java.util.Map<String, Object> pricingGet() {
                         return pricingPayload(com.lyhn.wraith.config.WraithConfig.load());
                     }
@@ -3648,9 +3684,8 @@ public class Main {
                 """.stripTrailing();
     }
 
-    /** `/config search` 支持的四个后端。duckduckgo 见 D6：显式可选，自动链永不选它。 */
-    private static final java.util.Set<String> SEARCH_PROVIDERS =
-            java.util.Set.of("zhipu", "serpapi", "searxng", "duckduckgo");
+    // 支持的四个后端搬到 com.lyhn.wraith.web.SearchConfigRules.PROVIDERS ——
+    // 桌面的 config.setSearch 也要用它,留在这儿会变成两份。
 
     static SearchConfigUpdate parseSearchConfigUpdate(String payload) {
         List<String> args = splitArgs(payload);
@@ -3686,25 +3721,27 @@ public class Main {
             }
         }
 
-        // --provider 必需：provider 为空而 apiKey 有值时,「这个 key 属于 zhipu 还是 serpapi」
-        // 不可猜,猜错会把 SerpAPI 的 key 发给智谱(或反之)。宁可现在报错。
-        if (provider == null || provider.isBlank()) {
-            return SearchConfigUpdate.error("必须指定 --provider（zhipu / serpapi / searxng / duckduckgo）");
+        // 规则本身在 SearchConfigRules —— 桌面的 config.setSearch 调的是同一份。
+        // 在这儿重写一遍的话，两条路会漂，而漂的方向恰好是「桌面能存进 CLI 认为非法的配置」。
+        // 这里只负责把「违反了哪条」翻成**点出旗标名**的话（表单那侧没有旗标，措辞不同）。
+        com.lyhn.wraith.web.SearchConfigRules.Violation violation =
+                com.lyhn.wraith.web.SearchConfigRules.check(provider, apiKey, baseUrl);
+        if (violation != null) {
+            return SearchConfigUpdate.error(switch (violation) {
+                // provider 为空而 apiKey 有值时,「这个 key 属于 zhipu 还是 serpapi」不可猜,
+                // 猜错会把 SerpAPI 的 key 发给智谱(或反之)。宁可现在报错。
+                case PROVIDER_REQUIRED -> "必须指定 --provider（"
+                        + com.lyhn.wraith.web.SearchConfigRules.PROVIDER_LIST + "）";
+                case UNKNOWN_PROVIDER -> "未知搜索后端: " + provider + "，只支持 "
+                        + com.lyhn.wraith.web.SearchConfigRules.PROVIDER_LIST;
+                case SEARXNG_NEEDS_BASE_URL ->
+                        "searxng 需要 --base-url（例如 --base-url http://localhost:8888）";
+                // 静默吞掉多给的参数会让用户以为 key 生效了,之后排查不可能。
+                case DUCKDUCKGO_TAKES_NOTHING -> "duckduckgo 不需要 --api-key / --base-url";
+            });
         }
-        String normalized = provider.trim().toLowerCase(Locale.ROOT);
-        if (!SEARCH_PROVIDERS.contains(normalized)) {
-            return SearchConfigUpdate.error(
-                    "未知搜索后端: " + provider + "，只支持 zhipu / serpapi / searxng / duckduckgo");
-        }
-        if ("searxng".equals(normalized) && (baseUrl == null || baseUrl.isBlank())) {
-            return SearchConfigUpdate.error(
-                    "searxng 需要 --base-url（例如 --base-url http://localhost:8888）");
-        }
-        // 静默吞掉多给的参数会让用户以为 key 生效了,之后排查不可能。
-        if ("duckduckgo".equals(normalized) && (apiKey != null || baseUrl != null)) {
-            return SearchConfigUpdate.error("duckduckgo 不需要 --api-key / --base-url");
-        }
-        return new SearchConfigUpdate(normalized, apiKey, baseUrl, null);
+        return new SearchConfigUpdate(
+                com.lyhn.wraith.web.SearchConfigRules.normalize(provider), apiKey, baseUrl, null);
     }
 
     private static String searchConfigUsage() {
@@ -4040,13 +4077,9 @@ public class Main {
             search = new WraithConfig.SearchConfig();
             config.setSearch(search);
         }
-        search.setProvider(update.provider());
-        if (update.apiKey() != null) {
-            search.setApiKey(update.apiKey());
-        }
-        if (update.baseUrl() != null) {
-            search.setBaseUrl(update.baseUrl());
-        }
+        // 落盘语义(空=保留旧、换 provider 不继承旧 key)在 SearchConfigRules.apply ——
+        // 桌面的 config.setSearch 调的是同一份,否则两条路会漂。
+        com.lyhn.wraith.web.SearchConfigRules.apply(search, update.provider(), update.apiKey(), update.baseUrl());
         config.save();
 
         StringBuilder out = new StringBuilder();

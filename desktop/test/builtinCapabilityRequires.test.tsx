@@ -98,8 +98,20 @@ describe('BUILTIN_CAPABILITIES 的前置条件标注', () => {
     expect(searchHalf).not.toMatch(/零额外配置|零配置/)
   })
 
-  it('提到 /config search 这个写入口(此前只有环境变量一条路)', () => {
-    expect(BUILTIN_CAPABILITIES.find(c => c.id === 'web')!.requires).toMatch(/\/config search/)
+  /**
+   * 这条原来钉的是「文案要提到 `/config search`」—— 写它的时候 CLI **是唯一的写入口**
+   * （在那之前文案只说环境变量，等于让人去改 shell 配置）。
+   *
+   * <p>现在桌面端能配了（`config.setSearch` + 卡片详情里的表单），继续钉那个命令就成了
+   * 反向要求：用户实测问的正是「这个不是必须要 cli 才能配置吧 桌面端也可以」，
+   * 而文案当时确实在把他推去开终端。
+   *
+   * <p><b>意图不变、期望改了</b>：文案必须指出一个<b>就在手边</b>的写入口。
+   */
+  it('指出一个就在手边的写入口 —— 不再把人推去开终端', () => {
+    const requires = BUILTIN_CAPABILITIES.find(c => c.id === 'web')!.requires!
+    expect(requires).toMatch(/点这张卡片|这张卡片/)
+    expect(requires).not.toMatch(/\/config search/)
   })
 
   it('浏览器接管要点名 Node 与 Chrome', () => {

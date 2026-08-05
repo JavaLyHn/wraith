@@ -455,9 +455,36 @@ export interface EmbeddingTestResult {
  * 所以面板不会出现「面板说就绪、agent 说未配置」这种分裂。
  */
 export interface SearchStatusView {
-  /** zhipu / serpapi / searxng / duckduckgo / unconfigured */
+  /** zhipu / serpapi / searxng / duckduckgo / unconfigured —— **实际生效**的那个 */
   provider: string
   ready: boolean
+  /**
+   * 已存配置里有没有 key。**永远只是布尔，不含 key 本身。**
+   *
+   * 表单要能区分「没配过」和「配过但不给看」—— 否则输入框显示成空的，
+   * 用户以为清空了，一保存就把好 key 覆盖没了。
+   */
+  hasKey?: boolean
+  /** 已存的实例地址（SearXNG 用）。不是密钥，可以回显，否则改端口要重打一遍 */
+  baseUrl?: string
+  /**
+   * 已存配置里写的那个 provider —— 可能与 `provider` 不同（环境变量优先级更高）。
+   * 表单靠它判断「那个 hasKey 属不属于我现在选的这家」。
+   */
+  savedProvider?: string
+}
+
+/** 搜索后端「测试连接」的结果（`config.testSearch` 回包）。不含任何 key。 */
+export interface SearchTestResult {
+  ok: boolean
+  provider?: string
+  /** 拿到几条结果。0 条**算失败** —— 连得上但搜不出东西，对用户没区别 */
+  results?: number
+  latencyMs?: number
+  /** 第一条结果的标题，用来一眼确认「搜到的是真东西」 */
+  sample?: string
+  /** 失败原文（key 已抹除）。「连不上」「401」「429」是三件不同的事，不合并成一句 */
+  error?: string
 }
 
 /** 一条模型计价。seeded=内置种子（不可编辑）；价格单位是「每百万 token」。 */

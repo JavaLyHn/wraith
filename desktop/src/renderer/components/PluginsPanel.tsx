@@ -4,6 +4,7 @@ import type { McpServerView, McpResourceView, BuiltinToolView, SearchStatusView 
 import McpServerForm, { type McpFormValue, type McpPrefill } from './McpServerForm'
 import { BUILTIN_CAPABILITIES, RECOMMENDED_MCP } from '../lib/pluginShowcase'
 import { unaddedRecommendations } from '../lib/recommendedMcpFilter'
+import SearchBackendForm from './SearchBackendForm'
 import { capabilityReadiness, readinessBadgeClass } from '../lib/capabilityReadiness'
 import { joinBuiltinTools } from '../lib/builtinCapabilityDetail'
 import ToolDetailRow from './ToolDetailRow'
@@ -61,18 +62,19 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
   useEffect(() => { onRefresh() }, [onRefresh])
 
   // 进面板探一次搜索后端。失败就留在 null(检测中),不退回假黄标。
-  useEffect(() => {
-    let stale = false
+  const refreshSearchStatus = useCallback(() => {
     void (async () => {
       try {
-        const status = await window.wraith.configGetSearch()
-        if (!stale) setSearchStatus(status)
+        setSearchStatus(await window.wraith.configGetSearch())
       } catch (err) {
         console.error('[wraith] configGetSearch error:', err)
       }
     })()
-    return () => { stale = true }
   }, [])
+
+  // 存完要**重新拉一次**:角标(需配置/已就绪)与「当前」标记都靠它,
+  // 不刷的话用户刚配好却还看见黄标 —— 那正是这张卡片以前的老毛病。
+  useEffect(() => { refreshSearchStatus() }, [refreshSearchStatus])
 
   const current = selected !== OVERVIEW ? (servers.find(s => s.name === selected) ?? null) : null
 
@@ -203,6 +205,11 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                     onClick={() => { setBuiltinError(false); void fetchBuiltinCatalog() }}
                     className="ml-2 underline hover:no-underline">重试</button>
                 </div>
+              )}
+              {/* 「网页搜索与抓取」是唯一一项能在这儿直接配好的能力。此前它只能指着
+                  CLI 的 /config search —— 用户问「这个不是必须要 cli 才能配置吧」。 */}
+              {selectedBuiltin.id === 'web' && (
+                <SearchBackendForm status={searchStatus} onSaved={refreshSearchStatus} />
               )}
               {builtinCatalog === null && !builtinError ? (
                 <div className="text-xs text-fg-subtle">加载中…</div>

@@ -298,12 +298,36 @@ public final class AppServer {
         }
 
         /**
-         * 搜索后端的实时状态 {@code {provider, ready}} —— 面板角标用。
+         * 搜索后端的实时状态 {@code {provider, ready, hasKey, baseUrl, savedProvider}} —— 面板角标 + 表单回显用。
          *
-         * <p>只读：不回任何 key。写入口仍然只有 CLI 的 {@code /config search}。
+         * <p><b>key 永不回传</b>，只回 {@code hasKey} 布尔：表单要能区分「没配过」和
+         * 「配过但不给看」，否则它显示成空的、用户以为清空了，一保存就把好 key 覆盖没了。
          */
         default java.util.Map<String, Object> searchStatus() {
             throw new UnsupportedOperationException("searchStatus not implemented");
+        }
+
+        /**
+         * 写搜索后端配置（{@code apiKey} 空 = 保留旧，同 {@code embeddingSet}）。
+         *
+         * <p>回 {@code {ok:true}} 或 {@code {ok:false, error}} —— 错误走回包而不是
+         * {@code writer.error}，因为表单要把那句话贴在字段旁边（同 {@code pricingSet}）。
+         *
+         * <p>校验规则来自 {@code SearchConfigRules}，与 CLI 的 {@code /config search} <b>同一份</b>。默认抛出。
+         */
+        default java.util.Map<String, Object> searchSet(String provider, String apiKey, String baseUrl) {
+            throw new UnsupportedOperationException("searchSet not implemented");
+        }
+
+        /**
+         * 「测试连接」：用表单值发一次<b>真实搜索请求</b>，回
+         * {@code {ok, provider, results, latencyMs, sample?}} 或 {@code {ok:false, error}}。
+         *
+         * <p>{@code apiKey} 空 = 沿用已存（同 {@code searchSet}）—— 测的必须正是保存会落盘的那套，
+         * 否则「测试通过但保存后不工作」（或反之）比没有这个按钮更糟。默认抛出。
+         */
+        default java.util.Map<String, Object> searchTest(String provider, String apiKey, String baseUrl) {
+            throw new UnsupportedOperationException("searchTest not implemented");
         }
 
         default java.util.Map<String, Object> pricingGet() {
@@ -875,6 +899,28 @@ public final class AppServer {
                 try { writer.result(msg.id(), session.searchStatus()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.setSearch" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String provider = textParam(p, "provider");
+                String apiKey = (p != null && p.hasNonNull("apiKey")) ? p.get("apiKey").asText() : "";
+                String baseUrl = (p != null && p.hasNonNull("baseUrl")) ? p.get("baseUrl").asText() : "";
+                try { writer.result(msg.id(), session.searchSet(provider, apiKey, baseUrl)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "config.testSearch" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                String provider = textParam(p, "provider");
+                String apiKey = (p != null && p.hasNonNull("apiKey")) ? p.get("apiKey").asText() : "";
+                String baseUrl = (p != null && p.hasNonNull("baseUrl")) ? p.get("baseUrl").asText() : "";
+                // 必须 offload,同 config.testProvider / config.testEmbedding:dispatch 跑在 serve()
+                // 那条**唯一的** reader 线程上,同步执行会让整个 app-server 在探测期间处理不了任何
+                // RPC —— 表现为「点了测试连接,整个桌面端都没反应」。搜索请求同样要走网络。
+                final SessionRunner s = session;
+                dispatchAsync(msg.id(), () -> s.searchTest(provider, apiKey, baseUrl));
             }
             case "config.getPricing" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }

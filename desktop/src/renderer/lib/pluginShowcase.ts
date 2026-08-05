@@ -52,7 +52,9 @@ export const BUILTIN_CAPABILITIES: BuiltinCapability[] = [
   {
     id: 'web', icon: '🌐', name: '网页搜索与抓取', desc: '联网搜索并抓取网页内容',
     tools: ['web_search', 'web_fetch'],
-    requires: '搜索需四者之一:SEARXNG(自托管,免费无需 key)/ SERPAPI_KEY / GLM_API_KEY(与 GLM 推理共用)/ duckduckgo(无需 key,但靠抓 HTML 会抖);可用 /config search 写进配置;抓取(web_fetch)零配置',
+    // 这句话原先结尾是「可用 /config search 写进配置」—— 桌面端能配之后那就是在把用户
+    // 推去开终端。用户实测问的正是这个：「这个不是必须要 cli 才能配置吧 桌面端也可以」。
+    requires: '搜索需四者之一:SEARXNG(自托管,免费无需 key)/ SERPAPI_KEY / GLM_API_KEY(与 GLM 推理共用)/ duckduckgo(无需 key,但靠抓 HTML 会抖);点这张卡片就能配;抓取(web_fetch)零配置',
   },
   {
     id: 'browser', icon: '🖥️', name: '浏览器接管', desc: '连接并驱动本地浏览器',

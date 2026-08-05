@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import PluginsPanel from '../src/renderer/components/PluginsPanel'
 import { RECOMMENDED_MCP } from '../src/renderer/lib/pluginShowcase'
 import type { McpServerView } from '../src/shared/types'
@@ -83,5 +83,40 @@ describe('推荐 MCP 区', () => {
 
     expect(screen.queryByTestId('mcp-rec-add-memory')).toBeNull()
     expect(screen.queryByTestId('mcp-rec-add-fetch')).not.toBeNull()
+  })
+})
+
+/**
+ * 表单接线：只有「网页搜索与抓取」这张卡片能就地配好搜索后端。
+ *
+ * <p>这条守的是那个 `selectedBuiltin.id === 'web'` 条件 —— 写成无条件的话，
+ * 「文件读写」详情里也会冒出一个搜索后端表单。
+ */
+describe('能力卡片详情里的搜索后端表单', () => {
+  /** 卡片都共用一个 testid,只能按文字认。 */
+  function clickCapabilityCard(name: string): void {
+    const card = [...document.querySelectorAll('[data-testid="mcp-builtin-card"]')]
+        .find(c => c.textContent?.includes(name))
+    if (!card) throw new Error(`找不到能力卡片: ${name}`)
+    fireEvent.click(card)
+  }
+
+  it('点「网页搜索与抓取」出表单', () => {
+    stubBackend()
+    render(<PluginsPanel {...props([])} />)
+
+    clickCapabilityCard('网页搜索与抓取')
+
+    expect(screen.queryByTestId('search-backend-form')).not.toBeNull()
+  })
+
+  it('**别的能力不该有它** —— 文件读写的详情里不出现搜索后端表单', () => {
+    stubBackend()
+    render(<PluginsPanel {...props([])} />)
+
+    clickCapabilityCard('文件读写')
+
+    expect(screen.queryByTestId('mcp-builtin-detail')).not.toBeNull()
+    expect(screen.queryByTestId('search-backend-form')).toBeNull()
   })
 })
