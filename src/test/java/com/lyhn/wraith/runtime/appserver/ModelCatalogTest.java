@@ -109,12 +109,22 @@ class ModelCatalogTest {
 
     // ── Test: result() structure is well-formed ──────────────────────────────
 
+    // 这条原先走的是 public 入口 result(config, ..., fallback) —— 它内部用
+    // ProviderResolver.candidates(config) **扫真实 env / ./.env**。于是:
+    //   · 开发机上 ./.env 里有真实 DEEPSEEK_API_KEY → candidates=[deepseek] → default="deepseek" → 绿
+    //   · 干净 clone / CI 上没有那个 key      → candidates=[]         → default=""         → 红
+    // 也就是「只在作者机器上绿」。用 dummy 值实测证实过因果:补一个任意 DEEPSEEK_API_KEY 就转绿。
+    //
+    // 这正是本文件上方(providersHasKeyFalseWhenNoKeyConfigured)已经记过并修掉的那个坑,
+    // 只是漏了这一条。修法照旧:走**注入重载**,候选表由测试给出,不碰真实环境。
     @Test
+    @DisplayName("result() 顶层结构完好 —— **候选表由测试注入**,不靠本机 .env 偶然为真")
     void resultHasExpectedTopLevelKeys() {
         WraithConfig config = new WraithConfig();
         config.setDefaultProvider("deepseek");
 
-        Map<String, Object> result = ModelCatalog.result(config, "deepseek", "deepseek-chat", false);
+        Map<String, Object> result = ModelCatalog.result(
+                config, "deepseek", "deepseek-chat", false, List.of("deepseek"));
 
         assertTrue(result.containsKey("current"), "result 应含 current");
         assertTrue(result.containsKey("default"), "result 应含 default");
@@ -126,6 +136,15 @@ class ModelCatalogTest {
         assertEquals("deepseek", current.get("provider"));
         assertEquals("deepseek-chat", current.get("model"));
         assertEquals("deepseek", result.get("default"));
+    }
+
+    @Test
+    @DisplayName("一个候选都没有时 default 是空串而不是 null —— 桌面侧直接读,不必判空")
+    void defaultIsEmptyStringWhenNoCandidates() {
+        Map<String, Object> result = ModelCatalog.result(
+                new WraithConfig(), "", "", false, List.of());
+
+        assertEquals("", result.get("default"));
     }
 
     // ── Test: fallback flag appears when fallback=true ───────────────────────
