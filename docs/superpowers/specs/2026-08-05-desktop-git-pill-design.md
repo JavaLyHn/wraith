@@ -252,6 +252,11 @@ wraith                                    ⟳
 
 ---
 
-## 10. 一个待验证的开放项
+## 10. 开放项：已在写计划时验证关闭
 
-**`turn.completed` 事件在 renderer 侧的接入点还没确认。** 事件流本身是九种定死事件之一（`runtime/appserver/EventStreamRenderer`），但 renderer 侧监听它的具体位置需要在实现时找到。若接入成本超预期，退路是「只保留『打开弹出层强刷』+ 手动刷新键」——那样 pill 上的数字在 Agent 改完文件后不会自动更新，但**用户主动看的那一刻仍然是准的**，可以接受。
+原本记着「`turn.completed` 在 renderer 侧的接入点未确认」。已查实：
+
+- 后端发的通知名确实是 `turn.completed`（`AppServer.java:1317-1336` 一带，与 `turn.started` / `turn.failed` 同族）
+- renderer 侧的统一入口是 `App.tsx:266` 的 `window.wraith.onEvent`，判据是 `evt.kind === 'notification' && evt.method === '<name>'`（`mcp.status` 与 `status` 已经这么接）
+
+所以接入成本很低，spec 里那条退路不需要启用。
