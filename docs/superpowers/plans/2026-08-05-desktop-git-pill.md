@@ -19,6 +19,8 @@
 - **git 硬超时 3 秒**，超时返回带 `error` 的结果，不抛、不阻塞。
 - **没有 `.git` 或 `git` 不在 PATH 时前端什么都不渲染**，原因只进 log，不弹窗。
 - **不写依赖真实仓库的测试**——本仓库自己的 git 状态一直在变，那种测试会随机变红。
+- **桌面测试不得用 `@testing-library/jest-dom` 的匹配器**（`toBeEmptyDOMElement` / `toBeInTheDocument` / `toHaveTextContent` 等）——**本项目没装它**。用 `queryByTestId(...)` / `container.querySelector(...)` → `toBeNull()`、`toBeTruthy()`、`.textContent` 这套（既有写法见 `test/accountRowAndSandboxChip.test.tsx`）。
+- **不得引入新 npm 依赖。** 计划用到的 `lucide-react` 图标 `GitBranch` / `RefreshCw` / `Link2` / `FileDiff` 已预检存在（lucide-react 1.24.0）。
 - 中文注释与文案；解释「为什么」而不是「做了什么」。
 
 ---
@@ -1192,9 +1194,12 @@ const s: GitStatusView = {
 }
 
 describe('GitPill', () => {
-  it('没有仓库时整块不渲染 —— 断言容器为空,而不是断言某句文案', () => {
+  it('没有仓库时整块不渲染 —— 断言什么都没渲染,而不是断言某句文案', () => {
+    // 用 container.firstChild → toBeNull()，**不要用 toBeEmptyDOMElement()**：
+    // 本项目没装 @testing-library/jest-dom，那个匹配器不存在。
+    // 既有写法见 test/accountRowAndSandboxChip.test.tsx:112。
     const { container } = render(<GitPill status={{ ...s, repo: false }} onRefresh={() => {}} />)
-    expect(container).toBeEmptyDOMElement()
+    expect(container.firstChild).toBeNull()
   })
 
   it('弹出层默认关着,点 pill 才开', () => {
