@@ -1,28 +1,124 @@
 {
   "topics": {
-    "core":        ["ai","artificial-intelligence","llm","generative-ai","genai","huggingface",
-                    "machine-learning","deep-learning","nlp","computer-vision"],
-    "agent":       ["ai-agent","agents","agentic","multi-agent","autonomous-agents",
-                    "agent-framework","coding-agent","computer-use","browser-use","swe-agent"],
-    "engineering": ["llmops","rag","retrieval-augmented-generation","embeddings",
-                    "vector-database","llm-serving","evals",
-                    "guardrails","fine-tuning","quantization","prompt-engineering"],
-    "spec":        ["mcp","model-context-protocol","a2a","agent-protocol","agents-md",
-                    "llms-txt","spec-driven-development","ai-governance","responsible-ai"],
-    "context":     ["context-engineering","long-context","knowledge-graph"],
-    "security":    ["prompt-injection","jailbreak","ai-red-teaming","agent-security"],
-    "ecosystem":   ["local-llm","ollama","edge-ai","on-device","voice-agent",
-                    "deep-research","multimodal","vlm","claude-code"]
+    "core": [
+      "ai",
+      "artificial-intelligence",
+      "llm",
+      "generative-ai",
+      "genai",
+      "huggingface",
+      "machine-learning",
+      "deep-learning",
+      "nlp",
+      "computer-vision"
+    ],
+    "agent": [
+      "ai-agent",
+      "agents",
+      "agentic",
+      "multi-agent",
+      "autonomous-agents",
+      "agent-framework",
+      "coding-agent",
+      "computer-use",
+      "browser-use",
+      "swe-agent"
+    ],
+    "engineering": [
+      "llmops",
+      "rag",
+      "retrieval-augmented-generation",
+      "embeddings",
+      "vector-database",
+      "llm-serving",
+      "evals",
+      "guardrails",
+      "fine-tuning",
+      "quantization",
+      "prompt-engineering"
+    ],
+    "spec": [
+      "mcp",
+      "model-context-protocol",
+      "a2a",
+      "agent-protocol",
+      "agents-md",
+      "llms-txt",
+      "spec-driven-development",
+      "ai-governance",
+      "responsible-ai"
+    ],
+    "context": [
+      "context-engineering",
+      "long-context",
+      "knowledge-graph"
+    ],
+    "security": [
+      "prompt-injection",
+      "jailbreak",
+      "ai-red-teaming",
+      "agent-security"
+    ],
+    "ecosystem": [
+      "local-llm",
+      "ollama",
+      "edge-ai",
+      "on-device",
+      "voice-agent",
+      "deep-research",
+      "multimodal",
+      "vlm",
+      "claude-code"
+    ]
   },
   "keywords": {
-    "include": ["agent","agentic","LLM","RAG","MCP","prompt","inference","embedding","eval",
-                "claude","codex","copilot","gpt","transformer","diffusion"],
-    "exclude": ["mirror","镜像","翻译","fanyi"]
+    "include": [
+      "agent",
+      "agentic",
+      "LLM",
+      "RAG",
+      "MCP",
+      "prompt",
+      "inference",
+      "embedding",
+      "eval",
+      "claude",
+      "codex",
+      "copilot",
+      "gpt",
+      "transformer",
+      "diffusion"
+    ],
+    "exclude": [
+      "mirror",
+      "镜像",
+      "翻译",
+      "fanyi"
+    ]
   },
-  "knowledgeRepoHints": ["awesome","cookbook","handbook","roadmap","tutorial","教程","面试"],
+  "knowledgeRepoHints": [
+    "awesome",
+    "cookbook",
+    "handbook",
+    "roadmap",
+    "tutorial",
+    "教程",
+    "面试"
+  ],
   "aiThreshold": 2,
-  "watchlist":  { "orgs": ["anthropics","openai","google","langchain-ai"], "users": [] },
-  "tiers":      { "rising": 3000, "mid": 30000 },
+  "watchlist": {
+    "orgs": [
+      "anthropics",
+      "openai",
+      "google",
+      "langchain-ai"
+    ],
+    "users": []
+  },
+  "tiers": {
+    "rising": 3000,
+    "mid": 30000
+  },
   "topN": 5,
   "minStars": 100,
   "newRepoMinStars": 5,
@@ -37,5 +133,6 @@
   "windowNominalHours": 24,
   "windowToleranceHours": 1,
   "searchThrottleMs": 2100,
-  "graphqlMaxRetries": 3
+  "graphqlMaxRetries": 3,
+  "maxBatchFailureRatio": 0.25
 }

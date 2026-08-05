@@ -9,6 +9,7 @@ const REST_ACCEPT = 'application/vnd.github+json';
 
 const MAX_RETRIES = 3; // 首次 + 3 次重试 = 最多 4 次 fetch
 const SEARCH_THROTTLE_MS = 2100; // search API 硬限 30 req/min → 每req间隔 ≥2s
+const MAX_BATCH_FAILURE_RATIO = 0.25; // 整批失败占比上限，超过就不出报告（见 _guardBatchFailures）
 const BATCH_SIZE = 100; // 每批 alias 数（GraphQL 单次请求上限的保守值）
 const RESET_MIN_MS = 1000;
 const RESET_MAX_MS = 60000;
@@ -171,6 +172,7 @@ export class GitHubClient {
     log = () => {},
     searchThrottleMs = SEARCH_THROTTLE_MS,
     maxRetries = MAX_RETRIES,
+    maxBatchFailureRatio = MAX_BATCH_FAILURE_RATIO,
   } = {}) {
     this.token = token;
     this.fetchImpl = fetchImpl;
@@ -179,6 +181,7 @@ export class GitHubClient {
     this.log = log;
     this.searchThrottleMs = searchThrottleMs;
     this.maxRetries = maxRetries;
+    this.maxBatchFailureRatio = maxBatchFailureRatio;
     // 三个计数器分别对应 report.mjs 的 cost.*，每个都只在对应方法里累加一次。
     this.cost = { graphqlPoints: 0, searchRequests: 0, restRequests: 0 };
     this.notes = [];
@@ -237,37 +240,75 @@ export class GitHubClient {
   }
 
   // 100 个 fullName 一批，alias 用「这次调用里的全局下标」，跨批不重置。
+  // 整批失败的兜底：一次瞬时 502 打在 57 个批次里的任意一个，不该赔掉另外 56 个批次和一整天的报告。
+  // 2026-08-04 首次真机运行就是这么死的（额度还剩 4953/5000，纯粹是 GitHub 抽风）。
+  // 所以按批隔离：某批耗尽重试就把该批全员记进 failures 并继续。
+  //
+  // 但「容错」不能滑成「拿 3% 的数据出报告」——失败占比超过 maxBatchFailureRatio 就抛，
+  // 让编排层退非零码、不写报告。这保住了原本那条「宁可失败也不出误导性报告」的红线。
+  // 注意入参是**整批取数挂掉**的数量，不含「单个 alias 返回 null」。后者是仓库被删/改名，
+  // 属于正常状况，把它算进失败占比会让「两个仓库里有一个改名了」被误判成 50% 的服务故障。
+  _guardBatchFailures(failed, total, what) {
+    const ratio = total === 0 ? 0 : failed / total;
+    if (ratio > this.maxBatchFailureRatio) {
+      // operational：这条已经把原因说清楚了，编排层不必再糊一屏调用栈。
+      throw Object.assign(new Error(
+        `${what}失败比例过高：${failed}/${total}（${(ratio * 100).toFixed(1)}%），`
+        + `超过上限 ${(this.maxBatchFailureRatio * 100).toFixed(1)}%，不出报告`), { operational: true });
+    }
+  }
+
   async batchRepoSnapshots(fullNames) {
     const repos = new Map();
     const failures = [];
+    let batchFailed = 0;   // 只数「整批挂掉」的仓库数，不含 alias 为 null 的改名/删除
     for (let start = 0; start < fullNames.length; start += BATCH_SIZE) {
       const batch = fullNames.slice(start, start + BATCH_SIZE);
       const pairs = batch.map((fullName, i) => ({ idx: start + i, fullName, ...splitOwnerName(fullName) }));
       const { query, variables } = buildRepoBatchQuery(pairs);
-      const data = await this.graphql(query, variables);
+      let data;
+      try {
+        data = await this.graphql(query, variables);
+      } catch (e) {
+        for (const p of pairs) failures.push(p.fullName);
+        batchFailed += pairs.length;
+        this.notes.push(`仓库快照第 ${Math.floor(start / BATCH_SIZE) + 1} 批（${batch.length} 个）取数失败：${e.message}`);
+        continue;
+      }
       for (const p of pairs) {
         const node = data[`r${p.idx}`];
         if (!node) { failures.push(p.fullName); continue; } // 仓库被删/改名：跳过，不拖累整批
         repos.set(node.nameWithOwner, normalizeGraphqlRepo(node));
       }
     }
+    this._guardBatchFailures(batchFailed, fullNames.length, '仓库快照');
     return { repos, failures };
   }
 
   async batchUserFollowers(logins) {
     const users = new Map();
     const failures = [];
+    let batchFailed = 0;
     for (let start = 0; start < logins.length; start += BATCH_SIZE) {
       const batch = logins.slice(start, start + BATCH_SIZE);
       const pairs = batch.map((login, i) => ({ idx: start + i, login }));
       const { query, variables } = buildUserBatchQuery(pairs);
-      const data = await this.graphql(query, variables);
+      let data;
+      try {
+        data = await this.graphql(query, variables);
+      } catch (e) {
+        for (const p of pairs) failures.push(p.login);
+        batchFailed += pairs.length;
+        this.notes.push(`人物快照第 ${Math.floor(start / BATCH_SIZE) + 1} 批（${batch.length} 人）取数失败：${e.message}`);
+        continue;
+      }
       for (const p of pairs) {
         const node = data[`u${p.idx}`];
         if (!node) { failures.push(p.login); continue; } // 用户被删/改名同理
         users.set(node.login, node.followers?.totalCount ?? 0);
       }
     }
+    this._guardBatchFailures(batchFailed, logins.length, '人物快照');
     return { users, failures };
   }
 

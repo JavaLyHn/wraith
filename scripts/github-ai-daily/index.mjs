@@ -29,6 +29,10 @@ const EXIT_CONFIG = 1;
 const EXIT_TOKEN = 2;
 const EXIT_NETWORK = 3;
 
+// 「运维型」异常：已经诊断清楚、话也说明白了的失败（额度耗尽、失败占比过高、池子为空）。
+// 打上这个标记，收尾处就不再糊一屏调用栈 —— 栈只对真正没预料到的异常有价值。
+const operational = (err) => Object.assign(err, { operational: true });
+
 const HOUR_MS = 3_600_000;
 const DAY_MS = 86_400_000;
 const BASELINE_MAX_ATTEMPTS = 3;    // 坏快照最多往回退 3 份（spec §8）
@@ -315,6 +319,7 @@ async function run(argv) {
     log,
     searchThrottleMs: config.searchThrottleMs ?? 2100,
     maxRetries: config.graphqlMaxRetries ?? 3,
+    maxBatchFailureRatio: config.maxBatchFailureRatio ?? 0.25,
   });
 
   const now = new Date();
@@ -356,13 +361,13 @@ async function run(argv) {
   // 5. 快照取数：池内全部 + 新库
   const targets = [...new Set([...Object.keys(pool), ...newRepos.map((r) => r.fullName)])];
   if (targets.length === 0) {
-    throw new Error('候选池与新库都是空的，没有任何仓库可取数'
-      + '（Search 发现是不是全失败了？看上面的 stderr 里有没有 403/限流）');
+    throw operational(new Error('候选池与新库都是空的，没有任何仓库可取数'
+      + '（Search 发现是不是全失败了？看上面的 stderr 里有没有 403/限流）'));
   }
   log(`[ghai] 批量取仓库快照：${targets.length} 个……`);
   const { repos: currentRepos, failures: repoFailures } = await client.batchRepoSnapshots(targets);
   if (currentRepos.size === 0) {
-    throw new Error(`${targets.length} 个仓库一个都没取到，本期没有任何可报的数据`);
+    throw operational(new Error(`${targets.length} 个仓库一个都没取到，本期没有任何可报的数据`));
   }
   log(`[ghai] 仓库快照完成：成功 ${currentRepos.size} / 失败 ${repoFailures.length}`);
 
@@ -554,7 +559,9 @@ async function main() {
       return EXIT_TOKEN;
     }
     process.stderr.write(`[ghai] 取数失败，本次没有写出任何报告：${e.message}\n`);
-    if (e?.stack) process.stderr.write(`${e.stack}\n`);
+    // 运维型异常（额度耗尽、失败占比过高、池子为空）已经把话说清楚了，再糊一屏栈只会
+    // 让人误以为是崩溃。只有真正没预料到的异常才值得打栈。
+    if (e?.stack && !e.operational) process.stderr.write(`${e.stack}\n`);
     process.stderr.write('[ghai] 排查顺序：网络是否通 → `gh api rate_limit` 看额度是否耗尽'
       + ' → 隔一会儿重跑。已经落盘的快照/池子不会丢，重跑不会重复计数。\n');
     return EXIT_NETWORK;
