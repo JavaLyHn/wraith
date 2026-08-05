@@ -468,7 +468,7 @@ Expected: `Tests run: 10, Failures: 0, Errors: 0`（本节共 10 个 @Test）
 - [ ] **Step 8: RED 证明（本仓库硬要求）**
 
 把 `entry()` 里的 `xy.charAt(0) != '.'` 改成 `!= 'x'`，重跑。
-Expected: `stagedFlagComesFromXNotY` 与 `renameRecordTakesTheNewPath` 精确变红，其余仍绿。
+Expected: **恰好 2 条精确变红**，其余仍绿。实测是 `stagedFlagComesFromXNotY` 与 `parsesBranchHeaderAndAheadBehind`（后者本就藏了一条 `staged()` 断言）；**不是** `renameRecordTakesTheNewPath` —— 它的 `xy="R."` 对这个变异不敏感，`'R'` 既不等于 `'.'` 也不等于 `'x'`。
 确认后**改回来**再跑一遍确认全绿。
 
 - [ ] **Step 9: 提交**
