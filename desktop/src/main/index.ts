@@ -1052,6 +1052,18 @@ ipcMain.handle('wraith:snapshotClean', async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('snapshot.clean', {})
 })
+// 快照开关。此前**关快照只有环境变量一条路**,桌面端没有任何入口 ——
+// 因为没地方存(SnapshotConfig 只读 env + 系统属性)。现在多了 config.json 的 snapshot 节。
+ipcMain.handle('wraith:snapshotSettings', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('snapshot.settings', {})
+})
+// 写盘 + 立刻对本会话生效。只写盘的话本次会话仍在照旧存快照(SideGitManager 的 config
+// 是构造时捕获的)—— 那是本仓库第八次 snapshot-vs-live。
+ipcMain.handle('wraith:snapshotSetEnabled', async (_e, enabled: boolean) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('snapshot.setEnabled', { enabled })
+})
 
 // 手动压缩当前对话历史(转发 AppServer session.compact,后端后台线程跑)
 ipcMain.handle('wraith:compactHistory', async () => {

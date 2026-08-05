@@ -54,6 +54,7 @@ public class WraithConfig {
     private RagConfig rag;
     /** 搜索后端配置。缺省时 {@code SearchProviderFactory} 回落 env / 自动选。 */
     private SearchConfig search;
+    private SnapshotSettings snapshot;
     private java.util.List<PricingEntry> pricing = new java.util.ArrayList<>();
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -215,6 +216,23 @@ public class WraithConfig {
         public void setBaseUrl(String v) { this.baseUrl = v; }
     }
 
+    /**
+     * 快照设置。
+     *
+     * <p><b>为什么需要它</b>：关快照此前只有环境变量与系统属性两条路，都是「本次运行」级别，
+     * <b>没有任何持久化位置</b>。于是桌面端做不了开关按钮 —— 点完没地方存。
+     *
+     * <p>{@code enabled} 用装箱的 {@link Boolean}：{@code null} 才能表达「用户没表态」，
+     * 从而让取值链落到默认值。用基本类型 {@code boolean} 的话「没配过」和
+     * 「显式关掉了」会长得一模一样。
+     */
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    public static class SnapshotSettings {
+        private Boolean enabled;
+        public Boolean getEnabled() { return enabled; }
+        public void setEnabled(Boolean v) { this.enabled = v; }
+    }
+
     /** 模型计价条目(用户自配;官方牌价≠实付价,换算率由掌握合同的人提供)。 */
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class PricingEntry {
@@ -250,6 +268,9 @@ public class WraithConfig {
 
     public SearchConfig getSearch() { return search; }
     public void setSearch(SearchConfig search) { this.search = search; }
+
+    public SnapshotSettings getSnapshot() { return snapshot; }
+    public void setSnapshot(SnapshotSettings snapshot) { this.snapshot = snapshot; }
     public java.util.List<PricingEntry> getPricing() { return pricing; }
     public void setPricing(java.util.List<PricingEntry> pricing) {
         this.pricing = pricing == null ? new java.util.ArrayList<>() : pricing;

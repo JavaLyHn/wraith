@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, RagScopeView, SearchStatusView, SearchTestResult, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, SnapshotSettingsView, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, RagScopeView, SearchStatusView, SearchTestResult, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
@@ -104,6 +104,10 @@ export interface WraithApi {
   snapshotRestore(offset: number): Promise<SnapshotRestoreResult>
   snapshotRestoreCommit(commitId: string): Promise<SnapshotRestoreResult>
   snapshotClean(): Promise<{ ok: boolean; message?: string }>
+  /** 快照开关状态(含「是谁决定的」,面板据此决定要不要如实置灰) */
+  snapshotSettings(): Promise<SnapshotSettingsView>
+  /** 开/关快照:写盘 + 立刻对本会话生效 */
+  snapshotSetEnabled(enabled: boolean): Promise<{ ok: boolean; enabled?: boolean; warning?: string; message?: string }>
   policyStatus(): Promise<PolicyStatusView>
   auditList(limit?: number): Promise<AuditListResult>
   sandboxGet(): Promise<SandboxState>
@@ -514,6 +518,12 @@ const wraith: WraithApi = {
   },
   snapshotRestoreCommit(commitId) {
     return ipcRenderer.invoke('wraith:snapshotRestoreCommit', commitId) as Promise<SnapshotRestoreResult>
+  },
+  snapshotSettings() {
+    return ipcRenderer.invoke('wraith:snapshotSettings') as Promise<SnapshotSettingsView>
+  },
+  snapshotSetEnabled(enabled) {
+    return ipcRenderer.invoke('wraith:snapshotSetEnabled', enabled) as Promise<{ ok: boolean; enabled?: boolean; warning?: string; message?: string }>
   },
   snapshotClean() {
     return ipcRenderer.invoke('wraith:snapshotClean') as Promise<{ ok: boolean; message?: string }>

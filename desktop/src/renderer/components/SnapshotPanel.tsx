@@ -1,7 +1,47 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ArrowLeft, History, RotateCcw, RefreshCw, Trash2 } from 'lucide-react'
-import type { SnapshotEntryView } from '../../shared/types'
+import { ArrowLeft, History, RotateCcw, RefreshCw, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
+import type { SnapshotEntryView, SnapshotSettingsView } from '../../shared/types'
 import { phaseLabel, phaseMeaning, modeLabel, absTime, relativeTime, summaryInput } from '../lib/snapshotView'
+
+/**
+ * 快照总开关。
+ *
+ * <p><b>被环境变量压住时不许装作能改。</b> 取值链是
+ * env → 系统属性 → config.json → 默认开，按钮写的是最后那层。
+ * 所以 `locked` 时要把话说全：本次会话仍会切过去（运行期覆盖生效），
+ * 但下次启动还是听那个环境变量的 —— 不说清的话用户下次会以为按钮坏了。
+ */
+function SnapshotToggle({ settings, busy, onToggle }: {
+  settings: SnapshotSettingsView | null
+  busy: boolean
+  onToggle: () => void
+}): JSX.Element {
+  if (settings && !settings.available) {
+    return <span data-testid="snapshot-toggle-unavailable" className="text-3xs text-fg-subtle">快照不可用</span>
+  }
+  const on = settings?.enabled ?? true
+  const locked = Boolean(settings?.locked)
+  const title = locked
+    ? `快照${on ? '已开启' : '已关闭'}（当前由${settings?.source === 'env' ? '环境变量' : '启动参数'}决定）\n`
+      + '点它会立刻对本次会话生效并写进配置，但下次启动仍以那个设置为准。'
+    : `点一下${on ? '关闭' : '开启'}快照（写进配置，立即生效）`
+  return (
+    <button
+      data-testid="snapshot-toggle"
+      data-enabled={on ? 'true' : 'false'}
+      data-locked={locked ? 'true' : 'false'}
+      onClick={onToggle}
+      disabled={busy || settings === null}
+      title={title}
+      className={'flex items-center gap-1 rounded-full border px-1.5 py-0.5 text-3xs transition-colors disabled:opacity-40 '
+        + (on ? 'border-ok/60 text-ok hover:bg-ok/10' : 'border-border text-fg-subtle hover:bg-surface')}>
+      {on ? <ToggleRight className="h-3.5 w-3.5" strokeWidth={1.5} />
+          : <ToggleLeft className="h-3.5 w-3.5" strokeWidth={1.5} />}
+      {on ? '已开' : '已关'}
+      {locked && <span data-testid="snapshot-toggle-locked" title={title}>*</span>}
+    </button>
+  )
+}
 
 export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.Element {
   const [snapshots, setSnapshots] = useState<SnapshotEntryView[]>([])
@@ -9,6 +49,8 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+
+  const [settings, setSettings] = useState<SnapshotSettingsView | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     setBusy(true)
@@ -19,7 +61,34 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
     finally { setBusy(false) }
   }, [])
 
-  useEffect(() => { void load() }, [load])
+  // 开关状态单独拉:它不属于「列表」,而且关掉之后列表是空的 ——
+  // 若混在一起,关掉后就再也拉不到开关状态了。
+  const loadSettings = useCallback(async (): Promise<void> => {
+    try {
+      setSettings(await window.wraith.snapshotSettings())
+    } catch (err) {
+      console.error('[wraith] snapshotSettings error:', err)
+    }
+  }, [])
+
+  useEffect(() => { void load(); void loadSettings() }, [load, loadSettings])
+
+  const toggleEnabled = useCallback(async (): Promise<void> => {
+    const next = !(settings?.enabled ?? enabled)
+    setBusy(true); setNotice(null)
+    try {
+      const r = await window.wraith.snapshotSetEnabled(next)
+      if (r.ok) {
+        setNotice((next ? '✅ 快照已开启' : '🛑 快照已关闭')
+            + (r.warning ? `　⚠️ ${r.warning}` : '　（已记住，重启仍生效）'))
+      } else {
+        setNotice('❌ ' + (r.message ?? '切换失败'))
+      }
+      await loadSettings()
+      await load()
+    } catch (err) { setError((err as Error).message) }
+    finally { setBusy(false) }
+  }, [settings, enabled, load, loadSettings])
 
   const doRestore = useCallback(async (e: SnapshotEntryView): Promise<void> => {
     const input = summaryInput(e.summary)
@@ -60,6 +129,7 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
         </span>
         <span className="ml-auto flex items-center gap-2 text-xs text-fg-subtle">
           {enabled ? `共 ${snapshots.length} 个` : '快照未启用'}
+          <SnapshotToggle settings={settings} busy={busy} onToggle={() => void toggleEnabled()} />
           <button onClick={() => void load()} title="刷新" className="rounded p-1 hover:bg-surface hover:text-fg">
             <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.5} />
           </button>

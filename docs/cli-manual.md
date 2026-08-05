@@ -12,6 +12,7 @@
 ## 目录
 
 - [1. 启动与退出](#1-启动与退出)
+  - [1.1 启动参数](#11-启动参数)
 - [2. 界面上每一块是什么](#2-界面上每一块是什么)
 - [3. 你能输入三种东西](#3-你能输入三种东西)
 - [4. 快捷键](#4-快捷键)
@@ -53,6 +54,24 @@ java -jar ~/.wraith/wraith.jar
 快照、项目级记忆（`WRAITH.md`）全部以它为界。
 
 退出：`/exit`、`/quit`，或 `Ctrl+D`。
+
+### 1.1 启动参数
+
+**一共只有这些** —— 剩下的开关都走环境变量（见 [§7](#7-环境变量)）或进 REPL 之后的 `/` 命令。
+
+| 参数 | 做什么 |
+|---|---|
+| `--no-snapshot`（或 `--no-snapshots`） | **本次运行不存快照**。不写盘 —— 下次不带它启动就照旧 |
+| `terminal doctor` · `sandbox doctor` | 诊断子命令，不进 REPL（见 [§6](#6-子命令不进-repl-的那些)） |
+| `app-server` · `gateway` · `serve` | 给桌面端 / IM 网关 / Runtime API 用的常驻模式（见 [§6](#6-子命令不进-repl-的那些)） |
+
+```bash
+wraith --no-snapshot          # 这一次别存快照
+wraith --no-snapshot terminal doctor   # 参数可以和子命令一起用
+```
+
+> **想长期关掉**用 `/snapshot off`（写进配置）或桌面端的开关按钮，见 [§5.7](#57-快照与回滚)。
+> 三者的关系：`--no-snapshot` 管这一次、`/snapshot off` 管以后、环境变量压过前两者。
 
 > **交互式 CLI 不套命令沙箱。** 桌面端 / IM 网关 / 定时任务里 `execute_command` 走 AppContainer（Windows）
 > 或 Seatbelt（macOS），而你在终端里手动跑的那一轮**不套** —— 因为你就在现场，能看见它要干什么。
@@ -261,10 +280,29 @@ java -jar ~/.wraith/wraith.jar
 |---|---|
 | `/snapshot` | 看最近的快照列表 |
 | `/snapshot status` | 快照状态（目录、保留数、排除项、最近一张） |
+| `/snapshot on` | **开启**快照：写进配置，立即生效 |
+| `/snapshot off` | **关闭**快照：写进配置，立即生效 |
 | `/snapshot clean` | 清掉当前项目的整个快照目录 |
 | `/restore <N>` | 恢复到**最近第 N 个 pre-turn** 快照 |
 
 `/restore` 之前会先自动存一张 `pre-restore` 快照 —— 所以「撤销这次恢复」也是可能的。
+
+#### 关掉快照的三条路，管的时间长度不同
+
+| 怎么关 | 管多久 | 用在什么时候 |
+|---|---|---|
+| `wraith --no-snapshot` | **这一次** | 临时跑一把、或在一个巨大的仓库里不想等 pre-turn |
+| `/snapshot off` · 桌面端开关按钮 | **以后**（写进 `~/.wraith/config.json`） | 你就是不想要这个功能 |
+| `WRAITH_SNAPSHOT_ENABLED=false` | 这一次，且**压过上面两者** | CI / 脚本里统一关掉 |
+
+取值链是 **环境变量 → 启动参数/系统属性 → config.json → 默认开**。
+
+> ⚠️ 所以在 shell profile 里写死了那个环境变量的人，`/snapshot on` 只对**本次会话**有效，
+> 下次启动仍会被它按回去 —— 命令与桌面按钮都会当场把这句话说出来，不会假装切成功了。
+> 想让选择长期有效，先取消那个环境变量。
+
+**桌面端**：快照面板右上角有一颗开关（「已开 / 已关」），与 `/snapshot on|off` 同一个后端；
+被环境变量压住时它会带一个 `*` 并在悬浮提示里说明原因。
 
 ### 5.8 MCP server
 

@@ -279,6 +279,10 @@ wraith
 commit、`git status` 里什么都不多。`/snapshot` 看列表，`/restore N` 回滚，
 回滚前还会再存一张（所以「撤销这次回滚」也可能）。
 
+**不想要它**：`wraith --no-snapshot` 关这一次；`/snapshot off`（或桌面端快照面板右上角的
+开关按钮）关以后。三条路各管多久，见
+[终端使用手册 §5.7](docs/cli-manual.md#57-快照与回滚)。
+
 ---
 
 ## 常用命令速查
@@ -299,6 +303,7 @@ commit、`git status` 里什么都不多。`/snapshot` 看列表，`/restore N` 
 | `/save <事实>` | 手动记一条（加 `--global` 存成跨项目可见） |
 | `/index` · `/search <查询>` | 建代码索引 / 语义检索 |
 | `/snapshot` · `/restore <N>` | 看快照 / 回滚到最近第 N 轮之前 |
+| `/snapshot on` · `/snapshot off` | 开 / 关快照（写进配置；启动时用 `wraith --no-snapshot` 只关这一次） |
 | `/mcp` · `/skill` | MCP server / skill 状态 |
 | `/task add <任务>` | 提交后台任务 |
 | `/policy` · `/audit` | 安全策略状态 / 危险操作审计 |

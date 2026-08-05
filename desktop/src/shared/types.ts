@@ -474,6 +474,22 @@ export interface SearchStatusView {
   savedProvider?: string
 }
 
+/**
+ * 快照开关状态（`snapshot.settings` 回包）。
+ *
+ * 取值链是 环境变量 → 系统属性 → config.json → 默认开，所以按钮**可能压不过前两层**。
+ * `locked` 为真时面板要如实说明，而不是让用户点了没反应。
+ */
+export interface SnapshotSettingsView {
+  enabled: boolean
+  /** 这个值是谁决定的 */
+  source: 'env' | 'property' | 'config' | 'default'
+  /** 被 env / 系统属性压住了 —— 写盘改不了下次启动的结果 */
+  locked: boolean
+  /** 后端有没有快照服务（没有时开关无意义） */
+  available: boolean
+}
+
 /** 搜索后端「测试连接」的结果（`config.testSearch` 回包）。不含任何 key。 */
 export interface SearchTestResult {
   ok: boolean

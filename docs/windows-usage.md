@@ -1069,13 +1069,42 @@ git 仓库 —— `gitDir` 在 `%USERPROFILE%\.wraith\snapshots\<项目哈希>\`
 那就说明问题不在锁上，看 cause 链原文。最常见的剩余原因是**同一个项目上开着两个 wraith**
 （比如桌面端和 CLI 同时跑），关掉一个即可。
 
-**相关开关**：
+**关掉快照有三条路，管的时间长度不同**（Windows 上尤其别用环境变量那条 —— 见下）：
+
+| 怎么关 | 管多久 |
+|---|---|
+| `wraith --no-snapshot` | **这一次** |
+| `/snapshot off`（或桌面端快照面板右上角的开关按钮） | **以后**（写进 `%USERPROFILE%\.wraith\config.json`） |
+| `WRAITH_SNAPSHOT_ENABLED=false` | 这一次，且**压过上面两者** |
+
+```bat
+:: cmd —— 推荐用参数,不用环境变量
+wraith --no-snapshot
+
+:: cmd 里设环境变量要分两步,而且只对这个窗口有效
+set WRAITH_SNAPSHOT_ENABLED=false
+wraith
+```
+
+```powershell
+# PowerShell —— 同样推荐参数
+wraith --no-snapshot
+
+# PowerShell 的环境变量写法(注意与 cmd 完全不同)
+$env:WRAITH_SNAPSHOT_ENABLED = "false"; wraith
+```
+
+> ⚠️ **`set VAR=value wraith` 在 cmd 里不是「带着变量跑一次」** —— 那是 POSIX shell 的写法。
+> cmd 会把整串当成变量值（`WRAITH_SNAPSHOT_ENABLED` 被设成 `false wraith`），
+> 于是变量认不出来、命令也没跑。这类差异正是 `--no-snapshot` 存在的理由。
+
+**其它相关开关**：
 
 | 开关 | 作用 |
 |---|---|
-| `WRAITH_SNAPSHOT_ENABLED=false` | 干脆关掉快照 |
 | `WRAITH_SNAPSHOT_STALE_LOCK_SECONDS=<秒>` | 多久算「死锁」，默认 60。实测一次快照最慢约 8 秒，**别调得比它小** |
 | `WRAITH_SNAPSHOT_EXCLUDES=a,b` | 追加排除目录（默认已含 `target` / `node_modules` / `dist` / `release` 等） |
+| `/snapshot status` | 看快照目录、保留数、排除项、最近一张 |
 | `/snapshot clean` | 清掉当前项目的整个快照目录 |
 
 ---

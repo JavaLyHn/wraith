@@ -198,8 +198,49 @@ public class Main {
     ) {
     }
 
+    /** {@code --no-snapshot} / {@code --no-snapshots} 的两种写法都认。 */
+    static final java.util.Set<String> NO_SNAPSHOT_FLAGS =
+            java.util.Set.of("--no-snapshot", "--no-snapshots");
+
+    /**
+     * 本次运行不存快照。
+     *
+     * <p><b>只做一件事</b>：把 {@code wraith.snapshot.enabled} 系统属性设成 {@code false}，
+     * 然后把这个参数从 {@code args} 里摘掉。{@link com.lyhn.wraith.snapshot.SnapshotConfig}
+     * 本来就在读那个属性 —— 所以这是「一行解析 + 零新增管道」，
+     * 而且天然对所有子命令生效（{@code app-server} / {@code gateway} / {@code serve} 同一个 main）。
+     *
+     * <p><b>不写盘</b>：它是「这一次别存」。要持久化用 {@code /snapshot off} 或桌面按钮 ——
+     * 一个命令行参数偷偷改了配置文件，比不生效更糟。
+     *
+     * <p>必须<b>摘掉</b>而不是留在 args 里：下游 {@code isWechatCommand} 之类按位置读
+     * {@code args[0]}，多一个参数会让 {@code wraith --no-snapshot wechat} 认不出子命令。
+     */
+    static String[] applyNoSnapshotFlag(String[] args) {
+        if (args == null || args.length == 0) {
+            return args == null ? new String[0] : args;
+        }
+        java.util.List<String> kept = new ArrayList<>(args.length);
+        boolean found = false;
+        for (String arg : args) {
+            if (arg != null && NO_SNAPSHOT_FLAGS.contains(arg.trim().toLowerCase(Locale.ROOT))) {
+                found = true;
+                continue;
+            }
+            kept.add(arg);
+        }
+        if (!found) {
+            return args;
+        }
+        // 已经显式设过就不覆盖:用户同时给了 -Dwraith.snapshot.enabled=true 和 --no-snapshot
+        // 是自相矛盾的输入,而参数在命令行上更靠后、意图更明确,所以参数赢。
+        System.setProperty("wraith.snapshot.enabled", "false");
+        return kept.toArray(new String[0]);
+    }
+
     public static void main(String[] args) {
         configureAwtForCli();
+        args = applyNoSnapshotFlag(args);
         if (WechatCommandMain.isWechatCommand(args)) {
             configureLogging();
             int code = WechatCommandMain.run(args);
@@ -1761,6 +1802,42 @@ public class Main {
                         try { return java.util.Map.of("ok", true, "message", svc.clean()); }
                         catch (Exception e) { return java.util.Map.of("ok", false, "message", "清理失败: " + e.getClass().getSimpleName()); }
                     }
+                    public java.util.Map<String, Object> snapshotSettings() {
+                        com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
+                        com.lyhn.wraith.snapshot.SnapshotConfig.EnabledSource source =
+                                com.lyhn.wraith.snapshot.SnapshotConfig.enabledSource();
+                        boolean locked =
+                                source == com.lyhn.wraith.snapshot.SnapshotConfig.EnabledSource.ENV
+                                || source == com.lyhn.wraith.snapshot.SnapshotConfig.EnabledSource.PROPERTY;
+                        java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+                        out.put("enabled", svc != null && svc.isEnabled());
+                        out.put("source", source.name().toLowerCase(java.util.Locale.ROOT));
+                        // locked 只说「写盘压不过它」,不代表按钮完全无用:运行期覆盖仍会生效。
+                        // 面板据此把话说全,而不是简单置灰了事。
+                        out.put("locked", locked);
+                        out.put("available", svc != null);
+                        return out;
+                    }
+                    public java.util.Map<String, Object> snapshotSetEnabled(boolean enabled) {
+                        com.lyhn.wraith.snapshot.SnapshotService svc = agent.getToolRegistry().getSnapshotService();
+                        if (svc == null) return java.util.Map.of("ok", false, "message", "快照功能不可用");
+                        String saveError = svc.setEnabled(enabled);
+                        java.util.Map<String, Object> out = new java.util.LinkedHashMap<>();
+                        // ok=true 说的是「已生效」;写盘失败只丢「记住」那一半,靠 warning 说清
+                        out.put("ok", true);
+                        out.put("enabled", svc.isEnabled());
+                        if (saveError != null) {
+                            out.put("warning", saveError);
+                        }
+                        com.lyhn.wraith.snapshot.SnapshotConfig.EnabledSource source =
+                                com.lyhn.wraith.snapshot.SnapshotConfig.enabledSource();
+                        out.put("source", source.name().toLowerCase(java.util.Locale.ROOT));
+                        if (source == com.lyhn.wraith.snapshot.SnapshotConfig.EnabledSource.ENV) {
+                            out.put("warning", "环境变量 WRAITH_SNAPSHOT_ENABLED 优先级更高，"
+                                    + "下次启动仍按它来。要让这次的选择长期有效，请先取消那个环境变量。");
+                        }
+                        return out;
+                    }
                     public java.util.Map<String, Object> compactHistory() {
                         try {
                             com.lyhn.wraith.agent.Agent.CompactionResult r = agent.compactHistoryNow();
@@ -3311,6 +3388,8 @@ public class Main {
                 new SlashCommandHint("/audit ", "/audit [N]", "查看今日最近 N 条危险工具审计"),
                 new SlashCommandHint("/snapshot", "/snapshot", "查看最近 Side-Git 快照"),
                 new SlashCommandHint("/snapshot status", "/snapshot status", "查看 Side-Git 快照状态"),
+                new SlashCommandHint("/snapshot on", "/snapshot on", "开启快照（写进配置，立即生效）"),
+                new SlashCommandHint("/snapshot off", "/snapshot off", "关闭快照（写进配置，立即生效）"),
                 new SlashCommandHint("/snapshot clean", "/snapshot clean", "清理当前项目 Side-Git 快照"),
                 new SlashCommandHint("/restore ", "/restore <N>", "恢复到最近第 N 个 pre-turn 快照"),
                 new SlashCommandHint("/index", "/index", "索引当前代码库"),
@@ -4683,6 +4762,33 @@ public class Main {
         out.println();
     }
 
+    /**
+     * {@code /snapshot on|off} —— 桌面开关按钮的 CLI 对等物。
+     *
+     * <p><b>被 env / 系统属性覆盖时要如实说</b>，不能装作切成功了：
+     * 取值链是 env → 属性 → config.json，写盘那一层压不过前两层。
+     * 用户在 shell profile 里写死了 {@code WRAITH_SNAPSHOT_ENABLED=false} 的话，
+     * {@code /snapshot on} 对本次会话有效（运行期覆盖），但重启又会被那个变量按回去 ——
+     * 这件事必须当场讲清，否则下次启动他会以为功能坏了。
+     */
+    private static void printSnapshotToggle(PrintStream out, SnapshotService snapshotService, boolean enable) {
+        String saveError = snapshotService.setEnabled(enable);
+        out.println(enable ? "✅ 快照已开启（本次会话立即生效）" : "🛑 快照已关闭（本次会话立即生效）");
+        if (saveError != null) {
+            out.println("   ⚠️ " + saveError);
+        }
+        com.lyhn.wraith.snapshot.SnapshotConfig.EnabledSource source =
+                com.lyhn.wraith.snapshot.SnapshotConfig.enabledSource();
+        if (source == com.lyhn.wraith.snapshot.SnapshotConfig.EnabledSource.ENV) {
+            out.println("   ⚠️ 环境变量 WRAITH_SNAPSHOT_ENABLED 的优先级更高 ——"
+                    + "下次启动仍会照它来。要让这次的选择长期有效，请先取消那个环境变量。");
+        } else if (source == com.lyhn.wraith.snapshot.SnapshotConfig.EnabledSource.PROPERTY) {
+            out.println("   ⚠️ 本次启动带了 --no-snapshot（或 -Dwraith.snapshot.enabled）——"
+                    + "已写进配置，下次不带参数启动就按新设置来。");
+        }
+        out.println();
+    }
+
     private static void printSnapshotCommand(PrintStream out, SnapshotService snapshotService, String payload) {
         String normalized = payload == null || payload.isBlank() ? "list" : payload.trim().toLowerCase();
         if ("status".equals(normalized)) {
@@ -4695,12 +4801,18 @@ public class Main {
             out.println();
             return;
         }
+        if ("on".equals(normalized) || "off".equals(normalized)) {
+            printSnapshotToggle(out, snapshotService, "on".equals(normalized));
+            return;
+        }
         if (!"list".equals(normalized)) {
             out.println("""
                     ❌ 未知 /snapshot 子命令: %s
                     可用命令：
                       /snapshot
                       /snapshot status
+                      /snapshot on
+                      /snapshot off
                       /snapshot clean
                       /restore <N>
                     """.formatted(payload).trim());

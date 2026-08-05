@@ -325,9 +325,21 @@ setx DEEPSEEK_API_KEY "sk-xxx"
 | 跑 `.ps1` 脚本 | `powershell -ExecutionPolicy Bypass -File x.ps1` | `.\x.ps1`（若被策略拦就用左边那句） |
 | 看 PATH | `echo %PATH%` | `$env:PATH -split ';'` |
 | 结束进程 | `taskkill /IM java.exe /F` | `Stop-Process -Name java -Force` |
+| 带一个环境变量跑一次 | **做不到**，要先 `set K=V` 再跑命令 | `$env:K="V"; cmd` |
 
 > **`&&` 那一行值得单独记。** PowerShell 5.1（Windows 自带那个）不支持 `&&`；
 > PowerShell 7+ 支持。文档里的 `a && b` 若在 PowerShell 里报错，换成 `a; b`。
+
+> **最后一行也值得记。** POSIX shell 里的 `VAR=value command`（带着变量跑一次）
+> **在 cmd 里不存在** —— `set WRAITH_SNAPSHOT_ENABLED=false wraith` 会把
+> `false wraith` 整串当成变量值，于是变量认不出来、命令也没跑，而且**不报错**。
+> 所以凡是「临时改个行为」的场景，优先找**命令行参数**：
+>
+> ```bat
+> wraith --no-snapshot      :: 这一次不存快照;两个 shell 写法相同
+> ```
+>
+> 全部启动参数见 [`cli-manual.md` §1.1](cli-manual.md#11-启动参数)。
 
 ---
 

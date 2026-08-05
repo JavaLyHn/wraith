@@ -208,6 +208,28 @@ public final class AppServer {
             throw new UnsupportedOperationException("snapshotRestoreCommit not implemented");
         }
         /** 清理旧快照,返回 {ok,message}。默认抛出。 */
+        /**
+         * 快照开关的当前状态 {@code {enabled, source, locked}}。
+         *
+         * <p>{@code source} 是 {@code env}/{@code property}/{@code config}/{@code default}，
+         * {@code locked} = 被 env/属性压住了、按钮点了也白点。
+         * <b>面板必须据此置灰并说明原因</b>，不能让用户点了没反应 ——
+         * 「面板显示的状态与实际生效的不是一回事」这个坑踩过一次了。默认抛出。
+         */
+        default java.util.Map<String, Object> snapshotSettings() {
+            throw new UnsupportedOperationException("snapshotSettings not implemented");
+        }
+
+        /**
+         * 开 / 关快照：<b>写盘 + 立刻对本会话生效</b>。
+         *
+         * <p>只写盘的话本次会话仍在照旧存（{@code SideGitManager} 的 config 是构造时捕获的）——
+         * 那是本仓库第八次 snapshot-vs-live。默认抛出。
+         */
+        default java.util.Map<String, Object> snapshotSetEnabled(boolean enabled) {
+            throw new UnsupportedOperationException("snapshotSetEnabled not implemented");
+        }
+
         default java.util.Map<String, Object> snapshotClean() {
             throw new UnsupportedOperationException("snapshotClean not implemented");
         }
@@ -787,6 +809,20 @@ public final class AppServer {
                 String commitId = textParam(p, "commitId");
                 if (commitId == null || commitId.isBlank()) { writer.error(msg.id(), -32602, "缺 commitId"); return true; }
                 try { writer.result(msg.id(), session.snapshotRestoreCommit(commitId)); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "snapshot.settings" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                try { writer.result(msg.id(), session.snapshotSettings()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "snapshot.setEnabled" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                JsonNode p = msg.params();
+                boolean enabled = p != null && p.hasNonNull("enabled") && p.get("enabled").asBoolean();
+                try { writer.result(msg.id(), session.snapshotSetEnabled(enabled)); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

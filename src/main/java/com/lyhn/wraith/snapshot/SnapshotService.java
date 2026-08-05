@@ -104,6 +104,42 @@ public class SnapshotService implements AutoCloseable {
         this.noticeSink = sink == null ? System.err::println : sink;
     }
 
+    /** 快照现在开没开（读的是运行期真值，含运行期覆盖）。 */
+    public boolean isEnabled() {
+        return manager.enabled();
+    }
+
+    /**
+     * 开 / 关快照，<b>并且记住</b>。
+     *
+     * <p>两件事都要做，缺一个都是坑：
+     * <ol>
+     *   <li><b>写盘</b>到 {@code config.json} 的 {@code snapshot.enabled} —— 否则重启就忘了，
+     *       用户会以为按钮没用。</li>
+     *   <li><b>立刻对本实例生效</b> —— {@code SideGitManager} 的 config 是构造时捕获的，
+     *       只写盘的话本次会话仍在照旧存快照（第八次 snapshot-vs-live）。</li>
+     * </ol>
+     *
+     * @return 写盘失败时的错误消息；{@code null} = 成功。运行期开关<b>一定</b>已生效 ——
+     *         先切内存再写盘，落盘失败只丢「记住」这一半，不丢「立刻生效」那一半。
+     */
+    public String setEnabled(boolean enabled) {
+        manager.setEnabled(enabled);
+        try {
+            com.lyhn.wraith.config.WraithConfig config = com.lyhn.wraith.config.WraithConfig.load();
+            com.lyhn.wraith.config.WraithConfig.SnapshotSettings settings = config.getSnapshot();
+            if (settings == null) {
+                settings = new com.lyhn.wraith.config.WraithConfig.SnapshotSettings();
+                config.setSnapshot(settings);
+            }
+            settings.setEnabled(enabled);
+            config.save();
+            return null;
+        } catch (Exception e) {
+            return "已对本次会话生效，但没能写进配置文件（重启后会忘）：" + e.getMessage();
+        }
+    }
+
     public List<TurnSnapshot> listSnapshots(int limit) throws Exception {
         awaitIdle();
         return manager.listSnapshots(limit);

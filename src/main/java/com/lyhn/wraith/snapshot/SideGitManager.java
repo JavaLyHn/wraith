@@ -70,7 +70,7 @@ public class SideGitManager {
      */
     public synchronized TurnSnapshot createSnapshot(SnapshotPhase phase, String turnId, String summary)
             throws IOException, GitAPIException {
-        if (!config.enabled()) {
+        if (!enabled()) {
             return null;
         }
         try {
@@ -106,7 +106,7 @@ public class SideGitManager {
     }
 
     public synchronized List<TurnSnapshot> listSnapshots(int limit) throws IOException, GitAPIException {
-        if (!config.enabled() || !Files.exists(gitDir.resolve("config"))) {
+        if (!enabled() || !Files.exists(gitDir.resolve("config"))) {
             return List.of();
         }
         int max = limit <= 0 ? config.maxSnapshots() : limit;
@@ -134,14 +134,14 @@ public class SideGitManager {
      */
     public synchronized java.util.Optional<TurnSnapshot> preTurnTarget(int offset)
             throws IOException, GitAPIException {
-        if (!config.enabled()) return java.util.Optional.empty();
+        if (!enabled()) return java.util.Optional.empty();
         int n = Math.max(1, offset);
         List<TurnSnapshot> preTurns = listPreTurnSnapshots(Math.max(n, config.maxSnapshots()));
         return preTurns.size() < n ? java.util.Optional.empty() : java.util.Optional.of(preTurns.get(n - 1));
     }
 
     public synchronized RestoreResult restorePreTurn(int offset) throws IOException, GitAPIException {
-        if (!config.enabled()) {
+        if (!enabled()) {
             return RestoreResult.failure("快照功能已关闭");
         }
         int normalizedOffset = Math.max(1, offset);
@@ -167,7 +167,7 @@ public class SideGitManager {
 
     /** 恢复到任意一张快照(按 commitId;含 pre-restore,故可用于撤销上一次恢复)。恢复前同样先存 pre-restore 快照。 */
     public synchronized RestoreResult restoreToCommit(String commitId) throws IOException, GitAPIException {
-        if (!config.enabled()) {
+        if (!enabled()) {
             return RestoreResult.failure("快照功能已关闭");
         }
         if (commitId == null || commitId.isBlank()) {
@@ -194,7 +194,7 @@ public class SideGitManager {
     public synchronized String formatStatus() {
         StringBuilder sb = new StringBuilder();
         sb.append("📸 Side-Git 快照状态\n");
-        sb.append("   状态: ").append(config.enabled() ? "启用" : "关闭").append('\n');
+        sb.append("   状态: ").append(enabled() ? "启用" : "关闭").append('\n');
         sb.append("   项目根: ").append(projectRoot).append('\n');
         sb.append("   Side-Git: ").append(gitDir).append('\n');
         sb.append("   最大展示/保留数: ").append(config.maxSnapshots()).append('\n');
@@ -228,6 +228,27 @@ public class SideGitManager {
         } catch (IOException e) {
             return "❌ 清理快照失败: " + e.getMessage();
         }
+    }
+
+    /**
+     * 运行期覆盖：{@code null} = 听 {@link SnapshotConfig} 的。
+     *
+     * <p><b>为什么需要它</b>：{@code config} 是构造时就捕获成字段的，桌面按钮 /
+     * {@code /snapshot off} 改完 config.json <b>不会影响正在跑的这个实例</b> ——
+     * 那是本仓库第八次 snapshot-vs-live（前七次：沙箱护盾、动作卡、pet 窗口、补全、
+     * 搜索 provider、计价表、搜索后端）。没有这一层，用户会看到「关掉了但它还在存」。
+     */
+    private volatile Boolean enabledOverride;
+
+    /** 快照现在到底开没开 —— 内部所有判断都走这里，不再直读 {@code config.enabled()}。 */
+    public boolean enabled() {
+        Boolean override = enabledOverride;
+        return override != null ? override : config.enabled();
+    }
+
+    /** 运行期开/关；只影响本实例，落盘由调用方负责（两件事分开才好测）。 */
+    public void setEnabled(boolean value) {
+        this.enabledOverride = value;
     }
 
     public Path gitDir() {

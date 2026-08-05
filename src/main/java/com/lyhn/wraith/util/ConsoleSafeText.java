@@ -50,6 +50,7 @@ public final class ConsoleSafeText {
         ASCII.put("✗", "[x]");
         ASCII.put("✘", "[x]");
         ASCII.put("🚫", "[no]");
+        ASCII.put("🛑", "[off]");
         ASCII.put("⛔", "[no]");
         ASCII.put("🔴", "[!]");
         ASCII.put("🟡", "[~]");
