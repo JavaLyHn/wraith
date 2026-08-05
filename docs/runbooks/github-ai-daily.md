@@ -247,6 +247,7 @@ node <repo>\scripts\github-ai-daily\index.mjs --data-dir $Smoke
 | `streakTtlDays` | 30 | 「连续在榜 N 天」的记录多久没上榜就清掉 |
 | `windowNominalHours` / `windowToleranceHours` | 24 / 1 | 窗口偏离标称值超过容差就在报告头部标「退化」 |
 | `baselineMinAgeHours` | 20 | 至少多久之前的快照才能当基线 |
+| `copyReportTo` | `~/.wraith/documents` | 每天把报告**多拷一份**到这个目录。桌面「文档」面板以目录为唯一真相源（readdir 现算、不建索引），所以文件一放进去就出现在左侧列表里。设成 `null` 关闭。⚠ 必须真拷贝，面板用 `lstat`、软链会被跳过 |
 | `snapshotRetainDays` | 400 | 快照保留天数。**实测 896 KB/天**（gzip 后），400 天≈358 MB；只用于「和昨天做差」与「连续在榜天数」，**90 天≈81 MB / 30 天≈27 MB 完全够用** |
 | `searchThrottleMs` | 2100 | Search 请求间隔。**别调小**，30 次/分是 GitHub 的硬限 |
 | `graphqlMaxRetries` | 3 | GraphQL 限流/5xx 的重试次数 |
