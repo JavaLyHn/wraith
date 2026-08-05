@@ -55,6 +55,24 @@ public final class TerminalMarkdownRenderer {
         flushCompleteLines();
     }
 
+    /**
+     * 未成行的残留够长时，主动把它当成一行冲出去。
+     *
+     * <p><b>为什么需要</b>：{@link #append(String)} 只按 {@code \n} 切行，一段
+     * <b>不带换行</b>的长文本会一直堆在 {@code pending} 里，直到 {@link #finish()} 才出现。
+     * 流式 reasoning 正是这种形态（模型常常整段思考不带换行），结果是屏幕上一个字都没有 ——
+     * 用户看到的就是「发完消息直接卡了」。见 {@code Agent.REASONING_FLUSH_CHARS}。
+     *
+     * <p>只在超过阈值时触发，所以正常的按行输出行为完全不变。
+     */
+    public void flushPartialLineIfLongerThan(int threshold) {
+        if (threshold > 0 && pending.length() >= threshold) {
+            processLine(pending.toString());
+            pending.setLength(0);
+            out.flush();
+        }
+    }
+
     public void finish() {
         if (pending.length() > 0) {
             processLine(pending.toString());

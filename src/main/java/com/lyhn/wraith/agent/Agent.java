@@ -1194,12 +1194,18 @@ public class Agent {
                 if (pendingReasoning.toString().isBlank()) {
                     return;  // 还没攒出实质内容，等
                 }
-                if (!containsLineBreak(pendingReasoning)) {
-                    return;  // 避免先打印一个空标题，等有完整行或迭代切换时再 flush
+                if (!reasoningWorthFlushing(pendingReasoning)) {
+                    // 短且无换行:继续等,避免先打印一个空标题。
+                    // 但攒够一行的量就必须冲出去 —— 否则不带换行的长 reasoning 会让屏幕
+                    // 一个字都没有,看起来就是卡死。见 REASONING_FLUSH_CHARS 的说明。
+                    return;
                 }
                 printReasoningHeadingIfNeeded();
                 reasoningRenderer = newMarkdownRenderer();
                 reasoningRenderer.append(pendingReasoning.toString());
+                // markdown 渲染器只按 \n 切行,无换行的整段会一直堆在它内部 ——
+                // 于是标题打出来了、内容还是不见。这是第二层「吞掉」,测试抓到的。
+                reasoningRenderer.flushPartialLineIfLongerThan(REASONING_FLUSH_CHARS);
                 pendingReasoning.setLength(0);
                 reasoningStarted = true;
                 streamedOutput = true;
@@ -1208,6 +1214,8 @@ public class Agent {
                     renderer.appendThinking(delta);
                 } else {
                     reasoningRenderer.append(delta);
+                    // 同上:后续 delta 也可能长期不带换行,一样会堆在渲染器里不显示
+                    reasoningRenderer.flushPartialLineIfLongerThan(REASONING_FLUSH_CHARS);
                 }
             }
             out().flush();
@@ -1324,6 +1332,32 @@ public class Agent {
                 }
             }
             return false;
+        }
+
+        /**
+         * 无换行时也该把攒下的 reasoning 冲出去的字符数门槛。
+         *
+         * <p><b>为什么需要这个兜底</b>（用户实测：CLI 上「发完消息直接卡了」，桌面端没事）：
+         * 原来的条件只看「有没有换行」——{@code if (!containsLineBreak(pending)) return;}。
+         * 可 reasoning 模型常常先吐一大段<b>不带换行</b>的思考，正文迟迟不来，
+         * 于是这一整段全堆在缓冲里，屏幕上<b>一个字都没有</b>，看起来就是卡死。
+         *
+         * <p>桌面端不中招是因为 {@code EventStreamRenderer.supportsThinkingPanel()} 硬编码
+         * {@code true}，走的是 {@code appendThinking(delta)} 那条即时显示的路；
+         * 而 CLI 的 {@code InlineRenderer} 把这个能力和 scroll region 绑在了一起
+         * （{@code activityDisplay != null} ⇐ {@code supportsScrollRegion}），
+         * 终端一降级就连思考面板一起没了，只能落到这条「等换行」的路上。
+         *
+         * <p><b>不能简单删掉换行判断</b>：它保护着一个真实的好意图 —— 短 reasoning 时
+         * 先打一个「思考过程」标题再打三五个字会很突兀（{@code AgentStreamRendererTest} 钉住了这条）。
+         * 所以保留「短的继续等」，只在<b>攒够约一行的量</b>时强制冲出去：
+         * 到那个体量本来就该换行显示了，再等下去只有坏处。
+         */
+        private static final int REASONING_FLUSH_CHARS = 120;
+
+        /** 攒下的 reasoning 是否已经到了「无论有没有换行都该显示」的程度。 */
+        private boolean reasoningWorthFlushing(CharSequence pending) {
+            return containsLineBreak(pending) || pending.length() >= REASONING_FLUSH_CHARS;
         }
 
         private void flushPendingReasoning() {

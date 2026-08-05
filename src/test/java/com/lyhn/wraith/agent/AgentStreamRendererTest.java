@@ -42,6 +42,52 @@ class AgentStreamRendererTest {
         assertTrue(rendered.contains("继续查看 src 目录下的包结构"));
     }
 
+    /**
+     * 用户实测：CLI 上「发完消息直接卡了」，而桌面端同一条消息没事。
+     *
+     * <p>根因是这条路只看「有没有换行」：reasoning 模型常常先吐一大段<b>不带换行</b>的思考，
+     * 正文迟迟不来，于是整段全堆在缓冲里、屏幕上一个字都没有 —— 看起来就是卡死。
+     * 桌面端不中招是因为 {@code EventStreamRenderer.supportsThinkingPanel()} 硬编码 true，
+     * 走的是 appendThinking 那条即时显示的路。
+     */
+    @Test
+    void longReasoningWithoutLineBreakMustStillBeFlushed() throws Exception {
+        LlmClient.StreamListener renderer = newStreamRenderer();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        // 200 字符、**一个换行都没有** —— 正是 reasoning 模型的常见形态
+        String longNoBreak = "先看仓库结构再定位实现文件然后读关键类的方法签名".repeat(9);
+        try {
+            System.setOut(new PrintStream(output, true, StandardCharsets.UTF_8));
+            renderer.onReasoningDelta(longNoBreak);
+        } finally {
+            System.setOut(originalOut);
+        }
+        String rendered = output.toString(StandardCharsets.UTF_8);
+        assertTrue(longNoBreak.length() > 120, "前提:这段要超过 flush 门槛");
+        assertTrue(rendered.contains("思考过程"),
+                "攒够一行的量就必须冲出去,否则屏幕上一个字都没有: " + rendered);
+        assertTrue(rendered.contains("先看仓库结构"),
+                "标题出来了但内容还堆在 markdown 渲染器里 —— 那是第二层「吞掉」: " + rendered);
+    }
+
+    @Test
+    void shortReasoningWithoutLineBreakStillWaits() throws Exception {
+        // 上面那条修的是「无限期吞掉」,但**短 reasoning 继续等**这个原意图必须保住 ——
+        // 先打一个「思考过程」标题再打三五个字很突兀。
+        LlmClient.StreamListener renderer = newStreamRenderer();
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        try {
+            System.setOut(new PrintStream(output, true, StandardCharsets.UTF_8));
+            renderer.onReasoningDelta("短思考");
+        } finally {
+            System.setOut(originalOut);
+        }
+        assertFalse(output.toString(StandardCharsets.UTF_8).contains("思考过程"),
+                "短且无换行时不该先打标题");
+    }
+
     @Test
     void shouldIgnoreWhitespaceOnlyReasoningAcrossIterationReset() throws Exception {
         LlmClient.StreamListener renderer = newStreamRenderer();
