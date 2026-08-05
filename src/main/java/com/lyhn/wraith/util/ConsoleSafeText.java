@@ -41,41 +41,162 @@ public final class ConsoleSafeText {
     private static final Map<String, String> ASCII = new LinkedHashMap<>();
 
     static {
-        ASCII.put("⚠️", "[!]");
+        // ── 状态 ────────────────────────────────────────────────────────────
         ASCII.put("⚠", "[!]");
         ASCII.put("✅", "[ok]");
         ASCII.put("❌", "[x]");
         ASCII.put("✔", "[v]");
         ASCII.put("✓", "[v]");
         ASCII.put("✗", "[x]");
-        ASCII.put("🔍", "[?]");
+        ASCII.put("✘", "[x]");
+        ASCII.put("🚫", "[no]");
+        ASCII.put("⛔", "[no]");
+        ASCII.put("🔴", "[!]");
+        ASCII.put("🟡", "[~]");
+        ASCII.put("🟢", "[ok]");
+        ASCII.put("ℹ", "[i]");
+        ASCII.put("💡", "[tip]");
+        ASCII.put("❓", "[?]");
+        // ── 文件与资料 ──────────────────────────────────────────────────────
         ASCII.put("📁", "[dir]");
+        ASCII.put("📂", "[dir]");
         ASCII.put("📄", "[file]");
-        ASCII.put("✂️", "[cut]");
-        ASCII.put("✂", "[cut]");
+        ASCII.put("📝", "[note]");
+        ASCII.put("📖", "[doc]");
+        ASCII.put("📚", "[docs]");
+        ASCII.put("📋", "[list]");
+        ASCII.put("📭", "[empty]");
+        ASCII.put("📰", "[news]");
+        ASCII.put("📦", "[pkg]");
+        ASCII.put("📊", "[stat]");
+        ASCII.put("📏", "[len]");
+        ASCII.put("📸", "[snap]");
+        ASCII.put("🗑", "[del]");
+        ASCII.put("🔗", "[link]");
+        ASCII.put("📤", "[send]");
+        // ── 能力与子系统 ────────────────────────────────────────────────────
+        ASCII.put("🔍", "[?]");
+        ASCII.put("🔎", "[?]");
         ASCII.put("🧩", "[skill]");
         ASCII.put("🧠", "[mem]");
         ASCII.put("🌐", "[web]");
+        ASCII.put("🕸", "[web]");
         ASCII.put("🌿", "[git]");
-        ASCII.put("⏰", "[time]");
-        ASCII.put("🎭", "[play]");
         ASCII.put("🐙", "[gh]");
+        ASCII.put("🤖", "[ai]");
+        ASCII.put("🔌", "[plug]");
+        ASCII.put("🔧", "[tool]");
+        ASCII.put("🛠", "[tool]");
+        ASCII.put("🏗", "[build]");
+        ASCII.put("🛡", "[safe]");
+        ASCII.put("🕵", "[scan]");
+        ASCII.put("🧹", "[clean]");
         ASCII.put("💾", "[save]");
+        ASCII.put("💼", "[work]");
+        ASCII.put("🖥", "[pc]");
+        ASCII.put("⚙", "[cfg]");
+        ASCII.put("🔒", "[lock]");
+        ASCII.put("🔓", "[unlock]");
+        ASCII.put("✏", "[edit]");
+        ASCII.put("✂", "[cut]");
+        ASCII.put("🎭", "[play]");
+        ASCII.put("🚀", "[go]");
+        ASCII.put("⚡", "[fast]");
+        // ── 人 ──────────────────────────────────────────────────────────────
+        ASCII.put("👋", "[hi]");
+        ASCII.put("👤", "[user]");
+        ASCII.put("🧑", "[user]");
+        ASCII.put("👥", "[team]");
+        ASCII.put("👆", "^");
+        // ── 时间与进度 ──────────────────────────────────────────────────────
+        ASCII.put("⏰", "[time]");
+        ASCII.put("⏱", "[time]");
+        ASCII.put("⏳", "[...]");
+        ASCII.put("🔄", "[sync]");
         ASCII.put("🔁", "[loop]");
+        ASCII.put("⏹", "[stop]");
+        ASCII.put("⏸", "[pause]");
+        ASCII.put("▶", ">");
+        ASCII.put("⏵", ">");
+        ASCII.put("⏭", ">>");
+        ASCII.put("⏎", "[enter]");
+        // ── 箭头与线条 ──────────────────────────────────────────────────────
         ASCII.put("→", "->");
         ASCII.put("←", "<-");
         ASCII.put("↑", "^");
         ASCII.put("↓", "v");
+        ASCII.put("↔", "<->");
+        ASCII.put("↩", "<-");
+        ASCII.put("↳", "->");
+        ASCII.put("⇒", "=>");
+        ASCII.put("⇐", "<=");
+        ASCII.put("›", ">");
+        ASCII.put("⏷", "v");
         ASCII.put("…", "...");
         ASCII.put("—", "--");
+        ASCII.put("−", "-");
         ASCII.put("·", "-");
         ASCII.put("•", "*");
+        ASCII.put("▪", "-");
         ASCII.put("★", "*");
+        ASCII.put("✢", "*");
+        ASCII.put("⟦", "[[");
+        ASCII.put("⟧", "]]");
         ASCII.put("│", "|");
         ASCII.put("─", "-");
         ASCII.put("└", "\\");
         ASCII.put("├", "|");
         ASCII.put("┌", "/");
+        // 进度条与底纹:保住「填了多少」的对比,退成 ? 就整条看不出进度了
+        ASCII.put("▰", "#");
+        ASCII.put("▱", "-");
+        ASCII.put("▀", "#");
+        ASCII.put("▒", ":");
+        ASCII.put("░", ".");
+        // spinner:盲文点阵逐帧映到 ASCII 的四帧循环 —— 全退成 ? 会让它看着**停住了**,
+        // 而 spinner 唯一的作用就是证明「还在动」。
+        ASCII.put("⠋", "|");
+        ASCII.put("⠙", "/");
+        ASCII.put("⠹", "-");
+        ASCII.put("⠸", "\\");
+        ASCII.put("⠼", "|");
+        ASCII.put("⠴", "/");
+        ASCII.put("⠦", "-");
+        ASCII.put("⠧", "\\");
+        ASCII.put("⠇", "|");
+        ASCII.put("⠏", "/");
+    }
+
+    /**
+     * 这些码点<b>该丢掉，而不是变成 {@code ?}</b>。
+     *
+     * <p>它们本身不是字形，只是修饰前一个字符：变体选择符（{@code U+FE00–FE0F}，
+     * 决定用彩色 emoji 还是黑白字形）、零宽连接符（{@code U+200D}，把两个 emoji 粘成一个）、
+     * 肤色修饰符（{@code U+1F3FB–1F3FF}）。
+     *
+     * <p>用户 Windows 实测的 {@code ??} 就有它的份：{@code ⚠️} 是<b>两个</b>码点，
+     * 各退一个 {@code ?}。表里逐个写 {@code "⚠️"}/{@code "⚠"} 两条能挡住已知的，
+     * 但任何一个<b>没进表</b>的 emoji 带上它就又会多吐一个 {@code ?} ——
+     * 所以这里按规则统一丢掉，而不是靠穷举。
+     */
+    private static boolean isModifierOnly(int cp) {
+        return cp == 0x200D
+                || (cp >= 0xFE00 && cp <= 0xFE0F)
+                || (cp >= 0x1F3FB && cp <= 0x1F3FF);
+    }
+
+    private static String stripModifiers(String s) {
+        StringBuilder sb = new StringBuilder(s.length());
+        int i = 0;
+        while (i < s.length()) {
+            int cp = s.codePointAt(i);
+            int n = Character.charCount(cp);
+            if (!isModifierOnly(cp)) {
+                sb.append(s, i, i + n);
+            }
+            i += n;
+        }
+        return sb.toString();
     }
 
     /**
@@ -122,7 +243,9 @@ public final class ConsoleSafeText {
         if (encoder.canEncode(text)) {
             return text;        // 常态:UTF-8 控制台,零成本
         }
-        String s = text;
+        // 先丢掉纯修饰码点:否则 `⚠️` 这类「基字符 + 变体选择符」会多吐一个 `?`,
+        // 而表里不可能穷举所有 emoji 的带修饰形态。
+        String s = stripModifiers(text);
         for (Map.Entry<String, String> e : ASCII.entrySet()) {
             if (s.indexOf(e.getKey()) >= 0 && !encoder.canEncode(e.getKey())) {
                 s = s.replace(e.getKey(), e.getValue());
