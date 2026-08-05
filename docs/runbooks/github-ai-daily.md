@@ -90,23 +90,31 @@ stderr 会告诉你跑 `gh auth login`。**token 值不会出现在任何日志�
 
 ## 2. 装取数任务（选你的系统）
 
+> **先在面板建好日报任务再装。** 时刻由你在面板里定**一次**，安装脚本按它反推取数时刻
+> （默认提前 45 分钟）—— 你不用记两个时间，也不用自己算间隔。面板任务怎么建见 §3。
+
 **macOS：**
 
 ```bash
 cd /path/to/wraith/scripts/github-ai-daily/install
-./install-macos.sh          # 默认每天 06:00；改时间：./install-macos.sh 05 30
+./install-macos.sh --from-panel        # 提前量改成 60 分钟：--from-panel 60
 ```
 
 **Windows（普通 PowerShell，不需要管理员）：**
 
 ```powershell
 cd D:\wraith\scripts\github-ai-daily\install
-.\install-windows.ps1                 # 默认每天 06:00
-.\install-windows.ps1 -At "05:30"
+.\install-windows.ps1 -FromPanel                     # 提前量：-LeadMinutes 60
 ```
 
-两个脚本都会：定位 node 与 gh、建好 `<repo>/.ghai/`、注册每日任务、把 stdout/stderr 追加到
-`<repo>/.ghai/run.log`。卸载分别是 `--uninstall` 与 `-Uninstall`。
+两个脚本都会：读面板里那条日报任务的时刻、反推取数时刻、定位 node 与 gh、
+建好 `<repo>/.ghai/`、注册每日任务、把 stdout/stderr 追加到 `<repo>/.ghai/run.log`。
+卸载分别是 `--uninstall` 与 `-Uninstall`。
+
+**⚠ 改了面板时刻，要重跑一次安装脚本**，取数时刻不会自己跟着动。这是「面板为唯一真相」
+这个选择的代价：换来的是你平时只需要记一个时间。
+
+不想让它反推就手动指定：`./install-macos.sh 06 00` / `.\install-windows.ps1 -At "06:00"`。
 
 装完立刻验一次（不用等到明早）：
 
@@ -159,7 +167,7 @@ node "$Repo\scripts\github-ai-daily\index.mjs" --data-dir $Smoke
 
 - **名称**：GitHub AI 日报
 - **项目**：选**装了取数任务的那个仓库目录**（必须一致，否则 `read_file` 够不着 `.ghai/`）
-- **频率**：每天，**时刻晚于取数任务超过一次完整运行的时长**（见 §4）
+- **频率**：每天，**时刻由你定** —— 这是整件事唯一需要你决定的时间，取数时刻由安装脚本按它反推（§2）
 - **结果投递**：勾你想要的（桌面通知 / QQ / 微信 / 企业微信 / 飞书，随时改）
 - **高级·工具调用审批**：保持**默认拒绝**即可。这个 prompt 只用 `read_file`，不需要放行任何工具
 

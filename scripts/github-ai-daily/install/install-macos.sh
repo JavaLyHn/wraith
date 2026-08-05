@@ -7,9 +7,13 @@
 # 所以取数交给 launchd（不进沙箱），wraith 那边只负责读报告、点评、投递。
 #
 # 用法：
-#   ./install-macos.sh                 # 默认 06:00 跑
-#   ./install-macos.sh 05 30           # 改成 05:30
-#   ./install-macos.sh --uninstall     # 卸载
+#   ./install-macos.sh --from-panel        # 推荐:面板为唯一真相,取数时刻自动反推(默认提前 45 分钟)
+#   ./install-macos.sh --from-panel 60     # 提前量改成 60 分钟
+#   ./install-macos.sh 05 30               # 手动指定取数时刻 05:30
+#   ./install-macos.sh --uninstall         # 卸载
+#
+# 为什么默认走 --from-panel:时刻该由你在面板里定一次,而不是在两个地方各记一个、
+# 还要自己算间隔。取数必须早于面板任务超过一次完整运行时长(实测 31 分钟)。
 
 set -euo pipefail
 
@@ -34,18 +38,57 @@ case "$REPO" in
     echo "  每日任务会被指向这个临时目录,它一旦被清理任务就断了。" >&2
     echo "  请到主仓库目录再跑一次本脚本。" >&2
     echo "  确实想这么装就加 --force-worktree。" >&2
-    [ "${3:-}" = "--force-worktree" ] || exit 1
+    case " $* " in *" --force-worktree "*) ;; *) exit 1 ;; esac
     ;;
 esac
-
-HOUR="${1:-06}"
-MINUTE="${2:-00}"
 
 NODE_BIN="$(command -v node || true)"
 if [ -z "$NODE_BIN" ]; then
   echo "找不到 node。装一个再来：brew install node" >&2
   exit 1
 fi
+
+PANEL_JSON="$HOME/Library/Application Support/wraith-desktop/automations.json"
+
+if [ "${1:-}" = "--from-panel" ]; then
+  LEAD="${2:-45}"
+  if [ ! -f "$PANEL_JSON" ]; then
+    echo "读不到面板配置：$PANEL_JSON" >&2
+    echo "先在桌面「自动化」面板建好日报任务(prompt 写「生成今天的 GitHub AI 日报」),再回来跑本脚本。" >&2
+    exit 1
+  fi
+  # 用 node 解析 —— node 本来就是本脚本的硬依赖,不额外引入 jq/python。
+  DERIVED="$("$NODE_BIN" -e '
+    const fs = require("fs");
+    const lead = Number(process.argv[2]);
+    const tasks = (JSON.parse(fs.readFileSync(process.argv[1], "utf8")).tasks) || [];
+    // 认哪一条:名字或 prompt 里提到 GitHub 日报的。找不到/找到多条都要说清楚,不许瞎猜。
+    const hit = tasks.filter(t => /github/i.test(`${t.name ?? ""} ${t.prompt ?? ""}`)
+                                  && /日报|daily/i.test(`${t.name ?? ""} ${t.prompt ?? ""}`));
+    if (hit.length !== 1) {
+      console.error(`AMBIGUOUS:${hit.length}:` + tasks.map(t => t.name ?? "(无名)").join(" / "));
+      process.exit(2);
+    }
+    const at = hit[0].schedule?.time ?? hit[0].schedule?.at;
+    if (!/^\d{1,2}:\d{2}$/.test(at ?? "")) { console.error("NOTIME:" + at); process.exit(3); }
+    const [h, m] = at.split(":").map(Number);
+    // 减提前量,跨零点回绕到前一天的同一时刻
+    const total = ((h * 60 + m - lead) % 1440 + 1440) % 1440;
+    console.log(`${String(Math.floor(total / 60)).padStart(2, "0")} ${String(total % 60).padStart(2, "0")} ${at}`);
+  ' "$PANEL_JSON" "$LEAD")" || {
+    echo "从面板反推失败。要么还没建日报任务,要么建了多条同名的 —— 上面一行是实际找到的任务名。" >&2
+    echo "也可以手动指定：./install-macos.sh 06 00" >&2
+    exit 1
+  }
+  HOUR="$(echo "$DERIVED" | cut -d' ' -f1)"
+  MINUTE="$(echo "$DERIVED" | cut -d' ' -f2)"
+  PANEL_AT="$(echo "$DERIVED" | cut -d' ' -f3)"
+  echo "面板日报任务在 $PANEL_AT，提前 ${LEAD} 分钟取数 → $HOUR:$MINUTE"
+else
+  HOUR="${1:-06}"
+  MINUTE="${2:-00}"
+fi
+
 if [ ! -f "$SCRIPT" ]; then
   echo "找不到取数脚本：$SCRIPT" >&2
   exit 1
