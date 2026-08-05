@@ -153,6 +153,7 @@ public class ToolRegistry {
         registerRagTools();
         registerWebTools();
         registerBrowserTools();
+        registerDocumentsTools();
         registerMemoryTools();
         registerSkillTools();
         registerSnapshotTools();
@@ -741,6 +742,68 @@ public class ToolRegistry {
                         new Param("max_chars", "integer", "返回 Markdown 最大字符数（默认 8000，超出截断）", false)
                 ),
                 args -> webFetch(args.get("url"), parseInt(args.get("max_chars"), DEFAULT_FETCH_MAX_CHARS))
+        ));
+    }
+
+    /**
+     * 「文档资料库」的只读入口（~/.wraith/documents/）。
+     *
+     * <p>为什么不复用 read_file:read_file 被 PathGuard(projectPath) 锁在当前项目内,而资料库
+     * 刻意不属于任何项目 —— 它就是「跨项目的知识存放处」。在这两个工具之前,库里的东西只有
+     * 桌面 UI 读得到,agent 在任何项目里都读不到,那个存放处等于对 agent 不存在。
+     *
+     * <p>为什么不让模型用 execute_command + cat 绕:两个平台行为不一致。macOS 的 Seatbelt
+     * profile 打底 (allow default),读得到库;Windows 的 AppContainer 是能力制、默认全拒,
+     * 只授予了 workspace 一个目录,读不到。跨平台只能走进程内工具。
+     *
+     * <p>只读,故**不进** ApprovalPolicy.DANGEROUS_TOOLS:读用户自己放进库、UI 里本来就看得见的
+     * 东西,不该每次都拦一道审批 —— 那会让无人值守的定时任务没法用。
+     */
+    private void registerDocumentsTools() {
+        tools.put("documents_list", new Tool(
+                "documents_list",
+                "列出「文档资料库」(~/.wraith/documents/)里的文档,按修改时间倒序。"
+                        + "资料库是跨项目的:不管当前项目是哪个,这里的内容都读得到。"
+                        + "想引用用户存放的资料、或读取由外部定时脚本生成的报告时先调它看有什么。",
+                createParameters(),
+                args -> {
+                    var entries = com.lyhn.wraith.documents.DocumentsVault.list();
+                    if (entries.isEmpty()) {
+                        return "文档资料库是空的（" + com.lyhn.wraith.documents.DocumentsVault.dir() + "）。";
+                    }
+                    StringBuilder sb = new StringBuilder("文档资料库共 " + entries.size() + " 份（按修改时间倒序）：\n");
+                    for (var e : entries) {
+                        sb.append("- ").append(e.name())
+                          .append("（").append(e.size()).append(" 字节，修改于 ")
+                          .append(java.time.Instant.ofEpochMilli(e.modifiedAt())
+                                  .atZone(java.time.ZoneId.systemDefault())
+                                  .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")))
+                          .append("）\n");
+                    }
+                    return sb.toString();
+                }
+        ));
+        tools.put("documents_read", new Tool(
+                "documents_read",
+                "读「文档资料库」里的一份文档。只接受文档名(资料库是平铺的,没有子目录),不接受路径。"
+                        + "不受当前项目限制 —— 任何项目下都读得到。文档名可先用 documents_list 查。",
+                createParameters(
+                        new Param("name", "string", "文档名，例如 GitHub-AI-日报-2026-08-05.md", true)
+                ),
+                args -> {
+                    try {
+                        return com.lyhn.wraith.documents.DocumentsVault.read(args.get("name"));
+                    } catch (IllegalArgumentException e) {
+                        return "documents_read 失败：" + e.getMessage();
+                    } catch (java.io.FileNotFoundException e) {
+                        // 明确区分「库里没有」与「读取出错」：前者常常是正常情况
+                        // （比如今天的报告还没生成），模型据此该如实说明而不是编内容。
+                        return "资料库里没有这份文档：" + args.get("name")
+                                + "。用 documents_list 看看现在有哪些。";
+                    } catch (java.io.IOException e) {
+                        return "documents_read 读取失败：" + e.getMessage();
+                    }
+                }
         ));
     }
 

@@ -48,15 +48,29 @@ if [ -z "$NODE_BIN" ]; then
   exit 1
 fi
 
-PANEL_JSON="$HOME/Library/Application Support/wraith-desktop/automations.json"
+# 面板任务的**真实**存储:Java daemon 的 AutomationStore(GatewayDaemon.java:56 —— ~/.wraith)。
+# 第二条是迁移前的遗留文件:桌面启动时做过一次性迁移(index.ts «Part C»),迁完保留作备份、
+# 不再更新。原来这里只读那一条,后果不是"读不到"而是**读到一份冻结的旧列表**——
+# 开发机上实测:遗留文件停在一个月前的「给我打招呼」,而真实面板里躺着今天建的「GitHub AI 日报」。
+# 顺序不能反:遗留文件在老机器上一直存在,先读它就永远轮不到真的那份。
+PANEL_JSON_CANDIDATES=(
+  "$HOME/.wraith/automations.json"
+  "$HOME/Library/Application Support/wraith-desktop/automations.json"
+)
 
 if [ "${1:-}" = "--from-panel" ]; then
   LEAD="${2:-45}"
-  if [ ! -f "$PANEL_JSON" ]; then
-    echo "读不到面板配置：$PANEL_JSON" >&2
+  PANEL_JSON=""
+  for candidate in "${PANEL_JSON_CANDIDATES[@]}"; do
+    if [ -f "$candidate" ]; then PANEL_JSON="$candidate"; break; fi
+  done
+  if [ -z "$PANEL_JSON" ]; then
+    echo "读不到面板配置。找过这些位置：" >&2
+    for candidate in "${PANEL_JSON_CANDIDATES[@]}"; do echo "  $candidate" >&2; done
     echo "先在桌面「自动化」面板建好日报任务(prompt 写「生成今天的 GitHub AI 日报」),再回来跑本脚本。" >&2
     exit 1
   fi
+  echo "读面板配置：$PANEL_JSON"
   # 用 node 解析 —— node 本来就是本脚本的硬依赖,不额外引入 jq/python。
   DERIVED="$("$NODE_BIN" -e '
     const fs = require("fs");
