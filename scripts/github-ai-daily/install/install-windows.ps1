@@ -91,7 +91,14 @@ if ($FromPanel) {
   $ph, $pm = $panelAt -split ':'
   # 减提前量，跨零点回绕到前一天同一时刻
   $total = (([int]$ph * 60 + [int]$pm - $LeadMinutes) % 1440 + 1440) % 1440
-  $At = "{0:d2}:{1:d2}" -f [math]::Floor($total / 60), ($total % 60)
+  # [int] 这个转换不是装饰:[math]::Floor() 返回 **Double**,而 `d2` 是整数专用的格式
+  # 说明符,喂给 Double 会抛「格式说明符无效」—— 真机首跑就死在这一行。
+  # 也别图省事写成 [int]($total / 60):PowerShell 的 `/` 对两个整数产出 Double,
+  # 再 [int] 走的是**银行家舍入**,210/60=3.5 会进成 4(而不是 3),时刻直接算错一小时。
+  # 必须先 Floor 再转 int。
+  $hh = [int][math]::Floor($total / 60)
+  $mm = $total % 60
+  $At = '{0:d2}:{1:d2}' -f $hh, $mm
   Write-Host "面板日报任务在 $panelAt，提前 $LeadMinutes 分钟取数 → $At"
 }
 
@@ -102,8 +109,26 @@ New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
 $logPath = Join-Path $DataDir "run.log"
 $inner   = '"{0}" "{1}" --data-dir "{2}" >> "{3}" 2>&1' -f $node.Source, $Script, $DataDir, $logPath
 
-$action    = New-ScheduledTaskAction -Execute "cmd.exe" -Argument ('/c ' + $inner) -WorkingDirectory $Repo
-$trigger   = New-ScheduledTaskTrigger -Daily -At $At
+# 外面**必须**再套一对引号(`/c "«inner»"`,即 cmd /c ""A" "B" …" 那个经典写法)。
+# cmd /? 里的规则:当 /c 后面的串引号多于两个时,它会**剥掉第一个和最后一个引号**。
+# 不套外层的话被剥的就是 node 路径两边那对,于是
+#     "C:\Program Files\nodejs\node.exe" "…index.mjs" …
+# 变成
+#     C:\Program Files\nodejs\node.exe" "…index.mjs" …
+# cmd 去执行 `C:\Program` —— 每天 06:15 静默失败。winget 装的 node 正好就落在
+# 「Program Files」这个带空格的目录里,所以这不是理论风险。
+# 套上外层之后被剥掉的是那对多余的,inner 原样送进 cmd。
+$action    = New-ScheduledTaskAction -Execute "cmd.exe" -Argument ('/c "' + $inner + '"') -WorkingDirectory $Repo
+
+# -At 收 DateTime。直接喂字符串能不能过取决于**当前区域设置**怎么解析「06:15」——
+# 这台机器行不代表下一台行,而装错时刻是静默的(任务照建,只是每天在错的点跑)。
+# 显式按不变文化解析,顺便把 -At "6:00" 这种单位数小时也收下;解析不了当场报错。
+$atParsed = [datetime]::MinValue
+$okAt = [datetime]::TryParseExact($At, @('HH:mm', 'H:mm'),
+          [Globalization.CultureInfo]::InvariantCulture,
+          [Globalization.DateTimeStyles]::None, [ref]$atParsed)
+if (-not $okAt) { throw "时刻格式不对：$At（要 HH:mm，例如 06:15）" }
+$trigger   = New-ScheduledTaskTrigger -Daily -At $atParsed
 # 关键几项：不插电也跑、跑之前不必空闲、允许跑满（默认 3 天上限足够，25 分钟的活不会被腰斩）。
 $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
                                           -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)
@@ -115,8 +140,14 @@ Write-Host "已安装：$TaskName"
 Write-Host "  每天 $At 取数 → $DataDir"
 Write-Host "  日志：$logPath"
 Write-Host ""
-Write-Host "立刻跑一次验证： Start-ScheduledTask -TaskName $TaskName"
-Write-Host "看状态：         Get-ScheduledTaskInfo -TaskName $TaskName"
+Write-Host "立刻跑一次验证（一次完整取数约 31 分钟）："
+Write-Host "  PowerShell:  Start-ScheduledTask -TaskName $TaskName"
+Write-Host "  cmd:         schtasks /Run /TN $TaskName"
+Write-Host "看状态："
+Write-Host "  PowerShell:  Get-ScheduledTaskInfo -TaskName $TaskName"
+Write-Host "  cmd:         schtasks /Query /TN $TaskName /V /FO LIST"
 Write-Host ""
-Write-Host "接着在 wraith 桌面「自动化」面板建一个任务，项目选 $Repo，"
-Write-Host "prompt 用 docs\runbooks\github-ai-daily.md 里给的那段（只用 read_file，不碰沙箱）。"
+Write-Host "另一半（读报告 + 点评 + 投递）在 wraith 桌面「自动化」面板里，prompt 就一句"
+Write-Host "「生成今天的 GitHub AI 日报」，项目选哪个都行 —— 报告走文档资料库，"
+Write-Host "由内置 skill 指引 documents_read 去读，不受项目边界约束。详见"
+Write-Host "docs\runbooks\github-ai-daily.md 的 §3。"
