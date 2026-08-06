@@ -85,7 +85,8 @@ describe('listDocuments', () => {
     const outside = path.join(tmp, 'outside.txt')
     await fs.promises.writeFile(outside, 'sensitive')
     if (!await createSymlinkOrSkip(outside, path.join(vault, '看起来很正常.txt'))) {
-      return ctx.skip('当前 Windows 账号没有创建符号链接的权限；支持该能力的平台仍执行库外链接防护断言。')
+      // 当前 Windows 账号无创建符号链接权限；支持的平台仍执行库外链接防护断言。
+      return ctx.skip()
     }
     await fs.promises.writeFile(path.join(vault, 'real.md'), 'x')
     const list = await listDocuments(vault)
@@ -131,7 +132,8 @@ describe('resolveInVault —— 路径安全', () => {
     const outside = path.join(tmp, 'secret.txt')
     await fs.promises.writeFile(outside, 'sensitive')
     if (!await createSymlinkOrSkip(outside, path.join(vault, 'innocent.txt'))) {
-      return ctx.skip('当前 Windows 账号没有创建符号链接的权限；支持该能力的平台仍执行库外链接防护断言。')
+      // 当前 Windows 账号无创建符号链接权限；支持的平台仍执行库外链接防护断言。
+      return ctx.skip()
     }
     expect(() => resolveInVault(vault, 'innocent.txt')).toThrow(/越界/)
   })
@@ -234,7 +236,8 @@ describe('removeDocument', () => {
     const outside = path.join(tmp, 'keep.txt')
     await fs.promises.writeFile(outside, 'x')
     if (!await createSymlinkOrSkip(outside, path.join(vault, 'link.txt'))) {
-      return ctx.skip('当前 Windows 账号没有创建符号链接的权限；支持该能力的平台仍执行库外链接防护断言。')
+      // 当前 Windows 账号无创建符号链接权限；支持的平台仍执行库外链接防护断言。
+      return ctx.skip()
     }
     await expect(removeDocument(vault, 'link.txt')).rejects.toThrow(/越界/)
     expect(fs.existsSync(outside)).toBe(true)
