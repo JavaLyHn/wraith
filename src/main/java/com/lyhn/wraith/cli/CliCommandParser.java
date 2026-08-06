@@ -50,7 +50,13 @@ final class CliCommandParser {
         SKILL_RELOAD,
         CONFIG,
         EXPORT,
-        RESUME
+        RESUME,
+        ARCHIVE,
+        ARCHIVE_LIST,
+        ARCHIVE_SHOW,
+        ARCHIVE_RESTORE,
+        ARCHIVE_DELETE,
+        ARCHIVE_CLEAR
     }
 
     record ParsedCommand(CommandType type, String payload) {
@@ -309,6 +315,31 @@ final class CliCommandParser {
 
         if (trimmed.equalsIgnoreCase("/export")) {
             return new ParsedCommand(CommandType.EXPORT, null);
+        }
+
+        // /archive 命令族：归档当前聊天，之后在「设置 → 已归档聊天」或 /archive list 里回看。
+        // 子命令先于裸 /archive 匹配，否则 "/archive list" 会被当成给 /archive 的参数。
+        if (trimmed.equalsIgnoreCase("/archive list")) {
+            return new ParsedCommand(CommandType.ARCHIVE_LIST, null);
+        }
+        if (trimmed.equalsIgnoreCase("/archive clear")) {
+            return new ParsedCommand(CommandType.ARCHIVE_CLEAR, null);
+        }
+        if (trimmed.regionMatches(true, 0, "/archive show ", 0, 14)) {
+            return new ParsedCommand(CommandType.ARCHIVE_SHOW, trimmed.substring(14).trim());
+        }
+        if (trimmed.regionMatches(true, 0, "/archive restore ", 0, 17)) {
+            return new ParsedCommand(CommandType.ARCHIVE_RESTORE, trimmed.substring(17).trim());
+        }
+        if (trimmed.regionMatches(true, 0, "/archive delete ", 0, 16)) {
+            return new ParsedCommand(CommandType.ARCHIVE_DELETE, trimmed.substring(16).trim());
+        }
+        if (trimmed.equalsIgnoreCase("/archive")) {
+            return new ParsedCommand(CommandType.ARCHIVE, null);
+        }
+        if (trimmed.regionMatches(true, 0, "/archive ", 0, 9)) {
+            // /archive <标题>：归档并把余下文本当自定义标题
+            return new ParsedCommand(CommandType.ARCHIVE, trimmed.substring(9).trim());
         }
 
         if (trimmed.equalsIgnoreCase("/mcp")) {

@@ -3426,6 +3426,12 @@ public class Main {
                 new SlashCommandHint("/skill off ", "/skill off <name>", "禁用 skill"),
                 new SlashCommandHint("/skill reload", "/skill reload", "重新扫描 skill 目录"),
                 new SlashCommandHint("/export", "/export", "导出当前会话对话记录为 Markdown"),
+                new SlashCommandHint("/archive", "/archive [标题]", "归档当前聊天并清空（之后在设置或 /archive list 里回看）"),
+                new SlashCommandHint("/archive list", "/archive list", "查看已归档聊天列表"),
+                new SlashCommandHint("/archive show ", "/archive show <id>", "预览某条已归档聊天"),
+                new SlashCommandHint("/archive restore ", "/archive restore <id>", "把某条归档载回当前对话继续聊"),
+                new SlashCommandHint("/archive delete ", "/archive delete <id>", "删除某条已归档聊天"),
+                new SlashCommandHint("/archive clear", "/archive clear", "清空全部已归档聊天"),
                 new SlashCommandHint("/exit", "/exit", "退出 Wraith"),
                 new SlashCommandHint("/quit", "/quit", "退出 Wraith")
         );
