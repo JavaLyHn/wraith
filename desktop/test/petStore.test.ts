@@ -44,6 +44,16 @@ function writePet(base: string, id: string, json = manifest(id), image = png()):
   fs.writeFileSync(path.join(dir, 'spritesheet.png'), image)
 }
 
+function createSymlinkOrSkip(target: string, link: string): boolean {
+  try {
+    fs.symlinkSync(target, link)
+    return true
+  } catch (error) {
+    if (process.platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EPERM') return false
+    throw error
+  }
+}
+
 /** A minimal stored ZIP is enough to exercise path validation before extraction. */
 function zipWithEntry(name: string, content: Buffer): Buffer {
   const file = Buffer.alloc(30 + Buffer.byteLength(name) + content.length)
@@ -85,19 +95,23 @@ describe('petStore', () => {
     expect(noir).toMatchObject({ id: 'noir-webling', displayName: 'Noir Webling', source: 'petdex', available: false, removable: false })
   })
 
-  it('does not follow Petdex manifest or asset symlinks outside a package', async () => {
+  it('does not follow Petdex manifest or asset symlinks outside a package', async ctx => {
     const outsideManifest = path.join(root, 'outside.json')
     fs.writeFileSync(outsideManifest, manifest('linked-manifest'))
     const manifestDir = path.join(petdexRoot, 'linked-manifest')
     fs.mkdirSync(manifestDir, { recursive: true })
-    fs.symlinkSync(outsideManifest, path.join(manifestDir, 'pet.json'))
+    if (!createSymlinkOrSkip(outsideManifest, path.join(manifestDir, 'pet.json'))) {
+      return ctx.skip('当前 Windows 账户没有创建符号链接的权限；支持该能力的平台仍执行宠物包路径逃逸防护断言。')
+    }
     fs.writeFileSync(path.join(manifestDir, 'spritesheet.png'), png())
 
     const outsideSprite = path.join(root, 'outside.png')
     fs.writeFileSync(outsideSprite, png())
     writePet(petdexRoot, 'linked-asset')
     fs.rmSync(path.join(petdexRoot, 'linked-asset', 'spritesheet.png'))
-    fs.symlinkSync(outsideSprite, path.join(petdexRoot, 'linked-asset', 'spritesheet.png'))
+    if (!createSymlinkOrSkip(outsideSprite, path.join(petdexRoot, 'linked-asset', 'spritesheet.png'))) {
+      return ctx.skip('当前 Windows 账户没有创建符号链接的权限；支持该能力的平台仍执行宠物包路径逃逸防护断言。')
+    }
 
     const pets = await listPets({ userDataDir, petdexRoot })
     expect(pets.some(pet => pet.id === 'linked-manifest' || pet.id === 'linked-asset')).toBe(false)
@@ -227,12 +241,15 @@ describe('petStore', () => {
     await expect(previewDataUrl({ userDataDir, petdexRoot, id: 'wraith-companion' })).resolves.toBeNull()
   })
 
-  it('rejects a preview when its imported asset becomes a symlink or exceeds the byte limit', async () => {
+  it('rejects a preview when its imported asset becomes a symlink or exceeds the byte limit', async ctx => {
     const source = path.join(root, 'preview.png'); fs.writeFileSync(source, png())
     const imported = await importStaticImage({ userDataDir, sourcePath: source })
     const asset = path.join(userDataDir, 'pets', 'imported', imported.id, 'image.png')
     const outside = path.join(root, 'outside.png'); fs.writeFileSync(outside, png())
-    fs.rmSync(asset); fs.symlinkSync(outside, asset)
+    fs.rmSync(asset)
+    if (!createSymlinkOrSkip(outside, asset)) {
+      return ctx.skip('当前 Windows 账户没有创建符号链接的权限；支持该能力的平台仍执行宠物包路径逃逸防护断言。')
+    }
     await expect(previewDataUrl({ userDataDir, petdexRoot, id: imported.id })).resolves.toBeNull()
     fs.rmSync(asset); fs.writeFileSync(asset, Buffer.alloc(8 * 1024 * 1024 + 1))
     await expect(previewDataUrl({ userDataDir, petdexRoot, id: imported.id })).resolves.toBeNull()
