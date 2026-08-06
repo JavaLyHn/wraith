@@ -71,7 +71,8 @@ class TerminalCapabilitiesTest {
 
     @Test
     void xtermTerminalIsAnsiCapable() {
-        assertTrue(TerminalCapabilities.supportsAnsi(typed("xterm-256color")));
+        assertTrue(TerminalCapabilities.supportsAnsi(
+                "xterm-256color", "Linux", Map.of()));
     }
 
     // ── dumb type 的新契约 ──────────────────────────────────────────────────
@@ -180,7 +181,8 @@ class TerminalCapabilitiesTest {
     void scrollRegionTrueOnNormalTerminal() {
         Terminal normal = typed("xterm-256color");
         Mockito.when(normal.getSize()).thenReturn(new Size(120, 40));
-        assertTrue(TerminalCapabilities.supportsScrollRegion(normal));
+        assertTrue(TerminalCapabilities.supportsScrollRegionFor(
+                normal, "Linux", Map.of()));
     }
 
     @Test

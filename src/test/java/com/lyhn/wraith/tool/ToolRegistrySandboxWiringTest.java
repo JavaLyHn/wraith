@@ -1,6 +1,7 @@
 package com.lyhn.wraith.tool;
 
 import com.lyhn.wraith.policy.sandbox.CommandSandbox;
+import com.lyhn.wraith.policy.sandbox.ShellCommand;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -13,7 +14,7 @@ class ToolRegistrySandboxWiringTest {
     @Test
     void noSandbox_runsPlainBash() {
         ToolRegistry reg = new ToolRegistry();
-        assertEquals(List.of("bash", "-c", "echo hi"), reg.resolveProcessCommand("echo hi"));
+        assertEquals(ShellCommand.wrap("echo hi"), reg.resolveProcessCommand("echo hi"));
     }
 
     @Test

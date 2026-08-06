@@ -1,6 +1,7 @@
 package com.lyhn.wraith.tool;
 
 import com.lyhn.wraith.hitl.*;
+import com.lyhn.wraith.policy.sandbox.ShellCommand;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import java.nio.file.Path;
@@ -23,7 +24,7 @@ class ToolRegistryNetworkOnceTest {
         ToolRegistry reg = new ToolRegistry(); // 未注入沙箱
         reg.grantNetworkOnce();
         List<String> cmd = reg.resolveProcessCommand("echo hi");
-        assertEquals(List.of("bash", "-c", "echo hi"), cmd);
+        assertEquals(ShellCommand.wrap("echo hi"), cmd);
         assertFalse(reg.consumeNetworkOnce(), "无沙箱也要消费,防泄漏到后续命令");
     }
 

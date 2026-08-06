@@ -59,14 +59,16 @@ class MemoryManagerTest {
     void shouldStoreProjectScopedFactsByDefault() {
         LongTermMemory longTermMemory = new LongTermMemory(tempDir.toFile());
         MemoryManager memoryManager = new MemoryManager(new StubGLMClient(List.of()), 32768, 128000, longTermMemory);
-        memoryManager.setProjectPath("/repo/current");
+        Path projectRoot = tempDir.resolve("repo").resolve("current");
+        memoryManager.setProjectPath(projectRoot.toString());
 
         memoryManager.storeFact("当前项目使用 Java 17");
         memoryManager.storeFact("默认用中文回答", "global");
 
         MemoryEntry projectEntry = longTermMemory.search("Java", 5, memoryManager.getCurrentProject()).get(0);
         assertEquals("project", projectEntry.getMetadata().get("scope"));
-        assertTrue(projectEntry.getMetadata().get("project").endsWith("/repo/current"));
+        assertEquals(projectRoot.toAbsolutePath().normalize(),
+                Path.of(projectEntry.getMetadata().get("project")).toAbsolutePath().normalize());
         assertEquals("global", longTermMemory.search("中文", 5).get(0).getMetadata().get("scope"));
     }
 

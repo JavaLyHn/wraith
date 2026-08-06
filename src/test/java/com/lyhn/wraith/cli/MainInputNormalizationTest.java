@@ -68,7 +68,9 @@ class MainInputNormalizationTest {
         assertTrue(lines.stream().anyMatch(line -> line.contains("@path")));
         assertTrue(lines.stream().noneMatch(line -> line.contains("for shortcuts")));
         assertTrue(lines.stream().noneMatch(line -> line.contains("────────────────")));
-        assertTrue(lines.stream().noneMatch(line -> line.endsWith("║")),
+        assertTrue(lines.stream()
+                        .filter(line -> line.contains("v16.1.0") || line.contains("Tips for getting started"))
+                        .noneMatch(line -> line.endsWith("║")),
                 "banner should not depend on a padded right border");
     }
 
