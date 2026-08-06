@@ -485,7 +485,7 @@ public class ToolRegistry {
                 }
                 Path relative = projectRoot.relativize(path);
                 if (matcher.matches(relative) || fileNameMatcher.matches(path.getFileName())) {
-                    matches.add(relative.toString());
+                    matches.add(relative.toString().replace('\\', '/'));
                 }
             }));
         } catch (Exception e) {
