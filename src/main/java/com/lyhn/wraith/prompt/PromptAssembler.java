@@ -21,7 +21,7 @@ public class PromptAssembler {
         Objects.requireNonNull(mode, "mode");
         PromptContext ctx = context == null ? PromptContext.empty() : context;
 
-        String base = repository.loadRequired("base.md");
+        String base = loadRequired("base.md");
         if (!ctx.toolsEnabled()) {
             base = stripToolSections(base);
         }
@@ -34,20 +34,26 @@ public class PromptAssembler {
         }
         // capabilities.md 里含 {{configDir}} 占位:它原本写死 `~/.wraith/...`,而那在 Windows 上
         // 既不是用户看得懂的位置,也不是模型能塞进 cmd.exe 的路径。
-        append(prompt, applyConfigDir(repository.loadRequired("capabilities.md")));
-        append(prompt, repository.loadRequired("personalities/calm.md"));
-        append(prompt, applyVariables(repository.loadRequired(mode.resourcePath()), ctx));
-        append(prompt, repository.loadRequired("approvals/" + approvalMode(ctx) + ".md"));
+        append(prompt, applyConfigDir(loadRequired("capabilities.md")));
+        append(prompt, loadRequired("personalities/calm.md"));
+        append(prompt, applyVariables(loadRequired(mode.resourcePath()), ctx));
+        append(prompt, loadRequired("approvals/" + approvalMode(ctx) + ".md"));
         append(prompt, runtimeContext(mode));
         append(prompt, dynamicSection("Project Context", ctx.projectMemoryContext(), ctx.memoryContext(),
                 ctx.externalContext()));
         append(prompt, dynamicSection("Skills", ctx.skillIndex()));
-        append(prompt, repository.loadRequired("context/context-management.md"));
-        append(prompt, repository.loadRequired("handoff.md"));
+        append(prompt, loadRequired("context/context-management.md"));
+        append(prompt, loadRequired("handoff.md"));
 
         String assembled = prompt.toString().trim();
         validateLanguageSection(assembled, "assembled prompt");
         return assembled;
+    }
+
+    private String loadRequired(String resourcePath) {
+        return repository.loadRequired(resourcePath)
+                .replace("\r\n", "\n")
+                .replace('\r', '\n');
     }
 
     private String approvalMode(PromptContext context) {
