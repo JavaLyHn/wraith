@@ -52,6 +52,7 @@ import { runPetdexInstall } from './petInstall'
 import { detectEditors, detectWindowsEditors, uniqueDownloadName, performUndo, resolveOpenWithPlan } from './fileOpen'
 import type { EditorApp } from '../shared/editors'
 import { documentsDir, ensureDocumentsDir, listDocuments, resolveInVault, addDocuments, removeDocument } from './documents'
+import { requestGitStatus } from './gitStatusBridge'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -1176,6 +1177,13 @@ ipcMain.handle('wraith:configTestEmbedding', async (_e, cfg: { provider: string;
 ipcMain.handle('wraith:configGetSearch', async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.getSearch', {})
+})
+
+// renderer 只拿真实仓库的只读视图，不接触通用 RPC；这样不会绕过 preload 的窄权限边界。
+// 逐字段投影且不补默认值：null、空列表与 error 都必须如实到达，不能伪装成干净仓库。
+ipcMain.handle('wraith:gitStatus', async () => {
+  if (!client) throw new Error('Backend not connected')
+  return requestGitStatus(client)
 })
 // 写搜索后端。此前**只有读没有写** —— 卡片只能指着 CLI 的 /config search,
 // 用户问「这个不是必须要 cli 才能配置吧」。校验与落盘语义都在后端的 SearchConfigRules,

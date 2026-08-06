@@ -474,6 +474,42 @@ export interface SearchStatusView {
   savedProvider?: string
 }
 
+/** porcelain v2 的一条变更记录。 */
+export interface GitFileEntry {
+  path: string
+  /** 两字符 XY：X=暂存区相对 HEAD，Y=工作区相对暂存区。 */
+  xy: string
+  staged: boolean
+}
+
+export interface GitRemote {
+  name: string
+  url: string
+}
+
+/**
+ * 用户真实仓库的只读状态；与 Side-Git 快照刻意分开。
+ *
+ * null 与 error 都是有意义的后端状态，不能补成空串或“干净”，否则 renderer 会误报。
+ */
+export interface GitStatusView {
+  repo: boolean
+  root: string | null
+  name: string | null
+  state: string | null
+  branch: string | null
+  upstream: string | null
+  ahead: number
+  behind: number
+  insertions: number
+  deletions: number
+  untracked: number
+  filesTotal: number
+  files: GitFileEntry[]
+  remotes: GitRemote[]
+  error: string | null
+}
+
 /**
  * 快照开关状态（`snapshot.settings` 回包）。
  *
