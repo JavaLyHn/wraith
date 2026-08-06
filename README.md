@@ -113,8 +113,13 @@ powershell -ExecutionPolicy Bypass -File scripts\windows\wraith-install.ps1
 > 旧文档若让你 `git checkout feat/windows-parity-block1`，那是合并之前的说法 ——
 > 那条分支仍然存在且与 `main` 同一个提交，切过去不会错，只是没必要。
 >
-> ⚠️ 但**「代码完成」不等于「验证完成」**：Windows 桌面对等**尚未在真机全部验证完毕**
-> （AppContainer 沙箱、NSIS 安装包、桌宠 FFI 这几块只能在真 Windows 上验）。
+> ✅ **v1.4.0 起，Windows 的主链路已在真机验证过**：安装启动、配模型、对话、MCP、
+> 命令沙箱（AppContainer）、IM 网关、定时任务都在真 Windows 上跑通了。
+> 真机也确实抓出了代码审查抓不到的东西 —— **AppContainer 的管道 DACL 漏了创建者，
+> 沙箱其实从来没真正起来过**（修复见 `51fe2d3`）。这正是「代码完成 ≠ 验证完成」的实例。
+>
+> ⚠️ **仍未逐条走完** [`docs/windows-dev.md`](docs/windows-dev.md) 的 124 条验收清单，
+> 桌宠 FFI、部分面板的边角情况尚未逐项确认。「主链路已验」不等于「全部验收通过」。
 
 ---
 
@@ -216,8 +221,9 @@ wraith
 前两条绿只说明沙箱没碍事，只有「工作区外拒写」和「断网」被拦住，才说明围栏真在生效。
 沙箱按平台分派 —— macOS 走 Seatbelt，Windows 走 AppContainer，Linux 暂无实现且如实显示。
 
-> 本图在 macOS 上截取。**Windows 侧的 AppContainer 尚未在真机验证**，因此没有对应截图 ——
-> 那部分只能等真机跑过 `sandbox doctor` 才有资格放图。
+> 本图在 macOS 上截取。**Windows 侧的 AppContainer 已在真机验证过主链路**（v1.4.0），
+> 真机上还揪出并修掉了一个「管道 DACL 漏了创建者、AppContainer 其实从来没起来过」的缺陷。
+> 这里暂时仍只放 macOS 图 —— Windows 的对应截图还没补。
 
 ### 桌面宠物
 
