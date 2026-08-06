@@ -101,7 +101,8 @@ describe('petStore', () => {
     const manifestDir = path.join(petdexRoot, 'linked-manifest')
     fs.mkdirSync(manifestDir, { recursive: true })
     if (!createSymlinkOrSkip(outsideManifest, path.join(manifestDir, 'pet.json'))) {
-      return ctx.skip('当前 Windows 账户没有创建符号链接的权限；支持该能力的平台仍执行宠物包路径逃逸防护断言。')
+      // Windows 无符号链接权限时无法构造夹具；有权限的平台继续执行防护断言。
+      return ctx.skip()
     }
     fs.writeFileSync(path.join(manifestDir, 'spritesheet.png'), png())
 
@@ -110,7 +111,8 @@ describe('petStore', () => {
     writePet(petdexRoot, 'linked-asset')
     fs.rmSync(path.join(petdexRoot, 'linked-asset', 'spritesheet.png'))
     if (!createSymlinkOrSkip(outsideSprite, path.join(petdexRoot, 'linked-asset', 'spritesheet.png'))) {
-      return ctx.skip('当前 Windows 账户没有创建符号链接的权限；支持该能力的平台仍执行宠物包路径逃逸防护断言。')
+      // Windows 无符号链接权限时无法构造夹具；有权限的平台继续执行防护断言。
+      return ctx.skip()
     }
 
     const pets = await listPets({ userDataDir, petdexRoot })
@@ -248,7 +250,8 @@ describe('petStore', () => {
     const outside = path.join(root, 'outside.png'); fs.writeFileSync(outside, png())
     fs.rmSync(asset)
     if (!createSymlinkOrSkip(outside, asset)) {
-      return ctx.skip('当前 Windows 账户没有创建符号链接的权限；支持该能力的平台仍执行宠物包路径逃逸防护断言。')
+      // Windows 无符号链接权限时无法构造夹具；有权限的平台继续执行防护断言。
+      return ctx.skip()
     }
     await expect(previewDataUrl({ userDataDir, petdexRoot, id: imported.id })).resolves.toBeNull()
     fs.rmSync(asset); fs.writeFileSync(asset, Buffer.alloc(8 * 1024 * 1024 + 1))
