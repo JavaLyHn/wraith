@@ -3,6 +3,7 @@ package com.lyhn.wraith.rag;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
@@ -12,19 +13,32 @@ import static org.junit.jupiter.api.Assertions.*;
 class VectorStoreTest {
 
     private VectorStore store;
-    private static final String TEST_PROJECT = "/tmp/test-project";
+
+    @TempDir
+    Path tempDir;
+
+    private String originalRagDir;
 
     @BeforeEach
     void setUp() throws Exception {
-        System.setProperty("wraith.rag.dir", "/tmp/wraith-test-rag");
-        store = new VectorStore(TEST_PROJECT);
+        originalRagDir = System.getProperty("wraith.rag.dir");
+        System.setProperty("wraith.rag.dir", tempDir.resolve("rag-store").toString());
+        store = new VectorStore(tempDir.resolve("project").toString());
         store.clearProject();
     }
 
     @AfterEach
     void tearDown() throws Exception {
-        if (store != null) {
-            store.close();
+        try {
+            if (store != null) {
+                store.close();
+            }
+        } finally {
+            if (originalRagDir == null) {
+                System.clearProperty("wraith.rag.dir");
+            } else {
+                System.setProperty("wraith.rag.dir", originalRagDir);
+            }
         }
     }
 
