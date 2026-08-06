@@ -109,14 +109,31 @@ class ModelCatalogTest {
 
     // ── Test: result() structure is well-formed ──────────────────────────────
 
-    // 这条原先走的是 public 入口 result(config, ..., fallback) —— 它内部用
-    // ProviderResolver.candidates(config) **扫真实 env / ./.env**。于是:
-    //   · 开发机上 ./.env 里有真实 DEEPSEEK_API_KEY → candidates=[deepseek] → default="deepseek" → 绿
-    //   · 干净 clone / CI 上没有那个 key      → candidates=[]         → default=""         → 红
-    // 也就是「只在作者机器上绿」。用 dummy 值实测证实过因果:补一个任意 DEEPSEEK_API_KEY 就转绿。
-    //
-    // 这正是本文件上方(providersHasKeyFalseWhenNoKeyConfigured)已经记过并修掉的那个坑,
-    // 只是漏了这一条。修法照旧:走**注入重载**,候选表由测试给出,不碰真实环境。
+    /**
+     * 结构测试：**候选表显式注入**，不走 {@code ProviderResolver.candidates(config)}。
+     *
+     * <p><b>合并说明</b>：这个修复在 {@code feat/windows-parity-block1}（53ed9fb）与
+     * {@code feat/desktop-git-pill}（58927ab）上被独立做了两遍，相隔 45 秒。改法一致，
+     * 本文保留两版各自查到的信息。
+     *
+     * <p>原先这条走的是 public 入口 {@code result(config, ..., fallback)}，它内部用
+     * {@code ProviderResolver.candidates(config)} <b>扫真实 env / ./.env</b>。规则是
+     * 「{@code defaultProvider} 仅当它拿得到 key 才进候选」，而这里的 config <b>没有 key</b>，于是：
+     * <pre>
+     *   开发机(./.env 里有真实 DEEPSEEK_API_KEY) → candidates=[deepseek] → default="deepseek" → 绿
+     *   干净 clone / CI / 干净 worktree          → candidates=[]         → default=""         → 红
+     * </pre>
+     * 也就是「只在作者机器上绿」。用 dummy 值实测证实过因果：补一个任意
+     * {@code DEEPSEEK_API_KEY} 就转绿。
+     *
+     * <p><b>这条断言是被 {@code 54c1856} 留下的</b>（那次把 default 改成报「有效默认」而非
+     * config 里的死字段）：行为改了，断言没跟着改，而环境恰好掩盖了它。
+     *
+     * <p>本节标题写的是「result() structure is well-formed」——<b>结构</b>测试不该依赖默认解析；
+     * 默认解析本身由 {@code ProviderResolverTest} 覆盖。这正是本文件上方
+     * （{@code providersHasKeyFalseWhenNoKeyConfigured}）已经记过并修掉的那个坑，只是漏了这一条。
+     * 修法照旧：走<b>注入重载</b>，候选表由测试给出，不碰真实环境。
+     */
     @Test
     @DisplayName("result() 顶层结构完好 —— **候选表由测试注入**,不靠本机 .env 偶然为真")
     void resultHasExpectedTopLevelKeys() {
@@ -138,11 +155,19 @@ class ModelCatalogTest {
         assertEquals("deepseek", result.get("default"));
     }
 
+    /**
+     * 候选表为空时 {@code default} 必须是空串而不是 null —— 桌面侧直接读，不判空。
+     *
+     * <p><b>provider 刻意传非空的 "deepseek"</b>：两版实现里这里曾写作 {@code ""}，
+     * 那样即使 {@code result()} 错误地把「传入的 provider」当默认返回，断言
+     * {@code default == ""} 也照样通过 —— 空断言。传非空值之后，一旦实现回退成
+     * 「返回传入值」，这条会得到 {@code "deepseek" != ""} 而当场变红。
+     */
     @Test
     @DisplayName("一个候选都没有时 default 是空串而不是 null —— 桌面侧直接读,不必判空")
     void defaultIsEmptyStringWhenNoCandidates() {
         Map<String, Object> result = ModelCatalog.result(
-                new WraithConfig(), "", "", false, List.of());
+                new WraithConfig(), "deepseek", "deepseek-chat", false, List.of());
 
         assertEquals("", result.get("default"));
     }

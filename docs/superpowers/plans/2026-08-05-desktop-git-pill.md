@@ -19,6 +19,8 @@
 - **git 硬超时 3 秒**，超时返回带 `error` 的结果，不抛、不阻塞。
 - **没有 `.git` 或 `git` 不在 PATH 时前端什么都不渲染**，原因只进 log，不弹窗。
 - **不写依赖真实仓库的测试**——本仓库自己的 git 状态一直在变，那种测试会随机变红。
+- **桌面测试不得用 `@testing-library/jest-dom` 的匹配器**（`toBeEmptyDOMElement` / `toBeInTheDocument` / `toHaveTextContent` 等）——**本项目没装它**。用 `queryByTestId(...)` / `container.querySelector(...)` → `toBeNull()`、`toBeTruthy()`、`.textContent` 这套（既有写法见 `test/accountRowAndSandboxChip.test.tsx`）。
+- **不得引入新 npm 依赖。** 计划用到的 `lucide-react` 图标 `GitBranch` / `RefreshCw` / `Link2` / `FileDiff` 已预检存在（lucide-react 1.24.0）。
 - 中文注释与文案；解释「为什么」而不是「做了什么」。
 
 ---
@@ -276,12 +278,16 @@ public final class PorcelainV2Parser {
 
     /**
      * `1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>` —— 路径前固定 8 个字段。
-     * `2` 记录（重命名）在路径位置是 `<path>\t<origPath>`，取前半即新路径。
+     * `2` 记录（重命名/复制）比 `1` **多一个 `<X><score>` 字段**（如 `R100`），
+     * 路径前是 9 个字段，位置是 `<path>\t<origPath>`，取前半即新路径。
+     * 两种记录字段数不同，**沿用同一个 limit=9 会把 score 吞进路径**。
      */
     private static GitStatus.FileEntry entry(String line) {
-        String[] parts = line.split(" ", 9);
+        boolean renamedOrCopied = line.startsWith("2 ");
+        String[] parts = line.split(" ", renamedOrCopied ? 10 : 9);
         String xy = parts.length > 1 ? parts[1] : "..";
-        String path = parts.length > 8 ? parts[8] : "";
+        int pathIdx = renamedOrCopied ? 9 : 8;
+        String path = parts.length > pathIdx ? parts[pathIdx] : "";
         int tab = path.indexOf('\t');
         if (tab >= 0) path = path.substring(0, tab);
         return new GitStatus.FileEntry(path, xy, !xy.isEmpty() && xy.charAt(0) != '.');
@@ -457,12 +463,12 @@ Expected: `Tests run: 1, Failures: 0, Errors: 0`
 - [ ] **Step 7: 跑全部并确认绿**
 
 Run: `mvn -q -DskipTests=false -Dtest=PorcelainV2ParserTest test`
-Expected: `Tests run: 11, Failures: 0, Errors: 0`
+Expected: `Tests run: 10, Failures: 0, Errors: 0`（本节共 10 个 @Test）
 
 - [ ] **Step 8: RED 证明（本仓库硬要求）**
 
 把 `entry()` 里的 `xy.charAt(0) != '.'` 改成 `!= 'x'`，重跑。
-Expected: `stagedFlagComesFromXNotY` 与 `renameRecordTakesTheNewPath` 精确变红，其余仍绿。
+Expected: **恰好 2 条精确变红**，其余仍绿。实测是 `stagedFlagComesFromXNotY` 与 `parsesBranchHeaderAndAheadBehind`（后者本就藏了一条 `staged()` 断言）；**不是** `renameRecordTakesTheNewPath` —— 它的 `xy="R."` 对这个变异不敏感，`'R'` 既不等于 `'.'` 也不等于 `'x'`。
 确认后**改回来**再跑一遍确认全绿。
 
 - [ ] **Step 9: 提交**
@@ -1192,9 +1198,12 @@ const s: GitStatusView = {
 }
 
 describe('GitPill', () => {
-  it('没有仓库时整块不渲染 —— 断言容器为空,而不是断言某句文案', () => {
+  it('没有仓库时整块不渲染 —— 断言什么都没渲染,而不是断言某句文案', () => {
+    // 用 container.firstChild → toBeNull()，**不要用 toBeEmptyDOMElement()**：
+    // 本项目没装 @testing-library/jest-dom，那个匹配器不存在。
+    // 既有写法见 test/accountRowAndSandboxChip.test.tsx:112。
     const { container } = render(<GitPill status={{ ...s, repo: false }} onRefresh={() => {}} />)
-    expect(container).toBeEmptyDOMElement()
+    expect(container.firstChild).toBeNull()
   })
 
   it('弹出层默认关着,点 pill 才开', () => {
