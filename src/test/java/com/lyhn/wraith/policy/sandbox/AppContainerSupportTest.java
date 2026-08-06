@@ -17,6 +17,19 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class AppContainerSupportTest {
 
+    private static final AppContainerSupport.CapabilityProbe NO_POWERSHELL =
+            new AppContainerSupport.CapabilityProbe() {
+                @Override
+                public String resolvePowershell() {
+                    return null;
+                }
+
+                @Override
+                public String ensureLauncher() {
+                    return "C:\\temp\\appcontainer-run.ps1";
+                }
+            };
+
     // ---------- 版本解析 ----------
 
     @Test
@@ -58,11 +71,10 @@ class AppContainerSupportTest {
     }
 
     @Test
-    @DisplayName("在 mac 上跑 Windows 分支:powershell 找不到 → 不 ready,且原因可读")
+    @DisplayName("注入 Windows 能力探测:powershell 找不到 → 不 ready,且原因可读")
     void windowsWithoutPowershellIsNotReady() {
-        // 本机不是 Windows,StdioCommand.resolveExecutable 恒返回 null,
-        // 正好模拟「组策略把 PowerShell 拿掉了」这种情况
-        AppContainerSupport.Diagnosis d = AppContainerSupport.compute("Windows 11", "10.0");
+        AppContainerSupport.Diagnosis d = AppContainerSupport.compute(
+                "Windows 11", "10.0", NO_POWERSHELL);
         assertFalse(d.ready());
         assertNotNull(d.reason());
         AppContainerSupport.Check ps = d.checks().stream()
@@ -73,7 +85,8 @@ class AppContainerSupportTest {
     @Test
     @DisplayName("reason 取的是第一条失败项,不是笼统一句「不可用」")
     void reasonNamesTheFailingCheck() {
-        AppContainerSupport.Diagnosis d = AppContainerSupport.compute("Windows 11", "10.0");
+        AppContainerSupport.Diagnosis d = AppContainerSupport.compute(
+                "Windows 11", "10.0", NO_POWERSHELL);
         assertNotNull(d.reason());
         List<String> failed = d.checks().stream().filter(c -> !c.ok()).map(AppContainerSupport.Check::name).toList();
         assertFalse(failed.isEmpty());

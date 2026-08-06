@@ -33,6 +33,24 @@ public final class AppContainerSupport {
     /** @param reason ready=false 时非空，是「为什么没有沙箱」的用户可读说明 */
     public record Diagnosis(boolean ready, List<Check> checks, String reason) {}
 
+    interface CapabilityProbe {
+        String resolvePowershell();
+
+        String ensureLauncher() throws Exception;
+    }
+
+    private static final CapabilityProbe REAL_CAPABILITIES = new CapabilityProbe() {
+        @Override
+        public String resolvePowershell() {
+            return AppContainerSupport.resolvePowershell();
+        }
+
+        @Override
+        public String ensureLauncher() throws Exception {
+            return AppContainerSupport.ensureLauncher();
+        }
+    };
+
     // 探测涉及 PATH 扫描 + 落盘,每条命令跑一次太浪费,故缓存。
     // 但 key 里带上 configDir —— 否则 -Dwraith.config.dir 换了目录,
     // 缓存还指着上一个,测试里会悄悄复用开发机的真实 ~/.wraith(WraithConfig 里
@@ -70,6 +88,10 @@ public final class AppContainerSupport {
     }
 
     static Diagnosis compute(String osName, String osVersion) {
+        return compute(osName, osVersion, REAL_CAPABILITIES);
+    }
+
+    static Diagnosis compute(String osName, String osVersion, CapabilityProbe capabilities) {
         List<Check> checks = new ArrayList<>();
 
         boolean win = ShellCommand.isWindows(osName);
@@ -83,7 +105,7 @@ public final class AppContainerSupport {
         checks.add(new Check("Windows 版本", verOk,
                 verOk ? osVersion : osVersion + "（需 " + MIN_WINDOWS_MAJOR + " 及以上）"));
 
-        String ps = resolvePowershell();
+        String ps = capabilities.resolvePowershell();
         boolean psOk = ps != null;
         checks.add(new Check("powershell.exe", psOk,
                 psOk ? ps : "在 PATH 中找不到（可能被组策略移除）"));
@@ -91,7 +113,7 @@ public final class AppContainerSupport {
         String script = null;
         String scriptErr = null;
         try {
-            script = ensureLauncher();
+            script = capabilities.ensureLauncher();
         } catch (Exception e) {
             scriptErr = e.getClass().getSimpleName() + ": " + e.getMessage();
         }
