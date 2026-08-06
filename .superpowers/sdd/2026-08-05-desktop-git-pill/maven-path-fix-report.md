@@ -65,17 +65,71 @@ mvn test -Dtest=AppServerWorkspaceDirTest -DskipTests=false
 
 ## D. Java 搜索路径
 
-待处理。
+根因：Java fallback 在 `Path -> GrepMatch.file` 边界直接使用 `relative.toString()`，Windows 返回反斜杠；同一 `GrepMatch.file` 又被正文和 `suggested_reads` 共用，因此 fallback 与 rg 后端的公开格式不一致。
+
+RED：
+
+```powershell
+mvn test -Dtest=CodeSearchGoldenSetTest -DskipTests=false
+```
+
+结果：退出码 1；`Tests run: 1, Failures: 1, Errors: 0, Skipped: 0`。期望包含 `src/main/java/com/lyhn/wraith/cli/Main.java:520`，实际正文与 `suggested_reads` 均为 `src\main\java\...`。
+
+修复：仅在 `collectMatches` 生成对外 `fileKey` 时将 `\` 替换为 `/`；glob 过滤继续使用原生 `Path`。
+
+GREEN：
+
+```powershell
+mvn test -Dtest=CodeSearchGoldenSetTest -DskipTests=false
+```
+
+结果：退出码 0；`Tests run: 1, Failures: 0, Errors: 0, Skipped: 0`（随后与 `ToolRegistryTest` 同跑时该 golden test 仍为 1/1）。
+
+文件：
+
+- `src/main/java/com/lyhn/wraith/tool/JavaCodeSearchEngine.java`
 
 ## E. 图片 file:// Windows drive path
 
-待处理。
+根因：`fileUriToLocalPath` 对不以 `/` 开头的 `afterScheme` 一律按 authority/fallback 处理并补前导 `/`；Windows 兼容输入 `file://C:\...` 因此变成 `/C:\...`，文件不存在。percent decode 本身可用，只是输入路径结构已经错误。
+
+RED：
+
+```powershell
+mvn test -Dtest=ImageReferenceParserTest -DskipTests=false
+```
+
+结果：退出码 1；`Tests run: 10, Failures: 3, Errors: 0, Skipped: 0`；失败正是未编码空格、非 ASCII 与 `%20` 三个 `file://` 用例。
+
+修复：在 POSIX/authority 分支前识别 `字母盘符 + ':' + ('/' 或 '\')`，Windows drive path 原样进入既有 `percentDecodeUtf8`。未将 `file://host/share` 当作本地盘符，也未扩展 UNC 行为。
+
+GREEN：
+
+```powershell
+mvn test -Dtest=ImageReferenceParserTest -DskipTests=false
+```
+
+结果：退出码 0；`Tests run: 10, Failures: 0, Errors: 0, Skipped: 0`，既有 POSIX/percent decode 相关测试共同通过。
+
+文件：
+
+- `src/main/java/com/lyhn/wraith/image/ImageReferenceParser.java`
 
 ## 提交
 
-- RAG / AppServer 阶段提交：待本阶段提交后在最终报告回填。
+- `6c323a09 test: 修复 Windows 下 Maven 路径隔离`：RAG / AppServer 测试隔离与本报告初稿。
+- Java 搜索 / 图片路径提交：待最终提交后由 `git log` 确认。
 
 ## 顾虑
 
 - `wraith.rag.dir` 是 JVM 全局属性；本修复逐测试恢复原值，但若未来开启同 JVM 并行执行这些测试类，仍应使用 JUnit 资源锁或改为显式依赖注入。
 - Maven 任务共享同一 worktree 的 `target` 时会互相删除/覆盖类文件与 Surefire 报告；验证应避免并发运行。
+- `CodeSearchGoldenSetTest,ToolRegistryTest` 同跑时 golden 始终通过，但 `ToolRegistryTest` 在当前 Windows sandbox 有 3 个既有环境失败（`shouldRunCommandInProjectDirectory`、`shouldTimeoutLongRunningCommandWithoutHanging`、`shouldGlobFilesInsideProject`）；把 `TEMP/TMP` 指到 workspace-local 目录后仍相同。本任务未修改这些命令/glob 路径，按范围留给共享边界审查。
+
+## 最终组合验证
+
+```powershell
+mvn test '-Dtest=CodeIndexTest,CodeRetrieverTest,VectorStoreTest,AppServerWorkspaceDirTest,CodeSearchGoldenSetTest,ImageReferenceParserTest' -DskipTests=false
+```
+
+结果：退出码 0；`Tests run: 24, Failures: 0, Errors: 0, Skipped: 0`，`BUILD SUCCESS`。

@@ -97,7 +97,7 @@ final class JavaCodeSearchEngine implements CodeSearchEngine {
                 return;
             }
             List<String> lines = Files.readAllLines(file, StandardCharsets.UTF_8);
-            String fileKey = relative.toString();
+            String fileKey = relative.toString().replace('\\', '/');
             for (int i = 0; i < lines.size() && matches.size() < request.maxResults(); i++) {
                 int currentFileMatches = perFileMatches.getOrDefault(fileKey, 0);
                 if (currentFileMatches >= request.headLimit()) {
