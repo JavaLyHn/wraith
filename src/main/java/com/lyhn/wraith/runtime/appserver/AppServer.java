@@ -329,6 +329,10 @@ public final class AppServer {
             throw new UnsupportedOperationException("searchStatus not implemented");
         }
 
+        default java.util.Map<String, Object> gitStatus() {
+            throw new UnsupportedOperationException("gitStatus not implemented");
+        }
+
         /**
          * 写搜索后端配置（{@code apiKey} 空 = 保留旧，同 {@code embeddingSet}）。
          *
@@ -933,6 +937,14 @@ public final class AppServer {
             case "config.getSearch" -> {
                 if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
                 try { writer.result(msg.id(), session.searchStatus()); }
+                catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
+                catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
+            }
+            case "git.status" -> {
+                if (session == null) { writer.error(msg.id(), -32000, "no session"); return true; }
+                // git.* 读取用户真实仓库，刻意与 Side-Git 的 snapshot.* 分开；
+                // reader 自带三秒硬超时，因此这里同步返回，避免引入异步状态竞态。
+                try { writer.result(msg.id(), session.gitStatus()); }
                 catch (UnsupportedOperationException e) { writer.error(msg.id(), -32000, e.getMessage()); }
                 catch (Exception e) { writer.error(msg.id(), -32000, e.getMessage()); }
             }

@@ -2070,6 +2070,38 @@ public class Main {
                         // 这里就能立刻反映出来,不需要重启后端。
                         return registry.searchStatus();
                     }
+                    public java.util.Map<String, Object> gitStatus() {
+                        com.lyhn.wraith.git.GitStatus status =
+                                com.lyhn.wraith.git.GitStatusReader.read(root);
+                        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+                        result.put("repo", status.repo());
+                        result.put("root", status.root());
+                        result.put("name", status.name());
+                        result.put("state", status.state());
+                        result.put("branch", status.branch());
+                        result.put("upstream", status.upstream());
+                        result.put("ahead", status.ahead());
+                        result.put("behind", status.behind());
+                        result.put("insertions", status.insertions());
+                        result.put("deletions", status.deletions());
+                        result.put("untracked", status.untracked());
+                        result.put("filesTotal", status.filesTotal());
+                        result.put("files", status.files().stream().map(file -> {
+                            java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+                            row.put("path", file.path());
+                            row.put("xy", file.xy());
+                            row.put("staged", file.staged());
+                            return row;
+                        }).toList());
+                        result.put("remotes", status.remotes().stream().map(remote -> {
+                            java.util.Map<String, Object> row = new java.util.LinkedHashMap<>();
+                            row.put("name", remote.name());
+                            row.put("url", remote.url());
+                            return row;
+                        }).toList());
+                        result.put("error", status.error());
+                        return result;
+                    }
                     public java.util.Map<String, Object> searchSet(String provider, String apiKey, String baseUrl) {
                         com.lyhn.wraith.web.SearchConfigRules.Violation violation =
                                 com.lyhn.wraith.web.SearchConfigRules.check(provider, apiKey, baseUrl);
