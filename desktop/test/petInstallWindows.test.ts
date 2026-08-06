@@ -109,7 +109,7 @@ describe('npxSpawnArgs —— .cmd 不能直接 spawn', () => {
   })
 
   it('ComSpec 缺失时回落到裸 cmd.exe(交给 PATH 找)', () => {
-    expect(npxSpawnArgs('C:\\n\\npx.cmd', ARGS, 'win32', undefined).command).toBe('cmd.exe')
+    expect(npxSpawnArgs('C:\\n\\npx.cmd', ARGS, 'win32', '').command).toBe('cmd.exe')
     expect(npxSpawnArgs('C:\\n\\npx.cmd', ARGS, 'win32', '  ').command).toBe('cmd.exe')
   })
 
