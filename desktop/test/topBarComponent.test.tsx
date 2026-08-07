@@ -76,4 +76,19 @@ describe('TopBar', () => {
     render(<TopBar {...base} platform="darwin" />)
     expect(screen.queryByTestId('window-controls')).toBeNull()
   })
+
+  it('传了 git 状态就渲染 pill', () => {
+    render(<TopBar {...base} gitStatus={{
+      repo: true, root: '/r/w', name: 'w', state: 'normal', branch: 'main',
+      upstream: null, ahead: 0, behind: 0, insertions: 1, deletions: 0,
+      untracked: 0, filesTotal: 1, files: [], remotes: [], error: null,
+    }} onRefreshGit={() => {}} />)
+    expect(screen.getByTestId('git-pill')).toBeTruthy()
+  })
+
+  it('没传 git 状态时顶栏照常工作 —— pill 是可选的,不该让顶栏依赖它', () => {
+    render(<TopBar {...base} />)
+    expect(screen.getByTestId('topbar')).toBeTruthy()
+    expect(screen.queryByTestId('git-pill')).toBeNull()
+  })
 })

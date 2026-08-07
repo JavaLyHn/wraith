@@ -1,6 +1,6 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
-import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire } from '../shared/types'
+import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire, GitStatusView } from '../shared/types'
 import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
 import type { EditorApp } from '../shared/editors'
 import type { McpFormValue } from './components/McpServerForm'
@@ -225,6 +225,8 @@ export default function App(): JSX.Element {
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** 后端起来了但一个模型都没配 —— 全新装机的常态,需要在空态给出引导。 */
   const [noModel, setNoModel] = useState(false)
+  // 用户真实仓库的只读状态。null = 还没拉回来 / 不是仓库,顶栏 pill 整块不渲染。
+  const [gitStatus, setGitStatus] = useState<GitStatusView | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('wraith.sidebar.collapsed') === '1' } catch { return false }
   })
@@ -259,6 +261,17 @@ export default function App(): JSX.Element {
     }
   }, [])
 
+  // 取数失败时**保留上一次成功的值**,只把 error 换上 —— 静默拿旧数据当新的是不允许的
+  // (与上下文治理「绝不静默」同一条规矩),所以 error 会在弹出层里明写出来。
+  // 声明在 onEvent effect 之前,以便后者在 deps 里引用(同 fetchMcpResources 的处理)。
+  const fetchGitStatus = useCallback(async (): Promise<void> => {
+    try {
+      setGitStatus(await window.wraith.gitStatus())
+    } catch (e) {
+      setGitStatus(prev => (prev ? { ...prev, error: String(e) } : null))
+    }
+  }, [])
+
   // ── subscribe to backend events on mount (status 高频 → 100ms 窗口合并) ────
   useEffect(() => {
     const throttledStatus = createThrottleLatest<BackendEvent>(100, evt => dispatch(evt))
@@ -277,13 +290,20 @@ export default function App(): JSX.Element {
         throttledStatus(evt)
         return
       }
+      // Agent 刚改完文件,正是最该刷的点 —— 「数字变了」与「Agent 做了事」在时间上对得上。
+      // 刻意不轮询:空闲时零开销,而且轮询大多数时候刷出来的结果和上一次一模一样。
+      // turn.failed 也刷:失败的 turn 一样可能已经改了文件。
+      if (evt.kind === 'notification'
+          && (evt.method === 'turn.completed' || evt.method === 'turn.failed')) {
+        void fetchGitStatus()
+      }
       dispatch(evt)
     })
     return () => {
       throttledStatus.cancel()
       unsubscribe()
     }
-  }, [fetchMcpResources])
+  }, [fetchMcpResources, fetchGitStatus])
 
   // ── session list helpers ───────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -464,6 +484,7 @@ export default function App(): JSX.Element {
           dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
         } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
         void refreshSandbox()
+        void fetchGitStatus()   // 会话起来后取一次,顶栏 pill 能在首条消息前就显示
         void fetchSessions()
         void fetchProjects()
         void fetchMcp()
@@ -472,7 +493,7 @@ export default function App(): JSX.Element {
         console.error('[wraith] startup error:', err)
       }
     })()
-  }, [fetchSessions, fetchProjects, fetchMcp, fetchMcpResources, refreshSandbox])
+  }, [fetchSessions, fetchProjects, fetchMcp, fetchMcpResources, refreshSandbox, fetchGitStatus])
 
   useEffect(() => {
     if (!appPrefs.update.autoCheck) return
@@ -500,6 +521,7 @@ export default function App(): JSX.Element {
         dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(sb), networkAllowed: false })
         await window.wraith.startSession(ws)
         void refreshSandbox()   // 重连后后端是全新进程,联网位回到默认值,必须重新问
+        void fetchGitStatus()    // 重连后 git 状态也需重取
         if (activeId) {
           const { messages, model, cards } = await window.wraith.resumeSession(activeId)
           dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
@@ -517,7 +539,7 @@ export default function App(): JSX.Element {
         console.error('[wraith] reconnect error:', err)
       }
     })()
-  }, [state.connection, state.workspace, fetchSessions, refreshSandbox])
+  }, [state.connection, state.workspace, fetchSessions, refreshSandbox, fetchGitStatus])
 
   // ── refresh session list when a turn completes ────────────
   const prevTurnRef = useRef(state.turn)
@@ -1017,6 +1039,8 @@ export default function App(): JSX.Element {
         sandbox={state.sandbox}
         sandboxNet={state.sandboxNet}
         onOpenPolicy={() => setView('policy')}
+        gitStatus={gitStatus}
+        onRefreshGit={() => void fetchGitStatus()}
       />
       <div className="flex min-h-0 flex-1 overflow-hidden">
       <SidebarDock collapsed={sidebarCollapsed} peek={sidebarPeek} onPeekChange={setSidebarPeek}>
