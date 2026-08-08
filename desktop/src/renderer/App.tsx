@@ -1219,7 +1219,7 @@ export default function App(): JSX.Element {
             onAdd={handleAddProject}
           />
         ) : view === 'settings' ? (
-          <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} />
+          <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} onArchiveChanged={() => void fetchSessions()} />
         ) : (
           /* 既有 welcome ↔ transcript+composer 条件块整体原样嵌此 else */
           (() => {
