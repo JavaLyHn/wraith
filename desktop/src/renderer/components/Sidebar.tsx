@@ -163,8 +163,8 @@ interface SidebarProps {
   onDeleteSession: (id: string) => void
   onActivateProject: (path: string) => void
   onAddProject: () => void
-  onRemoveProject: (path: string) => void
-  onRenameProject: (path: string, name: string) => void
+  /** 进「项目」面板看全量(改名/移出/整理都在那儿)。 */
+  onOpenAllProjects: () => void
   /** 账户行的头像/昵称来源(设置→「我」)。沙箱状态已移出侧栏,见顶栏的盾图标。 */
   profile: ProfilePrefs
   activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'projects' | 'settings' | null
@@ -203,8 +203,7 @@ export default function Sidebar({
   onDeleteSession,
   onActivateProject,
   onAddProject,
-  onRemoveProject,
-  onRenameProject,
+  onOpenAllProjects,
   profile,
   activeNav,
   onOpenPlugins,
@@ -299,8 +298,7 @@ export default function Sidebar({
           busy={busy}
           onActivate={onActivateProject}
           onAdd={onAddProject}
-          onRemove={onRemoveProject}
-          onRename={onRenameProject}
+          onOpenAllProjects={onOpenAllProjects}
         />
 
         {/* new conversation — functional */}

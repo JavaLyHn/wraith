@@ -1087,8 +1087,7 @@ export default function App(): JSX.Element {
           onDeleteSession={handleDeleteSession}
           onActivateProject={switchToProject}
           onAddProject={handleAddProject}
-          onRemoveProject={handleRemoveProject}
-          onRenameProject={handleRenameProject}
+          onOpenAllProjects={() => setView('projects')}
           profile={appPrefs.profile}
           taskActiveCount={taskActiveCount}
           activeNav={view === 'chat' ? null : view}

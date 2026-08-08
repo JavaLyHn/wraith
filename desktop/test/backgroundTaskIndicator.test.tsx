@@ -15,7 +15,7 @@ function sidebarProps(over: Partial<SidebarProps> = {}): SidebarProps {
     activeSessionId: '', runningSessionId: '', newDraftActive: false,
     onNewConversation: vi.fn(), onSelectSession: vi.fn(), onToggleStar: vi.fn(),
     onRenameSession: vi.fn(), onDeleteSession: vi.fn(),
-    onActivateProject: vi.fn(), onAddProject: vi.fn(), onRemoveProject: vi.fn(), onRenameProject: vi.fn(),
+    onActivateProject: vi.fn(), onAddProject: vi.fn(), onOpenAllProjects: vi.fn(),
     profile: { name: 'Haonan', avatar: '🦊' }, activeNav: 'plugins', taskActiveCount: 0,
     onOpenPlugins: vi.fn(), onOpenAutomations: vi.fn(), onOpenImGateway: vi.fn(),
     onOpenProviders: vi.fn(), onOpenSkills: vi.fn(), onOpenMemory: vi.fn(),
