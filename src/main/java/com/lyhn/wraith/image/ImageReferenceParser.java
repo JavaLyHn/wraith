@@ -156,13 +156,22 @@ public class ImageReferenceParser {
     private static String fileUriToLocalPath(String value) {
         String afterScheme = value.substring("file://".length());
         String pathPart;
-        if (afterScheme.startsWith("/")) {
+        if (isWindowsDrivePath(afterScheme)) {
+            pathPart = afterScheme;
+        } else if (afterScheme.startsWith("/")) {
             pathPart = afterScheme;
         } else {
             int slashIdx = afterScheme.indexOf('/');
             pathPart = slashIdx < 0 ? "/" + afterScheme : afterScheme.substring(slashIdx);
         }
         return percentDecodeUtf8(pathPart);
+    }
+
+    private static boolean isWindowsDrivePath(String value) {
+        return value.length() >= 3
+                && Character.isLetter(value.charAt(0))
+                && value.charAt(1) == ':'
+                && (value.charAt(2) == '\\' || value.charAt(2) == '/');
     }
 
     private static String percentDecodeUtf8(String s) {

@@ -1108,9 +1108,13 @@ test('T23 切到无历史项目回欢迎态', async () => {
 
 // ---------------------------------------------------------------------------
 // T24: 项目管理 — 重命名别名 + 移出列表
+//
+// Task 14 把重命名/移出从侧栏快切下拉的内联按钮搬进了项目面板的 ··· 菜单
+// (ProjectRowMenu)。旧选择器 project-rename / project-rename-input / project-remove
+// 已不存在 —— 这里改成:侧栏快切 → 全部项目 → 行的 ··· → 编辑/移除。
 // ---------------------------------------------------------------------------
 
-test('T24 项目重命名与移出', async () => {
+test('T24 项目重命名与移出(面板 ··· 菜单)', async () => {
   const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-a-'))
   const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-proj-b-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t24-'))
@@ -1131,21 +1135,37 @@ test('T24 项目重命名与移出', async () => {
   })
   const win = await app.firstWindow()
   await expect(win.locator('[data-testid="project-switcher"]')).toBeVisible({ timeout: 15000 })
+
+  // 进项目面板:侧栏快切下拉 → 全部项目…
   await win.locator('[data-testid="project-switcher"]').click()
+  await win.locator('[data-testid="project-view-all"]').click()
+  await expect(win.locator('[data-testid="projects-panel"]')).toBeVisible({ timeout: 5000 })
 
-  // 重命名 B(非活跃,第 2 行):hover 露钮 → 内联输入 → Enter
-  const rowB = win.locator('[data-testid="project-item"]').nth(1)
+  // dirA(lastUsedAt=2000)排第一、dirB(1000)排第二;两者都无会话 → lastSessionAt=null
+  // → sortProjects 返回 0(保持 projects 原序),渲染顺序确定
+  const rowA = win.locator('[data-testid="project-row"]').nth(0)
+  const rowB = win.locator('[data-testid="project-row"]').nth(1)
+
+  // 重命名 B(非活跃):hover 露 ··· → 编辑项目 → 改别名 → 保存
   await rowB.hover()
-  await win.locator('[data-testid="project-rename"]').nth(1).click()
-  await win.locator('[data-testid="project-rename-input"]').fill('我的博客')
-  await win.locator('[data-testid="project-rename-input"]').press('Enter')
-  await expect(win.locator('[data-testid="project-item"]').nth(1)).toHaveText(/我的博客/, { timeout: 5000 })
+  await rowB.locator('[data-testid="project-row-menu"]').click()
+  await win.locator('[data-testid="project-menu-edit"]').click()
+  const editName = win.locator('[data-testid="project-edit-name"]')
+  await expect(editName).toBeVisible({ timeout: 5000 })
+  await editName.fill('我的博客')
+  await win.locator('[data-testid="project-edit-save"]').click()
+  await expect(win.locator('[data-testid="project-row-open"]').nth(1)).toHaveText(/我的博客/, { timeout: 5000 })
 
-  // 移出 B:hover 露钮 → 单击生效(无二次确认);活跃项 A 的移出钮 disabled
-  await expect(win.locator('[data-testid="project-remove"]').nth(0)).toBeDisabled()
-  await win.locator('[data-testid="project-item"]').nth(1).hover()
-  await win.locator('[data-testid="project-remove"]').nth(1).click()
-  await expect(win.locator('[data-testid="project-item"]')).toHaveCount(1, { timeout: 5000 })
+  // 移出 B:hover 露 ··· → 移除(无二次确认,单击生效)
+  await rowB.hover()
+  await rowB.locator('[data-testid="project-row-menu"]').click()
+  await win.locator('[data-testid="project-menu-remove"]').click()
+  await expect(win.locator('[data-testid="project-row"]')).toHaveCount(1, { timeout: 5000 })
+
+  // 活跃项 A 的移出钮 disabled —— 移出会把工作目录抽走,产品层硬拦
+  await rowA.hover()
+  await rowA.locator('[data-testid="project-row-menu"]').click()
+  await expect(win.locator('[data-testid="project-menu-remove"]')).toBeDisabled()
 
   await app.close()
   for (const p of [dirA, dirB, userData]) fs.rmSync(p, { recursive: true, force: true })
@@ -1768,13 +1788,13 @@ test('T46 命令面板搜索:输入关键字过滤会话+项目,清空恢复全�
 // T47: 会话行 star/改名/删除按钮元素存在性验证(降级)
 //
 // 降级原因:mock-appserver 未实现 wraith:setSessionStarred / wraith:renameSession /
-//   wraith:deleteSession IPC 处理器;调用这些 preload 方法会 reject,无法在 e2e 层
-//   对 IPC 往返做端到端断言。全链路 IPC 测试留待 mock 扩展后补齐。
+//   wraith:deleteSession / wraith:setSessionArchived IPC 处理器;调用这些 preload 方法会 reject,
+//   无法在 e2e 层对 IPC 往返做端到端断言。全链路 IPC 测试留待 mock 扩展后补齐。
 //   本用例仅验证 SessionRow 组件渲染正确:hover 后三个操作按钮元素存在于 DOM 中,
-//   且具备正确的 data-testid,确保 Task 6 UI 层变更本身不引入回归。
+//   且具备正确的 data-testid,确保 Task 6/15 UI 层变更本身不引入回归。
 // ---------------------------------------------------------------------------
 
-test('T47(降级) 会话行 hover 后 star/改名/删除按钮元素可见', async () => {
+test('T47(降级) 会话行 hover 后 star/改名/归档按钮元素可见', async () => {
   const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t47-a-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t47-'))
   const app = await launchApp({
@@ -1803,7 +1823,7 @@ test('T47(降级) 会话行 hover 后 star/改名/删除按钮元素可见', asy
   await win.locator('[data-testid="conversation-item"]').first().hover()
   await expect(win.locator('[data-testid="session-star"]').first()).toBeAttached({ timeout: 5000 })
   await expect(win.locator('[data-testid="session-rename"]').first()).toBeAttached({ timeout: 5000 })
-  await expect(win.locator('[data-testid="session-delete"]').first()).toBeAttached({ timeout: 5000 })
+  await expect(win.locator('[data-testid="session-archive"]').first()).toBeAttached({ timeout: 5000 })
 
   await app.close()
   for (const p of [dirA, userData]) fs.rmSync(p, { recursive: true, force: true })
@@ -1842,6 +1862,97 @@ test('T48 ProvidersPanel:nav-providers → 面板可见 + 搜索框 + catalog �
 
   // catalog 中至少一个 provider-config 按钮可见(mock modelList 返回空 providers → 全部在"全部"组)
   await expect(win.locator('[data-testid="provider-config"]').first()).toBeVisible({ timeout: 5000 })
+
+  await app.close()
+})
+
+// ---------------------------------------------------------------------------
+// T49: 项目面板 — 搜索过滤后切项目,落回聊天页
+//
+// Task 8–14 新增的 ProjectsPanel:搜索是本地子串过滤(filterProjects),
+// 点行走 handleOpenProject → switchToProject + setView('chat')。这条用例
+// 覆盖「面板里搜 → 点开 → 回聊天」的完整往返,确保搜索不会把切项目路径堵死。
+// ---------------------------------------------------------------------------
+
+test('T49 项目面板:搜索后切项目,落回聊天页', async () => {
+  const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t49-alpha-'))
+  const dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t49-beta-'))
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t49-'))
+  const app = await launchApp({
+    args: [mainPath],
+    env: {
+      ...process.env,
+      WRAITH_APPSERVER_CMD: 'node ' + mockPath,
+      WRAITH_E2E: '1',
+      WRAITH_E2E_USERDATA: userData,
+      WRAITH_E2E_WORKSPACE: dirA,
+      WRAITH_E2E_PROJECTS: JSON.stringify([
+        { path: dirA, lastUsedAt: 2000 },
+        { path: dirB, lastUsedAt: 1000 }
+      ]),
+      MOCK_SESSIONS_BY_WS: '{}'
+    }
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="project-switcher"]')).toBeVisible({ timeout: 15000 })
+
+  // 进项目面板
+  await win.locator('[data-testid="project-switcher"]').click()
+  await win.locator('[data-testid="project-view-all"]').click()
+  await expect(win.locator('[data-testid="projects-panel"]')).toBeVisible({ timeout: 5000 })
+
+  // 搜索 "beta":filterProjects 按名称+路径子串过滤,dirA 的路径尾段含 alpha 不命中
+  await win.locator('[data-testid="projects-search"]').fill('beta')
+  await expect(win.locator('[data-testid="project-row"]')).toHaveCount(1, { timeout: 5000 })
+
+  // 点开过滤后的行 → 切到 dirB → 回聊天页(输入框可见)
+  await win.locator('[data-testid="project-row-open"]').first().click()
+  await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 10000 })
+
+  await app.close()
+  for (const p of [dirA, dirB, userData]) fs.rmSync(p, { recursive: true, force: true })
+})
+
+// ---------------------------------------------------------------------------
+// T50: 归档往返 — 侧栏归档 → 设置里找到 → 恢复 → 侧栏又有
+//
+// Task 15 把侧栏的 session-delete 改成了 session-archive(归档可逆);
+// Task 17 加了设置 › 归档面板。这条用例把整条往返走一遍:侧栏归档(少一条)
+// → 设置 › 归档看到 archive-row → 恢复 → 回聊天侧栏又回来。
+// 需要后端跟踪归档状态 —— mock 已补 session.setArchived / listArchived /
+// delete / projectSummary 四个处理器(不补的话前端走 -32601 catch,往返永远红)。
+// ---------------------------------------------------------------------------
+
+test('T50 归档往返:侧栏归档 → 设置里找到 → 恢复 → 侧栏又有', async () => {
+  const app = await launchApp({
+    args: [mainPath],
+    env: { ...process.env, WRAITH_APPSERVER_CMD: 'node ' + mockPath, WRAITH_E2E: '1' }
+  })
+  const win = await app.firstWindow()
+  await expect(win.locator('[data-testid="input"]')).toBeVisible({ timeout: 15000 })
+
+  // mock session.list 返回 2 条(sess_a / sess_b),侧栏应至少有 1 条
+  const before = await win.locator('[data-testid="conversation-item"]').count()
+  expect(before).toBeGreaterThan(0)
+
+  // 归档第一条:hover 会话行露归档钮 → 点击 → setSessionArchived(true) →
+  // fetchSessions → session.list 过滤掉归档的 → 侧栏少一条
+  await win.locator('[data-testid="conversation-item"]').first().hover()
+  await win.locator('[data-testid="session-archive"]').first().click()
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(before - 1, { timeout: 10000 })
+
+  // 进设置 › 归档:listArchivedSessions 回传刚归档的那条 → archive-row 可见
+  await win.locator('[data-testid="nav-settings"]').click()
+  await win.locator('[data-testid="settings-nav-archive"]').click()
+  await expect(win.locator('[data-testid="archive-row"]').first()).toBeVisible({ timeout: 10000 })
+
+  // 恢复:setSessionArchived(false) → onArchiveChanged → fetchSessions;
+  // 先等归档行消失(乐观移除),再回聊天页断言侧栏计数复原
+  await win.locator('[data-testid="archive-row"]').first().hover()
+  await win.locator('[data-testid="archive-restore"]').first().click()
+  await expect(win.locator('[data-testid="archive-row"]')).toHaveCount(0, { timeout: 10000 })
+  await win.locator('[data-testid="settings-back"]').click()
+  await expect(win.locator('[data-testid="conversation-item"]')).toHaveCount(before, { timeout: 10000 })
 
   await app.close()
 })

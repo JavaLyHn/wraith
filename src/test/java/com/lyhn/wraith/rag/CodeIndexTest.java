@@ -1,5 +1,7 @@
 package com.lyhn.wraith.rag;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -13,6 +15,26 @@ import java.util.Set;
 import static org.junit.jupiter.api.Assertions.*;
 
 class CodeIndexTest {
+
+    @TempDir
+    Path tempDir;
+
+    private String originalRagDir;
+
+    @BeforeEach
+    void setUpRagDir() {
+        originalRagDir = System.getProperty("wraith.rag.dir");
+        System.setProperty("wraith.rag.dir", tempDir.resolve("rag-store").toString());
+    }
+
+    @AfterEach
+    void restoreRagDir() {
+        if (originalRagDir == null) {
+            System.clearProperty("wraith.rag.dir");
+        } else {
+            System.setProperty("wraith.rag.dir", originalRagDir);
+        }
+    }
 
     /**
      * 测试用桩:不发起网络请求,直接返回定长零向量。
@@ -59,7 +81,6 @@ class CodeIndexTest {
 
     @Test
     void testIndexCurrentProject() {
-        System.setProperty("wraith.rag.dir", "/tmp/wraith-test-rag-index");
         CodeIndex indexer = new CodeIndex(STUB_EMBEDDING_CLIENT, CodeIndex.ProgressListener.noop());
         // 索引测试资源目录
         CodeIndex.IndexResult result = indexer.index("src/test/resources/rag");
@@ -69,7 +90,6 @@ class CodeIndexTest {
 
     @Test
     void reportsProgressThroughListener() {
-        System.setProperty("wraith.rag.dir", "/tmp/wraith-test-rag-index");
         List<String> messages = new ArrayList<>();
         CodeIndex indexer = new CodeIndex(STUB_EMBEDDING_CLIENT, messages::add);
 
@@ -94,9 +114,7 @@ class CodeIndexTest {
      * 用户无法得知有文件被跳过。
      */
     @Test
-    void partialEmbedFailure_messageMustContainFailureCount(@TempDir Path tempDir) throws Exception {
-        System.setProperty("wraith.rag.dir", tempDir.resolve("rag-store").toString());
-
+    void partialEmbedFailure_messageMustContainFailureCount() throws Exception {
         // 文件 A:类名含触发词 "FailableClass",chunk embed text 格式 "[class:FailableClass] ..."
         // — 触发 IOException(模拟第一个文件的所有 chunk 失败)
         Path fileA = tempDir.resolve("FailableClass.java");
@@ -126,9 +144,7 @@ class CodeIndexTest {
      * 不追加失败后缀。
      */
     @Test
-    void allSuccess_messageDoesNotContainFailureSuffix(@TempDir Path tempDir) throws Exception {
-        System.setProperty("wraith.rag.dir", tempDir.resolve("rag-store").toString());
-
+    void allSuccess_messageDoesNotContainFailureSuffix() throws Exception {
         Path fileA = tempDir.resolve("FileA.java");
         Files.writeString(fileA, "public class FileA { public void hello() {} }");
 

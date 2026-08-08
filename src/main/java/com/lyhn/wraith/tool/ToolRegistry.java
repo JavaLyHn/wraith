@@ -485,7 +485,7 @@ public class ToolRegistry {
                 }
                 Path relative = projectRoot.relativize(path);
                 if (matcher.matches(relative) || fileNameMatcher.matches(path.getFileName())) {
-                    matches.add(relative.toString());
+                    matches.add(relative.toString().replace('\\', '/'));
                 }
             }));
         } catch (Exception e) {
@@ -1408,14 +1408,14 @@ public class ToolRegistry {
         // 「聊天↔面板对等」这条已交付的不变量就被悄悄破掉了。
         List<String> panels = List.of(
                 "plugins", "automations", "im-gateway", "providers", "skills",
-                "memory", "snapshots", "tasks", "policy", "browser", "rag", "documents");
+                "memory", "snapshots", "tasks", "policy", "browser", "rag", "documents", "projects");
         tools.put("open_panel", new Tool(
                 "open_panel",
                 "在桌面对话中为用户呈现「打开某功能面板」的一键入口。当你引导用户去用 Wraith 的某个功能面板"
-                        + "(plugins=MCP / automations / im-gateway / providers / skills / memory / snapshots / tasks / policy / browser / rag / documents)时调用。"
+                        + "(plugins=MCP / automations / im-gateway / providers / skills / memory / snapshots / tasks / policy / browser / rag / documents / projects)时调用。"
                         + "仅呈现入口,不产生任何文件或命令副作用。",
                 createParameters(new Param("panel", "string",
-                        "面板 id:plugins(MCP)|automations|im-gateway|providers|skills|memory|snapshots|tasks|policy|browser|rag|documents", true)),
+                        "面板 id:plugins(MCP)|automations|im-gateway|providers|skills|memory|snapshots|tasks|policy|browser|rag|documents|projects", true)),
                 args -> {
                     String raw = args.get("panel");
                     String norm = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);

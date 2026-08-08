@@ -1,18 +1,29 @@
 package com.lyhn.wraith.policy;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.AnnotatedElementContext;
+import org.junit.jupiter.api.extension.ExtensionContext;
+import org.junit.jupiter.api.io.CleanupMode;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.io.TempDirFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.junit.jupiter.api.Assertions.*;
 
 class PathGuardTest {
 
+    @TempDir(factory = TargetTempDirFactory.class, cleanup = CleanupMode.ALWAYS)
+    Path root;
+
+    @TempDir(factory = TargetTempDirFactory.class, cleanup = CleanupMode.ALWAYS)
+    Path outside;
+
     @Test
-    void allowsRelativePathInsideRoot(@TempDir Path root) throws Exception {
+    void allowsRelativePathInsideRoot() throws Exception {
         PathGuard guard = new PathGuard(root.toString());
         Path resolved = guard.resolveSafe("src/Main.java");
         assertTrue(resolved.startsWith(root.toRealPath()));
@@ -20,7 +31,7 @@ class PathGuardTest {
     }
 
     @Test
-    void allowsAbsolutePathInsideRoot(@TempDir Path root) throws Exception {
+    void allowsAbsolutePathInsideRoot() throws Exception {
         PathGuard guard = new PathGuard(root.toString());
         Path target = root.resolve("a/b.txt");
         Path resolved = guard.resolveSafe(target.toString());
@@ -28,14 +39,14 @@ class PathGuardTest {
     }
 
     @Test
-    void allowsCurrentDirectory(@TempDir Path root) throws Exception {
+    void allowsCurrentDirectory() throws Exception {
         PathGuard guard = new PathGuard(root.toString());
         Path resolved = guard.resolveSafe(".");
         assertEquals(root.toRealPath(), resolved);
     }
 
     @Test
-    void allowsNonExistingTargetForCreate(@TempDir Path root) throws Exception {
+    void allowsNonExistingTargetForCreate() throws Exception {
         PathGuard guard = new PathGuard(root.toString());
         Path resolved = guard.resolveSafe("nested/deeply/new-file.txt");
         assertTrue(resolved.startsWith(root.toRealPath()));
@@ -43,7 +54,7 @@ class PathGuardTest {
     }
 
     @Test
-    void rejectsAbsolutePathOutsideRoot(@TempDir Path root) {
+    void rejectsAbsolutePathOutsideRoot() {
         PathGuard guard = new PathGuard(root.toString());
         PolicyException ex = assertThrows(PolicyException.class,
                 () -> guard.resolveSafe("/etc/passwd"));
@@ -53,21 +64,21 @@ class PathGuardTest {
     }
 
     @Test
-    void rejectsParentTraversalEscape(@TempDir Path root) {
+    void rejectsParentTraversalEscape() {
         PathGuard guard = new PathGuard(root.toString());
         assertThrows(PolicyException.class,
                 () -> guard.resolveSafe("../../etc/passwd"));
     }
 
     @Test
-    void rejectsParentTraversalThroughLeadingDots(@TempDir Path root) {
+    void rejectsParentTraversalThroughLeadingDots() {
         PathGuard guard = new PathGuard(root.toString());
         assertThrows(PolicyException.class,
                 () -> guard.resolveSafe(".."));
     }
 
     @Test
-    void rejectsBlankPath(@TempDir Path root) {
+    void rejectsBlankPath() {
         PathGuard guard = new PathGuard(root.toString());
         assertThrows(PolicyException.class, () -> guard.resolveSafe(""));
         assertThrows(PolicyException.class, () -> guard.resolveSafe("   "));
@@ -75,7 +86,7 @@ class PathGuardTest {
     }
 
     @Test
-    void rejectsSymlinkEscapingRoot(@TempDir Path root, @TempDir Path outside) throws IOException {
+    void rejectsSymlinkEscapingRoot() throws IOException {
         Path outsideTarget = outside.resolve("secret.txt");
         Files.writeString(outsideTarget, "leak");
 
@@ -84,6 +95,7 @@ class PathGuardTest {
             Files.createSymbolicLink(linkInsideRoot, outside);
         } catch (UnsupportedOperationException | IOException e) {
             // 当前文件系统不支持符号链接（Windows 无管理员权限），跳过此用例
+            assumeTrue(false, "当前文件系统不支持创建符号链接: " + e.getMessage());
             return;
         }
 
@@ -98,5 +110,15 @@ class PathGuardTest {
         assertThrows(IllegalArgumentException.class, () -> new PathGuard(null));
         assertThrows(IllegalArgumentException.class, () -> new PathGuard(""));
         assertThrows(IllegalArgumentException.class, () -> new PathGuard("  "));
+    }
+
+    static final class TargetTempDirFactory implements TempDirFactory {
+        @Override
+        public Path createTempDirectory(AnnotatedElementContext elementContext,
+                                        ExtensionContext extensionContext) throws IOException {
+            Path parent = Path.of("target", "path-guard-test").toAbsolutePath();
+            Files.createDirectories(parent);
+            return Files.createTempDirectory(parent, "junit-");
+        }
     }
 }

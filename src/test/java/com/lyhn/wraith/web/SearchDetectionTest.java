@@ -4,6 +4,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.nio.file.Files;
@@ -25,7 +26,7 @@ class SearchDetectionTest {
         Path docker = Files.createFile(bin.resolve("docker"));
         docker.toFile().setExecutable(true);
 
-        assertTrue(SearchDetection.dockerOnPath(bin.toString(), ":", false));
+        assertTrue(SearchDetection.dockerOnPath(bin.toString(), File.pathSeparator, false));
     }
 
     @Test
@@ -36,8 +37,8 @@ class SearchDetectionTest {
         Path docker = Files.createFile(bin.resolve("docker"));
         docker.toFile().setExecutable(true);
 
-        String path = String.join(":", empty.toString(), bin.toString());
-        assertTrue(SearchDetection.dockerOnPath(path, ":", false));
+        String path = String.join(File.pathSeparator, empty.toString(), bin.toString());
+        assertTrue(SearchDetection.dockerOnPath(path, File.pathSeparator, false));
     }
 
     @Test

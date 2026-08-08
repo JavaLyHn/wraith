@@ -27,17 +27,24 @@ class InlineRendererTest {
 
     @Test
     void onAnsiTerminalEnablesStatusBar() {
-        Terminal terminal = Mockito.mock(Terminal.class);
-        Mockito.when(terminal.getType()).thenReturn("xterm-256color");
-        Mockito.when(terminal.getSize()).thenReturn(new Size(120, 40));
-
-        InlineRenderer renderer = new InlineRenderer(terminal);
+        String previous = System.getProperty("wraith.force.ansi");
+        System.setProperty("wraith.force.ansi", "true");
         try {
-            assertTrue(renderer.hasStatusBar());
-            renderer.start();
-            renderer.updateStatus(StatusInfo.idle("glm-5.1", 200_000L, false));
+            Terminal terminal = Mockito.mock(Terminal.class);
+            Mockito.when(terminal.getType()).thenReturn("xterm-256color");
+            Mockito.when(terminal.getSize()).thenReturn(new Size(120, 40));
+
+            try (InlineRenderer renderer = new InlineRenderer(terminal)) {
+                assertTrue(renderer.hasStatusBar());
+                renderer.start();
+                renderer.updateStatus(StatusInfo.idle("glm-5.1", 200_000L, false));
+            }
         } finally {
-            renderer.close();
+            if (previous == null) {
+                System.clearProperty("wraith.force.ansi");
+            } else {
+                System.setProperty("wraith.force.ansi", previous);
+            }
         }
     }
 
@@ -88,7 +95,7 @@ class InlineRendererTest {
             renderer.beginTurn();
             renderer.stream().println("异步通知");
 
-            Mockito.verify(lineReader).printAbove("异步通知\n");
+            Mockito.verify(lineReader).printAbove("异步通知" + System.lineSeparator());
             assertFalse(sink.toString(StandardCharsets.UTF_8).contains("异步通知"));
         } finally {
             renderer.close();

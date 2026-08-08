@@ -17,6 +17,7 @@ export interface PaletteItem {
  * label 用面板在 ⌘K 里的检索友好名,可以与侧栏/动作卡的 PANEL_LABELS 不同(如 插件 (MCP))。
  */
 const NAV_ITEMS = [
+  { view: 'projects', label: '项目' },
   { view: 'plugins', label: '插件 (MCP)' },
   { view: 'automations', label: '自动化' },
   { view: 'im-gateway', label: 'IM 网关' },

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lyhn.wraith.browser.BrowserConnector;
 import com.lyhn.wraith.mcp.protocol.McpToolDescriptor;
+import com.lyhn.wraith.policy.sandbox.ShellCommand;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -28,7 +29,8 @@ class ToolRegistryTest {
         ToolRegistry registry = new ToolRegistry();
         registry.setProjectPath(tempDir.toString());
 
-        String result = registry.executeTool("execute_command", "{\"command\":\"pwd\"}");
+        String command = ShellCommand.isWindows(System.getProperty("os.name", "")) ? "cd" : "pwd";
+        String result = registry.executeTool("execute_command", "{\"command\":\"" + command + "\"}");
 
         assertTrue(result.contains(tempDir.toString()));
     }
@@ -178,7 +180,10 @@ class ToolRegistryTest {
         ToolRegistry registry = new ToolRegistry(1);
         registry.setProjectPath(tempDir.toString());
 
-        String result = registry.executeTool("execute_command", "{\"command\":\"sleep 2\"}");
+        String command = ShellCommand.isWindows(System.getProperty("os.name", ""))
+                ? "ping -n 3 127.0.0.1 >NUL"
+                : "sleep 2";
+        String result = registry.executeTool("execute_command", "{\"command\":\"" + command + "\"}");
 
         assertTrue(result.contains("命令执行超时"));
     }

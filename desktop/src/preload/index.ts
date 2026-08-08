@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, SnapshotSettingsView, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, RagScopeView, SearchStatusView, SearchTestResult, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, ProjectSummary, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, SnapshotSettingsView, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, RagScopeView, SearchStatusView, GitStatusView, SearchTestResult, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
@@ -37,6 +37,12 @@ export interface WraithApi {
   addProject(): Promise<string | null>
   removeProject(path: string): Promise<void>
   renameProject(path: string, name: string): Promise<void>
+  setProjectStarred(path: string, starred: boolean): Promise<void>
+  projectSummary(paths: string[]): Promise<{ summaries: ProjectSummary[] }>
+  listSessionsForProject(path: string, limit?: number): Promise<{ sessions: SessionMeta[] }>
+  setSessionArchived(sessionId: string, archived: boolean, path?: string): Promise<{ ok: boolean }>
+  listArchivedSessions(paths: string[], limit?: number): Promise<{ sessions: SessionMeta[] }>
+  archiveProjectSessions(path: string): Promise<{ archived: number }>
   restartBackend(): Promise<void>
   setApprovalMode(auto: boolean): Promise<{ ok: boolean }>
   listSessions(): Promise<{ sessions: SessionMeta[] }>
@@ -45,7 +51,7 @@ export interface WraithApi {
   rewindSession(userOrdinal: number): Promise<{ ok: boolean }>
   setSessionStarred(sessionId: string, starred: boolean): Promise<{ ok: boolean }>
   renameSession(sessionId: string, name: string): Promise<{ ok: boolean }>
-  deleteSession(sessionId: string): Promise<{ ok: boolean }>
+  deleteSession(sessionId: string, path?: string): Promise<{ ok: boolean }>
   mcpList(): Promise<McpListResult>
   listBuiltinTools(): Promise<{ tools: BuiltinToolView[] }>
   mcpEnable(name: string): Promise<{ ok: boolean }>
@@ -126,6 +132,8 @@ export interface WraithApi {
   configSetRagScope(scope: RagScopeView): Promise<{ ok: boolean }>
   /** 搜索后端实时状态(只读,不回 key)——「能力概览」角标 + 表单回显用 */
   configGetSearch(): Promise<SearchStatusView>
+  /** 用户真实仓库的只读状态；renderer 不获得任意 RPC 调用能力。 */
+  gitStatus(): Promise<GitStatusView>
   /** 写搜索后端配置。apiKey 空=后端沿用已存;**换了 provider 则不继承**(一个 key 字段服务两家) */
   configSetSearch(cfg: { provider: string; apiKey: string; baseUrl: string }): Promise<{ ok: boolean; error?: string }>
   /** 「测试连接」:用表单草稿发一次真实搜索。不写盘;apiKey 空=后端沿用已存 */
@@ -286,6 +294,30 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:renameProject', path, name) as Promise<void>
   },
 
+  setProjectStarred(path, starred) {
+    return ipcRenderer.invoke('wraith:setProjectStarred', path, starred) as Promise<void>
+  },
+
+  projectSummary(paths) {
+    return ipcRenderer.invoke('wraith:projectSummary', paths) as Promise<{ summaries: ProjectSummary[] }>
+  },
+
+  listSessionsForProject(path, limit) {
+    return ipcRenderer.invoke('wraith:listSessionsForProject', path, limit) as Promise<{ sessions: SessionMeta[] }>
+  },
+
+  setSessionArchived(sessionId, archived, path) {
+    return ipcRenderer.invoke('wraith:setSessionArchived', sessionId, archived, path) as Promise<{ ok: boolean }>
+  },
+
+  listArchivedSessions(paths, limit) {
+    return ipcRenderer.invoke('wraith:listArchivedSessions', paths, limit) as Promise<{ sessions: SessionMeta[] }>
+  },
+
+  archiveProjectSessions(path) {
+    return ipcRenderer.invoke('wraith:archiveProjectSessions', path) as Promise<{ archived: number }>
+  },
+
   restartBackend() {
     return ipcRenderer.invoke('wraith:restartBackend')
   },
@@ -329,8 +361,8 @@ const wraith: WraithApi = {
     return ipcRenderer.invoke('wraith:renameSession', sessionId, name) as Promise<{ ok: boolean }>
   },
 
-  deleteSession(sessionId) {
-    return ipcRenderer.invoke('wraith:deleteSession', sessionId) as Promise<{ ok: boolean }>
+  deleteSession(sessionId, path) {
+    return ipcRenderer.invoke('wraith:deleteSession', sessionId, path) as Promise<{ ok: boolean }>
   },
 
   mcpList() {
@@ -569,6 +601,9 @@ const wraith: WraithApi = {
   },
   configGetSearch() {
     return ipcRenderer.invoke('wraith:configGetSearch') as Promise<SearchStatusView>
+  },
+  gitStatus() {
+    return ipcRenderer.invoke('wraith:gitStatus') as Promise<GitStatusView>
   },
   configSetSearch(cfg) {
     return ipcRenderer.invoke('wraith:configSetSearch', cfg) as Promise<{ ok: boolean; error?: string }>

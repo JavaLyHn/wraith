@@ -1,6 +1,6 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
-import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire } from '../shared/types'
+import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire, GitStatusView } from '../shared/types'
 import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
 import type { EditorApp } from '../shared/editors'
 import type { McpFormValue } from './components/McpServerForm'
@@ -38,7 +38,7 @@ import { useBackgroundTasks } from './lib/useBackgroundTasks'
 import { taskDoneLabel } from '../shared/taskWatch'
 import { PROMPT_CATEGORIES } from './lib/welcomePrompts'
 import { lastUserMessage } from './lib/resend'
-import { resolveWorkspacePath } from './lib/paths'
+import { resolveWorkspacePath, baseName } from './lib/paths'
 import { sessionDisplayName } from './lib/sessionView'
 import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
@@ -72,10 +72,12 @@ import PolicyPanel from './components/PolicyPanel'
 import BrowserPanel from './components/BrowserPanel'
 import RagPanel from './components/RagPanel'
 import DocumentsPanel from './components/DocumentsPanel'
+import ProjectsPanel from './components/ProjectsPanel'
 import SettingsPanel from './components/SettingsPanel'
 import TerminalDrawer from './components/TerminalDrawer'
 import RightDock, { type RightDockPane } from './components/RightDock'
 import SummaryPopover from './components/SummaryPopover'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from './components/ui/dialog'
 import { useSettings } from './settings/SettingsContext'
 
 // ---------------------------------------------------------------------------
@@ -185,7 +187,7 @@ export default function App(): JSX.Element {
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
-  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'settings'>('chat')
+  const [view, setView] = useState<'chat' | 'projects' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'settings'>('chat')
   const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
   const [automationBadge, setAutomationBadge] = useState(false)
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
@@ -225,6 +227,8 @@ export default function App(): JSX.Element {
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** 后端起来了但一个模型都没配 —— 全新装机的常态,需要在空态给出引导。 */
   const [noModel, setNoModel] = useState(false)
+  // 用户真实仓库的只读状态。null = 还没拉回来 / 不是仓库,顶栏 pill 整块不渲染。
+  const [gitStatus, setGitStatus] = useState<GitStatusView | null>(null)
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('wraith.sidebar.collapsed') === '1' } catch { return false }
   })
@@ -259,6 +263,17 @@ export default function App(): JSX.Element {
     }
   }, [])
 
+  // 取数失败时**保留上一次成功的值**,只把 error 换上 —— 静默拿旧数据当新的是不允许的
+  // (与上下文治理「绝不静默」同一条规矩),所以 error 会在弹出层里明写出来。
+  // 声明在 onEvent effect 之前,以便后者在 deps 里引用(同 fetchMcpResources 的处理)。
+  const fetchGitStatus = useCallback(async (): Promise<void> => {
+    try {
+      setGitStatus(await window.wraith.gitStatus())
+    } catch (e) {
+      setGitStatus(prev => (prev ? { ...prev, error: String(e) } : null))
+    }
+  }, [])
+
   // ── subscribe to backend events on mount (status 高频 → 100ms 窗口合并) ────
   useEffect(() => {
     const throttledStatus = createThrottleLatest<BackendEvent>(100, evt => dispatch(evt))
@@ -277,13 +292,20 @@ export default function App(): JSX.Element {
         throttledStatus(evt)
         return
       }
+      // Agent 刚改完文件,正是最该刷的点 —— 「数字变了」与「Agent 做了事」在时间上对得上。
+      // 刻意不轮询:空闲时零开销,而且轮询大多数时候刷出来的结果和上一次一模一样。
+      // turn.failed 也刷:失败的 turn 一样可能已经改了文件。
+      if (evt.kind === 'notification'
+          && (evt.method === 'turn.completed' || evt.method === 'turn.failed')) {
+        void fetchGitStatus()
+      }
       dispatch(evt)
     })
     return () => {
       throttledStatus.cancel()
       unsubscribe()
     }
-  }, [fetchMcpResources])
+  }, [fetchMcpResources, fetchGitStatus])
 
   // ── session list helpers ───────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -414,6 +436,22 @@ export default function App(): JSX.Element {
     if (pv && pv.kind === 'session' && pv.sessionId === id) setPreview(null)
   }, [fetchSessions, state.sessionId, handleNewConversation])
 
+  // ── 归档一条会话:从侧栏收起,收进「设置 › 归档」。可逆,故无二次确认 ────────────
+  const handleArchiveSession = useCallback(async (sessionId: string) => {
+    try {
+      const { ok } = await window.wraith.setSessionArchived(sessionId, true)
+      if (!ok) {
+        console.error('[wraith] setSessionArchived returned ok:false for', sessionId)
+        return
+      }
+      void fetchSessions()
+      // 归档的正好是当前正在看的会话:不强行跳走 —— 用户可能正读着它。
+      // 侧栏没有高亮项了,下一步点任何会话或「新对话」自然离开。
+    } catch (err) {
+      console.error('[wraith] setSessionArchived error:', err)
+    }
+  }, [fetchSessions])
+
   // ── 沙箱状态:App 是唯一真相源 ────────────────────────────────────────────
   // 此前顶栏那枚盾只在 initialize 时被写过一次,面板里 sandbox.set 的结果只落在
   // PolicyPanel 的局部 state —— 用户拨了开关,盾纹丝不动。把状态提到这里,
@@ -464,6 +502,7 @@ export default function App(): JSX.Element {
           dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
         } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
         void refreshSandbox()
+        void fetchGitStatus()   // 会话起来后取一次,顶栏 pill 能在首条消息前就显示
         void fetchSessions()
         void fetchProjects()
         void fetchMcp()
@@ -472,7 +511,7 @@ export default function App(): JSX.Element {
         console.error('[wraith] startup error:', err)
       }
     })()
-  }, [fetchSessions, fetchProjects, fetchMcp, fetchMcpResources, refreshSandbox])
+  }, [fetchSessions, fetchProjects, fetchMcp, fetchMcpResources, refreshSandbox, fetchGitStatus])
 
   useEffect(() => {
     if (!appPrefs.update.autoCheck) return
@@ -500,6 +539,7 @@ export default function App(): JSX.Element {
         dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(sb), networkAllowed: false })
         await window.wraith.startSession(ws)
         void refreshSandbox()   // 重连后后端是全新进程,联网位回到默认值,必须重新问
+        void fetchGitStatus()    // 重连后 git 状态也需重取
         if (activeId) {
           const { messages, model, cards } = await window.wraith.resumeSession(activeId)
           dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
@@ -517,7 +557,7 @@ export default function App(): JSX.Element {
         console.error('[wraith] reconnect error:', err)
       }
     })()
-  }, [state.connection, state.workspace, fetchSessions, refreshSandbox])
+  }, [state.connection, state.workspace, fetchSessions, refreshSandbox, fetchGitStatus])
 
   // ── refresh session list when a turn completes ────────────
   const prevTurnRef = useRef(state.turn)
@@ -883,6 +923,56 @@ export default function App(): JSX.Element {
     [fetchProjects],
   )
 
+  // ── 项目面板:点行 = 切项目 + 恢复最近会话 + 回聊天页 ──────────────────────────
+  const handleOpenProject = useCallback(async (projectPath: string) => {
+    if (turnRef.current === 'running') return
+    const ok = projectPath === state.workspace ? true : await switchToProject(projectPath)
+    if (ok) setView('chat')
+  }, [state.workspace, switchToProject])
+
+  // ── 项目面板:✎ = 切项目 + 新会话 + 回聊天页 ────────────────────────────────
+  const handleProjectNewConversation = useCallback(async (projectPath: string) => {
+    if (turnRef.current === 'running') return
+    if (projectPath !== state.workspace) {
+      const ok = await switchToProject(projectPath)
+      if (!ok) return
+    }
+    setView('chat')
+    await handleNewConversation()
+  }, [state.workspace, switchToProject, handleNewConversation])
+
+  // ── 项目面板:展开里点会话 = 切项目 + resume + 回聊天页 ──────────────────────
+  const handleOpenProjectSession = useCallback(async (projectPath: string, sessionId: string) => {
+    if (turnRef.current === 'running') return
+    if (projectPath !== state.workspace) {
+      const ok = await switchToProject(projectPath)
+      if (!ok) return
+    }
+    setView('chat')
+    await handleSelectSession(sessionId)
+  }, [state.workspace, switchToProject, handleSelectSession])
+
+  // ── 项目面板:重点 ─────────────────────────────────────────────────────────
+  const handleToggleProjectStar = useCallback(async (projectPath: string, starred: boolean) => {
+    try {
+      await window.wraith.setProjectStarred(projectPath, starred)
+      void fetchProjects()   // 侧栏快切下拉的前 5 名也要跟着变
+    } catch (err) {
+      console.error('[wraith] setProjectStarred error:', err)
+    }
+  }, [fetchProjects])
+
+  // 批量归档确认:null=没有待确认项
+  const [archiveConfirm, setArchiveConfirm] = useState<{ path: string; label: string; count: number } | null>(null)
+
+  // ── 项目面板:批量归档某项目的聊天(破坏性,先确认) ────────────────────────────
+  const handleArchiveProjectChats = useCallback(async (projectPath: string, count: number) => {
+    const entry = projects.find(p => p.path === projectPath)
+    const label = entry?.name || baseName(projectPath)
+    // 批量归档是破坏性动作,用受控 Dialog 确认(本仓库不用原生 confirm/prompt)
+    setArchiveConfirm({ path: projectPath, label, count })
+  }, [projects])
+
   // ── 运行历史:跳转到对应会话 ─────────────────────────────────────────────────
   const handleOpenAutomationSession = useCallback(async (projectPath: string, sessionId: string) => {
     if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
@@ -1017,6 +1107,8 @@ export default function App(): JSX.Element {
         sandbox={state.sandbox}
         sandboxNet={state.sandboxNet}
         onOpenPolicy={() => setView('policy')}
+        gitStatus={gitStatus}
+        onRefreshGit={() => void fetchGitStatus()}
       />
       <div className="flex min-h-0 flex-1 overflow-hidden">
       <SidebarDock collapsed={sidebarCollapsed} peek={sidebarPeek} onPeekChange={setSidebarPeek}>
@@ -1032,11 +1124,10 @@ export default function App(): JSX.Element {
           onSelectSession={handleSelectSession}
           onToggleStar={handleToggleStar}
           onRenameSession={handleRenameSession}
-          onDeleteSession={handleDeleteSession}
+          onArchiveSession={handleArchiveSession}
           onActivateProject={switchToProject}
           onAddProject={handleAddProject}
-          onRemoveProject={handleRemoveProject}
-          onRenameProject={handleRenameProject}
+          onOpenAllProjects={() => setView('projects')}
           profile={appPrefs.profile}
           taskActiveCount={taskActiveCount}
           activeNav={view === 'chat' ? null : view}
@@ -1137,8 +1228,22 @@ export default function App(): JSX.Element {
           <RagPanel onBack={() => setView('chat')} />
         ) : view === 'documents' ? (
           <DocumentsPanel onBack={() => setView('chat')} />
+        ) : view === 'projects' ? (
+          <ProjectsPanel
+            projects={projects}
+            activePath={state.workspace ?? ''}
+            busy={state.turn === 'running'}
+            onOpen={handleOpenProject}
+            onNewConversation={handleProjectNewConversation}
+            onToggleStar={handleToggleProjectStar}
+            onOpenSession={handleOpenProjectSession}
+            onRename={handleRenameProject}
+            onArchiveChats={handleArchiveProjectChats}
+            onRemove={handleRemoveProject}
+            onAdd={handleAddProject}
+          />
         ) : view === 'settings' ? (
-          <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} />
+          <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} onArchiveChanged={() => void fetchSessions()} />
         ) : (
           /* 既有 welcome ↔ transcript+composer 条件块整体原样嵌此 else */
           (() => {
@@ -1305,6 +1410,42 @@ export default function App(): JSX.Element {
           openView: (v) => setView(v as typeof view),
         }}
       />
+
+      {/* 项目面板:批量归档确认框(破坏性操作,需知项目名与真实数量,故在 App 弹) */}
+      <Dialog open={archiveConfirm !== null} onOpenChange={o => { if (!o) setArchiveConfirm(null) }}>
+        <DialogContent data-testid="archive-project-confirm" className="w-96">
+          <DialogTitle>归档 {archiveConfirm?.label} 的聊天？</DialogTitle>
+          <DialogDescription>
+            这个项目的 {archiveConfirm?.count} 个聊天会从侧栏隐藏，可在「设置 › 归档」中找回。不删除任何内容。
+          </DialogDescription>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              onClick={() => setArchiveConfirm(null)}
+              className="rounded-lg px-3 py-1.5 text-xs text-fg-muted hover:bg-fg/5"
+            >
+              取消
+            </button>
+            <button
+              data-testid="archive-project-confirm-ok"
+              onClick={async () => {
+                const target = archiveConfirm
+                setArchiveConfirm(null)
+                if (!target) return
+                try {
+                  await window.wraith.archiveProjectSessions(target.path)
+                  // 归档的若是当前项目,侧栏会话列表要立刻重拉
+                  if (target.path === state.workspace) void fetchSessions()
+                } catch (err) {
+                  console.error('[wraith] archiveProjectSessions error:', err)
+                }
+              }}
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg"
+            >
+              归档
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

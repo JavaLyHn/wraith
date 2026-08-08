@@ -50,6 +50,26 @@ let turnSeq = 0
 let turnId = ''
 let pendingApproval = false
 
+// 归档状态:sessionId -> session 对象。setSessionArchived 往里塞/删,
+// session.list 过滤掉这里的 id(归档的不进侧栏),listArchived 回传这里的值。
+// 初始空 → 不影响任何既有用例(它们不归档任何东西,过滤是 no-op)。
+const archivedSessions = new Map()
+
+/** 当前工作目录下的全量会话列表(未过滤归档)。session.list 与 setArchived 共用,
+ *  保证归档时能从列表里找到 session 对象暂存给 listArchived 回传。 */
+function currentSessionList() {
+  const byWs = process.env['MOCK_SESSIONS_BY_WS']
+  if (byWs) {
+    let map = {}
+    try { map = JSON.parse(byWs) } catch { /* 坏 JSON → 空 map */ }
+    return (lastWorkspaceDir && map[lastWorkspaceDir]) || []
+  }
+  return [
+    { id: 'sess_a', cwd: '/p', createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'mock', model: 'mock-model', title: '第一段对话', turns: 2 },
+    { id: 'sess_b', cwd: '/p', createdAt: '2026-06-30T00:00:00Z', updatedAt: '2026-06-30T01:00:00Z', provider: 'mock', model: 'mock-model', title: '早先的对话', turns: 5 },
+  ]
+}
+
 // ---------------------------------------------------------------------------
 // Model / provider state (Task 5: model.list / session.setModel / config.setDefaultProvider)
 // ---------------------------------------------------------------------------
@@ -328,19 +348,63 @@ async function handleRequest(req) {
     }
 
     case 'session.list': {
-      const byWs = process.env['MOCK_SESSIONS_BY_WS']
-      if (byWs) {
-        let map = {}
-        try { map = JSON.parse(byWs) } catch { /* 坏 JSON → 空 map */ }
-        reply(id, { sessions: (lastWorkspaceDir && map[lastWorkspaceDir]) || [] })
-        break
+      // 归档的不进侧栏列表 —— archivedSessions 初始空,既有用例不受影响
+      reply(id, { sessions: currentSessionList().filter(s => !archivedSessions.has(s.id)) })
+      break
+    }
+
+    // Task 19: 归档往返 e2e 需要后端真正跟踪归档状态。mock 之前只回 -32601,
+    // 前端走 catch 分支,侧栏计数不变 → 往返用例永远红。这里与 sandbox.get 同理:
+    // 不实现的话 e2e 就永远测不到真实路径。
+    case 'session.setArchived': {
+      const sid = (params && params.sessionId) || ''
+      const archived = params && params.archived === true
+      if (archived) {
+        // 从当前列表找到这条,暂存完整对象(listArchived 要回传);没找到也不报错
+        const found = currentSessionList().find(s => s.id === sid)
+        if (found && !archivedSessions.has(sid)) {
+          archivedSessions.set(sid, { ...found, archivedAt: new Date().toISOString() })
+        }
+      } else {
+        archivedSessions.delete(sid)
       }
-      reply(id, {
-        sessions: [
-          { id: 'sess_a', cwd: '/p', createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-01T01:00:00Z', provider: 'mock', model: 'mock-model', title: '第一段对话', turns: 2 },
-          { id: 'sess_b', cwd: '/p', createdAt: '2026-06-30T00:00:00Z', updatedAt: '2026-06-30T01:00:00Z', provider: 'mock', model: 'mock-model', title: '早先的对话', turns: 5 }
-        ]
+      reply(id, { ok: true })
+      break
+    }
+
+    case 'session.listArchived': {
+      const paths = (params && params.paths) || []
+      const limit = params && params.limit
+      let result = [...archivedSessions.values()]
+      // paths 为空(没有已配置项目)时回传全部归档 —— 否则设置 › 归档面板在
+      // 无项目的 E2E 环境下永远空白,往返用例测不到恢复路径
+      if (paths.length > 0) {
+        result = result.filter(s => paths.includes(s.cwd))
+      }
+      if (typeof limit === 'number') result = result.slice(0, limit)
+      reply(id, { sessions: result })
+      break
+    }
+
+    case 'session.delete': {
+      const sid = (params && params.sessionId) || ''
+      archivedSessions.delete(sid)
+      reply(id, { ok: true })
+      break
+    }
+
+    case 'session.projectSummary': {
+      // 按路径汇总未归档会话数 + 最新 updatedAt;概况缺失时面板照渲染(骨架态)
+      const paths = (params && params.paths) || []
+      const live = currentSessionList().filter(s => !archivedSessions.has(s.id))
+      const summaries = paths.map(p => {
+        const forPath = live.filter(s => s.cwd === p)
+        const last = forPath.length > 0
+          ? forPath.reduce((a, b) => (a.updatedAt > b.updatedAt ? a : b)).updatedAt
+          : null
+        return { path: p, sessionCount: forPath.length, lastSessionAt: last }
       })
+      reply(id, { summaries })
       break
     }
 

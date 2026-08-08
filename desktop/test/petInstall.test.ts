@@ -48,7 +48,7 @@ describe('isValidPetName', () => {
 
 describe('npxSearchDirs', () => {
   it('PATH 目录在前、常见目录在后,整体去重', () => {
-    const dirs = npxSearchDirs('/usr/local/bin:/foo/bin', '/Users/me')
+    const dirs = npxSearchDirs('/usr/local/bin:/foo/bin', '/Users/me', 'darwin')
     expect(dirs[0]).toBe('/usr/local/bin')
     expect(dirs[1]).toBe('/foo/bin')
     expect(dirs).toContain('/opt/homebrew/bin')
@@ -57,7 +57,7 @@ describe('npxSearchDirs', () => {
     expect(dirs.filter(d => d === '/usr/local/bin')).toHaveLength(1)
   })
   it('PATH 缺失时仍给出常见目录', () => {
-    const dirs = npxSearchDirs(undefined, '/Users/me')
+    const dirs = npxSearchDirs(undefined, '/Users/me', 'darwin')
     expect(dirs).toContain('/opt/homebrew/bin')
     expect(dirs.length).toBeGreaterThan(0)
   })
@@ -66,10 +66,10 @@ describe('npxSearchDirs', () => {
 describe('resolveNpx', () => {
   it('返回首个存在的 npx 绝对路径', () => {
     const exists = (p: string): boolean => p === '/opt/homebrew/bin/npx'
-    expect(resolveNpx(['/usr/local/bin', '/opt/homebrew/bin'], exists)).toBe('/opt/homebrew/bin/npx')
+    expect(resolveNpx(['/usr/local/bin', '/opt/homebrew/bin'], exists, 'darwin')).toBe('/opt/homebrew/bin/npx')
   })
   it('全不存在 → null', () => {
-    expect(resolveNpx(['/a', '/b'], () => false)).toBeNull()
+    expect(resolveNpx(['/a', '/b'], () => false, 'darwin')).toBeNull()
   })
 })
 

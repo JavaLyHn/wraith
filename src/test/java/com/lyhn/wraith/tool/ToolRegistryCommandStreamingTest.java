@@ -30,7 +30,7 @@ class ToolRegistryCommandStreamingTest {
         // 经 executeTools(带 callId) 走完整生产路径
         ToolRegistry.ToolInvocation inv = new ToolRegistry.ToolInvocation(
                 "call-42", "execute_command",
-                "{\"command\":\"printf 'line1\\\\nline2\\\\n'\"}");
+                "{\"command\":\"echo line1 && echo line2\"}");
         List<ToolRegistry.ToolExecutionResult> results = reg.executeTools(List.of(inv));
 
         assertEquals(1, results.size());
@@ -44,7 +44,7 @@ class ToolRegistryCommandStreamingTest {
 
         // 收尾:tool.result
         assertEquals("call-42", resultCallId.get());
-        assertEquals(Boolean.TRUE, resultOk.get(), "printf 退出码 0");
+        assertEquals(Boolean.TRUE, resultOk.get(), "命令退出码 0");
         assertEquals(Integer.valueOf(0), resultExit.get());
     }
 
@@ -52,7 +52,7 @@ class ToolRegistryCommandStreamingTest {
     void noObserverByDefaultDoesNotStreamOrThrow() {
         ToolRegistry reg = new ToolRegistry();  // 默认无 observer
         ToolRegistry.ToolInvocation inv = new ToolRegistry.ToolInvocation(
-                "c1", "execute_command", "{\"command\":\"printf 'x\\\\n'\"}");
+                "c1", "execute_command", "{\"command\":\"echo x\"}");
         List<ToolRegistry.ToolExecutionResult> r = reg.executeTools(List.of(inv));
         assertEquals(1, r.size(), "无 observer 时命令照常执行,不抛异常");
     }

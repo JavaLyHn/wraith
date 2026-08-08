@@ -9,6 +9,7 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -61,6 +62,9 @@ final class AppServerDriver {
     static Reply drive(Path home, List<String> requests, long lastId) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(
                 javaBin(),
+                "-Dstdout.encoding=UTF-8",
+                "-Dstderr.encoding=UTF-8",
+                "-Dwraith.mcp.builtin.browser=off",
                 "-cp", System.getProperty("java.class.path"),
                 "-Duser.home=" + home,
                 "-Dwraith.config.dir=" + home.resolve(".wraith"),
@@ -105,11 +109,43 @@ final class AppServerDriver {
                 if (n.hasNonNull("id") && n.get("id").asLong() == lastId) break;
             }
         } finally {
-            p.destroy();
-            p.waitFor(10, TimeUnit.SECONDS);
+            stopProcessTree(p);
             errPump.join(2000);
         }
         return new Reply(got, err.toString());
+    }
+
+    /**
+     * 测试子 JVM 可能再拉起 MCP / node 等后代。Windows 上只结束直接子进程会让后代继续以
+     * {@code @TempDir} 为 cwd，随后 JUnit 无法删除目录，所以必须先保存句柄再逐个收口。
+     */
+    private static void stopProcessTree(Process process) throws InterruptedException {
+        List<ProcessHandle> tree = new ArrayList<>(process.toHandle().descendants().toList());
+        Collections.reverse(tree); // 叶到根，避免先断开父子关系后找不到仍存活的后代
+        tree.add(process.toHandle());
+
+        tree.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroy);
+        if (awaitExit(tree, 2)) {
+            return;
+        }
+
+        tree.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
+        if (!awaitExit(tree, 5)) {
+            List<Long> alive = tree.stream()
+                    .filter(ProcessHandle::isAlive)
+                    .map(ProcessHandle::pid)
+                    .toList();
+            throw new IllegalStateException("app-server 测试进程树未完全退出: " + alive);
+        }
+    }
+
+    private static boolean awaitExit(List<ProcessHandle> tree, long timeoutSeconds)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        while (tree.stream().anyMatch(ProcessHandle::isAlive) && System.nanoTime() < deadline) {
+            Thread.sleep(20);
+        }
+        return tree.stream().noneMatch(ProcessHandle::isAlive);
     }
 
     static String req(long id, String method, String params) {

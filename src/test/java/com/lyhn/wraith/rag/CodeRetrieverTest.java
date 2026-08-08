@@ -3,7 +3,9 @@ package com.lyhn.wraith.rag;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -11,20 +13,34 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class CodeRetrieverTest {
 
-    private static final String TEST_PROJECT = "/tmp/wraith-code-retriever";
+    @TempDir
+    Path tempDir;
+
     private VectorStore store;
+    private String testProject;
+    private String originalRagDir;
 
     @BeforeEach
     void setUp() throws Exception {
-        System.setProperty("wraith.rag.dir", "/tmp/wraith-test-rag-retriever");
-        store = new VectorStore(TEST_PROJECT);
+        originalRagDir = System.getProperty("wraith.rag.dir");
+        System.setProperty("wraith.rag.dir", tempDir.resolve("rag-store").toString());
+        testProject = tempDir.resolve("project").toString();
+        store = new VectorStore(testProject);
         store.clearProject();
     }
 
     @AfterEach
     void tearDown() throws Exception {
-        if (store != null) {
-            store.close();
+        try {
+            if (store != null) {
+                store.close();
+            }
+        } finally {
+            if (originalRagDir == null) {
+                System.clearProperty("wraith.rag.dir");
+            } else {
+                System.setProperty("wraith.rag.dir", originalRagDir);
+            }
         }
     }
 
@@ -55,7 +71,7 @@ class CodeRetrieverTest {
             }
         };
 
-        try (CodeRetriever retriever = new CodeRetriever(TEST_PROJECT, stubClient)) {
+        try (CodeRetriever retriever = new CodeRetriever(testProject, stubClient)) {
             List<VectorStore.SearchResult> results = retriever.hybridSearch("Agent的ReAct循环是怎么实现的", 5);
 
             assertFalse(results.isEmpty());

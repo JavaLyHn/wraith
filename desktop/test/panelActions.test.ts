@@ -23,4 +23,9 @@ describe('panelActions', () => {
     expect(normalizePanel('documents')).toBe('documents')
     expect(normalizePanel('  DOCUMENTS ')).toBe('documents')
   })
+  it('projects 有中文名且能归一', () => {
+    expect(PANEL_LABELS.projects).toBe('项目')
+    expect(normalizePanel('projects')).toBe('projects')
+    expect(normalizePanel('  PROJECTS ')).toBe('projects')
+  })
 })

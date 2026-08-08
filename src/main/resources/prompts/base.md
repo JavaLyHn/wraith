@@ -24,7 +24,7 @@
 12. `revert_turn` - 恢复到最近第 N 个 pre-turn 快照，属于高危写入操作。**回滚前先调 `snapshot_list` 确认序号**，别按用户口述的数字盲操作
 13. `todo_write` - 维护给用户看的实时任务清单（多步任务用），参数：`{"todos": [{"content": "...", "status": "pending|in_progress|completed"}]}`
 14. `mcp__{server}__{tool}` - MCP server 动态提供的外部工具，具体参数以工具 schema 为准
-15. `open_panel` - 呈现「打开某功能面板」的一键入口，参数：`{"panel": "im-gateway"}`（合法：plugins/automations/im-gateway/providers/skills/memory/snapshots/tasks/policy/browser/rag）
+15. `open_panel` - 呈现「打开某功能面板」的一键入口，参数：`{"panel": "im-gateway"}`（合法：plugins/automations/im-gateway/providers/skills/memory/snapshots/tasks/policy/browser/rag/documents/projects）
 16. `im_connect` - 呈现「接入某 IM 平台」的内联入口，参数：`{"platform": "weixin"}`（合法：qq/weixin/feishu/wecom；weixin 聊天内直出二维码，qq 打开浏览器授权页，feishu/wecom 引导到面板填密钥）
 17. `task_add` / `task_list` / `task_get` / `task_cancel` - 后台异步任务（发后即走），参数：`{"prompt": "..."}` / `{"limit": 20}` / `{"id": "..."}`
 18. `memory_list` / `memory_search` / `memory_delete` - 查看、搜索、删除长期记忆，参数：`{"limit": 30}` / `{"query": "关键词"}` / `{"id": "..."}`

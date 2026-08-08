@@ -24,7 +24,7 @@ import java.util.List;
  */
 public final class CommandSandbox {
 
-    private static final Path SANDBOX_EXEC = Path.of("/usr/bin/sandbox-exec");
+    private static final String SANDBOX_EXEC = "/usr/bin/sandbox-exec";
 
     private final boolean networkAllowed;
 
@@ -65,7 +65,7 @@ public final class CommandSandbox {
     /** 当前平台实际可用的沙箱种类。 */
     public static SandboxKind detect() {
         return detect(System.getProperty("os.name", ""),
-                Files.isExecutable(SANDBOX_EXEC),
+                Files.isExecutable(Path.of(SANDBOX_EXEC)),
                 AppContainerSupport.probe());
     }
 
@@ -107,7 +107,7 @@ public final class CommandSandbox {
         switch (kind) {
             case SEATBELT -> {
                 List<String> cmd = new ArrayList<>();
-                cmd.add(SANDBOX_EXEC.toString());
+                cmd.add(SANDBOX_EXEC);
                 cmd.addAll(SeatbeltProfile.params(root, tmpDir, gitDir));
                 cmd.add("-p");
                 cmd.add(SeatbeltProfile.workspaceWrite(networkAllowed));

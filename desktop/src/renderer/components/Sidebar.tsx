@@ -7,7 +7,7 @@ import {
 } from './ui/tooltip'
 import {
   Plus, Search, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
-  Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown, ListTodo, Shield, User, FolderOpen,
+  Star, ListTree, List, Pencil, Archive, Settings, Wrench, ChevronDown, ListTodo, Shield, User, FolderOpen,
   type LucideIcon,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
@@ -17,14 +17,13 @@ import { userAvatarGlyph, accountGlyphDuplicatesName } from '../lib/chatIdentity
 import type { ProfilePrefs } from '../settings/prefs'
 import type { SessionMeta, ProjectView } from '../../shared/types'
 
-function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDelete }: {
+export function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onArchive }: {
   s: SessionMeta; active: boolean; running: boolean
   onSelect: (id: string) => void
   onToggleStar: (id: string, starred: boolean) => void
   onRename: (id: string, name: string) => void
-  onDelete: (id: string) => void
+  onArchive: (id: string) => void
 }): JSX.Element {
-  const [confirmDel, setConfirmDel] = useState(false)
   // 行内改名:Electron 渲染进程不支持 window.prompt,故用就地输入框
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -60,8 +59,7 @@ function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDe
 
   return (
     <div className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 ' +
-      (active ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent' : 'hover:bg-fg/5')}
-      onMouseLeave={() => setConfirmDel(false)}>
+      (active ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent' : 'hover:bg-fg/5')}>
       {running && (
         <span data-testid="session-running-dot" className="relative ml-1 flex h-2 w-2 shrink-0" title="运行中">
           <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-accent opacity-75 motion-reduce:hidden" />
@@ -83,14 +81,14 @@ function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDe
         className="shrink-0 px-1 text-fg-subtle opacity-0 hover:text-fg group-hover:opacity-100">
         <Pencil className="h-3 w-3" strokeWidth={1.5} />
       </button>
-      <button data-testid="session-delete"
-        title={running ? '会话进行中,不可删除' : (confirmDel ? '确认删除?' : '删除')}
+      {/* 归档可逆(设置里能恢复),故单击生效不做二次确认;二次确认留给真正不可逆的永久删除 */}
+      <button data-testid="session-archive"
+        title={running ? '会话进行中,不可归档' : '归档(从列表收起,可在设置 › 归档中找回)'}
         disabled={running}
-        onClick={() => { if (!confirmDel) { setConfirmDel(true); return } onDelete(s.id) }}
-        className={'shrink-0 px-1 opacity-0 group-hover:opacity-100 ' +
-          (running ? 'disabled:cursor-not-allowed disabled:opacity-40' : '') +
-          (confirmDel ? ' text-danger opacity-100' : ' text-fg-subtle hover:text-fg')}>
-        {confirmDel ? <Check className="h-3 w-3" strokeWidth={1.5} /> : <Trash2 className="h-3 w-3" strokeWidth={1.5} />}
+        onClick={() => onArchive(s.id)}
+        className={'shrink-0 px-1 opacity-0 group-hover:opacity-100 text-fg-subtle hover:text-fg ' +
+          (running ? 'disabled:cursor-not-allowed disabled:opacity-40' : '')}>
+        <Archive className="h-3 w-3" strokeWidth={1.5} />
       </button>
     </div>
   )
@@ -160,14 +158,14 @@ interface SidebarProps {
   onSelectSession: (id: string) => void
   onToggleStar: (id: string, starred: boolean) => void
   onRenameSession: (id: string, name: string) => void
-  onDeleteSession: (id: string) => void
+  onArchiveSession: (id: string) => void
   onActivateProject: (path: string) => void
   onAddProject: () => void
-  onRemoveProject: (path: string) => void
-  onRenameProject: (path: string, name: string) => void
+  /** 进「项目」面板看全量(改名/移出/整理都在那儿)。 */
+  onOpenAllProjects: () => void
   /** 账户行的头像/昵称来源(设置→「我」)。沙箱状态已移出侧栏,见顶栏的盾图标。 */
   profile: ProfilePrefs
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'settings' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'projects' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
@@ -200,11 +198,10 @@ export default function Sidebar({
   onSelectSession,
   onToggleStar,
   onRenameSession,
-  onDeleteSession,
+  onArchiveSession,
   onActivateProject,
   onAddProject,
-  onRemoveProject,
-  onRenameProject,
+  onOpenAllProjects,
   profile,
   activeNav,
   onOpenPlugins,
@@ -299,8 +296,7 @@ export default function Sidebar({
           busy={busy}
           onActivate={onActivateProject}
           onAdd={onAddProject}
-          onRemove={onRemoveProject}
-          onRename={onRenameProject}
+          onOpenAllProjects={onOpenAllProjects}
         />
 
         {/* new conversation — functional */}
@@ -388,7 +384,7 @@ export default function Sidebar({
                 <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
                   running={s.id === runningSessionId}
                   onSelect={onSelectSession} onToggleStar={onToggleStar}
-                  onRename={onRenameSession} onDelete={onDeleteSession} />
+                  onRename={onRenameSession} onArchive={onArchiveSession} />
               ))
               // sticky 表头:滚动时标题不动,内容从下方滑过(半透明 + 模糊)
               const headerCls = 'sticky top-0 z-20 mt-4 sidebar-sticky pl-5 pr-3 pb-1.5 pt-2 text-3xs uppercase tracking-wider text-fg-subtle'

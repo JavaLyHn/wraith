@@ -24,6 +24,16 @@ async function srcFile(name: string, content = 'x'): Promise<string> {
   return p
 }
 
+async function createSymlinkOrSkip(target: string, link: string): Promise<boolean> {
+  try {
+    await fs.promises.symlink(target, link)
+    return true
+  } catch (error) {
+    if (process.platform === 'win32' && (error as NodeJS.ErrnoException).code === 'EPERM') return false
+    throw error
+  }
+}
+
 describe('documentsDir', () => {
   it('落在 <home>/.wraith/documents', () => {
     expect(documentsDir('/home/me')).toBe(path.join('/home/me', '.wraith', 'documents'))
@@ -71,10 +81,13 @@ describe('listDocuments', () => {
   // final review 实测复现的两个实例:列出来的行,open/reveal/remove 三个动作全抛,
   // 用户只能去访达删,而且点开时弹的是「路径越界」这种听着像安全事故的文案。
 
-  it('库内软链(指向库外文件)不出现在列表里 —— 否则它的三个动作全抛「路径越界」', async () => {
+  it('库内软链(指向库外文件)不出现在列表里 —— 否则它的三个动作全抛「路径越界」', async (ctx) => {
     const outside = path.join(tmp, 'outside.txt')
     await fs.promises.writeFile(outside, 'sensitive')
-    await fs.promises.symlink(outside, path.join(vault, '看起来很正常.txt'))
+    if (!await createSymlinkOrSkip(outside, path.join(vault, '看起来很正常.txt'))) {
+      // 当前 Windows 账号无创建符号链接权限；支持的平台仍执行库外链接防护断言。
+      return ctx.skip()
+    }
     await fs.promises.writeFile(path.join(vault, 'real.md'), 'x')
     const list = await listDocuments(vault)
     expect(list.map(e => e.name)).toEqual(['real.md'])
@@ -82,7 +95,8 @@ describe('listDocuments', () => {
     expect(() => resolveInVault(vault, '看起来很正常.txt')).toThrow(/越界/)
   })
 
-  it('名字含反斜杠的普通文件不出现在列表里 —— 否则它的三个动作全抛「非法文件名」', async () => {
+  // Windows 的反斜杠是路径分隔符，真实文件系统无法构造这个 POSIX 文件名。
+  it.skipIf(process.platform === 'win32')('名字含反斜杠的普通文件不出现在列表里 —— 否则它的三个动作全抛「非法文件名」', async () => {
     // POSIX 上 \ 是合法文件名字符,从 Windows 拷来/拖进来就能产生
     await fs.promises.writeFile(path.join(vault, 'a\\b.txt'), 'x')
     await fs.promises.writeFile(path.join(vault, 'real.md'), 'x')
@@ -114,10 +128,13 @@ describe('resolveInVault —— 路径安全', () => {
     expect(() => resolveInVault(vault, '')).toThrow(/非法文件名/)
   })
 
-  it('库内软链指向库外 → 抛越界(realpath 才看得出来)', async () => {
+  it('库内软链指向库外 → 抛越界(realpath 才看得出来)', async (ctx) => {
     const outside = path.join(tmp, 'secret.txt')
     await fs.promises.writeFile(outside, 'sensitive')
-    await fs.promises.symlink(outside, path.join(vault, 'innocent.txt'))
+    if (!await createSymlinkOrSkip(outside, path.join(vault, 'innocent.txt'))) {
+      // 当前 Windows 账号无创建符号链接权限；支持的平台仍执行库外链接防护断言。
+      return ctx.skip()
+    }
     expect(() => resolveInVault(vault, 'innocent.txt')).toThrow(/越界/)
   })
 
@@ -215,10 +232,13 @@ describe('removeDocument', () => {
     await expect(removeDocument(vault, 'ghost.pdf')).resolves.toBeUndefined()
   })
 
-  it('越界名字 → 抛,且不碰目标文件', async () => {
+  it('越界名字 → 抛,且不碰目标文件', async (ctx) => {
     const outside = path.join(tmp, 'keep.txt')
     await fs.promises.writeFile(outside, 'x')
-    await fs.promises.symlink(outside, path.join(vault, 'link.txt'))
+    if (!await createSymlinkOrSkip(outside, path.join(vault, 'link.txt'))) {
+      // 当前 Windows 账号无创建符号链接权限；支持的平台仍执行库外链接防护断言。
+      return ctx.skip()
+    }
     await expect(removeDocument(vault, 'link.txt')).rejects.toThrow(/越界/)
     expect(fs.existsSync(outside)).toBe(true)
   })

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     把一条命令送进 Windows AppContainer 执行，作为 macOS Seatbelt 在 Windows 上的对等物。
 
@@ -290,7 +290,9 @@ try {
 
     # stdin 给 NUL:STARTF_USESTDHANDLES 要求三个句柄都有效,
     # 而 Java 侧本来也从不往命令写入。
-    $stdinHandle = [WraithAC]::CreateFile('NUL', 0x80000000, 3, [IntPtr]::Zero, 3, 0, [IntPtr]::Zero)
+    # 0x80000000 = GENERIC_READ。PowerShell 把 0x80000000 当有符号 Int32 解析成 -2147483648,
+    # 传给 uint 参数会抛「值对于 UInt32 太大或太小」—— 必须显式转 [uint32]
+    $stdinHandle = [WraithAC]::CreateFile('NUL', [uint32]0x80000000, 3, [IntPtr]::Zero, 3, 0, [IntPtr]::Zero)
 
     # ---- SECURITY_CAPABILITIES ----
     if (-not [WraithAC]::ConvertStringSidToSid($sid, [ref]$sidPtrForCaps)) { throw 'SID 转换失败' }

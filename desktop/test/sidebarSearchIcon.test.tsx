@@ -16,7 +16,7 @@ function props(over: Partial<SidebarProps> = {}): SidebarProps {
     workspace: '/w', projects: [], busy: false, sessions: [], activeSessionId: '',
     runningSessionId: '', newDraftActive: false,
     onNewConversation: noop, onSelectSession: noop, onToggleStar: noop,
-    onRenameSession: noop, onDeleteSession: noop, onActivateProject: noop,
+    onRenameSession: noop, onArchiveSession: noop, onActivateProject: noop,
     onAddProject: noop, onRemoveProject: noop, onRenameProject: noop,
     profile: { name: 'Haonan', avatar: '🦊' }, activeNav: null,
     onOpenPlugins: noop, onOpenAutomations: noop, onOpenImGateway: noop,

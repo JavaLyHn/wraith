@@ -1,11 +1,13 @@
 import { Shield, ShieldAlert, ShieldCheck, ShieldHalf } from 'lucide-react'
 import PanelToggleIcon from './PanelToggleIcon'
 import WindowControls from './WindowControls'
+import GitPill from './GitPill'
 import { topBarLeftPad, shouldShowWindowControls, sandboxChipView, type SandboxState } from '../lib/topBar'
+import type { GitStatusView } from '../../shared/types'
 
 /** 贯通整窗顶栏:左簇=交通灯内衬 + 侧栏切换(恒显);右簇=沙箱盾 + 终端 + 右栏;中段 drag。
  *  三键用 Codex 式自绘 glyph(PanelToggleIcon):分隔线滑动+填充、单色墨;hover 显柔底、开态常驻。 */
-export default function TopBar({ platform, sidebarCollapsed, onToggleSidebar, showChat, terminalOpen, onToggleTerminal, rightDockOpen, onToggleRightDock, sandbox, sandboxNet = false, onOpenPolicy }: {
+export default function TopBar({ platform, sidebarCollapsed, onToggleSidebar, showChat, terminalOpen, onToggleTerminal, rightDockOpen, onToggleRightDock, sandbox, sandboxNet = false, onOpenPolicy, gitStatus, onRefreshGit }: {
   platform: string
   sidebarCollapsed: boolean
   onToggleSidebar: () => void
@@ -18,6 +20,9 @@ export default function TopBar({ platform, sidebarCollapsed, onToggleSidebar, sh
   /** 沙箱是否放行了网络出口。默认 false —— 拿不准时按最强姿态显示,不要凭空说「已放行」。 */
   sandboxNet?: boolean
   onOpenPolicy: () => void
+  /** 用户真实仓库的只读状态。undefined/null = 不渲染 pill(顶栏不依赖它)。 */
+  gitStatus?: GitStatusView | null
+  onRefreshGit?: () => void
 }): JSX.Element {
   // 纯平单色墨:状态只用墨色表达——开=深墨(text-fg)、关=浅墨(text-fg-muted)、hover=深墨。
   // 不再有任何灰底/凸起(去掉开态与 hover 的 bg,避免读作"阴影/凸起")。
@@ -41,6 +46,7 @@ export default function TopBar({ platform, sidebarCollapsed, onToggleSidebar, sh
       {/* 右簇。沙箱盾**不跟 showChat 走** —— 在任何面板页都该看得见命令有没有沙箱;
           终端/右栏两键只在对话页有意义。整簇共用一个 pr-2,免得盾单独在时贴到窗沿。 */}
       <div className="flex items-center gap-1 pr-2">
+        {gitStatus && onRefreshGit && <GitPill status={gitStatus} onRefresh={onRefreshGit} />}
         <button
           data-testid="sandbox-badge"
           onClick={onOpenPolicy}

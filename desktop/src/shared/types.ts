@@ -131,6 +131,7 @@ export interface SessionMeta {
   turns: number           // count of user turns
   starred?: boolean        // 用户标记的重点会话
   name?: string            // 用户自定义名;显示优先于 title
+  archivedAt?: string | null  // 归档时间(ISO-8601);null/缺省=未归档。归档的不进侧栏列表
 }
 
 /** A tool call inside a resumed assistant message (mirrors SessionMessageCodec). */
@@ -175,6 +176,15 @@ export interface ProjectView {
   name?: string
   lastUsedAt: number
   exists: boolean
+  starred?: boolean
+}
+
+/** 一个项目的会话概况(session.projectSummary 回传)。 */
+export interface ProjectSummary {
+  path: string
+  sessionCount: number
+  /** 最新未归档会话的 updatedAt;无会话时 null */
+  lastSessionAt: string | null
 }
 
 // ---------------------------------------------------------------------------
@@ -472,6 +482,42 @@ export interface SearchStatusView {
    * 表单靠它判断「那个 hasKey 属不属于我现在选的这家」。
    */
   savedProvider?: string
+}
+
+/** porcelain v2 的一条变更记录。 */
+export interface GitFileEntry {
+  path: string
+  /** 两字符 XY：X=暂存区相对 HEAD，Y=工作区相对暂存区。 */
+  xy: string
+  staged: boolean
+}
+
+export interface GitRemote {
+  name: string
+  url: string
+}
+
+/**
+ * 用户真实仓库的只读状态；与 Side-Git 快照刻意分开。
+ *
+ * null 与 error 都是有意义的后端状态，不能补成空串或“干净”，否则 renderer 会误报。
+ */
+export interface GitStatusView {
+  repo: boolean
+  root: string | null
+  name: string | null
+  state: string | null
+  branch: string | null
+  upstream: string | null
+  ahead: number
+  behind: number
+  insertions: number
+  deletions: number
+  untracked: number
+  filesTotal: number
+  files: GitFileEntry[]
+  remotes: GitRemote[]
+  error: string | null
 }
 
 /**
