@@ -1210,6 +1210,11 @@ public class Main {
         }
     }
 
+    /** 用户 home。会话与归档存储的根,与 SessionStore.open 的第一参一致。 */
+    private static java.nio.file.Path userHome() {
+        return java.nio.file.Path.of(System.getProperty("user.home"));
+    }
+
     private static String formatSessionItem(SessionMeta m) {
         String title = m.title() == null || m.title().isBlank() ? "(无标题)" : m.title();
         return title + "   ·   " + relativeTime(m.updatedAt()) + "   ·   " + m.turns() + " 轮   ·   " + m.model();
@@ -1392,7 +1397,7 @@ public class Main {
 
                 com.lyhn.wraith.session.SessionStore sessionStore =
                         com.lyhn.wraith.session.SessionStore.open(
-                                java.nio.file.Path.of(System.getProperty("user.home")),
+                                userHome(),
                                 root,
                                 currentClient[0] == null ? "" : currentClient[0].getProviderName(),
                                 currentClient[0] == null ? "" : currentClient[0].getModelName());
@@ -1656,6 +1661,41 @@ public class Main {
                     }
                     public boolean deleteSession(String id) {
                         return sessionStore.deleteById(id);
+                    }
+                    public boolean deleteSession(String id, String path) {
+                        // path 空 → 活跃 store;否则按项目路径开新 store
+                        if (path == null || path.isBlank()) return sessionStore.deleteById(id);
+                        return com.lyhn.wraith.session.SessionStore
+                                .open(userHome(), path, "", "").deleteById(id);
+                    }
+                    public java.util.List<java.util.Map<String, Object>> projectSummary(java.util.List<String> paths) {
+                        java.util.List<java.util.Map<String, Object>> out = new java.util.ArrayList<>();
+                        for (com.lyhn.wraith.session.ProjectSessionReader.Summary s
+                                : com.lyhn.wraith.session.ProjectSessionReader.summaries(userHome(), paths)) {
+                            // lastSessionAt 可能为 null(无会话),Map.of 不吃 null → 用 LinkedHashMap
+                            java.util.Map<String, Object> m = new java.util.LinkedHashMap<>();
+                            m.put("path", s.path());
+                            m.put("sessionCount", s.sessionCount());
+                            m.put("lastSessionAt", s.lastSessionAt());
+                            out.add(m);
+                        }
+                        return out;
+                    }
+                    public java.util.List<com.lyhn.wraith.session.SessionMeta> listSessionsForProject(String path, int limit) {
+                        return com.lyhn.wraith.session.ProjectSessionReader.recent(userHome(), path, limit);
+                    }
+                    public boolean setSessionArchived(String id, boolean archived, String path) {
+                        // path 空 → 活跃 store;否则按项目路径开新 store
+                        if (path == null || path.isBlank()) return sessionStore.setArchived(id, archived);
+                        return com.lyhn.wraith.session.SessionStore
+                                .open(userHome(), path, "", "").setArchived(id, archived);
+                    }
+                    public java.util.List<com.lyhn.wraith.session.SessionMeta> listArchivedSessions(
+                            java.util.List<String> paths, int limit) {
+                        return com.lyhn.wraith.session.ProjectSessionReader.archived(userHome(), paths, limit);
+                    }
+                    public int archiveProjectSessions(String path) {
+                        return com.lyhn.wraith.session.ProjectSessionReader.archiveAll(userHome(), path);
                     }
                     public java.util.List<com.fasterxml.jackson.databind.JsonNode> readCards(String id) {
                         return sessionStore.readCards(id);
