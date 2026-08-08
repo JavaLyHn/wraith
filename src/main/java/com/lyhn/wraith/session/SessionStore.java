@@ -224,6 +224,39 @@ public final class SessionStore {
                 m.provider(), m.model(), m.title(), m.turns(), m.starred(), nm, m.origin(), m.archivedAt()));
     }
 
+    /**
+     * 给指定会话加/去归档。archived=true 写当前时刻,false 清为 null。找不到该会话返回 false。
+     *
+     * <p>归档只改 meta 首行,消息体与 sidecar cards 都原地不动 —— 取消归档是无损的。
+     */
+    public synchronized boolean setArchived(String id, boolean archived) {
+        String stamp = archived ? Instant.now().toString() : null;
+        return rewriteMeta(id, m -> new SessionMeta(m.id(), m.cwd(), m.createdAt(), m.updatedAt(),
+                m.provider(), m.model(), m.title(), m.turns(), m.starred(), m.name(), m.origin(), stamp));
+    }
+
+    /** 已归档会话,按归档时间倒序,最多 limit 条(limit&lt;=0 返回全部)。 */
+    public List<SessionMeta> listArchived(int limit) {
+        List<SessionMeta> metas = readAllMetas(m -> m.archivedAt() != null);
+        metas.sort(Comparator.comparing(SessionMeta::archivedAt,
+                Comparator.nullsFirst(Comparator.naturalOrder())).reversed());
+        if (limit > 0 && metas.size() > limit) {
+            return new ArrayList<>(metas.subList(0, limit));
+        }
+        return metas;
+    }
+
+    /** 把本 store 下全部未归档会话标为归档,返回实际归档条数。幂等:已全归档时返回 0。 */
+    public synchronized int archiveAll() {
+        int n = 0;
+        for (SessionMeta m : list(0)) {
+            if (setArchived(m.id(), true)) {
+                n++;
+            }
+        }
+        return n;
+    }
+
     // ---------------- sidecar cards ----------------
 
     private Path cardsFile(String id) {
@@ -318,28 +351,11 @@ public final class SessionStore {
 
     /** 本项目会话列表,按 updatedAt 倒序,最多 limit 条。 */
     public List<SessionMeta> list(int limit) {
-        if (!Files.isDirectory(dir)) {
-            return List.of();
-        }
-        List<SessionMeta> metas = new ArrayList<>();
-        try (Stream<Path> files = Files.list(dir)) {
-            List<Path> jsonl = files
-                    .filter(f -> {
-                        String n = f.getFileName().toString();
-                        return n.endsWith(".jsonl") && !n.endsWith(".cards.jsonl");
-                    })
-                    .collect(Collectors.toList());
-            for (Path p : jsonl) {
-                SessionMeta m = readMeta(p);
-                // 过滤掉自动化无头运行的会话:它们只属于「运行历史」,不进主对话列表
-                // (仍可按 id resume/peek——运行历史照常按 id 打开)。
-                if (m != null && !ORIGIN_AUTOMATION.equals(m.origin())) {
-                    metas.add(m);
-                }
-            }
-        } catch (IOException e) {
-            return metas;
-        }
+        // 两类会话不进主对话列表,但都仍可按 id resume/peek:
+        //   origin=automation —— 定时任务无头运行,只属于「运行历史」
+        //   archivedAt != null —— 用户主动归档,收进「设置 › 归档」
+        List<SessionMeta> metas = readAllMetas(m ->
+                !ORIGIN_AUTOMATION.equals(m.origin()) && m.archivedAt() == null);
         metas.sort(Comparator.comparing(SessionMeta::updatedAt,
                 Comparator.nullsFirst(Comparator.naturalOrder())).reversed());
         if (limit > 0 && metas.size() > limit) {
@@ -351,6 +367,31 @@ public final class SessionStore {
     // ---------------- internals ----------------
 
     private record SessionRecord(SessionMeta meta, List<LlmClient.Message> messages) {
+    }
+
+    /** 扫本 store 目录读出全部 meta,按 filter 保留。目录不存在或坏行 → 跳过。不排序。 */
+    private List<SessionMeta> readAllMetas(java.util.function.Predicate<SessionMeta> filter) {
+        if (!Files.isDirectory(dir)) {
+            return new ArrayList<>();
+        }
+        List<SessionMeta> metas = new ArrayList<>();
+        try (Stream<Path> files = Files.list(dir)) {
+            List<Path> jsonl = files
+                    .filter(f -> {
+                        String n = f.getFileName().toString();
+                        return n.endsWith(".jsonl") && !n.endsWith(".cards.jsonl");
+                    })
+                    .collect(Collectors.toList());
+            for (Path p : jsonl) {
+                SessionMeta m = readMeta(p);
+                if (m != null && filter.test(m)) {
+                    metas.add(m);
+                }
+            }
+        } catch (IOException e) {
+            return metas;
+        }
+        return metas;
     }
 
     private SessionMeta readMeta(Path file) {
