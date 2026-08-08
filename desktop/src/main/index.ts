@@ -15,6 +15,7 @@ import {
   upsertProject,
   removeProject,
   renameProject,
+  setProjectStarred,
   projectViews,
   seedProjectsIfEmpty,
   seedProjectsFromJson,
@@ -893,6 +894,36 @@ ipcMain.handle('wraith:renameProject', async (_e, projectPath: string, name: str
   renameProject(app.getPath('userData'), projectPath, name)
 })
 
+ipcMain.handle('wraith:setProjectStarred', async (_e, projectPath: string, starred: boolean) => {
+  setProjectStarred(app.getPath('userData'), projectPath, starred)
+})
+
+ipcMain.handle('wraith:projectSummary', async (_e, paths: string[]) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.projectSummary', { paths })
+})
+
+ipcMain.handle('wraith:listSessionsForProject', async (_e, path: string, limit?: number) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.listForProject', { path, ...(limit === undefined ? {} : { limit }) })
+})
+
+ipcMain.handle('wraith:setSessionArchived', async (_e, sessionId: string, archived: boolean, path?: string) => {
+  if (!client) throw new Error('Backend not connected')
+  // path 只在跨项目操作(设置 › 归档)时给;不给 → 后端走活跃项目
+  return client.request('session.setArchived', { sessionId, archived, ...(path ? { path } : {}) })
+})
+
+ipcMain.handle('wraith:listArchivedSessions', async (_e, paths: string[], limit?: number) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.listArchived', { paths, ...(limit === undefined ? {} : { limit }) })
+})
+
+ipcMain.handle('wraith:archiveProjectSessions', async (_e, path: string) => {
+  if (!client) throw new Error('Backend not connected')
+  return client.request('session.archiveProject', { path })
+})
+
 ipcMain.handle('wraith:mcpList', async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.list', {})
@@ -1295,9 +1326,9 @@ ipcMain.handle('wraith:renameSession', async (_e, sessionId: string, name: strin
   return client.request('session.rename', { sessionId, name })
 })
 
-ipcMain.handle('wraith:deleteSession', async (_e, sessionId: string) => {
+ipcMain.handle('wraith:deleteSession', async (_e, sessionId: string, path?: string) => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('session.delete', { sessionId })
+  return client.request('session.delete', { sessionId, ...(path ? { path } : {}) })
 })
 
 // ---------------------------------------------------------------------------
