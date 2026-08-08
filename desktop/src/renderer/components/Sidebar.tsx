@@ -167,7 +167,7 @@ interface SidebarProps {
   onRenameProject: (path: string, name: string) => void
   /** 账户行的头像/昵称来源(设置→「我」)。沙箱状态已移出侧栏,见顶栏的盾图标。 */
   profile: ProfilePrefs
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'settings' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'projects' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void

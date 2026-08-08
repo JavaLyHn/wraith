@@ -38,7 +38,7 @@ import { useBackgroundTasks } from './lib/useBackgroundTasks'
 import { taskDoneLabel } from '../shared/taskWatch'
 import { PROMPT_CATEGORIES } from './lib/welcomePrompts'
 import { lastUserMessage } from './lib/resend'
-import { resolveWorkspacePath } from './lib/paths'
+import { resolveWorkspacePath, baseName } from './lib/paths'
 import { sessionDisplayName } from './lib/sessionView'
 import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
@@ -72,10 +72,12 @@ import PolicyPanel from './components/PolicyPanel'
 import BrowserPanel from './components/BrowserPanel'
 import RagPanel from './components/RagPanel'
 import DocumentsPanel from './components/DocumentsPanel'
+import ProjectsPanel from './components/ProjectsPanel'
 import SettingsPanel from './components/SettingsPanel'
 import TerminalDrawer from './components/TerminalDrawer'
 import RightDock, { type RightDockPane } from './components/RightDock'
 import SummaryPopover from './components/SummaryPopover'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from './components/ui/dialog'
 import { useSettings } from './settings/SettingsContext'
 
 // ---------------------------------------------------------------------------
@@ -185,7 +187,7 @@ export default function App(): JSX.Element {
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
-  const [view, setView] = useState<'chat' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'settings'>('chat')
+  const [view, setView] = useState<'chat' | 'projects' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'settings'>('chat')
   const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
   const [automationBadge, setAutomationBadge] = useState(false)
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
@@ -883,6 +885,56 @@ export default function App(): JSX.Element {
     [fetchProjects],
   )
 
+  // ── 项目面板:点行 = 切项目 + 恢复最近会话 + 回聊天页 ──────────────────────────
+  const handleOpenProject = useCallback(async (projectPath: string) => {
+    if (turnRef.current === 'running') return
+    const ok = projectPath === state.workspace ? true : await switchToProject(projectPath)
+    if (ok) setView('chat')
+  }, [state.workspace, switchToProject])
+
+  // ── 项目面板:✎ = 切项目 + 新会话 + 回聊天页 ────────────────────────────────
+  const handleProjectNewConversation = useCallback(async (projectPath: string) => {
+    if (turnRef.current === 'running') return
+    if (projectPath !== state.workspace) {
+      const ok = await switchToProject(projectPath)
+      if (!ok) return
+    }
+    setView('chat')
+    await handleNewConversation()
+  }, [state.workspace, switchToProject, handleNewConversation])
+
+  // ── 项目面板:展开里点会话 = 切项目 + resume + 回聊天页 ──────────────────────
+  const handleOpenProjectSession = useCallback(async (projectPath: string, sessionId: string) => {
+    if (turnRef.current === 'running') return
+    if (projectPath !== state.workspace) {
+      const ok = await switchToProject(projectPath)
+      if (!ok) return
+    }
+    setView('chat')
+    await handleSelectSession(sessionId)
+  }, [state.workspace, switchToProject, handleSelectSession])
+
+  // ── 项目面板:重点 ─────────────────────────────────────────────────────────
+  const handleToggleProjectStar = useCallback(async (projectPath: string, starred: boolean) => {
+    try {
+      await window.wraith.setProjectStarred(projectPath, starred)
+      void fetchProjects()   // 侧栏快切下拉的前 5 名也要跟着变
+    } catch (err) {
+      console.error('[wraith] setProjectStarred error:', err)
+    }
+  }, [fetchProjects])
+
+  // 批量归档确认:null=没有待确认项
+  const [archiveConfirm, setArchiveConfirm] = useState<{ path: string; label: string; count: number } | null>(null)
+
+  // ── 项目面板:批量归档某项目的聊天(破坏性,先确认) ────────────────────────────
+  const handleArchiveProjectChats = useCallback(async (projectPath: string, count: number) => {
+    const entry = projects.find(p => p.path === projectPath)
+    const label = entry?.name || baseName(projectPath)
+    // 批量归档是破坏性动作,用受控 Dialog 确认(本仓库不用原生 confirm/prompt)
+    setArchiveConfirm({ path: projectPath, label, count })
+  }, [projects])
+
   // ── 运行历史:跳转到对应会话 ─────────────────────────────────────────────────
   const handleOpenAutomationSession = useCallback(async (projectPath: string, sessionId: string) => {
     if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
@@ -1137,6 +1189,20 @@ export default function App(): JSX.Element {
           <RagPanel onBack={() => setView('chat')} />
         ) : view === 'documents' ? (
           <DocumentsPanel onBack={() => setView('chat')} />
+        ) : view === 'projects' ? (
+          <ProjectsPanel
+            projects={projects}
+            activePath={state.workspace ?? ''}
+            busy={state.turn === 'running'}
+            onOpen={handleOpenProject}
+            onNewConversation={handleProjectNewConversation}
+            onToggleStar={handleToggleProjectStar}
+            onOpenSession={handleOpenProjectSession}
+            onRename={handleRenameProject}
+            onArchiveChats={handleArchiveProjectChats}
+            onRemove={handleRemoveProject}
+            onAdd={handleAddProject}
+          />
         ) : view === 'settings' ? (
           <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} />
         ) : (
@@ -1305,6 +1371,42 @@ export default function App(): JSX.Element {
           openView: (v) => setView(v as typeof view),
         }}
       />
+
+      {/* 项目面板:批量归档确认框(破坏性操作,需知项目名与真实数量,故在 App 弹) */}
+      <Dialog open={archiveConfirm !== null} onOpenChange={o => { if (!o) setArchiveConfirm(null) }}>
+        <DialogContent data-testid="archive-project-confirm" className="w-96">
+          <DialogTitle>归档 {archiveConfirm?.label} 的聊天？</DialogTitle>
+          <DialogDescription>
+            这个项目的 {archiveConfirm?.count} 个聊天会从侧栏隐藏，可在「设置 › 归档」中找回。不删除任何内容。
+          </DialogDescription>
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              onClick={() => setArchiveConfirm(null)}
+              className="rounded-lg px-3 py-1.5 text-xs text-fg-muted hover:bg-fg/5"
+            >
+              取消
+            </button>
+            <button
+              data-testid="archive-project-confirm-ok"
+              onClick={async () => {
+                const target = archiveConfirm
+                setArchiveConfirm(null)
+                if (!target) return
+                try {
+                  await window.wraith.archiveProjectSessions(target.path)
+                  // 归档的若是当前项目,侧栏会话列表要立刻重拉
+                  if (target.path === state.workspace) void fetchSessions()
+                } catch (err) {
+                  console.error('[wraith] archiveProjectSessions error:', err)
+                }
+              }}
+              className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg"
+            >
+              归档
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
