@@ -475,6 +475,9 @@ public class Main {
             configureMultilineInput(lineReader, renderer);
             enableMouseIfAvailable(terminal, lineReader);
 
+            // /archive clear 的二次确认:第一次打印警告置 true,紧接着再输一次才真清
+            boolean[] archiveClearPending = { false };
+
             while (true) {
                 refreshTerminalColumns(terminal);
                 PromptInput promptInput;
@@ -514,6 +517,11 @@ public class Main {
                     renderer.beginTurn();
                     printSubmittedInput(renderer, ui, input);
                     submittedInputRendered = true;
+                }
+                // 非 /archive clear 的任何输入都复位二次确认态:
+                // 否则「clear → 别的命令 → clear」会被误当成连续两次
+                if (command.type() != CliCommandParser.CommandType.ARCHIVE_CLEAR) {
+                    archiveClearPending[0] = false;
                 }
                 switch (command.type()) {
                     case UNKNOWN_COMMAND -> {
@@ -904,6 +912,30 @@ public class Main {
                     }
                     case EXPORT -> {
                         handleExportCommand(ui, reactAgent);
+                        continue;
+                    }
+                    case ARCHIVE -> {
+                        handleArchiveCurrent(command.payload(), sessionStore, reactAgent, renderer, ui);
+                        continue;
+                    }
+                    case ARCHIVE_LIST -> {
+                        handleArchiveList(sessionStore, ui);
+                        continue;
+                    }
+                    case ARCHIVE_SHOW -> {
+                        handleArchiveShow(command.payload(), sessionStore, ui);
+                        continue;
+                    }
+                    case ARCHIVE_RESTORE -> {
+                        handleArchiveRestore(command.payload(), sessionStore, reactAgent, ui);
+                        continue;
+                    }
+                    case ARCHIVE_DELETE -> {
+                        handleArchiveDelete(command.payload(), sessionStore, ui);
+                        continue;
+                    }
+                    case ARCHIVE_CLEAR -> {
+                        archiveClearPending[0] = handleArchiveClear(sessionStore, ui, archiveClearPending[0]);
                         continue;
                     }
                     case INDEX_CODE -> {
@@ -4461,6 +4493,119 @@ public class Main {
         }
         String v = env.trim().toLowerCase(java.util.Locale.ROOT);
         return !(v.equals("off") || v.equals("0") || v.equals("false") || v.equals("no"));
+    }
+
+    /**
+     * /archive [标题]:落盘当前对话 → 标归档 → 清空。
+     *
+     * <p>不新建存储:先 persist 成正常会话再打 archivedAt 标记。这样 .cards.jsonl(动作卡)
+     * 与 starred 都留在原文件里,恢复是无损的;桌面「设置 › 归档」看到的也是同一批东西。
+     */
+    private static void handleArchiveCurrent(String title, SessionStore sessionStore,
+                                             Agent reactAgent, Renderer renderer, PrintStream ui) {
+        sessionStore.persist(reactAgent.getConversationHistory());
+        String id = sessionStore.currentId();
+        if (id == null) {
+            ui.println("当前没有可归档的对话。\n");
+            return;
+        }
+        if (title != null && !title.isBlank()) {
+            sessionStore.rename(id, title.strip());
+        }
+        if (!sessionStore.setArchived(id, true)) {
+            ui.println("❌ 归档失败（会话文件写入出错）\n");
+            return;
+        }
+        // 与 /clear 同一套清空动作:归档 = 收起来 + 从干净状态继续
+        reactAgent.clearHistory();
+        sessionStore.startNew();
+        renderer.renderTodos(List.of());
+        ui.println("🗄️ 已归档并清空当前对话。用 /archive list 回看，或到桌面端「设置 › 归档」。\n");
+    }
+
+    /** /archive list:只列**当前项目**的归档(CLI 天生是项目内的工作台)。 */
+    private static void handleArchiveList(SessionStore sessionStore, PrintStream ui) {
+        java.util.List<com.lyhn.wraith.session.SessionMeta> metas = sessionStore.listArchived(0);
+        if (metas.isEmpty()) {
+            ui.println("当前项目还没有归档的聊天。\n");
+            return;
+        }
+        ui.println("已归档的聊天（" + metas.size() + " 条）：");
+        for (com.lyhn.wraith.session.SessionMeta m : metas) {
+            String label = m.name() != null && !m.name().isBlank() ? m.name() : m.title();
+            ui.println("  " + m.id() + "  " + label + "  （" + m.turns() + " 轮，归档于 " + m.archivedAt() + "）");
+        }
+        ui.println("\n只显示当前项目；全部归档见桌面端「设置 › 归档」。\n");
+    }
+
+    /** /archive show <id>:只读预览,不切活跃会话。 */
+    private static void handleArchiveShow(String id, SessionStore sessionStore, PrintStream ui) {
+        if (id == null || id.isBlank()) {
+            ui.println("❌ 请提供归档 id，例如 /archive show 20260805-101010-ab12\n");
+            return;
+        }
+        java.util.List<com.lyhn.wraith.llm.LlmClient.Message> msgs = sessionStore.peek(id.strip());
+        if (msgs.isEmpty()) {
+            ui.println("❌ 找不到这条归档：" + id.strip() + "\n");
+            return;
+        }
+        for (com.lyhn.wraith.llm.LlmClient.Message m : msgs) {
+            String content = m.content() == null ? "" : m.content();
+            ui.println("[" + m.role() + "] " + (content.length() > 500 ? content.substring(0, 500) + "…" : content));
+        }
+        ui.println();
+    }
+
+    /** /archive restore <id>:取消归档 + 载回当前对话。 */
+    private static void handleArchiveRestore(String id, SessionStore sessionStore,
+                                             Agent reactAgent, PrintStream ui) {
+        if (id == null || id.isBlank()) {
+            ui.println("❌ 请提供归档 id，例如 /archive restore 20260805-101010-ab12\n");
+            return;
+        }
+        String sid = id.strip();
+        if (!sessionStore.setArchived(sid, false)) {
+            ui.println("❌ 找不到这条归档：" + sid + "\n");
+            return;
+        }
+        java.util.List<com.lyhn.wraith.llm.LlmClient.Message> msgs = sessionStore.resume(sid);
+        reactAgent.restoreHistory(msgs);
+        ui.println("↩️ 已恢复并载回当前对话（" + msgs.size() + " 条消息）。\n");
+    }
+
+    /** /archive delete <id>:永久删除。 */
+    private static void handleArchiveDelete(String id, SessionStore sessionStore, PrintStream ui) {
+        if (id == null || id.isBlank()) {
+            ui.println("❌ 请提供归档 id，例如 /archive delete 20260805-101010-ab12\n");
+            return;
+        }
+        boolean removed = sessionStore.deleteById(id.strip());
+        ui.println(removed ? "🗑️ 已删除。\n" : "❌ 找不到这条归档：" + id.strip() + "\n");
+    }
+
+    /**
+     * /archive clear:清空当前项目全部归档。二次确认 —— 返回新的 pending 态。
+     * 第一次调用(pending=false)只打警告,返回 true;紧接着再来一次才真清。
+     */
+    private static boolean handleArchiveClear(SessionStore sessionStore, PrintStream ui, boolean pending) {
+        java.util.List<com.lyhn.wraith.session.SessionMeta> metas = sessionStore.listArchived(0);
+        if (metas.isEmpty()) {
+            ui.println("当前项目没有归档可清。\n");
+            return false;
+        }
+        if (!pending) {
+            ui.println("⚠️ 这会永久删除当前项目的 " + metas.size() + " 条归档，不可恢复。"
+                    + "确定就再输一次 /archive clear。\n");
+            return true;
+        }
+        int n = 0;
+        for (com.lyhn.wraith.session.SessionMeta m : metas) {
+            if (sessionStore.deleteById(m.id())) {
+                n++;
+            }
+        }
+        ui.println("🗑️ 已删除 " + n + " 条归档。\n");
+        return false;
     }
 
     private static void handleExportCommand(PrintStream out, Agent reactAgent) {
