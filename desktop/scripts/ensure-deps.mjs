@@ -59,17 +59,18 @@ export function npmInstallArgs() {
  * 主入口:依赖缺失时调 npm install,失败则非零退出。
  * npm install 继承当前 cwd / env / stdio,用户能看到完整的安装输出。
  *
- * @param platform  传入而非用 process.platform,便于测试
+ * @param platform    传入而非用 process.platform,便于测试
  * @param projectRoot  同上
+ * @param spawn        可注入的 spawnSync,测试时传 mock;缺省用 child_process.spawnSync
  * @returns 0=成功或依赖已就绪;非零=npm install 失败(错误码透传)
  */
-export function ensureDeps(platform = process.platform, projectRoot = desktopRoot) {
+export function ensureDeps(platform = process.platform, projectRoot = desktopRoot, spawn = spawnSync) {
   if (depsPresent(platform, projectRoot)) {
     return 0
   }
 
   console.log('[ensure-deps] node_modules 缺失,自动安装依赖…')
-  const result = spawnSync(npmBinary(platform), npmInstallArgs(), {
+  const result = spawn(npmBinary(platform), npmInstallArgs(), {
     cwd: projectRoot,
     stdio: 'inherit',
     env: process.env,
