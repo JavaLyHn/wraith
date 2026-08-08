@@ -1768,13 +1768,13 @@ test('T46 命令面板搜索:输入关键字过滤会话+项目,清空恢复全�
 // T47: 会话行 star/改名/删除按钮元素存在性验证(降级)
 //
 // 降级原因:mock-appserver 未实现 wraith:setSessionStarred / wraith:renameSession /
-//   wraith:deleteSession IPC 处理器;调用这些 preload 方法会 reject,无法在 e2e 层
-//   对 IPC 往返做端到端断言。全链路 IPC 测试留待 mock 扩展后补齐。
+//   wraith:deleteSession / wraith:setSessionArchived IPC 处理器;调用这些 preload 方法会 reject,
+//   无法在 e2e 层对 IPC 往返做端到端断言。全链路 IPC 测试留待 mock 扩展后补齐。
 //   本用例仅验证 SessionRow 组件渲染正确:hover 后三个操作按钮元素存在于 DOM 中,
-//   且具备正确的 data-testid,确保 Task 6 UI 层变更本身不引入回归。
+//   且具备正确的 data-testid,确保 Task 6/15 UI 层变更本身不引入回归。
 // ---------------------------------------------------------------------------
 
-test('T47(降级) 会话行 hover 后 star/改名/删除按钮元素可见', async () => {
+test('T47(降级) 会话行 hover 后 star/改名/归档按钮元素可见', async () => {
   const dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-t47-a-'))
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ud-t47-'))
   const app = await launchApp({
@@ -1803,7 +1803,7 @@ test('T47(降级) 会话行 hover 后 star/改名/删除按钮元素可见', asy
   await win.locator('[data-testid="conversation-item"]').first().hover()
   await expect(win.locator('[data-testid="session-star"]').first()).toBeAttached({ timeout: 5000 })
   await expect(win.locator('[data-testid="session-rename"]').first()).toBeAttached({ timeout: 5000 })
-  await expect(win.locator('[data-testid="session-delete"]').first()).toBeAttached({ timeout: 5000 })
+  await expect(win.locator('[data-testid="session-archive"]').first()).toBeAttached({ timeout: 5000 })
 
   await app.close()
   for (const p of [dirA, userData]) fs.rmSync(p, { recursive: true, force: true })

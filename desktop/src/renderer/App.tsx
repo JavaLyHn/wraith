@@ -416,6 +416,22 @@ export default function App(): JSX.Element {
     if (pv && pv.kind === 'session' && pv.sessionId === id) setPreview(null)
   }, [fetchSessions, state.sessionId, handleNewConversation])
 
+  // ── 归档一条会话:从侧栏收起,收进「设置 › 归档」。可逆,故无二次确认 ────────────
+  const handleArchiveSession = useCallback(async (sessionId: string) => {
+    try {
+      const { ok } = await window.wraith.setSessionArchived(sessionId, true)
+      if (!ok) {
+        console.error('[wraith] setSessionArchived returned ok:false for', sessionId)
+        return
+      }
+      void fetchSessions()
+      // 归档的正好是当前正在看的会话:不强行跳走 —— 用户可能正读着它。
+      // 侧栏没有高亮项了,下一步点任何会话或「新对话」自然离开。
+    } catch (err) {
+      console.error('[wraith] setSessionArchived error:', err)
+    }
+  }, [fetchSessions])
+
   // ── 沙箱状态:App 是唯一真相源 ────────────────────────────────────────────
   // 此前顶栏那枚盾只在 initialize 时被写过一次,面板里 sandbox.set 的结果只落在
   // PolicyPanel 的局部 state —— 用户拨了开关,盾纹丝不动。把状态提到这里,
@@ -1084,7 +1100,7 @@ export default function App(): JSX.Element {
           onSelectSession={handleSelectSession}
           onToggleStar={handleToggleStar}
           onRenameSession={handleRenameSession}
-          onDeleteSession={handleDeleteSession}
+          onArchiveSession={handleArchiveSession}
           onActivateProject={switchToProject}
           onAddProject={handleAddProject}
           onOpenAllProjects={() => setView('projects')}
