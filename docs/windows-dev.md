@@ -101,13 +101,18 @@ mvn -DskipTests=false test        # ⚠ 本仓库测试默认跳过,必须显式
 ```powershell
 powershell -ExecutionPolicy Bypass -File desktop\scripts\dev-win.ps1   # 构建并放 jar 到 %USERPROFILE%\.wraith\wraith.jar
 cd desktop
+npm run dev
+```
+
+`npm run dev` 会先跑 `predev` 钩子(`scripts/ensure-deps.mjs`)：检测到 `node_modules/.bin/electron-vite.cmd` 缺失时自动执行 `npm install --legacy-peer-deps`，依赖已就绪则直接启动。网络失败时手动执行：
+
+```powershell
 npm install --legacy-peer-deps     # ⚠ 必须带,见下
 npm run dev
 ```
 
 - [ ] `dev-win.ps1` 跑通,`%USERPROFILE%\.wraith\wraith.jar` 存在且时间戳是刚才
-- [ ] `npm install --legacy-peer-deps` 成功(含 node-pty 原生二进制)
-- [ ] `npm run dev` 起得来,主窗出现
+- [ ] `npm run dev` 起得来（首次会自动安装依赖，已安装则直接启动），主窗出现
 - [ ] 顶部/状态区显示**后端已连接**
 
 > `--legacy-peer-deps` 是必须的:`@lobehub/icons`→`@lobehub/ui` 有 react 18 vs 19 的 peer 冲突,干净 checkout 上普通 `npm install` 会 ERESOLVE 失败。
