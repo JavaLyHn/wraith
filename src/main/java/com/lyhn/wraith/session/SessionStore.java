@@ -55,6 +55,8 @@ public final class SessionStore {
     private String name;
     // 本 store 创建的新会话的来源(null=交互式);由 AutomationRunner 置为 ORIGIN_AUTOMATION。
     private String origin;
+    // 当前会话的归档时间;null=未归档。归档的会话从 list() 过滤,进 listArchived()
+    private String archivedAt;
 
     private SessionStore(Path dir, String cwd, String provider, String model) {
         this.dir = dir;
@@ -77,6 +79,7 @@ public final class SessionStore {
         title = null;
         starred = false;
         name = null;
+        archivedAt = null;
     }
 
     /**
@@ -125,7 +128,7 @@ public final class SessionStore {
             }
         }
         try {
-            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, turns, starred, name, origin), convo);
+            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, turns, starred, name, origin, archivedAt), convo);
         } catch (IOException e) {
             // 持久化失败不致命:本轮不写,下轮再试
         }
@@ -170,7 +173,7 @@ public final class SessionStore {
             title = deriveTitle(stub);
         }
         try {
-            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, 1, starred, name, origin), stub);
+            write(new SessionMeta(currentId, cwd, createdAt, now, provider, model, title, 1, starred, name, origin, archivedAt), stub);
         } catch (IOException e) {
             // 非致命:桩写失败则该会话要等轮末 persist 才出现在列表(退回旧行为),不影响本轮执行
         }
@@ -211,14 +214,14 @@ public final class SessionStore {
     /** 给指定会话加/去星。找不到该会话返回 false。 */
     public synchronized boolean setStarred(String id, boolean starredFlag) {
         return rewriteMeta(id, m -> new SessionMeta(m.id(), m.cwd(), m.createdAt(), m.updatedAt(),
-                m.provider(), m.model(), m.title(), m.turns(), starredFlag, m.name(), m.origin()));
+                m.provider(), m.model(), m.title(), m.turns(), starredFlag, m.name(), m.origin(), m.archivedAt()));
     }
 
     /** 给指定会话设自定义名;name 为 null/空白 → 清除(回落 title)。找不到返回 false。 */
     public synchronized boolean rename(String id, String newName) {
         String nm = (newName == null || newName.isBlank()) ? null : newName.strip();
         return rewriteMeta(id, m -> new SessionMeta(m.id(), m.cwd(), m.createdAt(), m.updatedAt(),
-                m.provider(), m.model(), m.title(), m.turns(), m.starred(), nm, m.origin()));
+                m.provider(), m.model(), m.title(), m.turns(), m.starred(), nm, m.origin(), m.archivedAt()));
     }
 
     // ---------------- sidecar cards ----------------
@@ -273,6 +276,7 @@ public final class SessionStore {
         if (updated.id().equals(currentId)) {
             this.starred = updated.starred();
             this.name = updated.name();
+            this.archivedAt = updated.archivedAt();
         }
         return true;
     }
@@ -289,6 +293,7 @@ public final class SessionStore {
         starred = rec.meta().starred();
         name = rec.meta().name();
         origin = rec.meta().origin();   // 续接时保留来源,后续 persist 不丢标记
+        archivedAt = rec.meta().archivedAt();   // 续接归档态:恢复已归档会话时 persist 不丢标记
         return rec.messages();
     }
 
@@ -360,7 +365,7 @@ public final class SessionStore {
                     text(n, "provider"), text(n, "model"), text(n, "title"),
                     n.has("turns") ? n.get("turns").asInt() : 0,
                     n.has("starred") && n.get("starred").asBoolean(),
-                    text(n, "name"), text(n, "origin"));
+                    text(n, "name"), text(n, "origin"), text(n, "archivedAt"));
         } catch (Exception e) {
             return null;
         }
@@ -430,6 +435,9 @@ public final class SessionStore {
         }
         if (m.origin() != null) {
             n.put("origin", m.origin());
+        }
+        if (m.archivedAt() != null) {
+            n.put("archivedAt", m.archivedAt());
         }
         return mapper.writeValueAsString(n);
     }
