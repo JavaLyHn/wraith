@@ -175,6 +175,7 @@ export interface ProjectView {
   name?: string
   lastUsedAt: number
   exists: boolean
+  starred?: boolean
 }
 
 // ---------------------------------------------------------------------------
