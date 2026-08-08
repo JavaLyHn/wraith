@@ -8,6 +8,7 @@
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev -- --disable-gpu --no-sandbox",
+    "predev": "node scripts/ensure-deps.mjs",
     "build": "electron-vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
