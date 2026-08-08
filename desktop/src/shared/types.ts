@@ -131,6 +131,7 @@ export interface SessionMeta {
   turns: number           // count of user turns
   starred?: boolean        // 用户标记的重点会话
   name?: string            // 用户自定义名;显示优先于 title
+  archivedAt?: string | null  // 归档时间(ISO-8601);null/缺省=未归档。归档的不进侧栏列表
 }
 
 /** A tool call inside a resumed assistant message (mirrors SessionMessageCodec). */
@@ -175,6 +176,15 @@ export interface ProjectView {
   name?: string
   lastUsedAt: number
   exists: boolean
+  starred?: boolean
+}
+
+/** 一个项目的会话概况(session.projectSummary 回传)。 */
+export interface ProjectSummary {
+  path: string
+  sessionCount: number
+  /** 最新未归档会话的 updatedAt;无会话时 null */
+  lastSessionAt: string | null
 }
 
 // ---------------------------------------------------------------------------

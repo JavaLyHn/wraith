@@ -35,6 +35,14 @@ class ToolRegistryUiIntentTest {
     }
 
     @Test
+    void openPanelAcceptsProjectsPanel() {
+        ToolRegistry reg = new ToolRegistry();
+        String out = reg.executeTool("open_panel", "{\"panel\":\"projects\"}");
+        assertTrue(out.contains("projects"), "projects 应是合法面板;实际: " + out);
+        assertFalse(out.startsWith("open_panel 失败"), "projects 不该被判成未知面板;实际: " + out);
+    }
+
+    @Test
     void openPanelRejectsUnknownPanel() {
         ToolRegistry reg = new ToolRegistry();
         String out = reg.executeTool("open_panel", "{\"panel\":\"nope\"}");

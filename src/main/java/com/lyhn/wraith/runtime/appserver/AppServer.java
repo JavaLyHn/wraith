@@ -62,6 +62,29 @@ public final class AppServer {
         default boolean setSessionStarred(String sessionId, boolean starred) { return false; }
         default boolean renameSession(String sessionId, String name) { return false; }
         default boolean deleteSession(String sessionId) { return false; }
+        /**
+         * 删会话的带项目重载。path 为 null/空 → 活跃项目(等价旧单参版本)。
+         * 「设置 › 归档」是跨项目列表,删别的项目的归档会话必须走这个重载 ——
+         * 否则跑在活跃 store 上找不到文件,静默失败。
+         */
+        default boolean deleteSession(String sessionId, String path) { return deleteSession(sessionId); }
+        /** 批量项目概况:每项 {path, sessionCount, lastSessionAt}。默认空。 */
+        default java.util.List<java.util.Map<String, Object>> projectSummary(java.util.List<String> paths) {
+            return java.util.List.of();
+        }
+        /** 指定项目的最近未归档会话(只读,不切活跃项目)。默认空。 */
+        default java.util.List<com.lyhn.wraith.session.SessionMeta> listSessionsForProject(String path, int limit) {
+            return java.util.List.of();
+        }
+        /** 加/去归档。path 为 null/空 → 活跃项目。默认 false。 */
+        default boolean setSessionArchived(String sessionId, boolean archived, String path) { return false; }
+        /** 跨项目已归档会话(按归档时间倒序)。默认空。 */
+        default java.util.List<com.lyhn.wraith.session.SessionMeta> listArchivedSessions(
+                java.util.List<String> paths, int limit) {
+            return java.util.List.of();
+        }
+        /** 归档某项目下全部未归档会话,返回条数。默认 0。 */
+        default int archiveProjectSessions(String path) { return 0; }
         /** MCP 操作面。实现可返回 null(表示 mcp 不可用)。默认 null。 */
         default McpOps mcp() { return null; }
         /**
@@ -449,6 +472,11 @@ public final class AppServer {
             case "session.setStarred" -> handleSessionSetStarred(msg);
             case "session.rename" -> handleSessionRename(msg);
             case "session.delete" -> handleSessionDelete(msg);
+            case "session.projectSummary" -> handleProjectSummary(msg);
+            case "session.listForProject" -> handleListForProject(msg);
+            case "session.setArchived" -> handleSessionSetArchived(msg);
+            case "session.listArchived" -> handleListArchived(msg);
+            case "session.archiveProject" -> handleArchiveProject(msg);
             case "mcp.list" -> handleMcp(msg, ops -> writer.result(msg.id(), ops.list()));
             case "mcp.enable" -> handleMcpNamed(msg, (ops, name) -> { ops.enable(name); ok(msg); });
             case "mcp.disable" -> handleMcpNamed(msg, (ops, name) -> { ops.disable(name); ok(msg); });
@@ -1542,8 +1570,69 @@ public final class AppServer {
         JsonNode p = msg.params();
         String id = (p != null && p.hasNonNull("sessionId")) ? p.get("sessionId").asText() : "";
         if (id.isBlank()) { writer.error(msg.id(), -32602, "missing sessionId"); return; }
-        session.deleteSession(id);   // 幂等:文件不存在也算删成功(前端只需知道"没了")
+        // path 可选:给了就删那个项目的,没给就删活跃项目的(旧调用方零改动)
+        session.deleteSession(id, textParam(p, "path"));   // 幂等:文件不存在也算删成功
         writer.result(msg.id(), Map.of("ok", true));
+    }
+
+    private void handleProjectSummary(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        List<String> paths = stringArrayParam(msg.params(), "paths");
+        if (paths == null) { writer.error(msg.id(), -32602, "missing paths"); return; }
+        writer.result(msg.id(), Map.of("summaries", session.projectSummary(paths)));
+    }
+
+    private void handleListForProject(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        String path = textParam(p, "path");
+        if (path == null) { writer.error(msg.id(), -32602, "missing path"); return; }
+        int limit = (p != null && p.hasNonNull("limit")) ? p.get("limit").asInt(50) : 50;
+        writer.result(msg.id(), Map.of("sessions", session.listSessionsForProject(path, limit)));
+    }
+
+    private void handleSessionSetArchived(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        String id = (p != null && p.hasNonNull("sessionId")) ? p.get("sessionId").asText() : "";
+        if (id.isBlank()) { writer.error(msg.id(), -32602, "missing sessionId"); return; }
+        boolean archived = p.path("archived").asBoolean(false);
+        // 与 setStarred 同样的幂等不对称:目标会话不存在 = 操作无法施加 → -32000(不是 ok)
+        if (!session.setSessionArchived(id, archived, textParam(p, "path"))) {
+            writer.error(msg.id(), -32000, "setArchived failed"); return;
+        }
+        writer.result(msg.id(), Map.of("ok", true));
+    }
+
+    private void handleListArchived(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        List<String> paths = stringArrayParam(p, "paths");
+        if (paths == null) { writer.error(msg.id(), -32602, "missing paths"); return; }
+        int limit = (p != null && p.hasNonNull("limit")) ? p.get("limit").asInt(0) : 0;
+        writer.result(msg.id(), Map.of("sessions", session.listArchivedSessions(paths, limit)));
+    }
+
+    private void handleArchiveProject(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        String path = textParam(msg.params(), "path");
+        if (path == null) { writer.error(msg.id(), -32602, "missing path"); return; }
+        writer.result(msg.id(), Map.of("archived", session.archiveProjectSessions(path)));
+    }
+
+    /** 读一个字符串数组参数。字段缺失/不是数组 → null(调用方回 -32602);空数组是合法的。 */
+    private static List<String> stringArrayParam(JsonNode p, String field) {
+        if (p == null || !p.has(field) || !p.get(field).isArray()) {
+            return null;
+        }
+        List<String> out = new ArrayList<>();
+        p.get(field).forEach(n -> {
+            String s = n.asText();
+            if (s != null && !s.isBlank()) {
+                out.add(s);
+            }
+        });
+        return out;
     }
 
     private void handleSessionResume(JsonRpc.Incoming msg) {

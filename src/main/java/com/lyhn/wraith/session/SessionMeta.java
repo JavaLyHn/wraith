@@ -15,6 +15,9 @@ package com.lyhn.wraith.session;
  * @param name      用户自定义名;显示优先于 title
  * @param origin    会话来源:null/"user"=交互式(默认);"automation"=定时任务无头运行
  *                  (后者从 {@code list()} 过滤,不进主对话侧栏,但仍可按 id resume/peek)
+ * @param archivedAt 归档时间(ISO-8601);null=未归档。归档的会话从 {@code list()} 过滤,
+ *                  进 {@code listArchived()},但仍可按 id resume/peek。与 origin 是两个
+ *                  独立维度:origin 说「谁产生的」,archivedAt 说「用户是否收起来了」
  */
 public record SessionMeta(
         String id,
@@ -27,5 +30,6 @@ public record SessionMeta(
         int turns,
         boolean starred,
         String name,
-        String origin) {
+        String origin,
+        String archivedAt) {
 }

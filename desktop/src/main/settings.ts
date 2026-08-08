@@ -15,6 +15,7 @@ export interface ProjectEntry {
   path: string        // 绝对路径,唯一键(去重依据)
   name?: string       // 显示别名;缺省 UI 用目录名
   lastUsedAt: number  // epoch ms,最近使用排序
+  starred?: boolean   // 用户标记的重点项目;面板与快切下拉都置顶。false 不落盘,只删键
 }
 
 export interface Settings {
@@ -154,6 +155,20 @@ export function renameProject(userDataDir: string, projectPath: string, name: st
   writeSettings(userDataDir, { ...s, projects })
 }
 
+/** 标记/取消重点项目。starred=false 时删掉这个键(与 renameProject 对空名的处理一致)。 */
+export function setProjectStarred(userDataDir: string, projectPath: string, starred: boolean): void {
+  const s = readSettings(userDataDir)
+  const projects = (s.projects ?? []).map(p => {
+    if (p.path !== projectPath) return p
+    if (!starred) {
+      const { starred: _drop, ...restEntry } = p
+      return restEntry
+    }
+    return { ...p, starred: true }
+  })
+  writeSettings(userDataDir, { ...s, projects })
+}
+
 /** lastUsedAt 倒序 + exists(失踪条目保留置灰,不静默过滤)。 */
 export function projectViews(userDataDir: string): ProjectView[] {
   return (readSettings(userDataDir).projects ?? [])
@@ -191,6 +206,7 @@ export function seedProjectsFromJson(userDataDir: string, json: string, now: num
     .map((p, i) => ({
       path: p['path'] as string,
       ...(typeof p['name'] === 'string' && p['name'] ? { name: p['name'] as string } : {}),
+      ...(p['starred'] === true ? { starred: true as const } : {}),
       lastUsedAt: typeof p['lastUsedAt'] === 'number' ? (p['lastUsedAt'] as number) : now - i,
     }))
   const s = readSettings(userDataDir)

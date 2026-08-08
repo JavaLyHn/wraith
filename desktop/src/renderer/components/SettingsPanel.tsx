@@ -1,21 +1,27 @@
 import { useState } from 'react'
-import { ArrowLeft, User, Palette, Bot, Coins, Info, type LucideIcon } from 'lucide-react'
+import { ArrowLeft, User, Palette, Bot, Coins, Info, Archive, type LucideIcon } from 'lucide-react'
 import SettingsInterface from './SettingsInterface'
 import SettingsMe from './SettingsMe'
 import PetsSettings from './PetsSettings'
 import SettingsPricing from './SettingsPricing'
 import SettingsAbout from './SettingsAbout'
+import SettingsArchive from './SettingsArchive'
 
-type Section = 'me' | 'interface' | 'pets' | 'pricing' | 'about'
+type Section = 'me' | 'interface' | 'pets' | 'archive' | 'pricing' | 'about'
 const NAV: { key: Section; label: string; Icon: LucideIcon }[] = [
   { key: 'me', label: '我', Icon: User },
   { key: 'interface', label: '界面', Icon: Palette },
   { key: 'pets', label: '宠物', Icon: Bot },
+  { key: 'archive', label: '归档', Icon: Archive },
   { key: 'pricing', label: '计价', Icon: Coins },
   { key: 'about', label: '关于', Icon: Info },
 ]
 
-export default function SettingsPanel({ onBack, onOpenProviders }: { onBack: () => void; onOpenProviders: () => void }): JSX.Element {
+export default function SettingsPanel({ onBack, onOpenProviders, onArchiveChanged }: {
+  onBack: () => void
+  onOpenProviders: () => void
+  onArchiveChanged: () => void
+}): JSX.Element {
   // 落地在「我」:入口已改成侧栏左下的账户行(头像+昵称),点头像却先看到「界面」是断裂的。
   // pets e2e 显式点 settings-nav-pets,不依赖这个默认值。
   const [active, setActive] = useState<Section>('me')
@@ -41,6 +47,7 @@ export default function SettingsPanel({ onBack, onOpenProviders }: { onBack: () 
           {active === 'interface' && <SettingsInterface />}
           {active === 'me' && <SettingsMe onOpenProviders={onOpenProviders} />}
           {active === 'pets' && <PetsSettings />}
+          {active === 'archive' && <SettingsArchive onArchiveChanged={onArchiveChanged} />}
           {active === 'pricing' && <SettingsPricing />}
           {active === 'about' && <SettingsAbout />}
         </div>
