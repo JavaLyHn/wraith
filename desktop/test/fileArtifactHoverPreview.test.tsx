@@ -110,3 +110,17 @@ describe('FileArtifactHoverPreview click 行为', () => {
     expect(screen.queryByTestId('artifact-hover-popover')).toBeNull()
   })
 })
+
+describe('FileArtifactHoverPreview ESC 关闭', () => {
+  it('ESC 关闭 popover', () => {
+    render(<FileArtifactHoverPreview file={md} workspace="/proj" editors={editors} />)
+    const card = screen.getByTestId('file-artifact-card')
+    fireEvent.mouseEnter(card)
+    act(() => { vi.advanceTimersByTime(300) })
+    expect(screen.getByTestId('artifact-hover-popover')).toBeTruthy()
+    // ESC 关闭:Radix DismissableLayer 在 document 上注册 capture keydown,
+    // 触发 onDismiss → context.onOpenChange(false) → controlled setOpen(false)
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+    expect(screen.queryByTestId('artifact-hover-popover')).toBeNull()
+  })
+})
