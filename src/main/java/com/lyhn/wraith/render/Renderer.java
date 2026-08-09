@@ -179,11 +179,33 @@ public interface Renderer extends AutoCloseable {
     ApprovalResult promptApproval(ApprovalRequest request);
 
     /**
+     * 同步阻塞地呈现交互式选择器列表，等待用户选定。
+     * 统一替代旧 openPalette + HITL 首选项 + Plan 审阅首选项。
+     *
+     * <p>默认实现返回 {@link ChoiceResult#cancelled()} 作为占位；
+     * 各渲染器形态（PlainRenderer / InlineRenderer / LanternaRenderer / EventStreamRenderer）
+     * 应在 Task 4 / 5 中覆盖为真实交互实现。
+     */
+    default ChoiceResult promptChoice(ChoiceRequest request) {
+        return ChoiceResult.cancelled();
+    }
+
+    /**
      * 显示一个临时浮起的选择列表，等待用户选定一项或取消。
      *
      * @return 选中项的下标；用户取消（Esc）返回 -1
+     * @deprecated 使用 {@link #promptChoice(ChoiceRequest)} 代替
      */
-    int openPalette(String title, List<String> items);
+    @Deprecated
+    default int openPalette(String title, List<String> items) {
+        if (items == null || items.isEmpty()) {
+            return -1;
+        }
+        java.util.List<ChoiceOption> opts = items.stream()
+                .map(s -> new ChoiceOption(s, null))
+                .toList();
+        return promptChoice(new ChoiceRequest(title, opts, true, null)).selectedIndex();
+    }
 
     /** 上下文治理事件(context.watermark / context.compaction)。终端渲染器默认忽略;事件流渲染器转发桌面。 */
     default void contextEvent(String method, java.util.Map<String, Object> payload) {
