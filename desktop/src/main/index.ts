@@ -820,6 +820,14 @@ ipcMain.handle(
   }
 )
 
+ipcMain.handle(
+  'wraith:respondChoice',
+  async (_e, choiceId: string, cancelled: boolean, selectedIndex: number) => {
+    if (!client) throw new Error('Backend not connected')
+    await client.request('choice.respond', { choiceId, cancelled, selectedIndex })
+  }
+)
+
 // Plan mode 审批响应:将用户决策(execute/supplement/cancel)透传给后端 plan.review.respond。
 ipcMain.handle('wraith:respondPlanReview', async (_e, reviewId: string, decision: string, feedback: string | null) => {
   if (!client) throw new Error('Backend not connected')
