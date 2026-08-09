@@ -3,6 +3,9 @@ package com.lyhn.wraith.runtime.appserver;
 import com.lyhn.wraith.hitl.ApprovalRequest;
 import com.lyhn.wraith.hitl.ApprovalResult;
 import com.lyhn.wraith.llm.LlmClient;
+import com.lyhn.wraith.render.ChoiceOption;
+import com.lyhn.wraith.render.ChoiceRequest;
+import com.lyhn.wraith.render.ChoiceResult;
 import com.lyhn.wraith.render.Renderer;
 import com.lyhn.wraith.render.StatusInfo;
 import com.lyhn.wraith.tool.todo.TodoItem;
@@ -38,6 +41,11 @@ public final class EventStreamRenderer implements Renderer {
     // 计划复审管道（镜像 approval 管道，独立字段避免干扰）
     private final java.util.concurrent.atomic.AtomicLong reviewSeq = new java.util.concurrent.atomic.AtomicLong();
     private final Map<String, java.util.concurrent.CompletableFuture<PlanReviewOutcome>> pendingReviews =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    // 交互式选择器管道（镜像 approval 管道,独立字段避免干扰）
+    private final java.util.concurrent.atomic.AtomicLong choiceSeq = new java.util.concurrent.atomic.AtomicLong();
+    private final Map<String, java.util.concurrent.CompletableFuture<ChoiceResult>> pendingChoices =
             new java.util.concurrent.ConcurrentHashMap<>();
 
     /** 计划复审结果；decision ∈ {"execute","supplement","cancel"}。 */
@@ -222,8 +230,6 @@ public final class EventStreamRenderer implements Renderer {
         writer.notify("mcp.status", p);
     }
 
-    @Override public int openPalette(String title, List<String> items) { return -1; } // v1 不暴露
-
     @Override public ApprovalResult promptApproval(ApprovalRequest request) {
         String approvalId = "appr_" + approvalSeq.incrementAndGet();
         java.util.concurrent.CompletableFuture<ApprovalResult> fut = new java.util.concurrent.CompletableFuture<>();
@@ -312,6 +318,44 @@ public final class EventStreamRenderer implements Renderer {
     public void resolvePlanReview(String reviewId, String decision, String feedback) {
         java.util.concurrent.CompletableFuture<PlanReviewOutcome> fut = pendingReviews.get(reviewId);
         if (fut != null) fut.complete(new PlanReviewOutcome(decision == null ? "cancel" : decision, feedback));
+    }
+
+    // ---- 交互式选择器阻塞管道（镜像 promptApproval）----
+
+    @Override public ChoiceResult promptChoice(ChoiceRequest request) {
+        if (request == null || request.options() == null || request.options().isEmpty()) {
+            return ChoiceResult.cancelled();
+        }
+        String choiceId = "choice_" + choiceSeq.incrementAndGet();
+        java.util.concurrent.CompletableFuture<ChoiceResult> fut = new java.util.concurrent.CompletableFuture<>();
+        pendingChoices.put(choiceId, fut);
+        Map<String, Object> p = base();
+        p.put("choiceId", choiceId);
+        p.put("title", request.title() == null ? "请选择" : request.title());
+        java.util.List<Map<String, Object>> opts = new java.util.ArrayList<>();
+        for (ChoiceOption opt : request.options()) {
+            Map<String, Object> o = new LinkedHashMap<>();
+            o.put("label", opt.label());
+            o.put("description", opt.description());
+            opts.add(o);
+        }
+        p.put("options", opts);
+        p.put("allowCancel", request.allowCancel());
+        p.put("hint", request.hint());
+        writer.notify("choice.requested", p);
+        try {
+            return fut.get();
+        } catch (Exception e) {
+            return ChoiceResult.cancelled();
+        } finally {
+            pendingChoices.remove(choiceId);
+        }
+    }
+
+    /** AppServer 收到 choice.respond 时调用;未知 choiceId 幂等忽略。 */
+    public void resolveChoice(String choiceId, ChoiceResult result) {
+        java.util.concurrent.CompletableFuture<ChoiceResult> fut = pendingChoices.get(choiceId);
+        if (fut != null) fut.complete(result);
     }
 
     // ---- team.* 通知发射方法（供 EventStreamTeamListener 调用）----
