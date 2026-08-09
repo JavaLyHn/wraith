@@ -19,6 +19,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -49,7 +50,7 @@ class MainInputNormalizationTest {
     void startupHintsKeepSlashCommandDetailsOutOfInitialScreen() {
         List<String> hints = Main.startupHints();
 
-        assertTrue(hints.stream().anyMatch(hint -> hint.contains("输入 '/' 后按 Tab 补全命令")));
+        assertTrue(hints.stream().anyMatch(hint -> hint.contains("输入 '/' 查看完整命令列表")));
         assertTrue(hints.stream().noneMatch(hint -> hint.contains("/model")));
         assertTrue(hints.stream().noneMatch(hint -> hint.contains("/index [路径]")));
         assertTrue(hints.stream().noneMatch(hint -> hint.contains("/skill list")));
@@ -189,6 +190,74 @@ class MainInputNormalizationTest {
         Main.clearInputBuffer(lineReader);
 
         assertEquals("", lineReader.getBuffer().toString());
+    }
+
+    @Test
+    void slashCommandListForEmptyBufferReturnsFullCommandList() {
+        String list = Main.slashCommandListForBuffer("", 120);
+
+        assertNotNull(list);
+        // 之前 widget 只 write("/") —— 用户按 / 什么都看不到,这正是本任务要修的回归。
+        assertTrue(list.contains("/model"), list);
+        assertTrue(list.contains("/browser status"), list);
+        assertTrue(list.contains("/memory pending"), list);
+    }
+
+    @Test
+    void slashCommandListForNonEmptyBufferReturnsNull() {
+        // 行内其它位置的 /（URL、路径片段）按字面量写入,不刷命令清单。
+        assertNull(Main.slashCommandListForBuffer("ab", 120));
+        assertNull(Main.slashCommandListForBuffer("https://example", 120));
+        assertNull(Main.slashCommandListForBuffer(null, 120));
+    }
+
+    @Test
+    void slashWidgetPrintsFullCommandListOnEmptyBuffer() throws Exception {
+        // 直接驱动 widget.apply():既能验"空行首字符 / 真的把清单写进终端输出",
+        // 又不依赖 readLine（dumb 终端喂 canned 字节会抛 EndOfFile）。
+        // printAbove 在非读取态会落到 terminal.writer(),这里捕获它。
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        Terminal terminal = TerminalBuilder.builder()
+                .dumb(true)
+                .streams(new ByteArrayInputStream(new byte[0]), out)
+                .build();
+        LineReader lineReader = LineReaderBuilder.builder()
+                .terminal(terminal)
+                .history(new DefaultHistory())
+                .build();
+        Main.configureSlashCommandHint(lineReader);
+        org.jline.reader.Widget widget =
+                (org.jline.reader.Widget) lineReader.getWidgets().get("wraith-slash-command-hint");
+
+        widget.apply();
+
+        assertEquals("/", lineReader.getBuffer().toString());
+        String output = out.toString(StandardCharsets.UTF_8);
+        assertTrue(output.contains("/model"), "应打印完整命令清单: " + output);
+        assertTrue(output.contains("/memory pending"), output);
+    }
+
+    @Test
+    void slashWidgetDoesNotPrintListWhenBufferNotEmpty() throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        Terminal terminal = TerminalBuilder.builder()
+                .dumb(true)
+                .streams(new ByteArrayInputStream(new byte[0]), out)
+                .build();
+        LineReader lineReader = LineReaderBuilder.builder()
+                .terminal(terminal)
+                .history(new DefaultHistory())
+                .build();
+        Main.configureSlashCommandHint(lineReader);
+        lineReader.getBuffer().write("ab");
+        org.jline.reader.Widget widget =
+                (org.jline.reader.Widget) lineReader.getWidgets().get("wraith-slash-command-hint");
+
+        widget.apply();
+
+        assertEquals("ab/", lineReader.getBuffer().toString());
+        String output = out.toString(StandardCharsets.UTF_8);
+        assertFalse(output.contains("可用命令"), "非空行不该刷命令清单: " + output);
     }
 
     @Test
