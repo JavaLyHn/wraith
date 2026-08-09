@@ -3425,7 +3425,7 @@ public class Main {
     static List<String> startupHints() {
         return List.of(
                 "输入你的问题或任务",
-                "输入 '/' 后按 Tab 补全命令",
+                "输入 '/' 查看完整命令列表，继续输入或 Tab 补全",
                 "输入 '@server:protocol://path' 可显式引用 MCP resource",
                 "任务运行中按 ESC 取消当前任务",
                 "默认模式是 ReAct"
@@ -3558,13 +3558,37 @@ public class Main {
             return;
         }
         lineReader.getWidgets().put("wraith-slash-command-hint", () -> {
-            lineReader.getBuffer().write("/");
+            var buffer = lineReader.getBuffer();
+            // 仅在空行首个字符为 / 时展开完整命令清单：行内其它位置的 /
+            // （URL、路径片段）按字面量写入，不抢光标、不刷屏。
+            // printAbove 自身会重绘提示行（把刚写入的 / 显示出来），不再额外 REDISPLAY。
+            String list = slashCommandListForBuffer(buffer.toString(), terminalColumns());
+            buffer.write("/");
+            if (list != null) {
+                lineReader.printAbove(list);
+            }
             return true;
         });
         Reference slashHint = new Reference("wraith-slash-command-hint");
         bindSlashWidget(lineReader, LineReader.MAIN, slashHint);
         bindSlashWidget(lineReader, LineReader.EMACS, slashHint);
         bindSlashWidget(lineReader, LineReader.VIINS, slashHint);
+    }
+
+    /**
+     * 敲 / 时若 buffer 为空,返回要打到输入行上方的完整命令清单；行内其它位置
+     * （URL、路径片段）返回 null,widget 只按字面量写入。
+     *
+     * <p>抽成纯函数是因为 {@code LineReader#callWidget} 只能在 {@code readLine}
+     * 调用内执行 —— widget 的"什么时候显示"逻辑没法用真实 LineReader 单测,
+     * 所以把判定与文案挪到这里,与 {@link #formatSlashCommandChoices(int)} 区分:
+     * 后者只负责"怎么排版",本函数负责"给不给"。
+     */
+    static String slashCommandListForBuffer(String bufferBeforeSlash, int terminalWidth) {
+        if (bufferBeforeSlash == null || !bufferBeforeSlash.isEmpty()) {
+            return null;
+        }
+        return formatSlashCommandChoices(terminalWidth);
     }
 
     static void configureJLineInteractiveWidgets(LineReader lineReader) {
