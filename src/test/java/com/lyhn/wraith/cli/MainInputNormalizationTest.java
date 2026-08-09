@@ -50,7 +50,7 @@ class MainInputNormalizationTest {
     void startupHintsKeepSlashCommandDetailsOutOfInitialScreen() {
         List<String> hints = Main.startupHints();
 
-        assertTrue(hints.stream().anyMatch(hint -> hint.contains("输入 '/' 查看完整命令列表")));
+        assertTrue(hints.stream().anyMatch(hint -> hint.contains("输入 '/' 查看完整命令列表，↑↓ 选择，Enter 执行")));
         assertTrue(hints.stream().noneMatch(hint -> hint.contains("/model")));
         assertTrue(hints.stream().noneMatch(hint -> hint.contains("/index [路径]")));
         assertTrue(hints.stream().noneMatch(hint -> hint.contains("/skill list")));
@@ -410,6 +410,185 @@ class MainInputNormalizationTest {
         } else {
             System.setProperty(key, value);
         }
+    }
+
+    // ── 斜杠命令实时选择器测试 ──
+
+    @Test
+    void filterSlashCommandsByPrefix() {
+        List<Main.SlashCommandHint> filtered = Main.filterSlashCommands("/m");
+
+        assertTrue(filtered.size() >= 3, "至少 /model, /memory, /mcp: " + filtered.size());
+        assertTrue(filtered.stream().allMatch(h -> h.insertText().startsWith("/m")),
+                "所有结果应以 /m 开头");
+    }
+
+    @Test
+    void filterSlashCommandsEmptyPrefixReturnsEmpty() {
+        assertTrue(Main.filterSlashCommands("").isEmpty());
+        assertTrue(Main.filterSlashCommands(null).isEmpty());
+    }
+
+    @Test
+    void filterSlashCommandsNarrowsWithLongerPrefix() {
+        // /m 命中 /model* + /mcp* + /memory* 共 18 条；
+        // /mem 只命中 /memory* 9 条 —— 真正体现"前缀越长匹配越少"。
+        // 注：/mo 和 /mod 均命中 /model 与 /model <provider> 两条,数量相同,
+        // 不能用来验证本性质。
+        List<Main.SlashCommandHint> m = Main.filterSlashCommands("/m");
+        List<Main.SlashCommandHint> mem = Main.filterSlashCommands("/mem");
+
+        assertTrue(m.size() > mem.size(),
+                "前缀越长匹配越少: /m=" + m.size() + " /mem=" + mem.size());
+        assertTrue(mem.stream().allMatch(h -> h.insertText().startsWith("/mem")));
+    }
+
+    @Test
+    void filterSlashCommandsNoMatchReturnsEmpty() {
+        assertTrue(Main.filterSlashCommands("/zzz").isEmpty());
+    }
+
+    @Test
+    void slashOverlayComputeReturnsNullForNonSlashBuffer() {
+        assertNull(Main.slashOverlayCompute("", 0, 120));
+        assertNull(Main.slashOverlayCompute("hello", 0, 120));
+        assertNull(Main.slashOverlayCompute(null, 0, 120));
+    }
+
+    @Test
+    void slashOverlayComputeReturnsFullListForSlashOnly() {
+        var result = Main.slashOverlayCompute("/", 0, 120);
+
+        assertNotNull(result);
+        assertFalse(result.filtered().isEmpty());
+        assertTrue(result.text().contains("/model"), result.text());
+        assertTrue(result.text().contains("▶"), "首项应被选中: " + result.text());
+    }
+
+    @Test
+    void slashOverlayComputeFiltersByPrefix() {
+        var result = Main.slashOverlayCompute("/me", 0, 120);
+
+        assertNotNull(result);
+        assertTrue(result.filtered().stream().allMatch(h -> h.insertText().startsWith("/me")));
+        assertTrue(result.text().contains("/memory"), result.text());
+        assertFalse(result.text().contains("/model"), "/model 不应出现在 /me 过滤中: " + result.text());
+    }
+
+    @Test
+    void slashOverlayComputeShowsNoMatchMessage() {
+        var result = Main.slashOverlayCompute("/zzz", 0, 120);
+
+        assertNotNull(result);
+        assertTrue(result.filtered().isEmpty());
+        assertTrue(result.text().contains("无匹配命令"), result.text());
+    }
+
+    @Test
+    void slashOverlayComputeClampsSelectedIndex() {
+        var result = Main.slashOverlayCompute("/", 999, 120);
+
+        assertNotNull(result);
+        assertTrue(result.selectedIndex() < result.filtered().size(),
+                "选中索引应被钳制到有效范围");
+    }
+
+    @Test
+    void formatSlashCommandOverlayMarksSelectedItem() {
+        List<Main.SlashCommandHint> filtered = Main.filterSlashCommands("/c");
+        String text = Main.formatSlashCommandOverlay(filtered, 0, 120);
+
+        String[] lines = text.split("\n");
+        assertTrue(lines.length >= 3, "应有标题行 + 至少 2 条命令");
+        assertEquals("可用命令（↑↓ 选择，Enter 执行，Tab 补全）：", lines[0]);
+        // 第一条命令应被选中
+        assertTrue(lines[1].startsWith("▶ "), "首行应有选中标记: " + lines[1]);
+        // 后续命令不应有选中标记
+        if (lines.length > 2) {
+            assertTrue(lines[2].startsWith("  "), "非选中行应有缩进: " + lines[2]);
+        }
+    }
+
+    @Test
+    void slashCommandNeedsParametersDetectsAngleBrackets() {
+        List<Main.SlashCommandHint> hints = Main.slashCommandHints();
+        Main.SlashCommandHint modelProvider = hints.stream()
+                .filter(h -> h.display().equals("/model <provider>"))
+                .findFirst().orElseThrow();
+        Main.SlashCommandHint clear = hints.stream()
+                .filter(h -> h.display().equals("/clear"))
+                .findFirst().orElseThrow();
+
+        assertTrue(Main.slashCommandNeedsParameters(modelProvider),
+                "/model <provider> 需要参数");
+        assertFalse(Main.slashCommandNeedsParameters(clear),
+                "/clear 不需要参数");
+    }
+
+    @Test
+    void slashCommandExecutableFormStripsOptionalParams() {
+        List<Main.SlashCommandHint> hints = Main.slashCommandHints();
+        Main.SlashCommandHint archive = hints.stream()
+                .filter(h -> h.display().equals("/archive [标题]"))
+                .findFirst().orElseThrow();
+        Main.SlashCommandHint clear = hints.stream()
+                .filter(h -> h.display().equals("/clear"))
+                .findFirst().orElseThrow();
+
+        assertEquals("/archive", Main.slashCommandExecutableForm(archive),
+                "应剥离 [标题] 可选参数");
+        assertEquals("/clear", Main.slashCommandExecutableForm(clear),
+                "无参命令原样返回");
+    }
+
+    @Test
+    void slashWidgetShowsOverlayOnEmptyBuffer() throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        Terminal terminal = TerminalBuilder.builder()
+                .dumb(true)
+                .streams(new ByteArrayInputStream(new byte[0]), out)
+                .build();
+        LineReader lineReader = LineReaderBuilder.builder()
+                .terminal(terminal)
+                .history(new DefaultHistory())
+                .build();
+        Main.configureSlashCommandHint(lineReader);
+        org.jline.reader.Widget widget =
+                (org.jline.reader.Widget) lineReader.getWidgets().get("wraith-slash-command-hint");
+
+        widget.apply();
+
+        assertEquals("/", lineReader.getBuffer().toString());
+        String output = out.toString(StandardCharsets.UTF_8);
+        assertTrue(output.contains("/model"), "应显示命令覆盖层: " + output);
+        // dumb terminal 在 Windows 上用平台编码(GBK),↑↓ 等非 ASCII 字符会乱码；
+        // 选择提示行 "可用命令（↑↓ 选择，Enter 执行，Tab 补全）：" 里的
+        // Enter/Tab 是 ASCII,用来确认覆盖层格式(而非旧的全列表格式)被写入。
+        assertTrue(output.contains("Enter") && output.contains("Tab"),
+                "应包含选择提示: " + output);
+    }
+
+    @Test
+    void slashWidgetDoesNotShowOverlayWhenBufferNotEmpty() throws Exception {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        Terminal terminal = TerminalBuilder.builder()
+                .dumb(true)
+                .streams(new ByteArrayInputStream(new byte[0]), out)
+                .build();
+        LineReader lineReader = LineReaderBuilder.builder()
+                .terminal(terminal)
+                .history(new DefaultHistory())
+                .build();
+        Main.configureSlashCommandHint(lineReader);
+        lineReader.getBuffer().write("ab");
+        org.jline.reader.Widget widget =
+                (org.jline.reader.Widget) lineReader.getWidgets().get("wraith-slash-command-hint");
+
+        widget.apply();
+
+        assertEquals("ab/", lineReader.getBuffer().toString());
+        String output = out.toString(StandardCharsets.UTF_8);
+        assertFalse(output.contains("可用命令"), "非空行不该刷命令清单: " + output);
     }
 
     private static LineReader newLineReader() throws Exception {
