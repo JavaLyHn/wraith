@@ -30,13 +30,22 @@ export function electronViteBinName(platform) {
 }
 
 /**
- * 检查依赖是否已就绪 —— 看 `node_modules/.bin/electron-vite` 入口在不在。
- * 不查 `node_modules` 目录是否存在:干净 checkout 连这个目录都没有,
- * existsSync 对不存在的路径返回 false,正好是我们要的。
+ * electron-vite 包的实际 JS 入口(所有平台一致)。
+ * `.bin/electron-vite.cmd` 只是 shim,真正被执行的是这个文件。
+ */
+export function electronViteEntryPath() {
+  return path.join('node_modules', 'electron-vite', 'bin', 'electron-vite.js')
+}
+
+/**
+ * 检查依赖是否已就绪 —— 同时看 bin shim 和实际包入口。
+ * 只查 bin shim 不够:半安装/损坏状态下 shim 残留但包已被删,
+ * depsPresent 会误判为 true,跳过安装,electron-vite 启动时 MODULE_NOT_FOUND。
  */
 export function depsPresent(platform, projectRoot) {
   const bin = path.join(projectRoot, 'node_modules', '.bin', electronViteBinName(platform))
-  return existsSync(bin)
+  const entry = path.join(projectRoot, electronViteEntryPath())
+  return existsSync(bin) && existsSync(entry)
 }
 
 /**
