@@ -6,19 +6,22 @@ import { OpenWithMenu } from './OpenWithMenu'
 import type { ArtifactFile } from '../../shared/artifactSummary'
 import type { EditorApp } from '../../shared/editors'
 
-/**
- * 回复下方统一文件卡:新建/已编辑 + 查看更改/审核(→右侧 diff)+ 打开方式 + 撤销(文件级写回)。
- * before===null(仅 no-op 无 diff)→ 查看更改/审核/撤销 不渲染。撤销带 confirm,成功进「已撤销」终态
- *(此后隐藏打开方式等一切动作:文件已写回/删除,再操作无意义或必失败)。失败弹窗显示真实原因。
- */
-export default function FileArtifactCard({ file, workspace, editors, onOpenPreview, onOpenDiff, onUndo }: {
+export interface FileArtifactCardProps {
   file: ArtifactFile
   workspace: string | null
   editors: EditorApp[]
   onOpenPreview?: (filePath: string, content: string) => void
   onOpenDiff?: (filePath: string, before: string, after: string) => void
   onUndo?: (file: ArtifactFile) => Promise<{ ok: boolean; message?: string }>
-}): JSX.Element {
+}
+
+/**
+ * 卡片按钮行(命名 export,供 hover popover 等场景复用)。
+ * 状态和事件处理与原 FileArtifactCard 一致:新建/已编辑 + 查看更改/审核(→右侧 diff)
+ * + 打开方式 + 撤销(文件级写回)。before===null(仅 no-op 无 diff)→ 查看更改/审核/撤销 不渲染。
+ * 撤销带 confirm,成功进「已撤销」终态(此后隐藏打开方式等一切动作);失败弹窗显示真实原因。
+ */
+export function FileArtifactCardInner({ file, workspace, editors, onOpenPreview, onOpenDiff, onUndo }: FileArtifactCardProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [undone, setUndone] = useState(false)
   const [pending, setPending] = useState(false)
@@ -95,4 +98,12 @@ export default function FileArtifactCard({ file, workspace, editors, onOpenPrevi
       )}
     </>
   )
+}
+
+/**
+ * 回复下方统一文件卡(default export,向后兼容)。
+ * 现等同于 FileArtifactCardInner。
+ */
+export default function FileArtifactCard(props: FileArtifactCardProps): JSX.Element {
+  return <FileArtifactCardInner {...props} />
 }

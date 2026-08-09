@@ -7,7 +7,7 @@ import ToolCard from './ToolCard'
 import ToolGroup from './ToolGroup'
 import UserMessage from './UserMessage'
 import AgentMessage from './AgentMessage'
-import FileArtifactCard from './FileArtifactCard'
+import FileArtifactHoverPreview from './FileArtifactHoverPreview'
 import type { EditorApp } from '../../shared/editors'
 import { filesUnderMessages } from '../../shared/artifactSummary'
 import type { ArtifactFile } from '../../shared/artifactSummary'
@@ -62,7 +62,7 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
         <div className="w-6 shrink-0" aria-hidden />
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           {chips.map(f => (
-            <FileArtifactCard key={f.path} file={f} workspace={workspace ?? null} editors={editors ?? []}
+            <FileArtifactHoverPreview key={f.path} file={f} workspace={workspace ?? null} editors={editors ?? []}
               onOpenPreview={onOpenArtifact} onOpenDiff={onOpenDiff} onUndo={onUndo} />
           ))}
         </div>

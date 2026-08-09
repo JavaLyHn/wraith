@@ -74,10 +74,14 @@ import org.jline.reader.UserInterruptException;
 import org.jline.reader.Reference;
 import org.jline.utils.NonBlockingReader;
 import org.jline.utils.AttributedString;
+import org.jline.utils.AttributedStringBuilder;
+import org.jline.utils.AttributedStyle;
+import org.jline.utils.InfoCmp;
 import org.jline.widget.AutosuggestionWidgets;
 import org.jline.widget.AutopairWidgets;
 import org.jline.console.CmdDesc;
 import org.jline.keymap.KeyMap;
+import org.jline.reader.Widget;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -3425,7 +3429,7 @@ public class Main {
     static List<String> startupHints() {
         return List.of(
                 "输入你的问题或任务",
-                "输入 '/' 查看完整命令列表，继续输入或 Tab 补全",
+                "输入 '/' 查看完整命令列表，↑↓ 选择，Enter 执行",
                 "输入 '@server:protocol://path' 可显式引用 MCP resource",
                 "任务运行中按 ESC 取消当前任务",
                 "默认模式是 ReAct"
@@ -3557,15 +3561,17 @@ public class Main {
         if (lineReader == null) {
             return;
         }
+
+        // ── / 键：写入 / 并启动命令覆盖层 ──
         lineReader.getWidgets().put("wraith-slash-command-hint", () -> {
             var buffer = lineReader.getBuffer();
-            // 仅在空行首个字符为 / 时展开完整命令清单：行内其它位置的 /
+            // 仅在空行首个字符为 / 时展开命令覆盖层：行内其它位置的 /
             // （URL、路径片段）按字面量写入，不抢光标、不刷屏。
-            // printAbove 自身会重绘提示行（把刚写入的 / 显示出来），不再额外 REDISPLAY。
-            String list = slashCommandListForBuffer(buffer.toString(), terminalColumns());
+            boolean wasEmpty = buffer.toString().isEmpty();
             buffer.write("/");
-            if (list != null) {
-                lineReader.printAbove(list);
+            if (wasEmpty) {
+                slashOverlaySelected = 0;
+                slashOverlayUpdate(lineReader);
             }
             return true;
         });
@@ -3573,6 +3579,119 @@ public class Main {
         bindSlashWidget(lineReader, LineReader.MAIN, slashHint);
         bindSlashWidget(lineReader, LineReader.EMACS, slashHint);
         bindSlashWidget(lineReader, LineReader.VIINS, slashHint);
+
+        // ── 字符输入后：若 buffer 以 / 开头，更新覆盖层 ──
+        Widget originalSelfInsert = lineReader.getWidgets().get(LineReader.SELF_INSERT);
+        if (originalSelfInsert != null) {
+            lineReader.getWidgets().put("wraith-smart-self-insert", () -> {
+                originalSelfInsert.apply();
+                String buf = lineReader.getBuffer().toString();
+                if (buf.startsWith("/")) {
+                    // 输入新字符后选中项重置为 0（最匹配的命令）
+                    slashOverlaySelected = 0;
+                    slashOverlayUpdate(lineReader);
+                }
+                return true;
+            });
+            Reference smartSelfInsert = new Reference("wraith-smart-self-insert");
+            bindKeyToWidget(lineReader, LineReader.MAIN, smartSelfInsert, LineReader.SELF_INSERT);
+            bindKeyToWidget(lineReader, LineReader.EMACS, smartSelfInsert, LineReader.SELF_INSERT);
+            bindKeyToWidget(lineReader, LineReader.VIINS, smartSelfInsert, LineReader.SELF_INSERT);
+        }
+
+        // ── 退格后：若 buffer 仍以 / 开头则更新覆盖层，否则隐藏 ──
+        Widget originalBackspace = lineReader.getWidgets().get(LineReader.BACKWARD_DELETE_CHAR);
+        if (originalBackspace != null) {
+            lineReader.getWidgets().put("wraith-smart-backspace", () -> {
+                originalBackspace.apply();
+                String buf = lineReader.getBuffer().toString();
+                if (buf.startsWith("/")) {
+                    slashOverlayUpdate(lineReader);
+                } else {
+                    slashOverlayHide(lineReader);
+                }
+                return true;
+            });
+            Reference smartBackspace = new Reference("wraith-smart-backspace");
+            bindKeyToWidget(lineReader, LineReader.MAIN, smartBackspace, LineReader.BACKWARD_DELETE_CHAR);
+            bindKeyToWidget(lineReader, LineReader.EMACS, smartBackspace, LineReader.BACKWARD_DELETE_CHAR);
+            bindKeyToWidget(lineReader, LineReader.VIINS, smartBackspace, LineReader.BACKWARD_DELETE_CHAR);
+        }
+
+        // ── ↑↓ 方向键：覆盖层激活时在命令列表中导航 ──
+        lineReader.getWidgets().put("wraith-cmd-up", () -> {
+            if (slashOverlayLines > 0) {
+                var buf = lineReader.getBuffer().toString();
+                var result = slashOverlayCompute(buf, slashOverlaySelected, terminalColumns());
+                if (result != null && !result.filtered().isEmpty()) {
+                    int size = result.filtered().size();
+                    slashOverlaySelected = (slashOverlaySelected - 1 + size) % size;
+                    String text = formatSlashCommandOverlay(result.filtered(), slashOverlaySelected, terminalColumns());
+                    slashOverlayShow(lineReader, text);
+                }
+                return true;
+            }
+            // 覆盖层未激活时回退到原始历史导航
+            lineReader.callWidget("up-history");
+            return true;
+        });
+        lineReader.getWidgets().put("wraith-cmd-down", () -> {
+            if (slashOverlayLines > 0) {
+                var buf = lineReader.getBuffer().toString();
+                var result = slashOverlayCompute(buf, slashOverlaySelected, terminalColumns());
+                if (result != null && !result.filtered().isEmpty()) {
+                    int size = result.filtered().size();
+                    slashOverlaySelected = (slashOverlaySelected + 1) % size;
+                    String text = formatSlashCommandOverlay(result.filtered(), slashOverlaySelected, terminalColumns());
+                    slashOverlayShow(lineReader, text);
+                }
+                return true;
+            }
+            lineReader.callWidget("down-history");
+            return true;
+        });
+        Reference cmdUp = new Reference("wraith-cmd-up");
+        Reference cmdDown = new Reference("wraith-cmd-down");
+        bindKeyToWidget(lineReader, LineReader.MAIN, cmdUp, "\033[A");
+        bindKeyToWidget(lineReader, LineReader.EMACS, cmdUp, "\033[A");
+        bindKeyToWidget(lineReader, LineReader.VIINS, cmdUp, "\033[A");
+        bindKeyToWidget(lineReader, LineReader.MAIN, cmdDown, "\033[B");
+        bindKeyToWidget(lineReader, LineReader.EMACS, cmdDown, "\033[B");
+        bindKeyToWidget(lineReader, LineReader.VIINS, cmdDown, "\033[B");
+
+        // ── Enter：覆盖层激活时智能判断（有参填入输入行，无参直接执行） ──
+        Widget originalAcceptLine = lineReader.getWidgets().get(LineReader.ACCEPT_LINE);
+        if (originalAcceptLine != null) {
+            lineReader.getWidgets().put("wraith-smart-accept", () -> {
+                if (slashOverlayLines > 0) {
+                    var buf = lineReader.getBuffer().toString();
+                    var result = slashOverlayCompute(buf, slashOverlaySelected, terminalColumns());
+                    if (result != null && !result.filtered().isEmpty()) {
+                        SlashCommandHint selected = result.filtered()
+                                .get(Math.min(slashOverlaySelected, result.filtered().size() - 1));
+                        var buffer = lineReader.getBuffer();
+                        buffer.clear();
+                        if (slashCommandNeedsParameters(selected)) {
+                            // 有必填参数：填入输入行，让用户补充参数
+                            buffer.write(selected.insertText());
+                            slashOverlayHide(lineReader);
+                            return true;
+                        } else {
+                            // 无参或可选参数：直接执行
+                            buffer.write(slashCommandExecutableForm(selected));
+                            slashOverlayHide(lineReader);
+                            return originalAcceptLine.apply();
+                        }
+                    }
+                }
+                // 覆盖层未激活时正常提交
+                return originalAcceptLine.apply();
+            });
+            Reference smartAccept = new Reference("wraith-smart-accept");
+            bindKeyToWidget(lineReader, LineReader.MAIN, smartAccept, "\r");
+            bindKeyToWidget(lineReader, LineReader.EMACS, smartAccept, "\r");
+            bindKeyToWidget(lineReader, LineReader.VIINS, smartAccept, "\r");
+        }
     }
 
     /**
@@ -3704,6 +3823,199 @@ public class Main {
             sb.append('\n');
         }
         return sb.toString();
+    }
+
+    // ─── 斜杠命令实时选择器 ───────────────────────────────────────────
+    //
+    // 用户在空行输入 / 后，在输入行上方显示完整命令清单；继续输入字符时实时
+    // 过滤为前缀匹配的子集；退格删除 / 后清单消失。↑↓ 选择、Enter 执行（智能
+    // 判断：无参命令直接执行，有参命令填入输入行等待补充），Tab 保留现有补全。
+    //
+    // 显示层用 ANSI insert_line/delete_line 在输入行上方管理一块可变区域，
+    // 不走 JLine Status（已被 BottomStatusBar 占用）。终端不支持这些能力时
+    // 回退到 printAbove 一次性显示（与旧版行为一致，无实时过滤）。
+
+    /** 覆盖层当前显示的物理行数；0 = 未显示。 */
+    private static int slashOverlayLines = 0;
+    /** 当前选中项索引。 */
+    private static int slashOverlaySelected = 0;
+
+    /** 按前缀过滤命令提示表，返回 insertText 以 prefix 开头的条目。 */
+    static List<SlashCommandHint> filterSlashCommands(String prefix) {
+        if (prefix == null || prefix.isEmpty()) {
+            return List.of();
+        }
+        String p = prefix.toLowerCase(Locale.ROOT);
+        return slashCommandHints().stream()
+                .filter(h -> h.insertText().toLowerCase(Locale.ROOT).startsWith(p))
+                .toList();
+    }
+
+    /**
+     * 将过滤后的命令列表格式化为覆盖层文本（单列，选中项用 ▶ 标记）。
+     *
+     * @param filtered  过滤后的命令列表
+     * @param selected  当前选中索引
+     * @param cols      终端宽度
+     * @return 多行文本（以 \n 结尾），行数 = newlineCount + 1
+     */
+    static String formatSlashCommandOverlay(List<SlashCommandHint> filtered, int selected, int cols) {
+        if (filtered == null || filtered.isEmpty()) {
+            return "无匹配命令\n";
+        }
+        int maxDisplay = filtered.stream()
+                .mapToInt(h -> h.display().length())
+                .max().orElse(12);
+        int descCol = Math.min(maxDisplay + 4, Math.max(20, cols / 2));
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("可用命令（↑↓ 选择，Enter 执行，Tab 补全）：\n");
+        for (int i = 0; i < filtered.size(); i++) {
+            SlashCommandHint hint = filtered.get(i);
+            String marker = (i == selected) ? "▶ " : "  ";
+            String display = hint.display();
+            String desc = hint.description();
+            if (display.length() > descCol - 2) {
+                display = display.substring(0, descCol - 5) + "…";
+            }
+            int pad = Math.max(1, descCol - 2 - display.length());
+            sb.append(marker).append(display).append(" ".repeat(pad));
+            // 描述截断到终端宽度
+            int descMax = cols - descCol - 4;
+            if (descMax > 0 && desc.length() > descMax) {
+                desc = desc.substring(0, descMax - 1) + "…";
+            }
+            sb.append(desc).append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** 判断命令是否需要必填参数（display 含 {@code <...>}）。 */
+    static boolean slashCommandNeedsParameters(SlashCommandHint hint) {
+        String d = hint.display();
+        return d.contains("<") && d.contains(">");
+    }
+
+    /** 返回可直接提交执行的命令文本（剥离可选参数 [...]）。 */
+    static String slashCommandExecutableForm(SlashCommandHint hint) {
+        String cmd = hint.insertText();
+        int bracket = cmd.indexOf('[');
+        if (bracket > 0) {
+            return cmd.substring(0, bracket).trim();
+        }
+        return cmd.trim();
+    }
+
+    /** 计算多行文本的行数（以 \n 为分隔，末尾 \n 不额外计行）。 */
+    private static int lineCount(String text) {
+        if (text == null || text.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        int idx = 0;
+        while ((idx = text.indexOf('\n', idx)) >= 0) {
+            count++;
+            idx++;
+        }
+        // 末尾无 \n 的最后一行也算
+        if (!text.endsWith("\n")) {
+            count++;
+        }
+        return count;
+    }
+
+    /**
+     * 在输入行上方显示或更新命令覆盖层。
+     * 先删除旧覆盖层行（如有），再插入新行并写入内容，最后 REDISPLAY 重绘输入行。
+     */
+    private static void slashOverlayShow(LineReader lineReader, String list) {
+        Terminal terminal = lineReader.getTerminal();
+        var writer = terminal.writer();
+
+        // 删除旧覆盖层
+        if (slashOverlayLines > 0) {
+            terminal.puts(InfoCmp.Capability.cursor_up);
+            for (int i = 1; i < slashOverlayLines; i++) {
+                terminal.puts(InfoCmp.Capability.cursor_up);
+            }
+            for (int i = 0; i < slashOverlayLines; i++) {
+                terminal.puts(InfoCmp.Capability.delete_line);
+            }
+        }
+
+        int newLines = lineCount(list);
+        // 插入新行
+        for (int i = 0; i < newLines; i++) {
+            terminal.puts(InfoCmp.Capability.insert_line);
+        }
+        writer.write(list);
+        writer.flush();
+
+        slashOverlayLines = newLines;
+
+        // 重绘输入行（仅在 readLine 调用期间；测试直接驱动 widget.apply() 时跳过,
+        // 否则抛 IllegalStateException: Widgets can only be called during a `readLine` call）
+        if (lineReader.isReading()) {
+            lineReader.callWidget(LineReader.REDRAW_LINE);
+        }
+    }
+
+    /** 隐藏命令覆盖层。 */
+    private static void slashOverlayHide(LineReader lineReader) {
+        if (slashOverlayLines <= 0) {
+            return;
+        }
+        Terminal terminal = lineReader.getTerminal();
+        for (int i = 0; i < slashOverlayLines; i++) {
+            terminal.puts(InfoCmp.Capability.cursor_up);
+        }
+        for (int i = 0; i < slashOverlayLines; i++) {
+            terminal.puts(InfoCmp.Capability.delete_line);
+        }
+        terminal.writer().flush();
+        slashOverlayLines = 0;
+        slashOverlaySelected = 0;
+        if (lineReader.isReading()) {
+            lineReader.callWidget(LineReader.REDRAW_LINE);
+        }
+    }
+
+    /**
+     * 根据当前 buffer 内容更新覆盖层：buffer 以 / 开头时显示过滤后的命令列表，
+     * 否则隐藏。纯逻辑部分抽成 {@link #slashOverlayCompute} 以便单测。
+     */
+    private static void slashOverlayUpdate(LineReader lineReader) {
+        String buffer = lineReader.getBuffer().toString();
+        var result = slashOverlayCompute(buffer, slashOverlaySelected, terminalColumns());
+        if (result == null) {
+            slashOverlayHide(lineReader);
+            return;
+        }
+        slashOverlaySelected = result.selectedIndex;
+        slashOverlayShow(lineReader, result.text);
+    }
+
+    /** 纯函数：计算覆盖层应显示的内容。返回 null 表示应隐藏。 */
+    static OverlayResult slashOverlayCompute(String buffer, int prevSelected, int cols) {
+        if (buffer == null || buffer.isEmpty() || !buffer.startsWith("/")) {
+            return null;
+        }
+        List<SlashCommandHint> filtered = filterSlashCommands(buffer);
+        if (filtered.isEmpty()) {
+            return new OverlayResult(formatSlashCommandOverlay(List.of(), 0, cols), 0, List.of());
+        }
+        int selected = Math.min(prevSelected, filtered.size() - 1);
+        if (selected < 0) {
+            selected = 0;
+        }
+        return new OverlayResult(
+                formatSlashCommandOverlay(filtered, selected, cols),
+                selected,
+                filtered);
+    }
+
+    /** 覆盖层计算结果。 */
+    record OverlayResult(String text, int selectedIndex, List<SlashCommandHint> filtered) {
     }
 
     /**
