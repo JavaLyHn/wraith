@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 // @ts-expect-error —— 构建脚本是无类型的 .mjs,这里只测它导出的纯函数
-import { electronViteBinName, depsPresent, npmBinary, npmInstallArgs, ensureDeps, isDirectRun } from '../scripts/ensure-deps.mjs'
+import { electronViteBinName, electronViteEntryPath, depsPresent, npmBinary, npmInstallArgs, ensureDeps, isDirectRun } from '../scripts/ensure-deps.mjs'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -27,10 +27,18 @@ describe('electronViteBinName', () => {
 })
 
 describe('depsPresent', () => {
-  it('入口存在时返回 true', () => {
+  /** 在 tmp 下造一个完整的 electron-vite 安装(bin shim + 实际包入口) */
+  function createCompleteInstall(platform: string) {
     const binDir = path.join(tmp, 'node_modules', '.bin')
     fs.mkdirSync(binDir, { recursive: true })
-    fs.writeFileSync(path.join(binDir, 'electron-vite.cmd'), '')
+    fs.writeFileSync(path.join(binDir, electronViteBinName(platform)), '')
+    const entryDir = path.dirname(path.join(tmp, electronViteEntryPath()))
+    fs.mkdirSync(entryDir, { recursive: true })
+    fs.writeFileSync(path.join(tmp, electronViteEntryPath()), '')
+  }
+
+  it('bin shim 和包入口都存在时返回 true', () => {
+    createCompleteInstall('win32')
     expect(depsPresent('win32', tmp)).toBe(true)
   })
 
@@ -42,6 +50,16 @@ describe('depsPresent', () => {
   it('node_modules 目录都没有时返回 false,不抛', () => {
     // 干净 checkout 的典型状态:连 node_modules 都不存在
     expect(depsPresent('linux', tmp)).toBe(false)
+  })
+
+  it('半安装状态:bin shim 存在但包入口缺失时返回 false', () => {
+    // 损坏的安装:npm 在异常中断后可能残留 .bin shim 但实际包已被删/未装,
+    // 此时 depsPresent 必须返回 false 触发重装,否则 electron-vite 启动时 MODULE_NOT_FOUND。
+    const binDir = path.join(tmp, 'node_modules', '.bin')
+    fs.mkdirSync(binDir, { recursive: true })
+    fs.writeFileSync(path.join(binDir, 'electron-vite.cmd'), '')
+    // 注意:不创建 electron-vite/bin/electron-vite.js
+    expect(depsPresent('win32', tmp)).toBe(false)
   })
 })
 
@@ -76,10 +94,13 @@ describe('ensureDeps', () => {
   }
 
   it('依赖已就绪时返回 0 且不调 spawn', () => {
-    // 在 tmp 里造一个 .bin/electron-vite.cmd,让 depsPresent 返回 true
+    // 在 tmp 里造完整安装(bin shim + 包入口),让 depsPresent 返回 true
     const binDir = path.join(tmp, 'node_modules', '.bin')
     fs.mkdirSync(binDir, { recursive: true })
     fs.writeFileSync(path.join(binDir, 'electron-vite.cmd'), '')
+    const entryDir = path.dirname(path.join(tmp, electronViteEntryPath()))
+    fs.mkdirSync(entryDir, { recursive: true })
+    fs.writeFileSync(path.join(tmp, electronViteEntryPath()), '')
 
     const { fn, calls } = mockSpawn(0)
     const code = ensureDeps('win32', tmp, fn as any)
@@ -98,6 +119,20 @@ describe('ensureDeps', () => {
     expect(calls[0].cmd).toBe('npm.cmd') // Windows 上必须是 npm.cmd
     expect(calls[0].args).toEqual(['install', '--legacy-peer-deps'])
     expect(calls[0].opts).toHaveProperty('cwd', tmp)
+  })
+
+  it('半安装状态(bin shim 在但包入口缺失)时触发重装', () => {
+    // 残留的 .cmd shim 存在但 electron-vite/bin/electron-vite.js 缺失,
+    // depsPresent 应返回 false,触发 npm install 修复损坏的安装。
+    const binDir = path.join(tmp, 'node_modules', '.bin')
+    fs.mkdirSync(binDir, { recursive: true })
+    fs.writeFileSync(path.join(binDir, 'electron-vite.cmd'), '')
+
+    const { fn, calls } = mockSpawn(0)
+    const code = ensureDeps('win32', tmp, fn as any)
+
+    expect(code).toBe(0)
+    expect(calls).toHaveLength(1) // 必须触发重装
   })
 
   it('Windows 上 spawn 必须带 shell:true(Node 18.20.2+ 调 .cmd 不带 shell 会 EINVAL)', () => {
