@@ -2505,8 +2505,9 @@ public class Main {
                             orchestrator.setStepStreamFactory((kind, id) ->
                                     new com.lyhn.wraith.runtime.appserver.EventStreamTeamStreamListener(renderer, teamId, kind, id));
 
-                            // UI 意图工具(open_panel/im_connect)贯通到渲染层:Team 模式也能出动作卡。
-                            // 只放行这两个——普通工具在本路径没有 tool.result,放行会让工具卡永久转圈。
+                            // UI 意图工具(open_panel/im_connect/present_options)贯通到渲染层:Team 模式也能出动作卡/选择器。
+                            // 只放行这三个——普通工具在本路径没有 tool.result,放行会让工具卡永久转圈。
+                            // present_options 在 CLI Team 路径经 ToolRegistry 执行能拿到 result;app-server 路径降级为 __cancelled__。
                             orchestrator.setToolCallObserver(calls ->
                                     renderer.appendToolCalls(com.lyhn.wraith.tool.UiIntentTools.filter(calls)));
 
