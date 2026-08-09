@@ -17,7 +17,7 @@ public final class UiIntentTools {
     private UiIntentTools() {}
 
     /** 需要在所有模式下贯通到渲染层的工具名。 */
-    public static final Set<String> NAMES = Set.of("open_panel", "im_connect");
+    public static final Set<String> NAMES = Set.of("open_panel", "im_connect", "present_options");
 
     /** 只保留 UI 意图工具的调用;null/空/畸形(function 为 null)安全。 */
     public static List<LlmClient.ToolCall> filter(List<LlmClient.ToolCall> calls) {
