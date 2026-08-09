@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { FileDiff, FilePlus } from 'lucide-react'
-import { Popover, PopoverContent } from './ui/popover'
+import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { FileArtifactCardInner } from './FileArtifactCard'
 import { ArtifactPreviewBody } from './ArtifactPreview'
 import { baseName } from '../lib/paths'
@@ -63,22 +63,24 @@ export default function FileArtifactHoverPreview(props: FileArtifactCardProps): 
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <span
-        onMouseEnter={onEnter}
-        onMouseLeave={onLeave}
-        onClickCapture={(e) => {
-          // 点击「查看更改」「审核」「撤销」后立即关闭 popover
-          const target = e.target as HTMLElement
-          const testId = target.getAttribute('data-testid')
-          if (testId === 'file-artifact-viewdiff' || testId === 'file-artifact-review' || testId === 'file-artifact-undo') {
-            setOpen(false)
-          }
-        }}
-        className="inline-block"
-        data-testid="artifact-hover-trigger-wrapper"
-      >
-        <FileArtifactCardInner {...props} />
-      </span>
+      <PopoverTrigger asChild>
+        <span
+          onMouseEnter={onEnter}
+          onMouseLeave={onLeave}
+          onClickCapture={(e) => {
+            // 点击「查看更改」「审核」「撤销」后立即关闭 popover
+            const target = e.target as HTMLElement
+            const testId = target.getAttribute('data-testid')
+            if (testId === 'file-artifact-viewdiff' || testId === 'file-artifact-review' || testId === 'file-artifact-undo') {
+              setOpen(false)
+            }
+          }}
+          className="inline-block"
+          data-testid="artifact-hover-trigger-wrapper"
+        >
+          <FileArtifactCardInner {...props} />
+        </span>
+      </PopoverTrigger>
       <PopoverContent
         side="right"
         align="start"
