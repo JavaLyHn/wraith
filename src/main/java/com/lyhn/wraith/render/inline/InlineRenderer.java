@@ -3,6 +3,8 @@ package com.lyhn.wraith.render.inline;
 import com.lyhn.wraith.hitl.ApprovalRequest;
 import com.lyhn.wraith.hitl.ApprovalResult;
 import com.lyhn.wraith.llm.LlmClient;
+import com.lyhn.wraith.render.ChoiceRequest;
+import com.lyhn.wraith.render.ChoiceResult;
 import com.lyhn.wraith.render.PlainRenderer;
 import com.lyhn.wraith.render.Renderer;
 import com.lyhn.wraith.render.StatusInfo;
@@ -517,6 +519,14 @@ public final class InlineRenderer implements Renderer {
             return fallback.openPalette(title, items);
         }
         return new SlashPalette(out, terminal).open(title, items);
+    }
+
+    @Override
+    public ChoiceResult promptChoice(ChoiceRequest request) {
+        if (terminal == null) {
+            return fallback.promptChoice(request);
+        }
+        return new InteractiveSelector(out, terminal).open(request);
     }
 
     @Override

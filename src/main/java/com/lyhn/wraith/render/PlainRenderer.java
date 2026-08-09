@@ -198,26 +198,33 @@ public final class PlainRenderer implements Renderer {
     }
 
     @Override
-    public int openPalette(String title, List<String> items) {
-        if (items == null || items.isEmpty()) {
-            return -1;
+    public ChoiceResult promptChoice(ChoiceRequest request) {
+        if (request == null || request.options() == null || request.options().isEmpty()) {
+            return ChoiceResult.cancelled();
         }
         out.println();
-        out.println(AnsiStyle.heading("📋 " + (title == null ? "请选择" : title)));
-        for (int i = 0; i < items.size(); i++) {
-            out.printf("  [%d] %s%n", i + 1, items.get(i));
+        out.println(AnsiStyle.heading("📋 " + (request.title() == null ? "请选择" : request.title())));
+        for (int i = 0; i < request.options().size(); i++) {
+            ChoiceOption opt = request.options().get(i);
+            out.printf("  [%d] %s%n", i + 1, opt.label());
+            if (opt.description() != null && !opt.description().isBlank()) {
+                out.println("      " + AnsiStyle.subtle(opt.description()));
+            }
         }
         out.print("> ");
         out.flush();
         try {
             String line = in.readLine();
             if (line == null || line.isBlank()) {
-                return -1;
+                return ChoiceResult.cancelled();
             }
             int idx = Integer.parseInt(line.trim()) - 1;
-            return (idx >= 0 && idx < items.size()) ? idx : -1;
+            if (idx >= 0 && idx < request.options().size()) {
+                return ChoiceResult.selected(idx);
+            }
+            return ChoiceResult.cancelled();
         } catch (IOException | NumberFormatException e) {
-            return -1;
+            return ChoiceResult.cancelled();
         }
     }
 

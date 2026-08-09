@@ -1,82 +1,44 @@
 package com.lyhn.wraith.render.inline;
 
+import com.lyhn.wraith.render.ChoiceOption;
+import com.lyhn.wraith.render.ChoiceRequest;
+import com.lyhn.wraith.render.ChoiceResult;
 import org.junit.jupiter.api.Test;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.*;
+
+/**
+ * SlashPalette 的委托测试：验证 open 仍然返回正确的下标。
+ *
+ * <p>handleKey / fit 等纯函数测试已迁到 {@link InteractiveSelectorTest}。
+ */
 class SlashPaletteTest {
 
     @Test
-    void enterConfirmsCurrentSelection() {
-        int decision = SlashPalette.handleKey('\r', 2, 5);
-        assertEquals(-2, decision);  // DECISION_CONFIRM
+    void openReturnsMinusOneForEmptyItems() {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        SlashPalette palette = new SlashPalette(new PrintStream(baos), null);
+        assertEquals(-1, palette.open("title", List.of()));
     }
 
     @Test
-    void escCancelsPalette() {
-        int decision = SlashPalette.handleKey(-2, 0, 5);
-        assertEquals(-1, decision);  // DECISION_CANCEL
+    void openReturnsMinusOneForNullItems() {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        SlashPalette palette = new SlashPalette(new PrintStream(baos), null);
+        assertEquals(-1, palette.open("title", null));
     }
 
     @Test
-    void numberKeyJumpsToIndex() {
-        int decision = SlashPalette.handleKey('3', 0, 5);
-        assertEquals(2, decision);  // index 2 (3rd item)
-    }
-
-    @Test
-    void numberKeyOutOfRangeFallsThrough() {
-        int decision = SlashPalette.handleKey('9', 0, 3);
-        // 9 - '1' = 8, 8 >= 3 → not direct selection, falls through to default
-        assertTrue(decision != 8);
-    }
-
-    @Test
-    void upArrowMovesSelection() {
-        int decision = SlashPalette.handleKey(-3, 0, 5);
-        assertEquals(-3, decision);  // DECISION_UP
-    }
-
-    @Test
-    void downArrowMovesSelection() {
-        int decision = SlashPalette.handleKey(-4, 0, 5);
-        assertEquals(-4, decision);
-    }
-
-    @Test
-    void vimKeyKMovesUp() {
-        int decision = SlashPalette.handleKey('k', 1, 5);
-        assertEquals(-3, decision);
-    }
-
-    @Test
-    void vimKeyJMovesDown() {
-        int decision = SlashPalette.handleKey('j', 1, 5);
-        assertEquals(-4, decision);
-    }
-
-    @Test
-    void qExitsPalette() {
-        int decision = SlashPalette.handleKey('q', 0, 5);
-        assertEquals(-1, decision);
-    }
-
-    @Test
-    void fitTruncatesByDisplayWidthToAvoidWrap() {
-        // 窄列下截断到 < cols(留 1 列余量),防止行回绕打乱画布行数(导致 dock 错位)
-        String fitted = SlashPalette.fit("会话标题非常长非常长非常长非常长", 10);
-        int width = 0;
-        for (int i = 0; i < fitted.length(); ) {
-            int cp = fitted.codePointAt(i);
-            width += (Character.UnicodeBlock.of(cp) == Character.UnicodeBlock.CJK_UNIFIED_IDEOGRAPHS) ? 2 : 1;
-            i += Character.charCount(cp);
-        }
-        assertTrue(width <= 9, "截断后显示宽度应 <= cols-1, 实际=" + width);
-    }
-
-    @Test
-    void fitKeepsShortLineIntact() {
-        assertEquals("abc", SlashPalette.fit("abc", 80));
+    void openReturnsCancelledWhenDelegateCancels() {
+        // null terminal → InteractiveSelector.open returns cancelled for non-empty options
+        // because readKey returns -1 (no terminal), handleKey(-1,...) → DECISION_CANCEL
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        SlashPalette palette = new SlashPalette(new PrintStream(baos), null);
+        int result = palette.open("test", List.of("a", "b"));
+        assertEquals(-1, result);
     }
 }
