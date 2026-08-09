@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 /**
  * dev 启动前自动补齐 npm 依赖。
@@ -74,18 +74,50 @@ export function ensureDeps(platform = process.platform, projectRoot = desktopRoo
     cwd: projectRoot,
     stdio: 'inherit',
     env: process.env,
+    // Windows 上必须 shell:true —— Node 18.20.2+ 为修 CVE-2024-27980,
+    // spawnSync 调 .cmd 文件不带 shell 会直接 EINVAL,status 永远是 null,
+    // npm 根本不启动,predev 等于没跑。参数是内部常量,无注入风险。
+    // POSIX 上保持 shell:false,避免 sh -c 改变错误码/信号语义。
+    shell: platform === 'win32',
   })
 
-  if (result.status !== 0) {
-    // 保留 npm 的原始错误码,禁止继续启动 Electron
-    console.error(`[ensure-deps] npm install 失败 (exit ${result.status})`)
+  if (result.error || result.status !== 0) {
+    // 保留 npm 的原始错误码,禁止继续启动 Electron。
+    // result.error 能进来说明 spawn 本身就失败了(EINVAL 等),status 是 null,
+    // 必须连同 error 一起判,否则 EINVAL 会被 `status ?? 1` 吞成 1 但日志只显示 null,误导排查。
+    console.error(`[ensure-deps] npm install 失败 (exit ${result.status}${result.error ? `, error: ${result.error.message}` : ''})`)
     return result.status ?? 1
   }
 
   return 0
 }
 
+/**
+ * 判断当前模块是不是"被直接运行"(而非被 import)。
+ *
+ * **为什么不能直接字符串拼接 `file://${process.argv[1]}`**:
+ *  Windows 上 `process.argv[1]` 是 `c:\Users\...\foo.mjs`(反斜杠、无 file:// 前缀),
+ *  而 `import.meta.url` 是 `file:///c:/Users/.../foo.mjs`(三斜杠 + 正斜杠)。
+ *  字符串拼出来的 `file://c:\Users\...\foo.mjs` 与 import.meta.url 永远不相等,
+ *  导致 predev 钩子在 Windows 上静默空跑、ensureDeps() 从不被调用,
+ *  干净 worktree 上 node_modules 不会自动安装,electron-vite 报"不是内部或外部命令"。
+ *  用 `node:url` 的 `pathToFileURL` 把 argv[1] 规范成 file URL 再比较,跨平台可靠。
+ *
+ * @param metaUrl  当前模块的 `import.meta.url`
+ * @param argv1     `process.argv[1]`(直接运行时是本脚本路径,被 import 时是宿主入口)
+ * @returns true = 本模块正在被直接运行
+ */
+export function isDirectRun(metaUrl, argv1) {
+  if (!argv1) return false
+  try {
+    return metaUrl === pathToFileURL(argv1).href
+  } catch {
+    // argv1 不是合法路径(极端情况下)时安全地视为非直接运行,而非抛错崩掉 predev
+    return false
+  }
+}
+
 // 直接运行时执行;被 import 时不执行(测试用)
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (isDirectRun(import.meta.url, process.argv[1])) {
   process.exit(ensureDeps())
 }
