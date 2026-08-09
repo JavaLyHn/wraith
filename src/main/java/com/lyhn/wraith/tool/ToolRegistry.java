@@ -17,6 +17,7 @@ import com.lyhn.wraith.tool.todo.TodoStatus;
 import com.lyhn.wraith.rag.CodeRetriever;
 import com.lyhn.wraith.rag.SearchResultFormatter;
 import com.lyhn.wraith.rag.VectorStore;
+import com.lyhn.wraith.render.Renderer;
 import com.lyhn.wraith.policy.AuditLog;
 import com.lyhn.wraith.policy.CommandGuard;
 import com.lyhn.wraith.policy.PathGuard;
@@ -128,6 +129,13 @@ public class ToolRegistry {
         this.curationSink = sink == null ? com.lyhn.wraith.context.curator.CurationSink.NOOP : sink;
     }
 
+    private Renderer renderer;
+
+    /** 注入渲染器(交互式 CLI / app-server 启动后下发);present_options 工具依赖它阻塞等待用户选择。 */
+    public void setRenderer(Renderer renderer) {
+        this.renderer = renderer;
+    }
+
     private com.lyhn.wraith.runtime.task.DurableTaskManager taskManager;
 
     /** 注入持久后台任务管理器(app-server / 交互式 CLI 装配时下发);未注入时相关工具诚实失败。 */
@@ -164,6 +172,7 @@ public class ToolRegistry {
         registerTaskTools();
         registerMemoryQueryTools();
         registerAutomationTools();
+        registerPresentOptionsTool();
     }
 
     /**
@@ -1832,6 +1841,48 @@ public class ToolRegistry {
                     } catch (Exception e) {
                         return "automation_runs 失败: " + e.getMessage();
                     }
+                }
+        ));
+    }
+
+    /** 注册 present_options 工具:让 AI 在对话中结构化呈现选项并阻塞等待用户选择。 */
+    private void registerPresentOptionsTool() {
+        ObjectNode schema = mapper.createObjectNode();
+        schema.put("type", "object");
+        ObjectNode props = schema.putObject("properties");
+
+        ObjectNode titleProp = props.putObject("title");
+        titleProp.put("type", "string").put("description", "选择器标题,如'选择实现方案'");
+
+        ObjectNode optionsProp = props.putObject("options");
+        optionsProp.put("type", "array");
+        optionsProp.put("description", "2-9 个选项");
+        ObjectNode items = optionsProp.putObject("items");
+        items.put("type", "object");
+        ObjectNode itemProps = items.putObject("properties");
+        itemProps.putObject("label").put("type", "string").put("description", "选项显示文本");
+        itemProps.putObject("description").put("type", "string").put("description", "选项的补充说明(可选)");
+        items.putArray("required").add("label");
+        optionsProp.put("minItems", 2);
+        optionsProp.put("maxItems", 9);
+
+        ObjectNode hintProp = props.putObject("hint");
+        hintProp.put("type", "string").put("description", "可选的自定义底部提示文本");
+
+        schema.putArray("required").add("title").add("options");
+
+        tools.put("present_options", new Tool(
+                "present_options",
+                "在对话中为用户呈现可交互的选项列表。当你需要用户从多个方案中选择时调用此工具,"
+                        + "而非用纯文本列出选项。选项 label 简洁(≤50 字符),详细说明放 description。"
+                        + "用户选择后,选中的 label 会作为工具返回值。用户取消时返回 __cancelled__。",
+                schema,
+                args -> {
+                    if (renderer == null) {
+                        return "present_options 失败: 渲染器未初始化";
+                    }
+                    PresentOptionsTool tool = new PresentOptionsTool(renderer, mapper);
+                    return tool.execute(args);
                 }
         ));
     }

@@ -47,8 +47,8 @@ class UiIntentToolsTest {
     }
 
     @Test
-    void namesContainsExactlyTheTwoUiIntentTools() {
-        assertEquals(java.util.Set.of("open_panel", "im_connect"), UiIntentTools.NAMES);
+    void namesContainsExactlyTheThreeUiIntentTools() {
+        assertEquals(java.util.Set.of("open_panel", "im_connect", "present_options"), UiIntentTools.NAMES);
     }
 
     @Test

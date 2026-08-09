@@ -170,6 +170,8 @@ public class Agent {
 
     public void setRenderer(Renderer renderer) {
         this.renderer = renderer;
+        // 下发给 ToolRegistry,present_options 工具依赖它阻塞等待用户选择。
+        this.toolRegistry.setRenderer(renderer);
     }
 
     public void setReturnFinalResponseWhenStreamed(boolean returnFinalResponseWhenStreamed) {

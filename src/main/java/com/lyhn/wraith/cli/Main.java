@@ -22,6 +22,9 @@ import com.lyhn.wraith.llm.LlmClientFactory;
 import com.lyhn.wraith.memory.LongTermMemory;
 import com.lyhn.wraith.memory.MemoryEntry;
 import com.lyhn.wraith.memory.PendingFact;
+import com.lyhn.wraith.render.ChoiceOption;
+import com.lyhn.wraith.render.ChoiceRequest;
+import com.lyhn.wraith.render.ChoiceResult;
 import com.lyhn.wraith.render.Renderer;
 import com.lyhn.wraith.render.RendererFactory;
 import com.lyhn.wraith.render.StatusInfo;
@@ -1038,7 +1041,7 @@ public class Main {
                     snapshotMode = "plan";
                     LlmClient activeClient = llmClient;
                     runTask = () -> {
-                        PlanExecuteAgent planAgent = createPlanAgent(activeClient, reactAgent, terminal, lineReader, ui);
+                        PlanExecuteAgent planAgent = createPlanAgent(activeClient, reactAgent, renderer, lineReader, ui);
                         planAgent.setExternalContextSupplier(mcpServerManager::resourceIndexForPrompt);
                         planAgent.setSkillRegistry(skillRegistry);
                         planAgent.setSkillContextBuffer(skillContextBuffer);
@@ -2506,8 +2509,9 @@ public class Main {
                             orchestrator.setStepStreamFactory((kind, id) ->
                                     new com.lyhn.wraith.runtime.appserver.EventStreamTeamStreamListener(renderer, teamId, kind, id));
 
-                            // UI 意图工具(open_panel/im_connect)贯通到渲染层:Team 模式也能出动作卡。
-                            // 只放行这两个——普通工具在本路径没有 tool.result,放行会让工具卡永久转圈。
+                            // UI 意图工具(open_panel/im_connect/present_options)贯通到渲染层:Team 模式也能出动作卡/选择器。
+                            // 只放行这三个——普通工具在本路径没有 tool.result,放行会让工具卡永久转圈。
+                            // present_options 在 CLI Team 路径经 ToolRegistry 执行能拿到 result;app-server 路径降级为 __cancelled__。
                             orchestrator.setToolCallObserver(calls ->
                                     renderer.appendToolCalls(com.lyhn.wraith.tool.UiIntentTools.filter(calls)));
 
@@ -2993,13 +2997,13 @@ public class Main {
     }
 
     private static PlanExecuteAgent createPlanAgent(LlmClient llmClient, Agent reactAgent,
-                                                    Terminal terminal, LineReader lineReader, PrintStream out) {
+                                                    Renderer renderer, LineReader lineReader, PrintStream out) {
         out.println("📋 使用 Plan-and-Execute 模式\n");
         return new PlanExecuteAgent(
                 llmClient,
                 reactAgent.getToolRegistry(),
                 reactAgent.getMemoryManager(),
-                createPlanReviewHandler(terminal, lineReader, out),
+                createPlanReviewHandler(renderer, lineReader, out),
                 out
         );
     }
@@ -3232,78 +3236,70 @@ public class Main {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("mac");
     }
 
-    private static PlanExecuteAgent.PlanReviewHandler createPlanReviewHandler(Terminal terminal,
+    private static PlanExecuteAgent.PlanReviewHandler createPlanReviewHandler(Renderer renderer,
                                                                               LineReader lineReader,
                                                                               PrintStream out) {
         return (String goal, ExecutionPlan plan) -> {
             boolean expanded = false;
             out.println(plan.summarize());
-            out.println("📝 计划已生成。");
-            out.println("   - 回车：按当前计划执行");
-            out.println("   - Ctrl+O：展开完整计划");
-            out.println("   - ESC：折叠或取消本次计划");
-            out.println("   - I：输入补充要求后重新规划\n");
+            out.println("📝 计划已生成。\n");
 
             while (true) {
-                KeyReadResult keyReadResult = readSingleKeyFromTerminal(terminal);
-                if (keyReadResult.ignoredControlSequence()) {
-                    continue;
-                }
+                List<ChoiceOption> planOptions = List.of(
+                    new ChoiceOption("执行计划", null),
+                    new ChoiceOption(expanded ? "折叠详情" : "展开详情", null),
+                    new ChoiceOption("取消", null),
+                    new ChoiceOption("补充指令重新规划", null)
+                );
+                ChoiceRequest planReq = new ChoiceRequest("Plan 审阅", planOptions, false, null);
+                ChoiceResult planChoice = renderer.promptChoice(planReq);
 
-                Integer key = keyReadResult.key();
-                if (key != null) {
-                    // Enter
-                    if (key == '\n' || key == '\r') {
-                        out.println();
-                        return PlanExecuteAgent.PlanReviewDecision.execute();
-                    }
-
-                    // ESC (27)
-                    if (key == 27) {
-                        out.println();
-                        if (expanded) {
-                            expanded = false;
-                            out.println(plan.summarize());
-                            out.println("📁 已退出完整计划视图，继续按 Enter / Ctrl+O / ESC / I。\n");
-                            continue;
-                        }
-                        return PlanExecuteAgent.PlanReviewDecision.cancel();
-                    }
-
-                    // I 或 i
-                    if (key == 'i' || key == 'I') {
-                        out.println();
-                        String supplementInput = lineReader.readLine("补充> ").trim();
-                        PlanReviewInputParser.Decision supplementDecision =
-                                PlanReviewInputParser.parse(supplementInput);
-                        return mapReviewDecision(supplementDecision);
-                    }
-
-                    // Ctrl+O
-                    if (key == CTRL_O) {
+                // promptChoice 取消（ESC）→ 降级到文本输入路径，保留 PlanReviewInputParser 兼容
+                if (planChoice.isCancelled()) {
+                    String decisionInput = lineReader.readLine("操作/补充> ").trim();
+                    if (decisionInput.equalsIgnoreCase("/view")) {
                         out.println();
                         out.println(plan.visualize());
                         expanded = true;
-                        out.println("👆 已展开完整计划，继续按 Enter / Ctrl+O / ESC / I。\n");
+                        out.println("👆 已展开完整计划，继续输入 Enter / /cancel / 补充要求。\n");
                         continue;
                     }
-
-                    out.println();
-                    out.println("未识别按键，请按 Enter / Ctrl+O / ESC / I。\n");
-                    continue;
+                    return mapReviewDecision(PlanReviewInputParser.parse(decisionInput));
                 }
 
-                // 如果无法读取单键，回退到行输入模式
-                String decisionInput = lineReader.readLine("操作/补充> ").trim();
-                if (decisionInput.equalsIgnoreCase("/view")) {
+                int idx = planChoice.selectedIndex();
+                if (idx == 0) {
+                    // 执行
                     out.println();
-                    out.println(plan.visualize());
-                    expanded = true;
-                    out.println("👆 已展开完整计划，继续输入 Enter / /cancel / 补充要求。\n");
+                    return PlanExecuteAgent.PlanReviewDecision.execute();
+                }
+                if (idx == 1) {
+                    // 展开/折叠
+                    out.println();
+                    if (expanded) {
+                        expanded = false;
+                        out.println(plan.summarize());
+                        out.println("📁 已退出完整计划视图。\n");
+                    } else {
+                        out.println(plan.visualize());
+                        expanded = true;
+                        out.println("👆 已展开完整计划。\n");
+                    }
                     continue;
                 }
-                PlanReviewInputParser.Decision decision = PlanReviewInputParser.parse(decisionInput);
-                return mapReviewDecision(decision);
+                if (idx == 2) {
+                    // 取消
+                    out.println();
+                    return PlanExecuteAgent.PlanReviewDecision.cancel();
+                }
+                if (idx == 3) {
+                    // 补充指令 → 文本输入
+                    out.println();
+                    String supplementInput = lineReader.readLine("补充> ").trim();
+                    return mapReviewDecision(PlanReviewInputParser.parse(supplementInput));
+                }
+                // 不应到达（promptChoice 总返回有效索引或取消）
+                return PlanExecuteAgent.PlanReviewDecision.cancel();
             }
         };
     }

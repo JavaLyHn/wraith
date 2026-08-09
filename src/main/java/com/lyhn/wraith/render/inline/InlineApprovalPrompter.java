@@ -4,41 +4,45 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lyhn.wraith.hitl.ApprovalPolicy;
 import com.lyhn.wraith.hitl.ApprovalRequest;
 import com.lyhn.wraith.hitl.ApprovalResult;
+import com.lyhn.wraith.render.ChoiceOption;
+import com.lyhn.wraith.render.ChoiceRequest;
+import com.lyhn.wraith.render.ChoiceResult;
+import com.lyhn.wraith.render.Renderer;
 import com.lyhn.wraith.util.AnsiStyle;
-import org.jline.terminal.Attributes;
-import org.jline.terminal.Terminal;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Inline 形态的 HITL 审批提示。
  *
- * <p>主菜单选项 {@code y / a / n / s / m} 通过 raw mode 单字符读取（不需要回车），
- * 后续输入（拒绝原因、新参数 JSON）回退到 {@code BufferedReader.readLine}。
+ * <p>首选项（批准 / 全部放行 / 拒绝 / 跳过 / 修改参数）通过
+ * {@link Renderer#promptChoice(ChoiceRequest)} 呈现，统一交互范式；
+ * 后续输入（拒绝原因、新参数 JSON、全部放行范围）回退到 {@code BufferedReader.readLine}。
  *
  * <p>有意保持和 {@link com.lyhn.wraith.render.PlainRenderer#promptApproval} 一致的语义；
- * 只是首选项交互更紧凑。
+ * 只是首选项交互复用统一的交互式选择器。
  */
 public final class InlineApprovalPrompter {
 
     private static final ObjectMapper JSON = new ObjectMapper();
-    private static final int MAX_ATTEMPTS = 5;
 
     private final PrintStream out;
-    private final Terminal terminal;
+    private final Renderer renderer;
     private final BufferedReader stdinReader;
 
-    public InlineApprovalPrompter(PrintStream out, Terminal terminal) {
-        this(out, terminal, new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)));
+    public InlineApprovalPrompter(PrintStream out, Renderer renderer) {
+        this(out, renderer, new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8)));
     }
 
-    InlineApprovalPrompter(PrintStream out, Terminal terminal, BufferedReader stdinReader) {
+    InlineApprovalPrompter(PrintStream out, Renderer renderer, BufferedReader stdinReader) {
         this.out = out;
-        this.terminal = terminal;
+        this.renderer = renderer;
         this.stdinReader = stdinReader;
     }
 
@@ -51,71 +55,46 @@ public final class InlineApprovalPrompter {
         }
         out.println(request.toDisplayText());
 
-        for (int attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-            String optionsLine = sensitive
-                    ? AnsiStyle.subtle("[y] approve  [n] reject  [s] skip  [m] modify")
-                    : AnsiStyle.subtle("[y] approve  [a] all  [n] reject  [s] skip  [m] modify");
-            out.print("> " + optionsLine + " ");
-            out.flush();
-
-            int key = readSingleKey();
-            if (key < 0) {
-                out.println();
-                return ApprovalResult.reject("无法读取按键");
-            }
-            char ch = Character.toLowerCase((char) key);
-            // echo + newline so后续输出不和提示行挤在一起
-            out.println(ch);
-            out.flush();
-
-            switch (ch) {
-                case 'y', '\n', '\r' -> {
-                    return ApprovalResult.approve();
-                }
-                case 'a' -> {
-                    if (sensitive) {
-                        out.println(AnsiStyle.subtle("  敏感操作不支持全部放行，请选 y/n/s/m"));
-                        continue;
-                    }
-                    return promptApproveAllScope(request);
-                }
-                case 'n' -> {
-                    return ApprovalResult.reject(promptForReason());
-                }
-                case 's' -> {
-                    return ApprovalResult.skip();
-                }
-                case 'm' -> {
-                    ApprovalResult modified = promptForModifiedArgs(request);
-                    if (modified != null) {
-                        return modified;
-                    }
-                }
-                default -> out.println(AnsiStyle.subtle("  ❓ 未识别按键 '" + ch + "'，重新选择"));
-            }
+        List<ChoiceOption> options = new ArrayList<>();
+        options.add(new ChoiceOption("批准", null));
+        if (!sensitive) {
+            options.add(new ChoiceOption("全部放行", null));
         }
-        out.println(AnsiStyle.subtle("  连续多次无效输入，保守处理为拒绝"));
-        return ApprovalResult.reject("连续多次无效输入");
-    }
+        options.add(new ChoiceOption("拒绝", null));
+        options.add(new ChoiceOption("跳过", null));
+        options.add(new ChoiceOption("修改参数", null));
 
-    private int readSingleKey() {
-        Attributes original;
-        try {
-            original = terminal.enterRawMode();
-        } catch (Exception e) {
-            return -1;
+        ChoiceRequest choiceReq = new ChoiceRequest("HITL 审批", options, false, null);
+        ChoiceResult choice = renderer.promptChoice(choiceReq);
+
+        if (choice.isCancelled()) {
+            return ApprovalResult.reject("用户取消");
         }
-        try {
-            terminal.flush();
-            return terminal.reader().read();
-        } catch (Exception e) {
-            return -1;
-        } finally {
-            try {
-                terminal.setAttributes(original);
-            } catch (Exception ignored) {
-            }
+
+        int idx = choice.selectedIndex();
+        int approveIdx = 0;
+        int approveAllIdx = sensitive ? -1 : 1;
+        int rejectIdx = sensitive ? 1 : 2;
+        int skipIdx = sensitive ? 2 : 3;
+        int modifyIdx = sensitive ? 3 : 4;
+
+        if (idx == approveIdx) {
+            return ApprovalResult.approve();
         }
+        if (idx == approveAllIdx && approveAllIdx >= 0) {
+            return promptApproveAllScope(request);
+        }
+        if (idx == rejectIdx) {
+            return ApprovalResult.reject(promptForReason());
+        }
+        if (idx == skipIdx) {
+            return ApprovalResult.skip();
+        }
+        if (idx == modifyIdx) {
+            ApprovalResult modified = promptForModifiedArgs(request);
+            return modified != null ? modified : ApprovalResult.approve();
+        }
+        return ApprovalResult.reject("未识别的选择");
     }
 
     private String promptForReason() {
@@ -135,22 +114,19 @@ public final class InlineApprovalPrompter {
             out.println(AnsiStyle.subtle("  已批准，后续 " + request.toolName() + " 自动通过"));
             return ApprovalResult.approveAll();
         }
-        out.println("  全部放行范围 [tool/Enter] 仅本工具  [server] 整个 MCP server " + mcpServer);
-        out.print("> ");
-        out.flush();
-        String scope;
-        try {
-            scope = stdinReader.readLine();
-        } catch (IOException e) {
-            scope = "";
+        List<ChoiceOption> scopeOptions = List.of(
+            new ChoiceOption("仅本工具", null),
+            new ChoiceOption("整个 MCP server " + mcpServer, null)
+        );
+        ChoiceResult scopeChoice = renderer.promptChoice(
+            new ChoiceRequest("全部放行范围", scopeOptions, false, null)
+        );
+        if (scopeChoice.isCancelled() || scopeChoice.selectedIndex() == 0) {
+            out.println(AnsiStyle.subtle("  已批准 tool 范围"));
+            return ApprovalResult.approveAll();
         }
-        String n = scope == null ? "" : scope.trim().toLowerCase();
-        if ("server".equals(n) || "s".equals(n)) {
-            out.println(AnsiStyle.subtle("  已批准 server 范围"));
-            return ApprovalResult.approveAllByServer();
-        }
-        out.println(AnsiStyle.subtle("  已批准 tool 范围"));
-        return ApprovalResult.approveAll();
+        out.println(AnsiStyle.subtle("  已批准 server 范围"));
+        return ApprovalResult.approveAllByServer();
     }
 
     private ApprovalResult promptForModifiedArgs(ApprovalRequest request) {

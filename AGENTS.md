@@ -138,9 +138,9 @@ src/main/java/com/lyhn/wraith/
 
 ### Plan 审阅交互
 
-- `Enter` 执行 / `Ctrl+O` 展开 / `ESC` 取消 / `I` 补充重规划
-- 方向键不应被误判为 ESC
-- 涉及改动要连 raw mode 和回退路径一起看
+- 已迁移到 `Renderer.promptChoice` 交互式选择器：选项 `[执行计划, 展开/折叠详情, 取消, 补充指令重新规划]`，方向键/数字键 + Enter 确认，ESC 降级到 `PlanReviewInputParser` 文本输入路径
+- 旧的 raw-mode 单字符读取（`Enter`/`Ctrl+O`/`ESC`/`I`）已废弃；`readSingleKeyFromTerminal` 保留为 private static 死代码，勿删（`readInputBurst`/`classifyEscapeSequence` 仍被其它方法使用）
+- 涉及改动要连 `createPlanReviewHandler` 签名、`createPlanAgent` 调用链和 `PlanReviewInputParser` 降级路径一起看
 
 ### 并行工具
 

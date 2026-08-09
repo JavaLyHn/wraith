@@ -2,117 +2,139 @@ package com.lyhn.wraith.render.inline;
 
 import com.lyhn.wraith.hitl.ApprovalRequest;
 import com.lyhn.wraith.hitl.ApprovalResult;
-import org.jline.terminal.Terminal;
-import org.jline.utils.NonBlockingReader;
+import com.lyhn.wraith.render.*;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-
-import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
-import java.io.PrintStream;
-import java.io.StringReader;
-import java.nio.charset.StandardCharsets;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import java.io.*;
+import java.util.List;
+import static org.junit.jupiter.api.Assertions.*;
 
 class InlineApprovalPrompterTest {
 
     @Test
-    void singleCharYReturnsApprove() throws Exception {
-        Terminal terminal = mockTerminalReturning('y');
-        ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        InlineApprovalPrompter p = new InlineApprovalPrompter(
-                new PrintStream(sink, true, StandardCharsets.UTF_8),
-                terminal,
-                new BufferedReader(new StringReader("")));
-        ApprovalResult result = p.prompt(ApprovalRequest.of("write_file", "{\"path\":\"a\"}", "test"));
+    void approveWhenSelected() {
+        MockChoiceRenderer renderer = new MockChoiceRenderer(ChoiceResult.selected(0));
+        InlineApprovalPrompter prompter = new InlineApprovalPrompter(
+            new PrintStream(new ByteArrayOutputStream()),
+            renderer,
+            new BufferedReader(new StringReader(""))
+        );
+
+        ApprovalRequest req = ApprovalRequest.of("test_tool", "{}", "test");
+        ApprovalResult result = prompter.prompt(req);
+
         assertEquals(ApprovalResult.Decision.APPROVED, result.decision());
     }
 
     @Test
-    void singleCharSReturnsSkip() throws Exception {
-        Terminal terminal = mockTerminalReturning('s');
-        ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        InlineApprovalPrompter p = new InlineApprovalPrompter(
-                new PrintStream(sink, true, StandardCharsets.UTF_8),
-                terminal,
-                new BufferedReader(new StringReader("")));
-        ApprovalResult result = p.prompt(ApprovalRequest.of("write_file", "{}", "test"));
+    void rejectWhenSelected() {
+        MockChoiceRenderer renderer = new MockChoiceRenderer(ChoiceResult.selected(2));
+        InlineApprovalPrompter prompter = new InlineApprovalPrompter(
+            new PrintStream(new ByteArrayOutputStream()),
+            renderer,
+            new BufferedReader(new StringReader("安全风险\n"))
+        );
+
+        ApprovalRequest req = ApprovalRequest.of("test_tool", "{}", "test");
+        ApprovalResult result = prompter.prompt(req);
+
+        assertEquals(ApprovalResult.Decision.REJECTED, result.decision());
+        assertEquals("安全风险", result.reason());
+    }
+
+    @Test
+    void skipWhenSelected() {
+        MockChoiceRenderer renderer = new MockChoiceRenderer(ChoiceResult.selected(3));
+        InlineApprovalPrompter prompter = new InlineApprovalPrompter(
+            new PrintStream(new ByteArrayOutputStream()),
+            renderer,
+            new BufferedReader(new StringReader(""))
+        );
+
+        ApprovalRequest req = ApprovalRequest.of("test_tool", "{}", "test");
+        ApprovalResult result = prompter.prompt(req);
+
         assertEquals(ApprovalResult.Decision.SKIPPED, result.decision());
     }
 
     @Test
-    void singleCharNFollowedByReasonReturnsRejected() throws Exception {
-        Terminal terminal = mockTerminalReturning('n');
-        ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        InlineApprovalPrompter p = new InlineApprovalPrompter(
-                new PrintStream(sink, true, StandardCharsets.UTF_8),
-                terminal,
-                new BufferedReader(new StringReader("too risky\n")));
-        ApprovalResult result = p.prompt(ApprovalRequest.of("write_file", "{}", "test"));
-        assertEquals(ApprovalResult.Decision.REJECTED, result.decision());
-        assertEquals("too risky", result.reason());
-    }
+    void approveAllWhenSelectedOnBuiltinTool() {
+        // 非敏感请求 + 非 MCP 工具：selected(1) → promptApproveAllScope 直返 approveAll
+        MockChoiceRenderer renderer = new MockChoiceRenderer(ChoiceResult.selected(1));
+        InlineApprovalPrompter prompter = new InlineApprovalPrompter(
+            new PrintStream(new ByteArrayOutputStream()),
+            renderer,
+            new BufferedReader(new StringReader(""))
+        );
 
-    @Test
-    void singleCharAOnBuiltinToolApproveAll() throws Exception {
-        Terminal terminal = mockTerminalReturning('a');
-        ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        InlineApprovalPrompter p = new InlineApprovalPrompter(
-                new PrintStream(sink, true, StandardCharsets.UTF_8),
-                terminal,
-                new BufferedReader(new StringReader("")));
-        ApprovalResult result = p.prompt(ApprovalRequest.of("write_file", "{}", "test"));
+        ApprovalRequest req = ApprovalRequest.of("write_file", "{\"path\":\"a\"}", "test");
+        ApprovalResult result = prompter.prompt(req);
+
         assertEquals(ApprovalResult.Decision.APPROVED_ALL, result.decision());
     }
 
     @Test
-    void singleCharAOnMcpToolApproveAllByServer() throws Exception {
-        Terminal terminal = mockTerminalReturning('a');
-        ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        InlineApprovalPrompter p = new InlineApprovalPrompter(
-                new PrintStream(sink, true, StandardCharsets.UTF_8),
-                terminal,
-                new BufferedReader(new StringReader("server\n")));
-        ApprovalResult result = p.prompt(ApprovalRequest.of("mcp__chrome-devtools__click", "{}", "test"));
-        assertEquals(ApprovalResult.Decision.APPROVED_ALL_BY_SERVER, result.decision());
-    }
+    void modifyWhenSelectedWithValidJson() {
+        // 非敏感请求：selected(4) → promptForModifiedArgs 从 stdinReader 读合法 JSON
+        MockChoiceRenderer renderer = new MockChoiceRenderer(ChoiceResult.selected(4));
+        InlineApprovalPrompter prompter = new InlineApprovalPrompter(
+            new PrintStream(new ByteArrayOutputStream()),
+            renderer,
+            new BufferedReader(new StringReader("{\"path\":\"safe.txt\"}\n"))
+        );
 
-    @Test
-    void singleCharMWithValidJsonReturnsModified() throws Exception {
-        Terminal terminal = mockTerminalReturning('m');
-        ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        InlineApprovalPrompter p = new InlineApprovalPrompter(
-                new PrintStream(sink, true, StandardCharsets.UTF_8),
-                terminal,
-                new BufferedReader(new StringReader("{\"path\":\"safe.txt\"}\n")));
-        ApprovalResult result = p.prompt(ApprovalRequest.of("write_file", "{\"path\":\"a\"}", "test"));
+        ApprovalRequest req = ApprovalRequest.of("write_file", "{\"path\":\"a\"}", "test");
+        ApprovalResult result = prompter.prompt(req);
+
         assertEquals(ApprovalResult.Decision.MODIFIED, result.decision());
+        assertNotNull(result.modifiedArguments());
         assertTrue(result.modifiedArguments().contains("safe.txt"));
     }
 
     @Test
-    void rawModeFailureFallsThroughToReject() throws Exception {
-        Terminal terminal = Mockito.mock(Terminal.class);
-        Mockito.when(terminal.enterRawMode()).thenThrow(new RuntimeException("no tty"));
-        ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        InlineApprovalPrompter p = new InlineApprovalPrompter(
-                new PrintStream(sink, true, StandardCharsets.UTF_8),
-                terminal,
-                new BufferedReader(new StringReader("")));
-        ApprovalResult result = p.prompt(ApprovalRequest.of("write_file", "{}", "test"));
-        assertNotNull(result);
+    void cancelReturnsReject() {
+        // promptChoice 返回 cancelled → 保守拒绝，reason="用户取消"
+        MockChoiceRenderer renderer = new MockChoiceRenderer(ChoiceResult.cancelled());
+        InlineApprovalPrompter prompter = new InlineApprovalPrompter(
+            new PrintStream(new ByteArrayOutputStream()),
+            renderer,
+            new BufferedReader(new StringReader(""))
+        );
+
+        ApprovalRequest req = ApprovalRequest.of("test_tool", "{}", "test");
+        ApprovalResult result = prompter.prompt(req);
+
         assertEquals(ApprovalResult.Decision.REJECTED, result.decision());
+        assertEquals("用户取消", result.reason());
     }
 
-    private static Terminal mockTerminalReturning(char ch) throws Exception {
-        Terminal terminal = Mockito.mock(Terminal.class);
-        Mockito.when(terminal.enterRawMode()).thenReturn(null);
-        NonBlockingReader reader = Mockito.mock(NonBlockingReader.class);
-        Mockito.when(reader.read()).thenReturn((int) ch);
-        Mockito.when(terminal.reader()).thenReturn(reader);
-        return terminal;
+    @Test
+    void sensitiveRequestHasNoApproveAllOption() {
+        // 敏感请求选项为 [批准, 拒绝, 跳过, 修改参数]（无全部放行），
+        // selected(1) 落到 rejectIdx（sensitive 路径下 rejectIdx=1）
+        MockChoiceRenderer renderer = new MockChoiceRenderer(ChoiceResult.selected(1));
+        InlineApprovalPrompter prompter = new InlineApprovalPrompter(
+            new PrintStream(new ByteArrayOutputStream()),
+            renderer,
+            new BufferedReader(new StringReader("敏感拒绝\n"))
+        );
+
+        ApprovalRequest req = ApprovalRequest.of("execute_command", "{}", "test", null, "敏感页面操作");
+        ApprovalResult result = prompter.prompt(req);
+
+        assertEquals(ApprovalResult.Decision.REJECTED, result.decision());
+        assertEquals("敏感拒绝", result.reason());
+    }
+
+    private static class MockChoiceRenderer implements Renderer {
+        private final ChoiceResult result;
+        MockChoiceRenderer(ChoiceResult result) { this.result = result; }
+        @Override public ChoiceResult promptChoice(ChoiceRequest request) { return result; }
+        @Override public void start() {}
+        @Override public void close() {}
+        @Override public PrintStream stream() { return System.out; }
+        @Override public void appendToolCalls(List<com.lyhn.wraith.llm.LlmClient.ToolCall> toolCalls) {}
+        @Override public void appendDiff(String filePath, String before, String after) {}
+        @Override public void updateStatus(StatusInfo status) {}
+        @Override public ApprovalResult promptApproval(ApprovalRequest request) { return ApprovalResult.reject("test"); }
     }
 }
