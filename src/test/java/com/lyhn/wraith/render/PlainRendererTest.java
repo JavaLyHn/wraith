@@ -72,9 +72,10 @@ class PlainRendererTest {
     }
 
     @Test
-    void promptApprovalApprovesOnEnter() {
+    void promptApprovalApprovesWhenFirstOptionSelected() {
+        // promptChoice 走编号列表 + 数字输入：选项 [1]批准 [2]全部放行 [3]拒绝 [4]跳过 [5]修改参数
         ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        BufferedReader reader = new BufferedReader(new StringReader("\n"));
+        BufferedReader reader = new BufferedReader(new StringReader("1\n"));
         PlainRenderer renderer = new PlainRenderer(
                 new PrintStream(sink, true, StandardCharsets.UTF_8), reader);
 
@@ -87,7 +88,7 @@ class PlainRendererTest {
     @Test
     void promptApprovalRejectsWithReason() {
         ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        BufferedReader reader = new BufferedReader(new StringReader("n\nrisky path\n"));
+        BufferedReader reader = new BufferedReader(new StringReader("3\nrisky path\n"));
         PlainRenderer renderer = new PlainRenderer(
                 new PrintStream(sink, true, StandardCharsets.UTF_8), reader);
 
@@ -100,7 +101,7 @@ class PlainRendererTest {
     @Test
     void promptApprovalApproveAllForBuiltinTool() {
         ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        BufferedReader reader = new BufferedReader(new StringReader("a\n"));
+        BufferedReader reader = new BufferedReader(new StringReader("2\n"));
         PlainRenderer renderer = new PlainRenderer(
                 new PrintStream(sink, true, StandardCharsets.UTF_8), reader);
 
@@ -112,7 +113,7 @@ class PlainRendererTest {
     @Test
     void promptApprovalApproveAllByServerForMcp() {
         ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        BufferedReader reader = new BufferedReader(new StringReader("a\nserver\n"));
+        BufferedReader reader = new BufferedReader(new StringReader("2\nserver\n"));
         PlainRenderer renderer = new PlainRenderer(
                 new PrintStream(sink, true, StandardCharsets.UTF_8), reader);
 
@@ -124,7 +125,7 @@ class PlainRendererTest {
     @Test
     void promptApprovalSkipReturnsSkipped() {
         ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        BufferedReader reader = new BufferedReader(new StringReader("s\n"));
+        BufferedReader reader = new BufferedReader(new StringReader("4\n"));
         PlainRenderer renderer = new PlainRenderer(
                 new PrintStream(sink, true, StandardCharsets.UTF_8), reader);
 
@@ -136,7 +137,7 @@ class PlainRendererTest {
     @Test
     void promptApprovalModifyAcceptsValidJson() {
         ByteArrayOutputStream sink = new ByteArrayOutputStream();
-        BufferedReader reader = new BufferedReader(new StringReader("m\n{\"path\":\"b.txt\"}\n"));
+        BufferedReader reader = new BufferedReader(new StringReader("5\n{\"path\":\"b.txt\"}\n"));
         PlainRenderer renderer = new PlainRenderer(
                 new PrintStream(sink, true, StandardCharsets.UTF_8), reader);
 

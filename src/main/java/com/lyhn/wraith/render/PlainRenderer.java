@@ -126,75 +126,68 @@ public final class PlainRenderer implements Renderer {
 
     @Override
     public ApprovalResult promptApproval(ApprovalRequest request) {
-        boolean sensitivePerCall = request.sensitiveNotice() != null && !request.sensitiveNotice().isBlank();
+        boolean sensitive = request.sensitiveNotice() != null && !request.sensitiveNotice().isBlank();
         out.println();
         out.println("────────── ⚠️  HITL 审批请求 ──────────");
-        if (sensitivePerCall) {
+        if (sensitive) {
             out.println("⚠️  " + request.sensitiveNotice());
         }
         out.println(request.toDisplayText());
 
-        for (int attempt = 0; attempt < 5; attempt++) {
-            out.println();
-            if (sensitivePerCall) {
-                out.println("请选择操作：[y/Enter] 批准本次  [n] 拒绝  [s] 跳过  [m] 修改参数");
-            } else {
-                out.println("请选择操作：[y/Enter] 批准  [a] 全部放行  [n] 拒绝  [s] 跳过  [m] 修改参数");
-            }
-            out.print("> ");
-            out.flush();
-
-            String input;
-            try {
-                input = in.readLine();
-            } catch (IOException e) {
-                out.println("  [HITL] 读取用户输入失败，保守处理为拒绝");
-                return ApprovalResult.reject("读取输入失败: " + e.getMessage());
-            }
-            if (input == null) {
-                out.println("  [HITL] 输入流已关闭，保守处理为拒绝");
-                return ApprovalResult.reject("输入流已关闭");
-            }
-
-            String normalized = input.trim().toLowerCase();
-            if (normalized.isEmpty() || normalized.equals("y")) {
-                out.println("  已批准");
-                return ApprovalResult.approve();
-            }
-            switch (normalized) {
-                case "a" -> {
-                    if (sensitivePerCall) {
-                        out.println("  敏感页面操作不支持全部放行，请选择 y/n/s/m");
-                        continue;
-                    }
-                    return promptApproveAllScope(request);
-                }
-                case "n" -> {
-                    out.print("  拒绝原因（可直接回车跳过）：");
-                    out.flush();
-                    String reason;
-                    try {
-                        reason = in.readLine();
-                    } catch (IOException e) {
-                        reason = "";
-                    }
-                    return ApprovalResult.reject(reason == null ? "" : reason.trim());
-                }
-                case "s" -> {
-                    out.println("  已跳过本次操作");
-                    return ApprovalResult.skip();
-                }
-                case "m" -> {
-                    ApprovalResult modified = promptModifiedArguments(request);
-                    if (modified != null) {
-                        return modified;
-                    }
-                }
-                default -> out.println("  ❓ 无法识别的选项：'" + input + "'，请输入 y/a/n/s/m 之一（Enter 等价于 y）");
-            }
+        // 首选项走统一的 promptChoice（编号列表 + 数字输入），不再走单字符重试循环。
+        // 非敏感：[批准, 全部放行, 拒绝, 跳过, 修改参数]（索引 0-4）
+        // 敏感：  [批准, 拒绝, 跳过, 修改参数]（索引 0-3，无全部放行）
+        List<ChoiceOption> options = new ArrayList<>();
+        options.add(new ChoiceOption("批准", null));
+        if (!sensitive) {
+            options.add(new ChoiceOption("全部放行", null));
         }
-        out.println("  [HITL] 连续多次无效输入，保守处理为拒绝");
-        return ApprovalResult.reject("连续多次无效输入");
+        options.add(new ChoiceOption("拒绝", null));
+        options.add(new ChoiceOption("跳过", null));
+        options.add(new ChoiceOption("修改参数", null));
+
+        ChoiceResult choice = this.promptChoice(new ChoiceRequest("HITL 审批", options, false, null));
+        if (choice.isCancelled()) {
+            out.println("  [HITL] 用户取消，保守处理为拒绝");
+            return ApprovalResult.reject("用户取消");
+        }
+
+        int idx = choice.selectedIndex();
+        int approveIdx = 0;
+        int approveAllIdx = sensitive ? -1 : 1;
+        int rejectIdx = sensitive ? 1 : 2;
+        int skipIdx = sensitive ? 2 : 3;
+        int modifyIdx = sensitive ? 3 : 4;
+
+        if (idx == approveIdx) {
+            out.println("  已批准");
+            return ApprovalResult.approve();
+        }
+        if (idx == approveAllIdx && approveAllIdx >= 0) {
+            return promptApproveAllScope(request);
+        }
+        if (idx == rejectIdx) {
+            out.print("  拒绝原因（可直接回车跳过）：");
+            out.flush();
+            String reason;
+            try {
+                reason = in.readLine();
+            } catch (IOException e) {
+                reason = "";
+            }
+            return ApprovalResult.reject(reason == null ? "" : reason.trim());
+        }
+        if (idx == skipIdx) {
+            out.println("  已跳过本次操作");
+            return ApprovalResult.skip();
+        }
+        if (idx == modifyIdx) {
+            // 子流程返回 null（非法 JSON / IO 失败）时无重试循环可回退，保守改为批准原参数，
+            // 与 InlineApprovalPrompter 的 modify 路径行为一致。
+            ApprovalResult modified = promptModifiedArguments(request);
+            return modified != null ? modified : ApprovalResult.approve();
+        }
+        return ApprovalResult.reject("未识别的选择");
     }
 
     @Override

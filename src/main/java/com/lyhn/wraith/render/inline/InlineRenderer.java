@@ -510,7 +510,7 @@ public final class InlineRenderer implements Renderer {
         if (terminal == null) {
             return fallback.promptApproval(request);
         }
-        return new InlineApprovalPrompter(out, terminal).prompt(request);
+        return new InlineApprovalPrompter(out, this).prompt(request);
     }
 
     @Override
