@@ -342,6 +342,12 @@ async function handleRequest(req) {
       break
     }
 
+    case 'choice.respond': {
+      // mock 直接返回 ok,不真正解析(测试场景不需要真实回传逻辑)
+      reply(id, { ok: true })
+      break
+    }
+
     case 'turn.interrupt': {
       reply(id, { ok: true })
       break
