@@ -48,6 +48,7 @@ import { Download, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
+import CloseConfirmModal from './components/CloseConfirmModal'
 import DisconnectedBanner from './components/DisconnectedBanner'
 import ModelFallbackBanner from './components/ModelFallbackBanner'
 import SubmitErrorBanner from './components/SubmitErrorBanner'
@@ -204,6 +205,8 @@ export default function App(): JSX.Element {
   const [rightDockOpen, setRightDockOpen] = useState(false)
   const [rightDockPane, setRightDockPane] = useState<RightDockPane>('browser')
   const [rightPreview, setRightPreview] = useState<RightPreview | null>(null)
+  // 关闭确认对话框:主进程发 'wraith:close:request' 时弹出
+  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
   const openArtifact = useCallback((filePath: string, content: string): void => {
     setRightPreview({ kind: 'content', filePath, content })
     setRightDockPane('artifact')
@@ -224,6 +227,43 @@ export default function App(): JSX.Element {
   }, [state.workspace])
   const [editors, setEditors] = useState<EditorApp[]>([])
   useEffect(() => { void window.wraith.listEditors().then(setEditors).catch(() => {}) }, [])
+
+  // 关闭确认:监听主进程 'wraith:close:request'。
+  // 若已记住 closeMode≠'ask',直接 execute;否则弹 CloseConfirmModal。
+  useEffect(() => {
+    let cancelled = false
+    const off = window.wraith.closeBehavior.onRequest(async () => {
+      if (cancelled) return
+      try {
+        const mode = await window.wraith.closeBehavior.getMode()
+        if (mode === 'background' || mode === 'quit') {
+          // 已记住:直接执行
+          await window.wraith.closeBehavior.execute({ mode, remember: null })
+        } else {
+          // ask:弹 modal
+          setCloseConfirmOpen(true)
+        }
+      } catch {
+        // 读 mode 失败 → 兜底弹 modal
+        setCloseConfirmOpen(true)
+      }
+    })
+    return () => { cancelled = true; off() }
+  }, [])
+
+  const handleCloseConfirm = useCallback(async (mode: 'background' | 'quit', remember: boolean) => {
+    setCloseConfirmOpen(false)
+    try {
+      await window.wraith.closeBehavior.execute({ mode, remember: remember ? mode : null })
+    } catch {
+      // best-effort
+    }
+  }, [])
+
+  const handleCloseConfirmCancel = useCallback(() => {
+    setCloseConfirmOpen(false)
+    // 不调 execute,主窗继续运行
+  }, [])
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** 后端起来了但一个模型都没配 —— 全新装机的常态,需要在空态给出引导。 */
   const [noModel, setNoModel] = useState(false)

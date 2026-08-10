@@ -837,3 +837,17 @@ export interface DocAddResult {
   added: string[]
   failed: { name: string; reason: string }[]
 }
+
+// ---------------------------------------------------------------------------
+// 桌面关闭行为 (close behavior)
+// ---------------------------------------------------------------------------
+
+/** 关闭主窗时用户选择的处理方式。 */
+export type CloseMode = 'ask' | 'background' | 'quit'
+
+/** renderer → main:执行用户选择的关闭动作。 */
+export interface CloseExecutePayload {
+  mode: 'background' | 'quit'
+  /** 用户勾选了「下次别问」则把 closeMode 持久化为对应 mode;未勾则 null=保持 ask。 */
+  remember: 'background' | 'quit' | null
+}

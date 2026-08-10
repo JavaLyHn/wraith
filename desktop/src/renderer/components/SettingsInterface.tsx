@@ -1,6 +1,8 @@
+import { useCallback, useEffect, useState } from 'react'
 import { useSettings } from '../settings/SettingsContext'
 import { ACCENTS } from '../settings/theme'
 import type { AccentKey, FontSize, ThemeMode } from '../settings/prefs'
+import type { CloseMode } from '../../shared/types'
 
 const THEME_OPTS: { key: ThemeMode; label: string; prev: string }[] = [
   { key: 'system', label: '系统', prev: 'linear-gradient(90deg,#f7f8fa 50%,#0f1419 50%)' },
@@ -9,6 +11,12 @@ const THEME_OPTS: { key: ThemeMode; label: string; prev: string }[] = [
 ]
 const SIZE_OPTS: { key: FontSize; label: string }[] = [{ key: 'sm', label: '小' }, { key: 'md', label: '中' }, { key: 'lg', label: '大' }]
 
+const CLOSE_MODE_LABEL: Record<CloseMode, string> = {
+  ask: '每次询问',
+  background: '挂后台',
+  quit: '直接退出',
+}
+
 export default function SettingsInterface(): JSX.Element {
   const { prefs, setUi } = useSettings()
   const ui = prefs.ui
@@ -16,6 +24,25 @@ export default function SettingsInterface(): JSX.Element {
   const seg = 'inline-flex overflow-hidden rounded-lg border border-border'
   const segItem = (on: boolean): string =>
     'px-3 py-1.5 text-xs ' + (on ? 'bg-accent/15 font-semibold text-accent' : 'text-fg-muted hover:bg-surface')
+
+  // 关闭行为:读当前 closeMode,非 ask 时可重置回「每次询问」
+  const [closeMode, setCloseMode] = useState<CloseMode>('ask')
+  useEffect(() => {
+    let cancelled = false
+    void window.wraith.closeBehavior.getMode().then((m) => {
+      if (!cancelled) setCloseMode(m)
+    }).catch(() => { /* best-effort */ })
+    return () => { cancelled = true }
+  }, [])
+
+  const handleResetCloseMode = useCallback(async () => {
+    try {
+      await window.wraith.closeBehavior.resetMode()
+      setCloseMode('ask')
+    } catch {
+      // best-effort
+    }
+  }, [])
 
   return (
     <div className="flex flex-col gap-6">
@@ -52,6 +79,27 @@ export default function SettingsInterface(): JSX.Element {
               className={segItem(ui.fontSize === s.key) + ' border-r border-border last:border-r-0'}>{s.label}</button>
           ))}
         </div>
+      </div>
+
+      <div>
+        <div className={lbl}>关闭窗口行为</div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-fg-muted">
+            当前:{CLOSE_MODE_LABEL[closeMode]}
+          </span>
+          {closeMode !== 'ask' && (
+            <button
+              data-testid="close-mode-reset"
+              onClick={handleResetCloseMode}
+              className="rounded-md border border-border px-2.5 py-1 text-xs text-fg-muted hover:bg-muted hover:text-fg"
+            >
+              恢复询问
+            </button>
+          )}
+        </div>
+        {closeMode === 'ask' && (
+          <div className="mt-1 text-2xs text-fg-subtle">关闭主窗时会询问挂后台还是退出</div>
+        )}
       </div>
     </div>
   )

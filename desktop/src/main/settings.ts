@@ -8,7 +8,7 @@
 
 import fs from 'fs'
 import path from 'path'
-import type { ProjectView } from '../shared/types'
+import type { ProjectView, CloseMode } from '../shared/types'
 import type { PetMotionStyle } from '../shared/pets'
 
 export interface ProjectEntry {
@@ -25,6 +25,8 @@ export interface Settings {
   projects?: ProjectEntry[]
   /** 桌面宠物配置(全局常驻窗口)。 */
   pets?: PetConfig
+  /** 关闭主窗时的行为:'ask'=每次问,'background'=挂后台,'quit'=直接退出。 */
+  closeMode?: CloseMode
 }
 
 /** 缩放范围。PET_SCALE_MIN 同时是"缩放关闭时"的固定尺寸(见 normalizePetConfig)。 */
@@ -211,4 +213,22 @@ export function seedProjectsFromJson(userDataDir: string, json: string, now: num
     }))
   const s = readSettings(userDataDir)
   writeSettings(userDataDir, { ...s, projects })
+}
+
+// ---------------------------------------------------------------------------
+// 关闭行为 (closeMode)
+// ---------------------------------------------------------------------------
+
+const CLOSE_MODES: CloseMode[] = ['ask', 'background', 'quit']
+
+/** 读取 closeMode;缺失/非法一律回落 'ask'。 */
+export function readCloseMode(userDataDir: string): CloseMode {
+  const raw = readSettings(userDataDir).closeMode
+  return CLOSE_MODES.includes(raw as CloseMode) ? (raw as CloseMode) : 'ask'
+}
+
+/** 写入 closeMode;非法值忽略,落回 'ask'。 */
+export function writeCloseMode(userDataDir: string, mode: CloseMode): void {
+  const safe = CLOSE_MODES.includes(mode) ? mode : 'ask'
+  writeSettings(userDataDir, { ...readSettings(userDataDir), closeMode: safe })
 }
