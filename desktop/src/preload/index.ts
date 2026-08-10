@@ -30,6 +30,7 @@ export interface WraithApi {
     decision: 'APPROVED' | 'REJECTED' | 'MODIFIED' | 'APPROVED_ALL',
     opts?: { modifiedArgs?: string; allowNetwork?: boolean }
   ): Promise<void>
+  respondChoice(choiceId: string, cancelled: boolean, selectedIndex: number): Promise<void>
   interrupt(): Promise<void>
   getInitialWorkspace(): Promise<string | null>
   listProjects(): Promise<{ projects: ProjectView[] }>
@@ -260,6 +261,10 @@ const wraith: WraithApi = {
 
   respondApproval(approvalId, decision, opts) {
     return ipcRenderer.invoke('wraith:respondApproval', approvalId, decision, opts ?? null)
+  },
+
+  respondChoice(choiceId, cancelled, selectedIndex) {
+    return ipcRenderer.invoke('wraith:respondChoice', choiceId, cancelled, selectedIndex)
   },
 
   respondPlanReview(reviewId, decision, feedback) {

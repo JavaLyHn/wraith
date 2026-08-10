@@ -686,6 +686,18 @@ export interface ApprovalPolicy {
   askTimeoutMinutes?: number
 }
 
+export interface ChoiceOption {
+  label: string
+  description: string | null
+}
+export interface PendingChoice {
+  choiceId: string
+  title: string
+  options: ChoiceOption[]
+  allowCancel: boolean
+  hint: string | null
+}
+
 /** 消息投递目标(对应 Java DeliveryTarget sealed interface). */
 export type DeliveryTarget =
   | { platform: 'qq'; chatId?: string }

@@ -10,6 +10,7 @@ import {
   initialState,
   reduce,
   clearApproval,
+  clearChoice,
   setModel,
   markStarted,
   markResumed,
@@ -48,6 +49,7 @@ import { Download, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
+import ChoiceModal from './components/ChoiceModal'
 import DisconnectedBanner from './components/DisconnectedBanner'
 import ModelFallbackBanner from './components/ModelFallbackBanner'
 import SubmitErrorBanner from './components/SubmitErrorBanner'
@@ -86,6 +88,7 @@ import { useSettings } from './settings/SettingsContext'
 
 type LocalAction =
   | { type: 'clearApproval' }
+  | { type: 'clearChoice' }
   | { type: 'setModel'; model: string }
   | { type: 'markStarted' }
   | { type: 'markResumed' }
@@ -110,6 +113,9 @@ type Action = BackendEvent | LocalAction
 function reduceAdapter(state: TranscriptState, action: Action): TranscriptState {
   if ('type' in action && action.type === 'clearApproval') {
     return clearApproval(state)
+  }
+  if ('type' in action && action.type === 'clearChoice') {
+    return clearChoice(state)
   }
   if ('type' in action && action.type === 'setModel') {
     return setModel(state, action.model)
@@ -668,6 +674,28 @@ export default function App(): JSX.Element {
     }
   }, [state.pendingApproval])
 
+  // ── choice handlers ───────────────────────────────────────────────────────
+  const handleChoiceRespond = useCallback(
+    async (selectedIndex: number) => {
+      if (!state.pendingChoice) return
+      try {
+        await window.wraith.respondChoice(state.pendingChoice.choiceId, false, selectedIndex)
+      } finally {
+        dispatch({ type: 'clearChoice' })
+      }
+    },
+    [state.pendingChoice],
+  )
+
+  const handleChoiceReject = useCallback(async () => {
+    if (!state.pendingChoice) return
+    try {
+      await window.wraith.respondChoice(state.pendingChoice.choiceId, true, -1)
+    } finally {
+      dispatch({ type: 'clearChoice' })
+    }
+  }, [state.pendingChoice])
+
   // ── automation approval handler ────────────────────────────────────────────
   const handleAutomationApprovalRespond = useCallback(async (_payload: ApprovalResponsePayload) => {
     const cur = automationApproval
@@ -715,12 +743,12 @@ export default function App(): JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
-      if (state.turn !== 'running' || state.pendingApproval || automationApproval) return
+      if (state.turn !== 'running' || state.pendingApproval || state.pendingChoice || automationApproval) return
       void window.wraith.interrupt().catch(err => console.error('[wraith] interrupt error:', err))
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [state.turn, state.pendingApproval, automationApproval])
+  }, [state.turn, state.pendingApproval, state.pendingChoice, automationApproval])
 
   // ── 全局真快捷键:⌘K 开/关命令面板、⌘N 新对话、⌘, 设置 ────────────────────
   useEffect(() => {
@@ -1376,6 +1404,18 @@ export default function App(): JSX.Element {
           beforeContent={state.pendingApproval.beforeContent}
           onRespond={handleApprovalRespond}
           onReject={handleReject}
+        />
+      )}
+
+      {state.pendingChoice && (
+        <ChoiceModal
+          key={state.pendingChoice.choiceId}
+          title={state.pendingChoice.title}
+          options={state.pendingChoice.options}
+          allowCancel={state.pendingChoice.allowCancel}
+          hint={state.pendingChoice.hint}
+          onRespond={handleChoiceRespond}
+          onReject={handleChoiceReject}
         />
       )}
 

@@ -11,7 +11,7 @@
  *   scanning the items array and is O(1).
  */
 
-import type { BackendEvent, StatusData, PlanStepView, SandboxKindWire, RunMode } from './types'
+import type { BackendEvent, ChoiceOption, PendingChoice, StatusData, PlanStepView, SandboxKindWire, RunMode } from './types'
 import { shouldPopChatApproval } from './approvalScope'
 
 // ---------------------------------------------------------------------------
@@ -170,6 +170,7 @@ export interface TranscriptState {
     suggestion: string
     beforeContent: string | null
   } | null
+  pendingChoice: PendingChoice | null
   turn: 'idle' | 'running'
   connection: 'connected' | 'disconnected'
   model: string
@@ -206,6 +207,7 @@ export interface TranscriptState {
 export const initialState: TranscriptState = {
   items: [],
   pendingApproval: null,
+  pendingChoice: null,
   turn: 'idle',
   connection: 'disconnected',
   model: '',
@@ -474,6 +476,24 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
       return {
         ...state,
         pendingApproval: { approvalId, toolName, argsJson, dangerLevel, riskDescription, suggestion, beforeContent },
+      }
+    }
+
+    // ── choice（交互式选择器,与 approval 一样是临时 modal 不进 transcript）──
+    case 'choice.requested': {
+      const choiceId = typeof p['choiceId'] === 'string' ? p['choiceId'] : ''
+      if (!choiceId) return state
+      const title = typeof p['title'] === 'string' ? p['title'] : '请选择'
+      const rawOptions = Array.isArray(p['options']) ? p['options'] : []
+      const options: ChoiceOption[] = rawOptions.map((o: any) => ({
+        label: typeof o?.label === 'string' ? o.label : '',
+        description: o?.description == null ? null : String(o.description),
+      }))
+      const allowCancel = p['allowCancel'] === true
+      const hint = typeof p['hint'] === 'string' ? p['hint'] : null
+      return {
+        ...state,
+        pendingChoice: { choiceId, title, options, allowCancel, hint },
       }
     }
 
@@ -823,6 +843,11 @@ export function clearApproval(state: TranscriptState): TranscriptState {
   return { ...state, pendingApproval: null }
 }
 
+/** Clear a pending choice (call after the UI sends the respond RPC). */
+export function clearChoice(state: TranscriptState): TranscriptState {
+  return { ...state, pendingChoice: null }
+}
+
 /** Update the active model name (e.g. from initialize response). */
 export function setModel(state: TranscriptState, model: string): TranscriptState {
   return { ...state, model }
@@ -877,6 +902,7 @@ export function resetSession(state: TranscriptState, ws: string): TranscriptStat
     turn: 'idle',
     approvalMode: 'ask',
     pendingApproval: null,
+    pendingChoice: null,
     workspace: ws,
     sessionId: '',
     status: null,

@@ -3,6 +3,7 @@ package com.lyhn.wraith.runtime.appserver;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.lyhn.wraith.config.WraithConfig;
 import com.lyhn.wraith.hitl.ApprovalResult;
+import com.lyhn.wraith.render.ChoiceResult;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -463,6 +464,7 @@ public final class AppServer {
             }
             case "approval.respond" -> handleApprovalRespond(msg);
             case "plan.review.respond" -> handlePlanReviewRespond(msg);
+            case "choice.respond" -> handleChoiceRespond(msg);
             case "session.setApprovalMode" -> handleSetApprovalMode(msg);
             case "session.list" -> handleSessionList(msg);
             case "session.resume" -> handleSessionResume(msg);
@@ -1476,6 +1478,20 @@ public final class AppServer {
         String decision = (p.hasNonNull("decision")) ? p.get("decision").asText("cancel") : "cancel";
         String feedback = p.hasNonNull("feedback") ? p.get("feedback").asText(null) : null;
         session.renderer().resolvePlanReview(reviewId, decision, feedback);
+        writer.result(msg.id(), java.util.Map.of("ok", true));
+    }
+
+    /** 处理前端的交互式选择器响应（镜像 handleApprovalRespond）。 */
+    private void handleChoiceRespond(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        if (p == null) { writer.error(msg.id(), -32602, "missing params"); return; }
+        String choiceId = p.path("choiceId").asText("");
+        if (choiceId.isBlank()) { writer.error(msg.id(), -32602, "缺 choiceId"); return; }
+        boolean cancelled = p.path("cancelled").asBoolean(false);
+        int selectedIndex = p.path("selectedIndex").asInt(-1);
+        ChoiceResult result = cancelled ? ChoiceResult.cancelled() : ChoiceResult.selected(selectedIndex);
+        session.renderer().resolveChoice(choiceId, result);
         writer.result(msg.id(), java.util.Map.of("ok", true));
     }
 
