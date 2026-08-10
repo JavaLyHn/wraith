@@ -45,7 +45,7 @@ export function FileArtifactCardInner({ file, workspace, editors, onOpenPreview,
           : <FileDiff className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.5} />}
         <div className="flex min-w-0 flex-1 flex-col items-start">
           <button data-testid="file-artifact-open-preview" onClick={() => onOpenPreview?.(file.path, file.content)}
-            className="max-w-full truncate text-left text-sm font-medium text-fg" title={file.path}>
+            className="max-w-full truncate text-left text-sm font-medium text-fg">
             {created ? '新建 ' : '已编辑 '}{baseName(file.path)}
           </button>
           {hasDiff && onOpenDiff && (
