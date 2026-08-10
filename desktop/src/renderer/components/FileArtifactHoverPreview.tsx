@@ -1,25 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { FileDiff, FilePlus } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover'
 import { FileArtifactCardInner } from './FileArtifactCard'
 import { ArtifactPreviewBody } from './ArtifactPreview'
-import { baseName } from '../lib/paths'
 import type { FileArtifactCardProps } from './FileArtifactCard'
 
 const ENTER_DELAY = 300
 const LEAVE_DELAY = 200
 const MAX_BYTES = 50 * 1024 // 50KB
 
-/** 字节数 → 人类可读字符串 */
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`
-}
-
 /**
  * 文件产物卡 hover peek 预览。
- * 鼠标移到卡片上 300ms 后弹出浮动 popover,显示文件内容 + 元数据标题。
+ * 鼠标移到卡片上 300ms 后弹出浮动 popover,直接显示文件内容(无标题栏,卡片本身已有文件名)。
+ * popover 优先在卡片下方显示,空间不足时由 Radix avoidCollisions + sticky="partial" 翻到上方。
  * 鼠标可从卡片移到 popover 不关闭(桥接区),200ms 后关闭。
  * click 文件名按钮仍触发 onOpenPreview(右侧 dock),不影响 hover state。
  */
@@ -59,7 +51,6 @@ export default function FileArtifactHoverPreview(props: FileArtifactCardProps): 
   const contentBytes = new Blob([file.content]).size
   const truncated = contentBytes > MAX_BYTES
   const displayContent = truncated ? file.content.slice(0, MAX_BYTES) : file.content
-  const lineCount = file.content === '' ? 0 : file.content.split('\n').length
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -82,32 +73,24 @@ export default function FileArtifactHoverPreview(props: FileArtifactCardProps): 
         </span>
       </PopoverTrigger>
       <PopoverContent
-        side="right"
+        side="bottom"
         align="start"
         sideOffset={8}
         collisionPadding={12}
         avoidCollisions
+        sticky="partial"
         onMouseEnter={onEnter}
         onMouseLeave={onLeave}
         data-testid="artifact-hover-popover"
         className="w-[min(560px,calc(100vw-24px))] p-0"
       >
-        <div className="flex max-h-[420px] min-h-0 flex-col">
-          <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-xs">
-            {file.kind === 'created'
-              ? <FilePlus className="h-3.5 w-3.5 shrink-0 text-ok" strokeWidth={1.5} />
-              : <FileDiff className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.5} />}
-            <span className="truncate font-mono font-semibold" title={file.path}>{baseName(file.path)}</span>
-            <span className="shrink-0 text-2xs text-fg-subtle">· {formatBytes(contentBytes)} · {lineCount} 行 · {file.kind === 'created' ? '新建' : '已编辑'}</span>
-          </div>
-          <div className="min-h-0 flex-1 overflow-auto px-3 py-2">
-            <ArtifactPreviewBody filePath={file.path} content={displayContent} />
-            {truncated && (
-              <div className="sticky bottom-0 left-0 right-0 border-t border-border bg-surface/95 px-3 py-1.5 text-2xs text-fg-subtle">
-                内容过长,预览已截断,点击打开查看完整
-              </div>
-            )}
-          </div>
+        <div className="max-h-[420px] min-h-0 overflow-auto px-3 py-2">
+          <ArtifactPreviewBody filePath={file.path} content={displayContent} />
+          {truncated && (
+            <div className="sticky bottom-0 left-0 right-0 border-t border-border bg-surface/95 px-3 py-1.5 text-2xs text-fg-subtle">
+              内容过长,预览已截断,点击打开查看完整
+            </div>
+          )}
         </div>
       </PopoverContent>
     </Popover>
