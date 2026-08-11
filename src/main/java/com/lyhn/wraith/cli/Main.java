@@ -3580,43 +3580,37 @@ public class Main {
         bindSlashWidget(lineReader, LineReader.EMACS, slashHint);
         bindSlashWidget(lineReader, LineReader.VIINS, slashHint);
 
-        // ── 字符输入后：若 buffer 以 / 开头，更新覆盖层 ──
+        // ── 字符输入后：若 buffer 以 / 开头，更新覆盖层；否则隐藏 ──
+        // 注意：必须直接替换 widgets map 中的 self-insert widget，而不是用
+        // keyMap.bind(..., LineReader.SELF_INSERT) —— 后者是把 reference 绑到
+        // 伪按键序列 "self-insert" 上,用户永远按不出来,导致输入字符时从不触发过滤更新。
         Widget originalSelfInsert = lineReader.getWidgets().get(LineReader.SELF_INSERT);
         if (originalSelfInsert != null) {
-            lineReader.getWidgets().put("wraith-smart-self-insert", () -> {
-                originalSelfInsert.apply();
+            lineReader.getWidgets().put(LineReader.SELF_INSERT, () -> {
+                boolean applied = originalSelfInsert.apply();
                 String buf = lineReader.getBuffer().toString();
                 if (buf.startsWith("/")) {
-                    // 输入新字符后选中项重置为 0（最匹配的命令）
                     slashOverlaySelected = 0;
                     slashOverlayUpdate(lineReader);
-                }
-                return true;
-            });
-            Reference smartSelfInsert = new Reference("wraith-smart-self-insert");
-            bindKeyToWidget(lineReader, LineReader.MAIN, smartSelfInsert, LineReader.SELF_INSERT);
-            bindKeyToWidget(lineReader, LineReader.EMACS, smartSelfInsert, LineReader.SELF_INSERT);
-            bindKeyToWidget(lineReader, LineReader.VIINS, smartSelfInsert, LineReader.SELF_INSERT);
-        }
-
-        // ── 退格后：若 buffer 仍以 / 开头则更新覆盖层，否则隐藏 ──
-        Widget originalBackspace = lineReader.getWidgets().get(LineReader.BACKWARD_DELETE_CHAR);
-        if (originalBackspace != null) {
-            lineReader.getWidgets().put("wraith-smart-backspace", () -> {
-                originalBackspace.apply();
-                String buf = lineReader.getBuffer().toString();
-                if (buf.startsWith("/")) {
-                    slashOverlayUpdate(lineReader);
-                } else {
+                } else if (slashOverlayLines > 0) {
+                    // 从 /xxx 改成了非 / 开头的内容（比如全选替换、前面插字），隐藏覆盖层
                     slashOverlayHide(lineReader);
                 }
-                return true;
+                return applied;
             });
-            Reference smartBackspace = new Reference("wraith-smart-backspace");
-            bindKeyToWidget(lineReader, LineReader.MAIN, smartBackspace, LineReader.BACKWARD_DELETE_CHAR);
-            bindKeyToWidget(lineReader, LineReader.EMACS, smartBackspace, LineReader.BACKWARD_DELETE_CHAR);
-            bindKeyToWidget(lineReader, LineReader.VIINS, smartBackspace, LineReader.BACKWARD_DELETE_CHAR);
         }
+
+        // ── 所有会改变 buffer 内容的删除类 widget：删后同步覆盖层 ──
+        // 不只 Backspace —— Ctrl-U(删整行)、Ctrl-W(删单词)、Delete(向后删)、
+        // Ctrl-K(删到行尾) 等都会让 / 前缀消失,都必须触发 hide,否则覆盖层残留。
+        wrapBufferMutatingWidget(lineReader, LineReader.BACKWARD_DELETE_CHAR);   // Backspace
+        wrapBufferMutatingWidget(lineReader, LineReader.DELETE_CHAR);            // Delete 键
+        wrapBufferMutatingWidget(lineReader, LineReader.BACKWARD_KILL_WORD);    // Ctrl-W (emacs)
+        wrapBufferMutatingWidget(lineReader, "unix-word-rubout");                // Ctrl-W (vi)
+        wrapBufferMutatingWidget(lineReader, "unix-line-discard");               // Ctrl-U
+        wrapBufferMutatingWidget(lineReader, LineReader.KILL_LINE);             // Ctrl-K
+        wrapBufferMutatingWidget(lineReader, LineReader.BACKWARD_KILL_LINE);    // Ctrl-U 反向
+        wrapBufferMutatingWidget(lineReader, LineReader.KILL_WHOLE_LINE);        // 整行删除
 
         // ── ↑↓ 方向键：覆盖层激活时在命令列表中导航 ──
         lineReader.getWidgets().put("wraith-cmd-up", () -> {
@@ -3660,9 +3654,12 @@ public class Main {
         bindKeyToWidget(lineReader, LineReader.VIINS, cmdDown, "\033[B");
 
         // ── Enter：覆盖层激活时智能判断（有参填入输入行，无参直接执行） ──
+        // 直接替换 widgets map 中的 accept-line widget，保证 Enter、Ctrl-M、
+        // 模式特定 Enter 绑定等所有提交路径都走同一套逻辑；仍保留 "\r"
+        // 按键级绑定兜底，兼容某些终端按键编码。
         Widget originalAcceptLine = lineReader.getWidgets().get(LineReader.ACCEPT_LINE);
         if (originalAcceptLine != null) {
-            lineReader.getWidgets().put("wraith-smart-accept", () -> {
+            Widget smartAccept = () -> {
                 if (slashOverlayLines > 0) {
                     var buf = lineReader.getBuffer().toString();
                     var result = slashOverlayCompute(buf, slashOverlaySelected, terminalColumns());
@@ -3672,25 +3669,25 @@ public class Main {
                         var buffer = lineReader.getBuffer();
                         buffer.clear();
                         if (slashCommandNeedsParameters(selected)) {
-                            // 有必填参数：填入输入行，让用户补充参数
                             buffer.write(selected.insertText());
                             slashOverlayHide(lineReader);
                             return true;
                         } else {
-                            // 无参或可选参数：直接执行
                             buffer.write(slashCommandExecutableForm(selected));
                             slashOverlayHide(lineReader);
                             return originalAcceptLine.apply();
                         }
                     }
                 }
-                // 覆盖层未激活时正常提交
                 return originalAcceptLine.apply();
-            });
-            Reference smartAccept = new Reference("wraith-smart-accept");
-            bindKeyToWidget(lineReader, LineReader.MAIN, smartAccept, "\r");
-            bindKeyToWidget(lineReader, LineReader.EMACS, smartAccept, "\r");
-            bindKeyToWidget(lineReader, LineReader.VIINS, smartAccept, "\r");
+            };
+            lineReader.getWidgets().put(LineReader.ACCEPT_LINE, smartAccept);
+            // "\r" 按键绑定仍保留作兜底
+            Reference smartAcceptRef = new Reference("wraith-smart-accept-backup");
+            lineReader.getWidgets().put("wraith-smart-accept-backup", smartAccept);
+            bindKeyToWidget(lineReader, LineReader.MAIN, smartAcceptRef, "\r");
+            bindKeyToWidget(lineReader, LineReader.EMACS, smartAcceptRef, "\r");
+            bindKeyToWidget(lineReader, LineReader.VIINS, smartAcceptRef, "\r");
         }
     }
 
@@ -3776,6 +3773,28 @@ public class Main {
         if (keyMap != null) {
             keyMap.bind(ref, keySeq);
         }
+    }
+
+    /**
+     * 包装一个会改变 buffer 内容的 widget（各种删除/剪切操作），
+     * 在原始逻辑执行后同步 slash 命令覆盖层：buffer 仍以 / 开头则更新过滤，
+     * 否则隐藏。直接替换 widgets map 而非 bind 到伪按键名。
+     */
+    private static void wrapBufferMutatingWidget(LineReader lineReader, String widgetName) {
+        Widget original = lineReader.getWidgets().get(widgetName);
+        if (original == null) {
+            return;
+        }
+        lineReader.getWidgets().put(widgetName, () -> {
+            boolean applied = original.apply();
+            String buf = lineReader.getBuffer().toString();
+            if (buf.startsWith("/")) {
+                slashOverlayUpdate(lineReader);
+            } else {
+                slashOverlayHide(lineReader);
+            }
+            return applied;
+        });
     }
 
     static LinkedHashMap<String, CmdDesc> slashCommandTailTips() {
