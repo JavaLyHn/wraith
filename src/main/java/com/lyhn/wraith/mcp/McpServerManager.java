@@ -37,7 +37,7 @@ import java.util.function.Consumer;
 import java.util.function.Function;
 
 public class McpServerManager implements AutoCloseable {
-    private static final Duration STARTUP_PROGRESS_INTERVAL = Duration.ofSeconds(5);
+    private static final Duration STARTUP_PROGRESS_INTERVAL = Duration.ofSeconds(2);
 
     // close 后置位:弃用 manager 的在途 startAll worker 不得再注册工具(与 AppServerMcp 切工作区竞态的兜底)
     private volatile boolean closed;
