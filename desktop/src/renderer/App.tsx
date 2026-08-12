@@ -1451,6 +1451,14 @@ export default function App(): JSX.Element {
         }}
       />
 
+      {/* 关闭确认对话框:点 X 时弹出,选择挂后台或退出 */}
+      {closeConfirmOpen && (
+        <CloseConfirmModal
+          onRespond={handleCloseConfirm}
+          onCancel={handleCloseConfirmCancel}
+        />
+      )}
+
       {/* 项目面板:批量归档确认框(破坏性操作,需知项目名与真实数量,故在 App 弹) */}
       <Dialog open={archiveConfirm !== null} onOpenChange={o => { if (!o) setArchiveConfirm(null) }}>
         <DialogContent data-testid="archive-project-confirm" className="w-96">
