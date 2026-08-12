@@ -21,9 +21,12 @@ import {
   seedProjectsFromJson,
   readPetConfig,
   writePetConfig,
+  readCloseMode,
+  writeCloseMode,
   type PetConfig,
 } from './settings'
-import type { BackendEvent } from '../shared/types'
+import { createTray, destroyTray, trayAlive } from './tray'
+import type { BackendEvent, CloseExecutePayload } from '../shared/types'
 import {
   readTasks as autoReadTasks,
   readRuns as autoReadRuns, readLastPanelOpenedAt, writeLastPanelOpenedAt, badgeVisible,
@@ -113,6 +116,9 @@ const defaultJar = defaultJarPath(os.homedir())
 // only notify runs that complete after app-open; avoids re-notifying历史 runs on cold start
 let notifyPollLastSeen = Date.now()
 let notifyPollTimer: ReturnType<typeof setInterval> | null = null
+
+/** 用户已确认退出(通过关闭对话框或托盘菜单);用于绕过 mainWindow.on('close') 拦截,避免循环。 */
+let isQuitting = false
 
 let gatewayManager: GatewayManager | null = null
 let ptyManager: PtyManager | null = null
@@ -319,6 +325,24 @@ function createWindow(): void {
   mainWindow.on('maximize', () => mainWindow?.webContents.send('wraith:win:maximizeChanged', true))
   mainWindow.on('unmaximize', () => mainWindow?.webContents.send('wraith:win:maximizeChanged', false))
 
+  // 关闭拦截:不直接 close,而是阻止默认行为 → 通知 renderer 决策(弹确认对话框或按已记住的 closeMode 直接执行)。
+  // 例外:splash 阶段(主窗尚未 ready-to-show)、主窗已 hidden(挂后台中)、或 isQuitting(用户已确认退出)时放行。
+  mainWindow.on('close', (e) => {
+    if (isQuitting) return
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    // 主窗不可见(已挂后台)或内容未就绪(splash 阶段)时直接放行
+    if (!mainWindow.isVisible() || !mainContentReady) return
+    e.preventDefault()
+    // 通知 renderer;若 closeMode 已记住非 ask,renderer 会直接回 execute,否则弹 modal
+    try {
+      mainWindow.webContents.send('wraith:close:request')
+    } catch {
+      // webContents 已销毁 → 兜底直接退出
+      isQuitting = true
+      mainWindow?.close()
+    }
+  })
+
   mainWindow.on('closed', () => {
     mainWindow = null
   })
@@ -421,6 +445,40 @@ ipcMain.handle('wraith:win:toggleMaximize', () => {
 })
 ipcMain.handle('wraith:win:close', () => { mainWindow?.close() })
 ipcMain.handle('wraith:win:isMaximized', () => !!mainWindow?.isMaximized())
+
+// 关闭行为 IPC:
+// - close:getMode: renderer 启动时读已记住的 closeMode,决定是否直接执行
+// - close:execute: renderer 回传用户选择(弹 modal 后或直接按记住的 mode)
+ipcMain.handle('wraith:close:getMode', () => {
+  return readCloseMode(app.getPath('userData'))
+})
+ipcMain.handle('wraith:close:execute', async (_e, payload: CloseExecutePayload) => {
+  const userData = app.getPath('userData')
+  // 持久化 remember(仅当用户勾了「下次别问」)
+  if (payload.remember === 'background' || payload.remember === 'quit') {
+    writeCloseMode(userData, payload.remember)
+  }
+  if (payload.mode === 'background') {
+    // 挂后台:hide 主窗 + 创建托盘;后端 Java / pty / 通知轮询全部继续运行
+    try {
+      mainWindow?.hide()
+    } catch {
+      // best-effort
+    }
+    if (!trayAlive()) {
+      createTray(() => mainWindow)
+    }
+    return
+  }
+  // mode === 'quit':真正退出。设置 isQuitting 绕过 close 拦截,触发 will-quit 走原 cleanup。
+  isQuitting = true
+  app.quit()
+})
+
+// 设置面板「恢复询问」:把 closeMode 重置为 'ask',下次关窗重新弹确认框。
+ipcMain.handle('wraith:close:resetMode', () => {
+  writeCloseMode(app.getPath('userData'), 'ask')
+})
 
 ipcMain.handle('wraith:initialize', async (_e, workspaceDir: string | null) => {
   if (!client) throw new Error('Backend not connected')
@@ -1845,6 +1903,11 @@ app.on('will-quit', () => {
   }
   try {
     destroyPetWindow()
+  } catch {
+    // best-effort
+  }
+  try {
+    destroyTray()
   } catch {
     // best-effort
   }

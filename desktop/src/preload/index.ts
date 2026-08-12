@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, ProjectSummary, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, SnapshotSettingsView, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, RagScopeView, SearchStatusView, GitStatusView, SearchTestResult, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, ProjectSummary, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, SnapshotSettingsView, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, RagScopeView, SearchStatusView, GitStatusView, SearchTestResult, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult, CloseMode, CloseExecutePayload } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
@@ -218,6 +218,8 @@ export interface WraithApi {
   }
   /** 窗口控制:Windows 无边框自绘窗控用(最小/最大化切换/关闭 + 最大化状态订阅)。 */
   windowControls: WindowControlsApi
+  /** 关闭行为:读已记住的 closeMode + 监听 close 请求 + 执行用户选择。 */
+  closeBehavior: CloseBehaviorApi
 }
 
 /** 窗口控制 API:最小化/切换最大化/关闭 + 最大化状态变更订阅。仅 Windows 渲染窗控 UI,其它平台调用无害。 */
@@ -227,6 +229,18 @@ export interface WindowControlsApi {
   close(): void
   isMaximized(): Promise<boolean>
   onMaximizeChange(cb: (max: boolean) => void): () => void
+}
+
+/** 关闭行为 API:读已记住的 closeMode + 监听主进程的 close 请求 + 执行用户选择 + 重置。 */
+export interface CloseBehaviorApi {
+  /** 读取已持久化的 closeMode('ask'|'background'|'quit')。 */
+  getMode(): Promise<CloseMode>
+  /** 监听主进程发来的 close 请求(用户点了 × 按钮)。 */
+  onRequest(cb: () => void): () => void
+  /** 回传用户选择:mode=挂后台或退出,remember=是否勾了「下次别问」。 */
+  execute(payload: CloseExecutePayload): Promise<void>
+  /** 重置 closeMode 为 'ask'(设置面板「恢复询问」按钮)。 */
+  resetMode(): Promise<void>
 }
 
 const wraith: WraithApi = {
@@ -818,6 +832,17 @@ const wraith: WraithApi = {
       ipcRenderer.on('wraith:win:maximizeChanged', listener)
       return () => { ipcRenderer.removeListener('wraith:win:maximizeChanged', listener) }
     },
+  },
+
+  closeBehavior: {
+    getMode() { return ipcRenderer.invoke('wraith:close:getMode') as Promise<CloseMode> },
+    onRequest(cb) {
+      const listener = (): void => cb()
+      ipcRenderer.on('wraith:close:request', listener)
+      return () => { ipcRenderer.removeListener('wraith:close:request', listener) }
+    },
+    execute(payload) { return ipcRenderer.invoke('wraith:close:execute', payload) as Promise<void> },
+    resetMode() { return ipcRenderer.invoke('wraith:close:resetMode') as Promise<void> },
   },
 }
 
