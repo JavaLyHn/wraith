@@ -422,6 +422,18 @@ public class Main {
             reactAgent.setExternalContextSupplier(mcpServerManager::resourceIndexForPrompt);
             reactAgent.setSkillRegistry(skillRegistry);
             reactAgent.setSkillContextBuffer(skillContextBuffer);
+            // 超时后后台 server 继续启动;注册监听器,每就绪一个就通知并刷新状态栏。
+            // 必须在 reactAgent / skillRegistry 创建之后注册:lambda 捕获这两个局部变量。
+            mcpServerManager.setStatusListener(server -> {
+                if (server.status() == McpServerStatus.READY) {
+                    long ready = mcpServerManager.servers().stream()
+                            .filter(s -> s.status() == McpServerStatus.READY).count();
+                    int total = mcpServerManager.servers().size();
+                    ui.printf("   ✅ %-16s 已就绪 (%d/%d)%n", server.name(), ready, total);
+                    ui.flush();
+                    renderer.updateStatus(statusInfo(reactAgent, mcpServerManager, skillRegistry, "idle"));
+                }
+            });
             DurableTaskManager taskManager = openTaskManager(llmClientRef);
             taskManager.start();
             Runtime.getRuntime().addShutdownHook(new Thread(taskManager::close, "wraith-task-shutdown"));
