@@ -63,11 +63,17 @@ function snapshot(activities: ActivityItem[], overrides: Partial<ActivitySnapsho
 type ActivityEvent = (value: ActivitySnapshot) => void
 type AutomationEvent = (value: { kind: 'runs-changed' | 'badge' | 'approval' | 'open-panel'; show?: boolean; runId?: string; payload?: Record<string, unknown> }) => void
 
-function installApi(initial: ActivitySnapshot) {
+function deferred<T>(): { promise: Promise<T>; resolve(value: T): void } {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>(done => { resolve = done })
+  return { promise, resolve }
+}
+
+function installApi(initial: ActivitySnapshot, activityListImpl: () => Promise<ActivitySnapshot> = async () => initial) {
   let activityListener: ActivityEvent | undefined
   let automationListener: AutomationEvent | undefined
   let backendListener: ((event: BackendEvent) => void) | undefined
-  const activityList = vi.fn(async () => initial)
+  const activityList = vi.fn(activityListImpl)
   const api = {
     platform: 'win32',
     listEditors: vi.fn(async () => []),
@@ -234,6 +240,47 @@ describe('activity navigation', () => {
     await waitFor(() => expect(activityList).toHaveBeenCalledTimes(2))
     act(() => emitBackend({ kind: 'notification', method: 'turn.failed', params: {} } as BackendEvent))
     await waitFor(() => expect(activityList).toHaveBeenCalledTimes(3))
+  })
+
+  it('ignores an older activityList response after an activity event and a later source refresh', async () => {
+    const initialRequest = deferred<ActivitySnapshot>()
+    const refreshRequest = deferred<ActivitySnapshot>()
+    const requests = [initialRequest, refreshRequest]
+    const pushed = snapshot([
+      item({ activityId: 'task:pushed', kind: 'task', taskId: 'pushed', sessionId: undefined, title: '推送快照' }),
+    ])
+    const refreshed = snapshot([
+      item({ activityId: 'task:refreshed', kind: 'task', taskId: 'refreshed', sessionId: undefined, title: '刷新快照' }),
+    ])
+    const old = snapshot([
+      item({ activityId: 'task:old-response', kind: 'task', taskId: 'old-response', sessionId: undefined, title: '旧响应' }),
+    ])
+    const { activityList, emitActivity, emitAutomation } = installApi(snapshot([]), () => {
+      const request = requests.shift()
+      if (!request) throw new Error('unexpected activityList call')
+      return request.promise
+    })
+    renderApp()
+
+    await openActivity()
+    await waitFor(() => expect(activityList).toHaveBeenCalledTimes(1))
+    act(() => emitActivity(pushed))
+    await screen.findByTestId('activity-card-task:pushed')
+
+    act(() => emitAutomation({ kind: 'runs-changed' }))
+    await waitFor(() => expect(activityList).toHaveBeenCalledTimes(2))
+    await act(async () => {
+      refreshRequest.resolve(refreshed)
+      await refreshRequest.promise
+    })
+    await screen.findByTestId('activity-card-task:refreshed')
+
+    await act(async () => {
+      initialRequest.resolve(old)
+      await initialRequest.promise
+    })
+    expect(screen.getByTestId('activity-card-task:refreshed')).toBeTruthy()
+    expect(screen.queryByTestId('activity-card-task:old-response')).toBeNull()
   })
 
   it('keeps the last successful cards and marks them stale when a later refresh fails', async () => {

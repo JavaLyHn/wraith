@@ -285,6 +285,8 @@ export default function App(): JSX.Element {
   const startedRef = useRef(false)
   // 首次失败与“曾成功读到空列表”不同：前者显示首屏错误，后者是有效空快照。
   const hasActivitySnapshotRef = useRef(false)
+  // 每次读取或主进程推送都会推进版本，避免旧的异步读取倒灌较新的快照。
+  const activitySnapshotVersionRef = useRef(0)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
   // 消除「dispatch(markStarted) → 组件重渲染」之间的闭包陈旧:markStarted 已在提交瞬间置 running,
@@ -328,11 +330,14 @@ export default function App(): JSX.Element {
   // 活动中心只从这一处读取。读取失败时保留最后一张可用快照并显式标旧，避免
   // 暂时不可用被误画成“暂无活动”；silent 只压低诊断噪声，不改变失败语义。
   const loadActivities = useCallback(async (silent: boolean): Promise<void> => {
+    const requestVersion = ++activitySnapshotVersionRef.current
     try {
       const next = await window.wraith.activityList()
+      if (requestVersion !== activitySnapshotVersionRef.current) return
       hasActivitySnapshotRef.current = true
       setActivitySnapshot(next)
     } catch (error) {
+      if (requestVersion !== activitySnapshotVersionRef.current) return
       const message = error instanceof Error ? error.message : String(error)
       setActivitySnapshot(previous => hasActivitySnapshotRef.current
         ? { ...previous, stale: true, error: message }
@@ -345,6 +350,7 @@ export default function App(): JSX.Element {
   useEffect(() => {
     void loadActivities(false)
     return window.wraith.onActivityEvent(snapshot => {
+      activitySnapshotVersionRef.current++
       hasActivitySnapshotRef.current = true
       setActivitySnapshot(snapshot)
     })
