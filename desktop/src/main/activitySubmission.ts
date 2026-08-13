@@ -7,15 +7,24 @@ export interface ActivitySubmissionDependencies {
   store: ActivityStore
   currentSessionId(): string | null
   currentProjectPath(): string
-  request(method: 'turn.submit', params: Record<string, unknown>): Promise<unknown>
+  request(
+    method: 'turn.submit',
+    params: Record<string, unknown>,
+    onResult?: (result: unknown) => void,
+  ): Promise<unknown>
   setCurrentTurnId(turnId: string | null): void
-  setSubmissionPending(sessionId: string | null): void
+  setPendingTurnId(turnId: string | null): void
   updateActivity(mutation: () => ActivitySnapshot): void
 }
 
 interface TurnSubmitResult {
   turnId: string
   status: string
+}
+
+function turnIdFromSubmitResult(result: unknown): string | null {
+  const turnId = (result as { turnId?: unknown } | null)?.turnId
+  return typeof turnId === 'string' && turnId ? turnId : null
 }
 
 function currentSessionActivity(store: ActivityStore, sessionId: string): ActivityItem | undefined {
@@ -35,7 +44,7 @@ export async function submitActivityTurn(
   const sessionId = deps.currentSessionId()
   const previous = sessionId ? currentSessionActivity(deps.store, sessionId) : undefined
   deps.setCurrentTurnId(null)
-  deps.setSubmissionPending(sessionId)
+  deps.setPendingTurnId(null)
   if (sessionId) {
     deps.updateActivity(() => deps.store.registerSession({
       sessionId,
@@ -50,13 +59,13 @@ export async function submitActivityTurn(
       input,
       ...(attachments?.length ? { attachments: attachments.map(attachment => ({ path: attachment.path, kind: attachment.kind })) } : {}),
       mode,
-    }) as TurnSubmitResult
-    deps.setCurrentTurnId(result.turnId)
+    }, result => deps.setPendingTurnId(turnIdFromSubmitResult(result))) as TurnSubmitResult
+    deps.setCurrentTurnId(turnIdFromSubmitResult(result))
     return result
   } catch (error) {
     if (sessionId) deps.updateActivity(() => deps.store.rollbackSessionSubmission(sessionId, previous))
     throw error
   } finally {
-    deps.setSubmissionPending(null)
+    deps.setPendingTurnId(null)
   }
 }

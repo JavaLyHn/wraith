@@ -120,8 +120,8 @@ let client: JsonRpcClient | null = null
 let currentSessionId: string | null = null
 /** Last turnId returned by turn.submit. */
 let currentTurnId: string | null = null
-/** Session whose turn.submit request may still race its terminal notification. */
-let submittingSessionId: string | null = null
+/** turn.submit result available before its awaiting renderer callback resumes. */
+let pendingSubmissionTurnId: string | null = null
 /** Workspace follows session.start so a submitted turn has a local project target. */
 let currentSessionProjectPath = ''
 const activityStore = new ActivityStore()
@@ -183,7 +183,7 @@ function updateActivityForNotification(method: string, params: unknown): void {
     currentTurnId,
     reportedSessionId,
     turnIdFromNotification(params),
-    submittingSessionId === currentSessionId,
+    pendingSubmissionTurnId,
   )) {
     updateActivity(() => activityStore.promoteSession(currentSessionId!, reportedSessionId))
     currentSessionId = reportedSessionId
@@ -585,9 +585,9 @@ ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { pa
     store: activityStore,
     currentSessionId: () => currentSessionId,
     currentProjectPath: () => currentSessionProjectPath,
-    request: (method, params) => rpcClient.request(method, params),
+    request: (method, params, onResult) => rpcClient.request(method, params, onResult),
     setCurrentTurnId: turnId => { currentTurnId = turnId },
-    setSubmissionPending: sessionId => { submittingSessionId = sessionId },
+    setPendingTurnId: turnId => { pendingSubmissionTurnId = turnId },
     updateActivity,
   }, input, attachments, mode)
 })

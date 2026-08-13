@@ -25,6 +25,22 @@ describe('JsonRpcClient', () => {
     expect(result).toEqual({ ok: true })
   })
 
+  test('delivers a request result observer before the next notification is dispatched', async () => {
+    const lines: string[] = []
+    const client = new JsonRpcClient((line) => lines.push(line))
+    const observed: unknown[] = []
+    let notificationSawResult = false
+    client.onNotification(() => { notificationSawResult = observed.length === 1 })
+
+    const promise = client.request('turn.submit', {}, result => observed.push(result))
+    const request = JSON.parse(lines[0])
+    client.handleLine(JSON.stringify({ jsonrpc: '2.0', id: request.id, result: { turnId: 'turn-current' } }))
+    client.handleLine(JSON.stringify({ jsonrpc: '2.0', method: 'turn.completed', params: { turnId: 'turn-current' } }))
+
+    await expect(promise).resolves.toEqual({ turnId: 'turn-current' })
+    expect(notificationSawResult).toBe(true)
+  })
+
   // Test 2: Two concurrent requests get distinct ids; results out of order settle correct promises
   test('two concurrent requests have distinct ids and settle correctly out of order', async () => {
     const lines: string[] = []

@@ -194,13 +194,13 @@ export function shouldPromoteSessionIdentity(
   currentTurnId: string | null,
   reportedSessionId: string,
   reportedTurnId: string | null,
-  submissionPending = false,
+  pendingSubmissionTurnId: string | null = null,
 ): boolean {
   return !!currentSessionId
     && currentSessionId.startsWith('sess_')
     && currentSessionId !== reportedSessionId
     && ((!!currentTurnId && currentTurnId === reportedTurnId)
-      || (submissionPending && !!reportedTurnId))
+      || (!!pendingSubmissionTurnId && pendingSubmissionTurnId === reportedTurnId))
 }
 
 function taskStatus(status: DurableTaskView['status']): ActivityStatus {
