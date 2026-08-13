@@ -15,7 +15,8 @@ import {
   upsertProject,
   removeProject,
   renameProject,
-  setProjectStarred,
+  setProjectStarred,                                       
+  reorderProject,
   projectViews,
   seedProjectsIfEmpty,
   seedProjectsFromJson,
@@ -963,6 +964,10 @@ ipcMain.handle('wraith:renameProject', async (_e, projectPath: string, name: str
 
 ipcMain.handle('wraith:setProjectStarred', async (_e, projectPath: string, starred: boolean) => {
   setProjectStarred(app.getPath('userData'), projectPath, starred)
+})
+
+ipcMain.handle('wraith:reorderProject', async (_e, projectPath: string, targetIndex: number) => {
+  reorderProject(app.getPath('userData'), projectPath, targetIndex)
 })
 
 ipcMain.handle('wraith:projectSummary', async (_e, paths: string[]) => {

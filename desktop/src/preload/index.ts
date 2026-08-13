@@ -39,6 +39,7 @@ export interface WraithApi {
   removeProject(path: string): Promise<void>
   renameProject(path: string, name: string): Promise<void>
   setProjectStarred(path: string, starred: boolean): Promise<void>
+  reorderProject(path: string, targetIndex: number): Promise<void>
   projectSummary(paths: string[]): Promise<{ summaries: ProjectSummary[] }>
   listSessionsForProject(path: string, limit?: number): Promise<{ sessions: SessionMeta[] }>
   setSessionArchived(sessionId: string, archived: boolean, path?: string): Promise<{ ok: boolean }>
@@ -315,6 +316,10 @@ const wraith: WraithApi = {
 
   setProjectStarred(path, starred) {
     return ipcRenderer.invoke('wraith:setProjectStarred', path, starred) as Promise<void>
+  },
+
+  reorderProject(path, targetIndex) {
+    return ipcRenderer.invoke('wraith:reorderProject', path, targetIndex) as Promise<void>
   },
 
   projectSummary(paths) {

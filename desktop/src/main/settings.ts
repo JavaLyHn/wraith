@@ -16,6 +16,7 @@ export interface ProjectEntry {
   name?: string       // 显示别名;缺省 UI 用目录名
   lastUsedAt: number  // epoch ms,最近使用排序
   starred?: boolean   // 用户标记的重点项目;面板与快切下拉都置顶。false 不落盘,只删键
+  order?: number      // 同一收藏分组内的手动顺序;旧 settings 缺失时按历史顺序补齐
 }
 
 export interface Settings {
@@ -160,7 +161,10 @@ export function renameProject(userDataDir: string, projectPath: string, name: st
 /** 标记/取消重点项目。starred=false 时删掉这个键(与 renameProject 对空名的处理一致)。 */
 export function setProjectStarred(userDataDir: string, projectPath: string, starred: boolean): void {
   const s = readSettings(userDataDir)
-  const projects = (s.projects ?? []).map(p => {
+  const source = orderedProjectEntries(s.projects ?? [])
+  const target = source.find(p => p.path === projectPath)
+  if (!target) return
+  const changed: ProjectEntry[] = source.map(p => {
     if (p.path !== projectPath) return p
     if (!starred) {
       const { starred: _drop, ...restEntry } = p
@@ -168,14 +172,46 @@ export function setProjectStarred(userDataDir: string, projectPath: string, star
     }
     return { ...p, starred: true }
   })
+  const moved = changed.find(p => p.path === projectPath)!
+  const destination = changed.filter(p => p.starred === starred).filter(p => p.path !== projectPath)
+  destination.push(moved)
+  const destinationOrder = new Map(destination.map((p, i) => [p.path, i]))
+  const projects = changed.map(p => destinationOrder.has(p.path) ? { ...p, order: destinationOrder.get(p.path)! } : p)
+  writeSettings(userDataDir, { ...s, projects })
+}
+
+function orderedProjectEntries(projects: ProjectEntry[]): ProjectEntry[] {
+  return projects.slice().sort((a, b) => {
+    const ao = typeof a.order === 'number' && Number.isFinite(a.order) ? a.order : null
+    const bo = typeof b.order === 'number' && Number.isFinite(b.order) ? b.order : null
+    if (ao !== null && bo !== null && ao !== bo) return ao - bo
+    if (ao !== null && bo === null) return -1
+    if (ao === null && bo !== null) return 1
+    return b.lastUsedAt - a.lastUsedAt
+  })
+}
+
+/** 移动项目在其 starred 分组内的目标位置;非法路径/索引保持 settings 不变。 */
+export function reorderProject(userDataDir: string, projectPath: string, targetIndex: number): void {
+  const s = readSettings(userDataDir)
+  const ordered = orderedProjectEntries(s.projects ?? [])
+  const current = ordered.find(p => p.path === projectPath)
+  if (!current || !Number.isInteger(targetIndex) || targetIndex < 0) return
+  const bucket = ordered.filter(p => (p.starred === true) === (current.starred === true))
+  if (targetIndex >= bucket.length) return
+  const sourceIndex = bucket.findIndex(p => p.path === projectPath)
+  if (sourceIndex < 0) return
+  const [moved] = bucket.splice(sourceIndex, 1)
+  bucket.splice(targetIndex, 0, moved!)
+  const orderByPath = new Map<string, number>()
+  for (const [i, p] of bucket.entries()) orderByPath.set(p.path, i)
+  const projects = (s.projects ?? []).map(p => orderByPath.has(p.path) ? { ...p, order: orderByPath.get(p.path)! } : p)
   writeSettings(userDataDir, { ...s, projects })
 }
 
 /** lastUsedAt 倒序 + exists(失踪条目保留置灰,不静默过滤)。 */
 export function projectViews(userDataDir: string): ProjectView[] {
-  return (readSettings(userDataDir).projects ?? [])
-    .slice()
-    .sort((a, b) => b.lastUsedAt - a.lastUsedAt)
+  return orderedProjectEntries(readSettings(userDataDir).projects ?? [])
     .map(p => {
       let exists = false
       try {

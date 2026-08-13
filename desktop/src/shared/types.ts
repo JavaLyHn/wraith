@@ -177,6 +177,7 @@ export interface ProjectView {
   lastUsedAt: number
   exists: boolean
   starred?: boolean
+  order?: number
 }
 
 /** 一个项目的会话概况(session.projectSummary 回传)。 */
