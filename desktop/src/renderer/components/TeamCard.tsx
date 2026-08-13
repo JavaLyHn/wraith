@@ -1,8 +1,14 @@
 import { useState } from 'react'
+import type { HTMLAttributes } from 'react'
 import type { TeamItem, TeamStep } from '../../shared/transcriptReducer'
 import { resolveExpanded, nextGlobalMode, globalToggleLabel, type GlobalMode } from '../lib/teamCardCollapse'
 import { stepPhaseLabel, reviewerDotClass, showsReviewerBlock } from '../lib/teamCardStatus'
 import { useStickToBottom } from '../lib/stickToBottom'
+import { cn } from '../lib/utils'
+
+interface TeamCardProps extends HTMLAttributes<HTMLDivElement> {
+  item: TeamItem
+}
 
 /**
  * 流式输出框:内容增长时自动贴底。
@@ -313,7 +319,7 @@ function footerClass(s: TeamStatus): string {
 // TeamCard
 // ---------------------------------------------------------------------------
 
-export function TeamCard({ item }: { item: TeamItem }): JSX.Element {
+export function TeamCard({ item, className: incomingClass, ...rest }: TeamCardProps): JSX.Element {
   const groups = groupSteps(item.steps, item.parallelStepIds)
   const footer = footerText(item.status)
   // agentId(如 worker-1)→ role(worker),用于步骤徽标配色
@@ -327,7 +333,7 @@ export function TeamCard({ item }: { item: TeamItem }): JSX.Element {
   const toggleAll = () => { setGlobalMode(m => nextGlobalMode(m)); setOverrides({}) }
 
   return (
-    <div className="my-1.5 rounded-lg border border-border bg-surface p-3 text-xs font-mono">
+    <div className={cn(incomingClass, "my-1.5 rounded-lg border border-border bg-surface p-3 text-xs font-mono")} {...rest}>
       {/* Header */}
       <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
         <span className="font-semibold text-accent">团队协作 · {item.goal}</span>

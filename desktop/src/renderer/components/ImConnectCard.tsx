@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
+import type { HTMLAttributes } from 'react'
 import { bindDoneHint, bindPhaseLabel, IM_SHORT_LABEL as LABELS } from '../lib/gatewayLabels'
 import { applyBindEvent, type BindState } from '../lib/imBind'
 import { consoleLink } from '../lib/imConsoleLinks'
 import type { PanelId } from '../lib/panelActions'
 import type { GatewayEvent, GatewayState } from '../../shared/gateway'
+import { cn } from '../lib/utils'
 
-interface ImConnectCardProps {
+interface ImConnectCardProps extends HTMLAttributes<HTMLDivElement> {
   /** 后端 im_connect 工具传来的平台 id。 */
   platform: string
   /** 微信绑定用的工作目录(可空)。 */
@@ -23,7 +25,7 @@ interface ImConnectCardProps {
  * 聊天内 IM 接入卡。⚠ 点击「开始」才启动绑定(不在挂载时启动):
  * transcript 历史回放会重建本 item,挂载即 spawn 会在每次 resume 重启绑定进程。
  */
-export default function ImConnectCard({ platform, workspace, onOpenPanel, onBound }: ImConnectCardProps): JSX.Element | null {
+export default function ImConnectCard({ platform, workspace, onOpenPanel, onBound, className: incomingClass, ...rest }: ImConnectCardProps): JSX.Element | null {
   const p = (platform || '').trim().toLowerCase()
   const [bind, setBind] = useState<BindState | null>(null)
   const [started, setStarted] = useState(false)
@@ -74,7 +76,7 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel, onBoun
   if (p === 'feishu' || p === 'wecom') {
     const link = consoleLink(p)
     return (
-      <div data-testid="im-connect-card" className="self-start flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg">
+      <div data-testid="im-connect-card" className={cn(incomingClass, "self-start flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-fg")} {...rest}>
         <span>接入 {LABELS[p]} 不用扫码,填一组开发者后台的凭证即可。</span>
         <span data-testid="im-connect-what" className="text-2xs text-fg-subtle">{link.what}</span>
         <div className="flex flex-wrap gap-1.5">
@@ -109,7 +111,7 @@ export default function ImConnectCard({ platform, workspace, onOpenPanel, onBoun
   const bound = bind?.phase === 'bound'
 
   return (
-    <div data-testid="im-connect-card" className="self-start flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-3 text-sm text-fg">
+    <div data-testid="im-connect-card" className={cn(incomingClass, "self-start flex flex-col gap-2 rounded-xl border border-border bg-surface px-3 py-3 text-sm text-fg")} {...rest}>
       <span className="font-medium">接入 {LABELS[p]}</span>
 
       {!started && (

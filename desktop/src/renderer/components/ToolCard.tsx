@@ -1,15 +1,17 @@
 import { useState } from 'react'
+import type { HTMLAttributes } from 'react'
 import type { ToolCard as ToolCardType } from '../../shared/transcriptReducer'
 import { toolBadgeLabel, toolCardFailed } from '../../shared/toolBadge'
 import { toolCardDefaultExpanded } from '../lib/toolCardExpand'
 import { prettyArgs } from '../lib/toolContent'
 import { hasArgs } from '../lib/toolArgsView'
+import { cn } from '../lib/utils'
 
-interface ToolCardProps {
+interface ToolCardProps extends HTMLAttributes<HTMLDivElement> {
   card: ToolCardType
 }
 
-export default function ToolCard({ card }: ToolCardProps): JSX.Element {
+export default function ToolCard({ card, className: incomingClass, ...rest }: ToolCardProps): JSX.Element {
   const [userToggled, setUserToggled] = useState<boolean | null>(null)
   const expanded = userToggled ?? toolCardDefaultExpanded(card)
 
@@ -22,7 +24,8 @@ export default function ToolCard({ card }: ToolCardProps): JSX.Element {
   return (
     <div
       data-testid="tool-card"
-      className="my-1.5 overflow-hidden rounded-xl border border-border bg-surface font-mono text-xs"
+      className={cn(incomingClass, "my-1.5 overflow-hidden rounded-xl border border-border bg-surface font-mono text-xs")}
+      {...rest}
     >
       <button
         type="button"
