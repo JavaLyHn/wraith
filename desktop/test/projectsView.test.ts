@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   mergeSummaries, filterProjects, sortProjects, partitionStarredProjects, shortRelativeTime,
+  projectGroup, moveProjectInGroup, projectMoveBounds,
   type ProjectRowData,
 } from '../src/renderer/lib/projectsView'
 import type { ProjectView, ProjectSummary } from '../src/shared/types'
@@ -118,6 +119,34 @@ describe('partitionStarredProjects', () => {
 
   it('没有重点时 starred 为空数组(组件据此不渲染分区标题)', () => {
     expect(partitionStarredProjects([row()]).starred).toEqual([])
+  })
+})
+
+describe('project reorder helpers', () => {
+  const s1 = row({ displayName: 's1', view: pv({ path: '/s1', starred: true }) })
+  const s2 = row({ displayName: 's2', view: pv({ path: '/s2', starred: true }) })
+  const r1 = row({ displayName: 'r1', view: pv({ path: '/r1' }) })
+  const r2 = row({ displayName: 'r2', view: pv({ path: '/r2' }) })
+
+  it('identifies the two project groups', () => {
+    expect(projectGroup(s1.view)).toBe('starred')
+    expect(projectGroup(r1.view)).toBe('rest')
+  })
+
+  it('moves only within the source group and preserves the other group', () => {
+    expect(moveProjectInGroup([s1, s2, r1, r2], '/s1', 1))
+      .toEqual(['/s2', '/s1', '/r1', '/r2'])
+  })
+
+  it('rejects a target index outside the source group', () => {
+    expect(moveProjectInGroup([s1, s2, r1, r2], '/s1', 2))
+      .toEqual(['/s1', '/s2', '/r1', '/r2'])
+  })
+
+  it('returns group-local bounds for menu actions', () => {
+    expect(projectMoveBounds([s1, s2, r1, r2], '/s1')).toEqual({ index: 0, count: 2, group: 'starred' })
+    expect(projectMoveBounds([s1, s2, r1, r2], '/r2')).toEqual({ index: 1, count: 2, group: 'rest' })
+    expect(projectMoveBounds([s1], '/missing')).toBeNull()
   })
 })
 

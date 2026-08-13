@@ -3,6 +3,37 @@ import type { ProjectView, ProjectSummary } from '../../shared/types'
 
 export type ProjectSortKey = 'name' | 'updated'
 export type SortDir = 'asc' | 'desc'
+export type ProjectGroup = 'starred' | 'rest'
+
+export function projectGroup(view: ProjectView): ProjectGroup {
+  return view.starred === true ? 'starred' : 'rest'
+}
+
+/** Return the list with one project moved within its own group; cross-group targets are ignored. */
+export function moveProjectInGroup(rows: ProjectRowData[], projectPath: string, targetIndex: number): string[] {
+  const group = projectGroup(rows.find(r => r.view.path === projectPath)?.view ?? { path: '', lastUsedAt: 0, exists: false })
+  const groupRows = rows.filter(r => projectGroup(r.view) === group)
+  const sourceIndex = groupRows.findIndex(r => r.view.path === projectPath)
+  if (sourceIndex < 0 || targetIndex < 0 || targetIndex >= groupRows.length) return rows.map(r => r.view.path)
+  const nextGroup = groupRows.map(r => r.view.path)
+  const [moved] = nextGroup.splice(sourceIndex, 1)
+  nextGroup.splice(targetIndex, 0, moved!)
+  let groupIndex = 0
+  return rows.map(r => projectGroup(r.view) === group ? nextGroup[groupIndex++]! : r.view.path)
+}
+
+export function projectMoveBounds(rows: ProjectRowData[], projectPath: string): {
+  index: number
+  count: number
+  group: ProjectGroup
+} | null {
+  const found = rows.find(r => r.view.path === projectPath)
+  if (!found) return null
+  const group = projectGroup(found.view)
+  const groupRows = rows.filter(r => projectGroup(r.view) === group)
+  const index = groupRows.findIndex(r => r.view.path === projectPath)
+  return index < 0 ? null : { index, count: groupRows.length, group }
+}
 
 /** 一行的渲染数据:项目条目 + 该项目的会话概况。 */
 export interface ProjectRowData {
