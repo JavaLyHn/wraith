@@ -64,6 +64,7 @@ import {
   sessionStatusForNotification,
   shouldPromoteSessionIdentity,
 } from './activityStore'
+import { registerActivityIpc } from './activityIpc'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -145,13 +146,13 @@ function pushAutomation(evt: AutomationEvent): void {
   } catch { /* window destroyed — 静默降级 */ }
 }
 
-/** Only changed snapshots are pushed; initial state is read through wraith:activitySnapshot. */
+/** Only changed snapshots are pushed; initial state is read through wraith:activityList. */
 function updateActivity(mutation: () => ActivitySnapshot): void {
   const before = JSON.stringify(activityStore.snapshot(100))
   const after = mutation()
   if (JSON.stringify(after) === before) return
   try {
-    mainWindow?.webContents.send('activity.changed', after)
+    mainWindow?.webContents.send('wraith:activity-event', after)
   } catch { /* window destroyed — best effort */ }
 }
 
@@ -580,9 +581,10 @@ ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { pa
   })
   const r = result as { turnId: string; status: string }
   currentTurnId = r.turnId
-  if (currentSessionId) {
+  const sessionId = currentSessionId
+  if (sessionId) {
     updateActivity(() => activityStore.registerSession({
-      sessionId: currentSessionId,
+      sessionId,
       projectPath: currentSessionProjectPath,
       title: input,
     }))
@@ -980,7 +982,8 @@ ipcMain.handle('wraith:interrupt', async () => {
     sessionId: currentSessionId,
     turnId: resolveInterruptTurnId(currentTurnId)
   })
-  if (currentSessionId) updateActivity(() => activityStore.updateSession(currentSessionId, { status: 'interrupted' }))
+  const interruptedSessionId = currentSessionId
+  if (interruptedSessionId) updateActivity(() => activityStore.updateSession(interruptedSessionId, { status: 'interrupted' }))
 })
 
 /**
@@ -1598,7 +1601,19 @@ ipcMain.handle('wraith:automationsRuns', async (_e, taskId?: string) => {
   }
 })
 
-ipcMain.handle('wraith:activitySnapshot', async (_e, limit?: number) => activityStore.snapshot(limit ?? 50))
+registerActivityIpc({
+  handle: ipcMain.handle.bind(ipcMain),
+  snapshot: limit => activityStore.snapshot(limit),
+  request: (method, params) => {
+    if (!client) return Promise.reject(new Error('Backend not connected'))
+    return client.request(method, params)
+  },
+  sessionInterruptParams: item => ({
+    sessionId: item.sessionId ?? '',
+    // Other sessions cannot safely borrow the current turn id.
+    turnId: item.sessionId === currentSessionId ? resolveInterruptTurnId(currentTurnId) : null,
+  }),
+})
 
 ipcMain.handle('wraith:qqPending', async () => {
   if (!client) throw new Error('Backend not connected')

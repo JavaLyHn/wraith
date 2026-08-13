@@ -394,6 +394,17 @@ export interface ActivitySnapshot {
   error?: string
 }
 
+/** Renderer input for the narrow activity cancellation IPC. */
+export interface ActivityCancelRequest {
+  kind: ActivityKind
+  id: string
+}
+
+export interface ActivityCancelResult {
+  ok: boolean
+  message?: string
+}
+
 export interface SnapshotRestoreResult {
   ok: boolean
   message: string
