@@ -1,6 +1,6 @@
 ﻿import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
-import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire, GitStatusView } from '../shared/types'
+import type { ActivityItem, ActivitySnapshot, BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire, GitStatusView } from '../shared/types'
 import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
 import type { EditorApp } from '../shared/editors'
 import type { McpFormValue } from './components/McpServerForm'
@@ -71,6 +71,7 @@ import SkillsPanel from './components/SkillsPanel'
 import MemoryPanel from './components/MemoryPanel'
 import SnapshotPanel from './components/SnapshotPanel'
 import TaskPanel from './components/TaskPanel'
+import ActivityPanel from './components/ActivityPanel'
 import PolicyPanel from './components/PolicyPanel'
 import BrowserPanel from './components/BrowserPanel'
 import RagPanel from './components/RagPanel'
@@ -82,6 +83,7 @@ import RightDock, { type RightDockPane } from './components/RightDock'
 import SummaryPopover from './components/SummaryPopover'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './components/ui/dialog'
 import { useSettings } from './settings/SettingsContext'
+import { activityBadgeCount } from './lib/activityView'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -194,7 +196,8 @@ export default function App(): JSX.Element {
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [projects, setProjects] = useState<ProjectView[]>([])
-  const [view, setView] = useState<'chat' | 'projects' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'settings'>('chat')
+  const [view, setView] = useState<'chat' | 'projects' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'activity' | 'settings'>('chat')
+  const [activitySnapshot, setActivitySnapshot] = useState<ActivitySnapshot>({ activities: [], stale: false })
   const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
   const [automationBadge, setAutomationBadge] = useState(false)
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
@@ -280,6 +283,8 @@ export default function App(): JSX.Element {
   })
   const [sidebarPeek, setSidebarPeek] = useState(false)
   const startedRef = useRef(false)
+  // 首次失败与“曾成功读到空列表”不同：前者显示首屏错误，后者是有效空快照。
+  const hasActivitySnapshotRef = useRef(false)
   const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
   // 消除「dispatch(markStarted) → 组件重渲染」之间的闭包陈旧:markStarted 已在提交瞬间置 running,
@@ -320,6 +325,31 @@ export default function App(): JSX.Element {
     }
   }, [])
 
+  // 活动中心只从这一处读取。读取失败时保留最后一张可用快照并显式标旧，避免
+  // 暂时不可用被误画成“暂无活动”；silent 只压低诊断噪声，不改变失败语义。
+  const loadActivities = useCallback(async (silent: boolean): Promise<void> => {
+    try {
+      const next = await window.wraith.activityList()
+      hasActivitySnapshotRef.current = true
+      setActivitySnapshot(next)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setActivitySnapshot(previous => hasActivitySnapshotRef.current
+        ? { ...previous, stale: true, error: message }
+        : { activities: [], stale: false, error: message })
+      if (!silent) console.error('[wraith] activityList error:', error)
+    }
+  }, [])
+
+  // 初次查询拿完整快照，后续仅消费主进程的变更推送；不新加固定高频轮询。
+  useEffect(() => {
+    void loadActivities(false)
+    return window.wraith.onActivityEvent(snapshot => {
+      hasActivitySnapshotRef.current = true
+      setActivitySnapshot(snapshot)
+    })
+  }, [loadActivities])
+
   // ── subscribe to backend events on mount (status 高频 → 100ms 窗口合并) ────
   useEffect(() => {
     const throttledStatus = createThrottleLatest<BackendEvent>(100, evt => dispatch(evt))
@@ -344,6 +374,7 @@ export default function App(): JSX.Element {
       if (evt.kind === 'notification'
           && (evt.method === 'turn.completed' || evt.method === 'turn.failed')) {
         void fetchGitStatus()
+        void loadActivities(true)
       }
       dispatch(evt)
     })
@@ -351,7 +382,7 @@ export default function App(): JSX.Element {
       throttledStatus.cancel()
       unsubscribe()
     }
-  }, [fetchMcpResources, fetchGitStatus])
+  }, [fetchMcpResources, fetchGitStatus, loadActivities])
 
   // ── session list helpers ───────────────────────────────────────────────────
   const fetchSessions = useCallback(async () => {
@@ -382,10 +413,13 @@ export default function App(): JSX.Element {
         automationApprovalRef.current = { runId: evt.runId, payload: evt.payload }
       }
       if (evt.kind === 'open-panel') setView('automations')
-      if (evt.kind === 'runs-changed') void fetchSessions()
+      if (evt.kind === 'runs-changed') {
+        void fetchSessions()
+        void loadActivities(true)
+      }
     })
     return unsub
-  }, [fetchSessions])
+  }, [fetchSessions, loadActivities])
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -1057,6 +1091,36 @@ export default function App(): JSX.Element {
     await handleSelectSession(sessionId)
   }, [state.workspace, switchToProject, handleSelectSession]) // running 守卫改读 turnRef,不再依赖 state.turn
 
+  // 活动只负责定位，实际切项目/恢复会话仍走既有安全路径，避免另起一套
+  // running 守卫或遗漏 model/context 的恢复步骤。
+  const handleOpenActivitySession = useCallback(async (item: ActivityItem) => {
+    if (!item.sessionId || turnRef.current === 'running') return
+    if (item.projectPath && item.projectPath !== state.workspace) {
+      const ok = await switchToProject(item.projectPath)
+      if (!ok) return
+    }
+    await handleSelectSession(item.sessionId)
+  }, [state.workspace, switchToProject, handleSelectSession])
+
+  const handleOpenActivityTask = useCallback((_item: ActivityItem) => {
+    setView('tasks')
+  }, [])
+
+  const handleOpenActivityAutomation = useCallback((item: ActivityItem) => {
+    // 自动化面板本身已有运行历史和会话回跳入口；不要用 runId 拼出不存在的
+    // session RPC。有关联 session 时仍由面板的既有路径决定何时恢复。
+    void item
+    setView('automations')
+  }, [])
+
+  const handleCancelActivity = useCallback(async (item: ActivityItem) => {
+    const id = item.kind === 'session' ? item.sessionId : item.kind === 'task' ? item.taskId : item.runId
+    if (!id) return { ok: false, message: '活动缺少可取消的来源标识' }
+    const result = await window.wraith.activityCancel({ kind: item.kind, id })
+    if (result.ok) void loadActivities(true)
+    return result
+  }, [loadActivities])
+
   // ── 运行历史:重弹已缓存的审批弹窗(先验证 run 仍在 waiting_approval,再重弹) ──
   const handleReopenApproval = useCallback(async (runId: string) => {
     const cached = automationApprovalRef.current
@@ -1203,6 +1267,7 @@ export default function App(): JSX.Element {
           onOpenAllProjects={() => setView('projects')}
           profile={appPrefs.profile}
           taskActiveCount={taskActiveCount}
+          activityCount={activityBadgeCount(activitySnapshot.activities)}
           activeNav={view === 'chat' ? null : view}
           onOpenPlugins={() => setView('plugins')}
           onOpenAutomations={() => setView('automations')}
@@ -1216,6 +1281,7 @@ export default function App(): JSX.Element {
           onOpenBrowser={() => setView('browser')}
           onOpenRag={() => setView('rag')}
           onOpenDocuments={() => setView('documents')}
+          onOpenActivity={() => setView('activity')}
           onOpenSettings={() => setView('settings')}
           automationBadge={automationBadge}
           onOpenSearch={() => setPaletteOpen(true)}
@@ -1252,7 +1318,17 @@ export default function App(): JSX.Element {
           <PreviewBanner onReturn={() => setPreview(null)} />
         )}
 
-        {view === 'plugins' ? (
+        {view === 'activity' ? (
+          <ActivityPanel
+            snapshot={activitySnapshot}
+            onBack={() => setView('chat')}
+            onOpenSession={item => { void handleOpenActivitySession(item) }}
+            onOpenTask={handleOpenActivityTask}
+            onOpenAutomation={handleOpenActivityAutomation}
+            onRefresh={() => { void loadActivities(false) }}
+            onCancel={handleCancelActivity}
+          />
+        ) : view === 'plugins' ? (
           <PluginsPanel
             servers={mcpServers}
             configError={mcpConfigError}

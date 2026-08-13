@@ -7,7 +7,7 @@ import {
 } from './ui/tooltip'
 import {
   Plus, Search, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
-  Star, ListTree, List, Pencil, Archive, Settings, Wrench, ChevronDown, ListTodo, Shield, User, FolderOpen,
+  Star, ListTree, List, Pencil, Archive, Settings, Wrench, ChevronDown, ListTodo, Shield, User, FolderOpen, Activity,
   type LucideIcon,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
@@ -95,7 +95,7 @@ export function SessionRow({ s, active, running, onSelect, onToggleStar, onRenam
 }
 
 type ToolNav = 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills'
-  | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents'
+  | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'activity'
 
 /**
  * 工具项分组。依据是**什么时候会点它**,不是功能相似:
@@ -119,6 +119,7 @@ const TOOL_GROUPS: { label: string; items: { nav: ToolNav; testId: string; label
   {
     label: '运行',
     items: [
+      { nav: 'activity', testId: 'nav-activity', label: '活动', Icon: Activity },
       { nav: 'automations', testId: 'nav-automations', label: '自动化', Icon: Clock },
       { nav: 'im-gateway', testId: 'nav-im-gateway', label: 'IM 网关', Icon: MessageSquare },
       { nav: 'tasks', testId: 'nav-tasks', label: '后台任务', Icon: ListTodo },
@@ -165,7 +166,7 @@ interface SidebarProps {
   onOpenAllProjects: () => void
   /** 账户行的头像/昵称来源(设置→「我」)。沙箱状态已移出侧栏,见顶栏的盾图标。 */
   profile: ProfilePrefs
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'projects' | 'settings' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'activity' | 'projects' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
@@ -178,10 +179,13 @@ interface SidebarProps {
   onOpenBrowser: () => void
   onOpenRag: () => void
   onOpenDocuments: () => void
+  onOpenActivity?: () => void
   onOpenSettings: () => void
   automationBadge: boolean
   /** 后台任务活跃数(running + enqueued);0 = 不显示。全局队列,不区分会话。 */
   taskActiveCount: number
+  /** 运行中/等待中的跨来源活动数；0 时仍保留入口以查看最近结果。 */
+  activityCount?: number
   /** 打开命令面板(搜索)。 */
   onOpenSearch: () => void
 }
@@ -216,9 +220,11 @@ export default function Sidebar({
   onOpenBrowser,
   onOpenRag,
   onOpenDocuments,
+  onOpenActivity = () => {},
   onOpenSettings,
   automationBadge,
   taskActiveCount,
+  activityCount = 0,
   onOpenSearch,
 }: SidebarProps): JSX.Element {
   // 进入某工具页时自动展开一次(让高亮的活动项可见);此后由用户折叠意图决定,可手动收起并保持。
@@ -252,6 +258,7 @@ export default function Sidebar({
     rag: onOpenRag,
     tasks: onOpenTasks,
     documents: onOpenDocuments,
+    activity: onOpenActivity,
   }
   const toggleGroupMode = (): void => setGroupMode(m => {
     const next = m === 'time' ? 'recent' : 'time'
@@ -358,6 +365,10 @@ export default function Sidebar({
                         </span>
                         {taskActiveCount}
                       </span>
+                    )}
+                    {item.nav === 'activity' && activityCount > 0 && (
+                      <span data-testid="nav-activity-count"
+                        className="ml-auto shrink-0 text-3xs text-accent">{activityCount}</span>
                     )}
                     {item.nav === 'automations' && automationBadge && (
                       <span data-testid="nav-automations-badge" className="relative ml-auto flex h-2 w-2 shrink-0">
