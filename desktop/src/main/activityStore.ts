@@ -7,9 +7,16 @@ import type {
   DurableTaskView,
 } from '../shared/types'
 import { execFile } from 'child_process'
+import path from 'path'
 import { promisify } from 'util'
 
 const execFileAsync = promisify(execFile)
+
+export type ActivityGitCommandRunner = (
+  file: string,
+  args: string[],
+  options: { env: NodeJS.ProcessEnv; windowsHide: boolean },
+) => Promise<string>
 
 export interface ActivityGitBatchResult {
   projectPath: string
@@ -25,33 +32,59 @@ export interface ActivityGitBatchResult {
 /** The caller supplies the batch reader in tests; production only performs Git reads. */
 export type ActivityGitBatchReader = (projectPaths: string[]) => Promise<ActivityGitBatchResult[]>
 
+/** Normalizes equivalent project spellings before any Git process is launched. */
+export function canonicalActivityProjectPath(projectPath: string, platform = process.platform): string {
+  const trimmed = projectPath.trim()
+  if (!trimmed) return ''
+  if (platform === 'win32') return path.win32.normalize(trimmed).replace(/[\\/]+$/, '').toLowerCase()
+  return path.posix.normalize(trimmed).replace(/\/+$/, '')
+}
+
 function nonBlankProjectPaths(activities: ActivityItem[]): string[] {
-  return [...new Set(activities.map(item => item.projectPath.trim()).filter(Boolean))]
+  return [...new Set(activities.map(item => canonicalActivityProjectPath(item.projectPath)).filter(Boolean))]
 }
 
 function gitError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-async function gitOutput(projectPath: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', ['-C', projectPath, ...args], { windowsHide: true })
+const execActivityGit: ActivityGitCommandRunner = async (file, args, options) => {
+  const { stdout } = await execFileAsync(file, args, options)
   return stdout
 }
 
-async function readActivityGit(projectPath: string): Promise<ActivityGitBatchResult> {
+function isExpectedNonGit(error: unknown): boolean {
+  const message = `${(error as { stderr?: unknown })?.stderr ?? ''}\n${gitError(error)}`.toLowerCase()
+  return message.includes('not a git repository')
+    || message.includes('cannot change to')
+    || message.includes('no such file or directory')
+}
+
+function safeGitArgs(projectPath: string, command: string[]): string[] {
+  return ['--no-optional-locks', '-C', projectPath, ...command]
+}
+
+async function gitOutput(projectPath: string, args: string[], run: ActivityGitCommandRunner): Promise<string> {
+  return run('git', safeGitArgs(projectPath, args), {
+    env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' },
+    windowsHide: true,
+  })
+}
+
+async function readActivityGit(projectPath: string, run: ActivityGitCommandRunner): Promise<ActivityGitBatchResult> {
   const empty = { projectPath, branch: null, changedFiles: 0, additions: 0, deletions: 0 }
   let worktree: string
   try {
-    worktree = (await gitOutput(projectPath, ['rev-parse', '--show-toplevel'])).trim()
-  } catch {
+    worktree = (await gitOutput(projectPath, ['rev-parse', '--show-toplevel'], run)).trim()
+  } catch (error) {
     // A missing folder or non-Git project is not an activity failure and gets no Git context.
-    return empty
+    return isExpectedNonGit(error) ? empty : { ...empty, error: gitError(error) }
   }
 
   try {
     const [status, numstat] = await Promise.all([
-      gitOutput(projectPath, ['status', '--porcelain=v1', '--branch']),
-      gitOutput(projectPath, ['diff', '--numstat', 'HEAD']),
+      gitOutput(projectPath, ['status', '--porcelain=v1', '--branch'], run),
+      gitOutput(projectPath, ['diff', '--no-ext-diff', '--numstat', 'HEAD'], run),
     ])
     const statusLines = status.split(/\r?\n/).filter(Boolean)
     const branchLine = statusLines.find(line => line.startsWith('## '))
@@ -71,7 +104,15 @@ async function readActivityGit(projectPath: string): Promise<ActivityGitBatchRes
 
 /** Reads each distinct project only when an activity snapshot is requested. */
 export const readActivityGitBatch: ActivityGitBatchReader = async projectPaths =>
-  Promise.all(projectPaths.map(readActivityGit))
+  readActivityGitBatchWithRunner(projectPaths, execActivityGit)
+
+/** Testable fixed-argv batch reader; each invocation remains a local read-only Git command. */
+export async function readActivityGitBatchWithRunner(
+  projectPaths: string[],
+  run: ActivityGitCommandRunner,
+): Promise<ActivityGitBatchResult[]> {
+  return Promise.all(projectPaths.map(projectPath => readActivityGit(projectPath, run)))
+}
 
 /** Adds optional Git context without mutating the store or altering work status. */
 export async function enrichActivitySnapshot(
@@ -98,7 +139,7 @@ export async function enrichActivitySnapshot(
   return {
     ...snapshot,
     activities: snapshot.activities.map(item => {
-      const result = byProject.get(item.projectPath.trim())
+      const result = byProject.get(canonicalActivityProjectPath(item.projectPath))
       if (!result || (!result.branch && !result.error && result.changedFiles === 0 && result.additions === 0 && result.deletions === 0)) return item
       const { projectPath: _projectPath, worktree, ...resultContext } = result
       const git: ActivityGitContext = { ...resultContext, worktree: worktree || result.projectPath }
@@ -263,9 +304,25 @@ export class ActivityStore {
   }
 
   mergeSnapshot(sourceItems: ActivityItem[]): ActivitySnapshot {
-    for (const item of sourceItems) this.items.set(item.activityId, { ...item, stale: false })
+    for (const item of sourceItems) this.items.set(item.activityId, { ...this.retainGitContext(item), stale: false })
     this.clearStale()
     this.trim()
+    return this.snapshot(MAX_RECENT_ITEMS)
+  }
+
+  /** Caches list-time Git context so later activity-change events do not erase it. */
+  mergeGitContext(sourceItems: ActivityItem[]): ActivitySnapshot {
+    for (const source of sourceItems) {
+      if (!source.git) continue
+      const current = this.items.get(source.activityId)
+      if (!current) continue
+      this.items.set(source.activityId, {
+        ...current,
+        ...(source.branch ? { branch: source.branch } : {}),
+        ...(source.worktree ? { worktree: source.worktree } : {}),
+        git: source.git,
+      })
+    }
     return this.snapshot(MAX_RECENT_ITEMS)
   }
 
@@ -317,7 +374,7 @@ export class ActivityStore {
   }
 
   private replace(item: ActivityItem): ActivitySnapshot {
-    this.items.set(item.activityId, item)
+    this.items.set(item.activityId, this.retainGitContext(item))
     this.clearStale()
     this.trim()
     return this.snapshot(MAX_RECENT_ITEMS)
@@ -347,5 +404,16 @@ export class ActivityStore {
       .filter(item => !['running', 'waiting'].includes(item.status))
       .sort((a, b) => b.updatedAt - a.updatedAt)
     for (const item of terminal.slice(MAX_RECENT_ITEMS)) this.items.delete(item.activityId)
+  }
+
+  private retainGitContext(item: ActivityItem): ActivityItem {
+    const existing = this.items.get(item.activityId)
+    if (!existing?.git || item.git) return item
+    return {
+      ...item,
+      branch: item.branch ?? existing.branch,
+      worktree: item.worktree ?? existing.worktree,
+      git: existing.git,
+    }
   }
 }

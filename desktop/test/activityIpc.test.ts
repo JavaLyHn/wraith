@@ -38,6 +38,7 @@ function install(snapshot: ActivitySnapshot, currentSessionId = 'session-1') {
   registerActivityIpc({
     handle: (channel, handler) => handlers.set(channel, handler),
     snapshot: vi.fn().mockReturnValue(snapshot),
+    listSnapshot: vi.fn().mockResolvedValue(snapshot),
     request,
     currentSessionId: () => currentSessionId,
     sessionInterruptParams: item => ({ sessionId: item.sessionId ?? null, turnId: null }),
@@ -103,6 +104,25 @@ describe('activity IPC handlers', () => {
     await expect(cancel(undefined, { kind: 'unknown', id: 'anything' })).resolves.toMatchObject({ ok: false })
     await expect(cancel(undefined, { kind: 'task' })).resolves.toMatchObject({ ok: false })
     expect(request).not.toHaveBeenCalled()
+  })
+
+  it('uses the raw registry snapshot for cancellation without invoking the Git-enriched list snapshot', async () => {
+    const handlers = new Map<string, Handler>()
+    const listSnapshot = vi.fn(async () => ({ activities: [active('task', 'task-1')], stale: false }))
+    const request = vi.fn().mockResolvedValue({ ok: true })
+  registerActivityIpc({
+      handle: (channel, handler) => handlers.set(channel, handler),
+    snapshot: () => ({ activities: [active('task', 'task-1')], stale: false }),
+      listSnapshot,
+      request,
+      currentSessionId: () => 'session-1',
+      sessionInterruptParams: item => ({ sessionId: item.sessionId ?? null, turnId: null }),
+    })
+
+    await handlers.get('wraith:activityCancel')!(undefined, { kind: 'task', id: 'task-1' })
+
+    expect(request).toHaveBeenCalledWith('task.cancel', { id: 'task-1' })
+    expect(listSnapshot).not.toHaveBeenCalled()
   })
 })
 

@@ -1604,9 +1604,14 @@ ipcMain.handle('wraith:automationsRuns', async (_e, taskId?: string) => {
 
 registerActivityIpc({
   handle: ipcMain.handle.bind(ipcMain),
+  snapshot: limit => activityStore.snapshot(limit),
   // The app-server git.status is scoped to its current workspace, so activity snapshots
   // resolve every referenced local project independently and only when the panel asks.
-  snapshot: async limit => enrichActivitySnapshot(activityStore.snapshot(limit)),
+  listSnapshot: async limit => {
+    const enriched = await enrichActivitySnapshot(activityStore.snapshot(limit))
+    activityStore.mergeGitContext(enriched.activities)
+    return enriched
+  },
   request: (method, params) => {
     if (!client) return Promise.reject(new Error('Backend not connected'))
     return client.request(method, params)

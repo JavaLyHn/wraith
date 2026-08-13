@@ -177,4 +177,16 @@ describe('ActivityStore', () => {
     expect(byId.get('automation:r-1')).not.toHaveProperty('stale', true)
     expect(byId.get('task:t-1')).not.toHaveProperty('stale', true)
   })
+
+  it('retains resolved Git context when a later activity change replaces the row', () => {
+    const store = new ActivityStore()
+    store.registerSession(session('s-1'))
+    store.mergeGitContext([{ ...store.snapshot(1).activities[0]!, git: {
+      branch: 'feat/activity', worktree: 'D:/projects/wraith', changedFiles: 1, additions: 2, deletions: 0,
+    } }])
+
+    store.updateSession('s-1', { status: 'waiting' })
+
+    expect(store.snapshot(1).activities[0]).toMatchObject({ status: 'waiting', git: { branch: 'feat/activity' } })
+  })
 })
