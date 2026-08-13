@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.lyhn.wraith.policy.sandbox.CommandSandbox;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,6 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** 经 execute_command 工具的端到端沙箱限定。仅 macOS。 */
+@EnabledOnOs(OS.MAC)
 class ExecuteCommandSandboxIntegrationTest {
 
     private static final ObjectMapper M = new ObjectMapper();

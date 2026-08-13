@@ -57,6 +57,7 @@ class PowerShellBomTest {
                         // (WindowsLauncherScriptTest 一开始就排了 /.claude/,这份老测试漏了。)
                         return !s.contains("/target/") && !s.contains("/node_modules/")
                                 && !s.contains("/.git/") && !s.contains("/.claude/")
+                                && !s.contains("/.worktrees/")
                                 && !s.contains("/dist/")
                                 && !s.contains("/release/") && !s.contains("/out/");
                     })

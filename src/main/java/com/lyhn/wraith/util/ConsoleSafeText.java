@@ -73,6 +73,7 @@ public final class ConsoleSafeText {
         ASCII.put("📏", "[len]");
         ASCII.put("📸", "[snap]");
         ASCII.put("🗑", "[del]");
+        ASCII.put("🗄", "[archive]");
         ASCII.put("🔗", "[link]");
         ASCII.put("📤", "[send]");
         // ── 能力与子系统 ────────────────────────────────────────────────────

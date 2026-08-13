@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     把一条命令送进 Windows AppContainer 执行，作为 macOS Seatbelt 在 Windows 上的对等物。
 

@@ -97,15 +97,25 @@ class AppContainerSupportTest {
     @Test
     @DisplayName("失败结果不进缓存 —— 否则用户修好环境后不重启就永远显示无沙箱")
     void failureIsNotCached() {
-        // 本机非 Windows,diagnose() 必然 not ready
+        // 无论本机是不是 Windows,临时把 os.name 设成非 Windows,
+        // diagnose() 必然 not ready,且不会写入缓存。
         AppContainerSupport.resetCache();
-        assertFalse(AppContainerSupport.diagnose().ready());
+        String prevOs = System.getProperty("os.name");
+        try {
+            System.setProperty("os.name", "Mac OS X");
+            AppContainerSupport.Diagnosis d1 = AppContainerSupport.diagnose();
+            assertFalse(d1.ready(), "非 Windows 应 not ready");
 
-        // 若失败被缓存了,下面这次会直接吃缓存;这里断言的是「缓存没被写脏」
-        AppContainerSupport.Diagnosis again = AppContainerSupport.diagnose();
-        assertFalse(again.ready());
-        assertNotSame(AppContainerSupport.diagnose(), again,
-                "失败结果被缓存了 —— 环境修好后不重启就恢复不了");
+            // 失败不应被缓存 —— compute 每次都走真判断,不会命中 cached
+            AppContainerSupport.Diagnosis d2 = AppContainerSupport.diagnose();
+            assertFalse(d2.ready());
+            assertNotSame(d1, d2,
+                    "失败结果被缓存了 —— 环境修好后不重启就恢复不了");
+        } finally {
+            if (prevOs == null) System.clearProperty("os.name");
+            else System.setProperty("os.name", prevOs);
+            AppContainerSupport.resetCache();
+        }
     }
 
     // ---------- 脚本落盘 ----------

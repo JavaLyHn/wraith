@@ -1,6 +1,8 @@
 package com.lyhn.wraith.policy.sandbox;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import java.net.InetAddress;
 import java.net.ServerSocket;
@@ -13,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /** 真实 sandbox-exec 边界证明。仅 macOS。 */
+@EnabledOnOs(OS.MAC)
 class SeatbeltSandboxTest {
 
     private final CommandSandbox sandbox = new CommandSandbox(false);

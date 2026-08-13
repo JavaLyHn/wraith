@@ -3,6 +3,8 @@ package com.lyhn.wraith.tool;
 import com.lyhn.wraith.policy.sandbox.CommandSandbox;
 import com.lyhn.wraith.policy.sandbox.ShellCommand;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 
 import java.util.List;
 
@@ -18,6 +20,7 @@ class ToolRegistrySandboxWiringTest {
     }
 
     @Test
+    @EnabledOnOs(OS.MAC)
     void withSandbox_wrapsWithSandboxExec() {
         assumeTrue(CommandSandbox.available(), "仅 macOS + sandbox-exec 环境验证包裹路径");
         ToolRegistry reg = new ToolRegistry();
