@@ -354,6 +354,46 @@ export interface TaskListResult {
   error?: string
 }
 
+// ---------------------------------------------------------------------------
+// Activity center: local sessions, durable tasks, and automation runs
+// ---------------------------------------------------------------------------
+
+export type ActivityKind = 'session' | 'task' | 'automation'
+
+export type ActivityStatus =
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'interrupted'
+  | 'unknown'
+
+/** A normalized local activity record consumed by the desktop activity center. */
+export interface ActivityItem {
+  activityId: string
+  kind: ActivityKind
+  status: ActivityStatus
+  projectPath: string
+  sessionId?: string
+  taskId?: string
+  runId?: string
+  title?: string
+  summary?: string
+  branch?: string
+  worktree?: string
+  startedAt: number
+  updatedAt: number
+  error?: string
+  stale?: boolean
+}
+
+export interface ActivitySnapshot {
+  activities: ActivityItem[]
+  stale: boolean
+  error?: string
+}
+
 export interface SnapshotRestoreResult {
   ok: boolean
   message: string
