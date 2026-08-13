@@ -68,6 +68,8 @@ npm install --legacy-peer-deps                      # --legacy-peer-deps 不能�
 npm run dev
 ```
 
+首次 checkout 或切换到新的 worktree 后，`desktop/node_modules` 可能不存在；此时 `npm run dev` 会自动执行 `npm install --legacy-peer-deps` 补齐桌面依赖。依赖已存在时不会重复安装。若网络或 npm 安装失败，命令会保留原始错误并停止启动，可手动执行同一安装命令后重试。
+
 > ⚠️ **桌面 dev 态 spawn 的是 `~/.wraith/wraith.jar`，不是 `target/`。**
 > 改了 Java 后端只跑 `mvn package` **等于没改，而且不报错** —— 表现是调新 RPC 报
 > `method not found`，或者改动毫无效果。必须把 jar 拷到 `~/.wraith/wraith.jar` 再重启 App。

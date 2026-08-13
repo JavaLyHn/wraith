@@ -1030,6 +1030,11 @@ export default function App(): JSX.Element {
     }
   }, [fetchProjects])
 
+  const handleMoveProject = useCallback(async (projectPath: string, targetIndex: number) => {
+    try { await window.wraith.reorderProject(projectPath, targetIndex); await fetchProjects() }
+    catch (err) { console.error('[wraith] reorderProject error:', err); await fetchProjects() }
+  }, [fetchProjects])
+
   // 批量归档确认:null=没有待确认项
   const [archiveConfirm, setArchiveConfirm] = useState<{ path: string; label: string; count: number } | null>(null)
 
@@ -1309,6 +1314,7 @@ export default function App(): JSX.Element {
             onArchiveChats={handleArchiveProjectChats}
             onRemove={handleRemoveProject}
             onAdd={handleAddProject}
+            onMove={handleMoveProject}
           />
         ) : view === 'settings' ? (
           <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} onArchiveChanged={() => void fetchSessions()} />

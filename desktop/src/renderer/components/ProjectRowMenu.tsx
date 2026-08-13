@@ -12,10 +12,15 @@ export interface ProjectRowMenuProps {
   /** 只把意图交上去;数量提示与确认框在上层(App)弹,菜单不做破坏性确认 */
   onArchiveChats: (path: string, count: number) => void
   onRemove: (path: string) => void
+  canMoveUp?: boolean
+  canMoveDown?: boolean
+  moveIndex?: number
+  onMove?: (path: string, targetIndex: number) => void
 }
 
 export default function ProjectRowMenu({
   row, active, onRename, onArchiveChats, onRemove,
+  canMoveUp = false, canMoveDown = false, moveIndex = 0, onMove,
 }: ProjectRowMenuProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -50,6 +55,9 @@ export default function ProjectRowMenu({
           </button>
         </PopoverTrigger>
         <PopoverContent className="w-48">
+          <button data-testid="project-menu-up" disabled={!canMoveUp} title="在当前分组内上移" onClick={() => onMove?.(path, moveIndex - 1)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg-muted hover:bg-fg/5 disabled:opacity-40">上移</button>
+          <button data-testid="project-menu-down" disabled={!canMoveDown} title="在当前分组内下移" onClick={() => onMove?.(path, moveIndex + 1)} className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-fg-muted hover:bg-fg/5 disabled:opacity-40">下移</button>
+          <div className="my-1 border-t border-border" />
           <button
             data-testid="project-menu-edit"
             onClick={startEdit}

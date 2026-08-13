@@ -15,7 +15,7 @@ function props(over: Partial<React.ComponentProps<typeof ProjectsPanel>> = {}) {
     busy: false,
     onOpen: vi.fn(), onNewConversation: vi.fn(), onToggleStar: vi.fn(),
     onOpenSession: vi.fn(), onRename: vi.fn(), onArchiveChats: vi.fn(),
-    onRemove: vi.fn(), onAdd: vi.fn(),
+    onRemove: vi.fn(), onAdd: vi.fn(), onMove: vi.fn(),
     ...over,
   }
 }

@@ -15,7 +15,7 @@ import {
   upsertProject,
   removeProject,
   renameProject,
-  setProjectStarred,                                       
+  setProjectStarred,
   reorderProject,
   projectViews,
   seedProjectsIfEmpty,

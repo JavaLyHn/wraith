@@ -20,15 +20,16 @@ export interface ProjectsPanelProps {
   onArchiveChats: (path: string, count: number) => void
   onRemove: (path: string) => void
   onAdd: () => void
+  onMove?: (path: string, targetIndex: number) => void
 }
 
 export default function ProjectsPanel({
   projects, activePath, busy,
   onOpen, onNewConversation, onToggleStar, onOpenSession,
-  onRename, onArchiveChats, onRemove, onAdd,
+  onRename, onArchiveChats, onRemove, onAdd, onMove = () => undefined,
 }: ProjectsPanelProps): JSX.Element {
   const [query, setQuery] = useState('')
-  const [sortKey, setSortKey] = useState<ProjectSortKey>('updated')
+  const [sortKey, setSortKey] = useState<ProjectSortKey>('manual')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [summaries, setSummaries] = useState<ProjectSummary[]>([])
   // 相对时间的统一基准。一次挂载算一次 —— 同屏几十行必须显示同一个"现在"
@@ -57,13 +58,15 @@ export default function ProjectsPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathsKey])
 
+  const allRows = useMemo(() => mergeSummaries(projects, summaries), [projects, summaries])
   const rows = useMemo(() => {
-    const merged = mergeSummaries(projects, summaries)
-    return sortProjects(filterProjects(merged, query), sortKey, sortDir)
+    const filtered = filterProjects(allRows, query)
+    return sortKey === 'manual' ? filtered : sortProjects(filtered, sortKey, sortDir)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathsKey, summaries, query, sortKey, sortDir, projects])
+  }, [allRows, pathsKey, query, sortKey, sortDir])
 
   const { starred, rest } = partitionStarredProjects(rows)
+  const allGroups = partitionStarredProjects(allRows)
 
   const clickSort = (key: ProjectSortKey): void => {
     if (key === sortKey) {
@@ -72,7 +75,8 @@ export default function ProjectsPanel({
     }
     setSortKey(key)
     // 换列时给各自最自然的初始方向:名称 A→Z、时间新→旧
-    setSortDir(key === 'name' ? 'asc' : 'desc')
+    // 手动顺序是默认视图;首次切到“已更新”沿用旧交互的升序翻转语义。
+    setSortDir(key === 'name' || (sortKey === 'manual' && key === 'updated') ? 'asc' : 'desc')
   }
 
   const renderRow = (r: ProjectRowData): JSX.Element => (
@@ -86,6 +90,9 @@ export default function ProjectsPanel({
       onNewConversation={onNewConversation}
       onToggleStar={onToggleStar}
       onOpenSession={onOpenSession}
+      moveIndex={(() => { const list = r.view.starred ? allGroups.starred : allGroups.rest; return list.findIndex(x => x.view.path === r.view.path) })()}
+      group={r.view.starred ? 'starred' : 'rest'}
+      onMove={onMove}
       menu={
         <ProjectRowMenu
           row={r}
@@ -93,6 +100,10 @@ export default function ProjectsPanel({
           onRename={onRename}
           onArchiveChats={onArchiveChats}
           onRemove={onRemove}
+          canMoveUp={((r.view.starred ? allGroups.starred : allGroups.rest).findIndex(x => x.view.path === r.view.path)) > 0}
+          canMoveDown={((r.view.starred ? allGroups.starred : allGroups.rest).findIndex(x => x.view.path === r.view.path)) < (r.view.starred ? allGroups.starred : allGroups.rest).length - 1}
+          moveIndex={(r.view.starred ? allGroups.starred : allGroups.rest).findIndex(x => x.view.path === r.view.path)}
+          onMove={onMove}
         />
       }
     />

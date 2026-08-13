@@ -19,6 +19,9 @@ export interface ProjectRowProps {
   onNewConversation: (path: string) => void
   onToggleStar: (path: string, starred: boolean) => void
   onOpenSession: (path: string, sessionId: string) => void
+  moveIndex?: number
+  group?: 'starred' | 'rest'
+  onMove?: (path: string, targetIndex: number) => void
   /** ··· 菜单(Task 10 注入)。行本身不关心它长什么样 */
   menu?: React.ReactNode
 }
@@ -26,6 +29,7 @@ export interface ProjectRowProps {
 export default function ProjectRow({
   row, active, busy, now,
   onOpen, onNewConversation, onToggleStar, onOpenSession, menu,
+  moveIndex = 0, group = 'rest', onMove,
 }: ProjectRowProps): JSX.Element {
   const [expanded, setExpanded] = useState(false)
   // null = 还没拉过。折叠不清它 —— 折叠再展开不该重复请求
@@ -54,7 +58,7 @@ export default function ProjectRow({
   }
 
   return (
-    <div data-testid="project-row" className="border-b border-border/60">
+    <div data-testid="project-row" draggable={!!onMove} onDragStart={e => { e.dataTransfer.setData('text/plain', path); e.dataTransfer.setData('application/x-wraith-project-group', group) }} onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); const source = e.dataTransfer.getData('text/plain'); const sourceGroup = e.dataTransfer.getData('application/x-wraith-project-group'); if (source && sourceGroup === group) onMove?.(source, moveIndex) }} className="border-b border-border/60">
       <div className={'group flex items-center gap-1 px-2 ' + (active ? 'relative' : '')}>
         {active && (
           <span className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-accent" />

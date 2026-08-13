@@ -1,7 +1,7 @@
 import { baseName } from './paths'
 import type { ProjectView, ProjectSummary } from '../../shared/types'
 
-export type ProjectSortKey = 'name' | 'updated'
+export type ProjectSortKey = 'manual' | 'name' | 'updated'
 export type SortDir = 'asc' | 'desc'
 export type ProjectGroup = 'starred' | 'rest'
 

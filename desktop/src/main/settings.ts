@@ -173,7 +173,7 @@ export function setProjectStarred(userDataDir: string, projectPath: string, star
     return { ...p, starred: true }
   })
   const moved = changed.find(p => p.path === projectPath)!
-  const destination = changed.filter(p => p.starred === starred).filter(p => p.path !== projectPath)
+  const destination = changed.filter(p => (p.starred === true) === starred).filter(p => p.path !== projectPath)
   destination.push(moved)
   const destinationOrder = new Map(destination.map((p, i) => [p.path, i]))
   const projects = changed.map(p => destinationOrder.has(p.path) ? { ...p, order: destinationOrder.get(p.path)! } : p)
