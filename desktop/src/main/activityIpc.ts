@@ -2,7 +2,7 @@ import type { ActivityCancelRequest, ActivityCancelResult, ActivityItem, Activit
 
 export interface ActivityIpcRegistration {
   handle(channel: string, handler: (_event: unknown, ...args: unknown[]) => Promise<unknown> | unknown): void
-  snapshot(limit: number): ActivitySnapshot
+  snapshot(limit: number): ActivitySnapshot | Promise<ActivitySnapshot>
   request(method: 'turn.interrupt' | 'task.cancel', params: Record<string, string | null>): Promise<unknown>
   currentSessionId(): string | null
   sessionInterruptParams(item: ActivityItem): Record<string, string | null>
@@ -50,7 +50,7 @@ export function registerActivityIpc(deps: ActivityIpcRegistration): void {
   deps.handle('wraith:activityCancel', async (_event, value: unknown): Promise<ActivityCancelResult> => {
     if (!isActivityCancelTarget(value)) return { ok: false, message: '无效的活动项' }
 
-    const item = activeActivity(deps.snapshot(100), value)
+    const item = activeActivity(await deps.snapshot(100), value)
     if (!item) return { ok: false, message: '活动项不存在或已结束' }
     if (!sourceId(item)) {
       const labels: Record<ActivityKind, string> = { session: '会话', task: '任务', automation: '自动化运行' }

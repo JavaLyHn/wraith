@@ -369,6 +369,16 @@ export type ActivityStatus =
   | 'interrupted'
   | 'unknown'
 
+/** Read-only Git context resolved for an activity's own project path. */
+export interface ActivityGitContext {
+  branch: string | null
+  worktree: string
+  changedFiles: number
+  additions: number
+  deletions: number
+  error?: string
+}
+
 /** A normalized local activity record consumed by the desktop activity center. */
 export interface ActivityItem {
   activityId: string
@@ -382,6 +392,7 @@ export interface ActivityItem {
   summary?: string
   branch?: string
   worktree?: string
+  git?: ActivityGitContext
   startedAt: number
   updatedAt: number
   error?: string

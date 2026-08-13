@@ -1,10 +1,116 @@
 import type {
+  ActivityGitContext,
   ActivityItem,
   ActivitySnapshot,
   ActivityStatus,
   AutomationRun,
   DurableTaskView,
 } from '../shared/types'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+
+const execFileAsync = promisify(execFile)
+
+export interface ActivityGitBatchResult {
+  projectPath: string
+  branch: string | null
+  changedFiles: number
+  additions: number
+  deletions: number
+  /** A reader may omit this; the requested project path remains the display fallback. */
+  worktree?: string
+  error?: string
+}
+
+/** The caller supplies the batch reader in tests; production only performs Git reads. */
+export type ActivityGitBatchReader = (projectPaths: string[]) => Promise<ActivityGitBatchResult[]>
+
+function nonBlankProjectPaths(activities: ActivityItem[]): string[] {
+  return [...new Set(activities.map(item => item.projectPath.trim()).filter(Boolean))]
+}
+
+function gitError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+async function gitOutput(projectPath: string, args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync('git', ['-C', projectPath, ...args], { windowsHide: true })
+  return stdout
+}
+
+async function readActivityGit(projectPath: string): Promise<ActivityGitBatchResult> {
+  const empty = { projectPath, branch: null, changedFiles: 0, additions: 0, deletions: 0 }
+  let worktree: string
+  try {
+    worktree = (await gitOutput(projectPath, ['rev-parse', '--show-toplevel'])).trim()
+  } catch {
+    // A missing folder or non-Git project is not an activity failure and gets no Git context.
+    return empty
+  }
+
+  try {
+    const [status, numstat] = await Promise.all([
+      gitOutput(projectPath, ['status', '--porcelain=v1', '--branch']),
+      gitOutput(projectPath, ['diff', '--numstat', 'HEAD']),
+    ])
+    const statusLines = status.split(/\r?\n/).filter(Boolean)
+    const branchLine = statusLines.find(line => line.startsWith('## '))
+    const branch = branchLine?.slice(3).split('...')[0]?.trim() || null
+    const totals = numstat.split(/\r?\n/).filter(Boolean).reduce((sum, line) => {
+      const [added, deleted] = line.split('\t')
+      return {
+        additions: sum.additions + (Number.isFinite(Number(added)) ? Number(added) : 0),
+        deletions: sum.deletions + (Number.isFinite(Number(deleted)) ? Number(deleted) : 0),
+      }
+    }, { additions: 0, deletions: 0 })
+    return { ...empty, branch, worktree, changedFiles: statusLines.filter(line => !line.startsWith('## ')).length, ...totals }
+  } catch (error) {
+    return { ...empty, worktree, error: gitError(error) }
+  }
+}
+
+/** Reads each distinct project only when an activity snapshot is requested. */
+export const readActivityGitBatch: ActivityGitBatchReader = async projectPaths =>
+  Promise.all(projectPaths.map(readActivityGit))
+
+/** Adds optional Git context without mutating the store or altering work status. */
+export async function enrichActivitySnapshot(
+  snapshot: ActivitySnapshot,
+  readBatch: ActivityGitBatchReader = readActivityGitBatch,
+): Promise<ActivitySnapshot> {
+  const projectPaths = nonBlankProjectPaths(snapshot.activities)
+  if (projectPaths.length === 0) return snapshot
+  let results: ActivityGitBatchResult[]
+  try {
+    results = await readBatch(projectPaths)
+  } catch (error) {
+    const message = gitError(error)
+    results = projectPaths.map(projectPath => ({
+      projectPath,
+      branch: null,
+      changedFiles: 0,
+      additions: 0,
+      deletions: 0,
+      error: message,
+    }))
+  }
+  const byProject = new Map(results.map(result => [result.projectPath, result]))
+  return {
+    ...snapshot,
+    activities: snapshot.activities.map(item => {
+      const result = byProject.get(item.projectPath.trim())
+      if (!result || (!result.branch && !result.error && result.changedFiles === 0 && result.additions === 0 && result.deletions === 0)) return item
+      const { projectPath: _projectPath, worktree, ...resultContext } = result
+      const git: ActivityGitContext = { ...resultContext, worktree: worktree || result.projectPath }
+      return {
+        ...item,
+        ...(git.branch ? { branch: git.branch } : {}),
+        ...(git.worktree ? { worktree: git.worktree } : {}),
+        git,
+      }
+    }),
+  }
+}
 
 export interface SessionActivityInput {
   sessionId: string

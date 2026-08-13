@@ -139,7 +139,12 @@ export default function ActivityPanel({
                             </div>
                             <p className="mt-1 truncate text-2xs text-fg-subtle" title={projectLabel(item)}>{projectLabel(item)}</p>
                             {item.summary && <p className="mt-1 text-xs text-fg-muted">{item.summary}</p>}
-                            {(item.branch || item.worktree) && <p className="mt-1 text-2xs text-fg-subtle">{[item.branch, item.worktree].filter(Boolean).join(' · ')}</p>}
+                            {(item.git || item.branch || item.worktree) && <p data-testid={`activity-git-${item.activityId}`} className="mt-1 text-2xs text-fg-subtle">{[
+                              item.git?.branch ?? item.branch,
+                              item.git?.worktree ?? item.worktree,
+                              item.git && `${item.git.changedFiles} 个文件 +${item.git.additions}/-${item.git.deletions}`,
+                              item.git?.error,
+                            ].filter(Boolean).join(' · ')}</p>}
                             {item.error && <p className="mt-1 text-xs text-danger">{item.error}</p>}
                           </div>
                         </div>

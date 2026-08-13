@@ -132,4 +132,17 @@ describe('ActivityPanel', () => {
     expect(screen.getByTestId('activity-status-task:one').textContent).toContain('等待中')
     expect(onCancel).toHaveBeenCalledWith(waiting)
   })
+
+  it('shows Git branch and worktree context without replacing the activity status', () => {
+    renderPanel(snapshot([activity({
+      status: 'waiting',
+      branch: 'feat/activity',
+      worktree: 'D:/projects/wraith',
+      git: { branch: 'feat/activity', worktree: 'D:/projects/wraith', changedFiles: 3, additions: 12, deletions: 4 },
+    })]))
+
+    expect(screen.getByTestId('activity-git-session:one').textContent).toContain('feat/activity')
+    expect(screen.getByTestId('activity-git-session:one').textContent).toContain('D:/projects/wraith')
+    expect(screen.getByTestId('activity-status-session:one').textContent).toContain('等待中')
+  })
 })
