@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { ActivityStore, isDurableTaskSnapshot, sessionStatusForNotification } from '../src/main/activityStore'
+import {
+  ActivityStore,
+  isDurableTaskSnapshot,
+  sessionStatusForNotification,
+  shouldPromoteSessionIdentity,
+} from '../src/main/activityStore'
 import type { AutomationRun, DurableTaskView } from '../src/shared/types'
 
 const session = (id: string) => ({
@@ -124,5 +129,24 @@ describe('ActivityStore', () => {
     expect(store.snapshot(10).activities).toEqual([
       expect.objectContaining({ activityId: 'session:20260813T123000', sessionId: '20260813T123000' }),
     ])
+  })
+
+  it('retains a failed task read as stale without marking fresh session or automation rows stale', () => {
+    const store = new ActivityStore()
+    store.registerSession(session('s-1'))
+    store.registerTask(task('t-1', 'running'))
+    store.registerAutomation(automation('r-1', 'running'))
+
+    const stale = store.markSourceStale('task', 'task list unavailable')
+    const byId = new Map(stale.activities.map(item => [item.activityId, item]))
+
+    expect(stale).toMatchObject({ stale: true, error: 'task list unavailable' })
+    expect(byId.get('task:t-1')).toMatchObject({ stale: true, error: 'task list unavailable' })
+    expect(byId.get('session:s-1')).not.toHaveProperty('stale', true)
+    expect(byId.get('automation:r-1')).not.toHaveProperty('stale', true)
+  })
+
+  it('does not promote the active temporary session for an unrelated notification turn', () => {
+    expect(shouldPromoteSessionIdentity('sess_active', 'turn-active', 'other-session', 'turn-other')).toBe(false)
   })
 })

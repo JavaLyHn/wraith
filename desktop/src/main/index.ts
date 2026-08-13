@@ -58,7 +58,12 @@ import { detectEditors, detectWindowsEditors, uniqueDownloadName, performUndo, r
 import type { EditorApp } from '../shared/editors'
 import { documentsDir, ensureDocumentsDir, listDocuments, resolveInVault, addDocuments, removeDocument } from './documents'
 import { requestGitStatus } from './gitStatusBridge'
-import { ActivityStore, isDurableTaskSnapshot, sessionStatusForNotification } from './activityStore'
+import {
+  ActivityStore,
+  isDurableTaskSnapshot,
+  sessionStatusForNotification,
+  shouldPromoteSessionIdentity,
+} from './activityStore'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -156,12 +161,18 @@ function sessionIdFromNotification(params: unknown): string | null {
   return typeof value === 'string' ? value : null
 }
 
+function turnIdFromNotification(params: unknown): string | null {
+  if (!params || typeof params !== 'object') return null
+  const value = (params as { turnId?: unknown }).turnId
+  return typeof value === 'string' ? value : null
+}
+
 function updateActivityForNotification(method: string, params: unknown): void {
   const status = sessionStatusForNotification(method)
   if (!status) return
   const reportedSessionId = sessionIdFromNotification(params)
   if (!reportedSessionId) return
-  if (currentSessionId && currentSessionId !== reportedSessionId) {
+  if (shouldPromoteSessionIdentity(currentSessionId, currentTurnId, reportedSessionId, turnIdFromNotification(params))) {
     updateActivity(() => activityStore.promoteSession(currentSessionId!, reportedSessionId))
     currentSessionId = reportedSessionId
   }
@@ -183,6 +194,11 @@ function registerTaskActivities(tasks: DurableTaskView[]): void {
 
 function registerAutomationActivities(runs: AutomationRun[]): void {
   for (const run of runs) updateActivity(() => activityStore.registerAutomation(run))
+}
+
+function markActivitySourceStale(kind: 'task' | 'automation', error: unknown): void {
+  const reason = error instanceof Error ? error.message : String(error)
+  updateActivity(() => activityStore.markSourceStale(kind, reason))
 }
 
 function pushBadge(): void {
@@ -1248,6 +1264,7 @@ ipcMain.handle('wraith:taskList', async (_e, limit: number) => {
     registerTaskActivities(result.tasks ?? [])
     return result
   } catch (e) {
+    markActivitySourceStale('task', e)
     // 后端的 task.list 挂在 SessionRunner 上,会话建立前一律回 "no session"。
     // 但这是**轮询**接口(侧栏计数 / 完成提醒每 15s 拉一次),启动窗口内必然撞上 ——
     // 让它抛出去的话,Electron 会给每一次轮询打一整段 "Error occurred in handler" 栈,
@@ -1521,9 +1538,14 @@ ipcMain.handle('wraith:automationStop', async (_e, runId: string) => {
 })
 ipcMain.handle('wraith:automationRuns', async () => {
   if (!client) throw new Error('Backend not connected')
-  const result = await client.request('automations.runs', {}) as { runs?: AutomationRun[] }
-  registerAutomationActivities(result.runs ?? [])
-  return result
+  try {
+    const result = await client.request('automations.runs', {}) as { runs?: AutomationRun[] }
+    registerAutomationActivities(result.runs ?? [])
+    return result
+  } catch (error) {
+    markActivitySourceStale('automation', error)
+    throw error
+  }
 })
 // Fix-B: param contract aligned to Fix-A — forwards { approvalId, decision } to daemon.
 ipcMain.handle('wraith:automationRespondApproval', async (_e, approvalId: string, decision: 'approve' | 'reject') => {
@@ -1553,9 +1575,14 @@ ipcMain.handle('wraith:automationsRemove', async (_e, id: string) => {
 })
 ipcMain.handle('wraith:automationsRuns', async (_e, taskId?: string) => {
   if (!client) throw new Error('Backend not connected')
-  const result = await client.request('automations.runs', taskId ? { taskId } : {}) as { runs?: AutomationRun[] }
-  registerAutomationActivities(result.runs ?? [])
-  return result
+  try {
+    const result = await client.request('automations.runs', taskId ? { taskId } : {}) as { runs?: AutomationRun[] }
+    registerAutomationActivities(result.runs ?? [])
+    return result
+  } catch (error) {
+    markActivitySourceStale('automation', error)
+    throw error
+  }
 })
 
 ipcMain.handle('wraith:activitySnapshot', async (_e, limit?: number) => activityStore.snapshot(limit ?? 50))
@@ -1835,8 +1862,8 @@ async function pollAndNotify(): Promise<void> {
       pushBadge()
     }
     if (sawNew) pushAutomation({ kind: 'runs-changed' })   // 触发 renderer 刷新会话/运行历史
-  } catch {
-    // best-effort: poll failure is silent
+  } catch (error) {
+    markActivitySourceStale('automation', error)
   }
 }
 

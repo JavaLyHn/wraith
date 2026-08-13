@@ -41,6 +41,20 @@ export function isDurableTaskSnapshot(value: unknown): value is DurableTaskView 
     && typeof (value as { status?: unknown }).status === 'string'
 }
 
+/** A persisted id may only replace the active temporary id for the same turn. */
+export function shouldPromoteSessionIdentity(
+  currentSessionId: string | null,
+  currentTurnId: string | null,
+  reportedSessionId: string,
+  reportedTurnId: string | null,
+): boolean {
+  return !!currentSessionId
+    && currentSessionId.startsWith('sess_')
+    && currentSessionId !== reportedSessionId
+    && !!currentTurnId
+    && currentTurnId === reportedTurnId
+}
+
 function taskStatus(status: DurableTaskView['status']): ActivityStatus {
   switch (status) {
     case 'enqueued':
@@ -153,7 +167,7 @@ export class ActivityStore {
     const activities = [...this.items.values()]
       .sort((a, b) => b.updatedAt - a.updatedAt)
       .slice(0, Math.max(0, limit))
-      .map(item => ({ ...item, ...(this.stale ? { stale: true } : {}) }))
+      .map(item => ({ ...item }))
     return { activities, stale: this.stale, ...(this.error ? { error: this.error } : {}) }
   }
 
@@ -166,6 +180,21 @@ export class ActivityStore {
     }
     this.stale = true
     this.error = reason
+    return this.snapshot(MAX_RECENT_ITEMS)
+  }
+
+  /** A failed source refresh must not make unrelated sources appear stale. */
+  markSourceStale(kind: ActivityItem['kind'], reason: string): ActivitySnapshot {
+    let changed = false
+    for (const [id, item] of this.items) {
+      if (item.kind !== kind) continue
+      changed = true
+      this.items.set(id, { ...item, stale: true, error: reason })
+    }
+    if (changed) {
+      this.stale = true
+      this.error = reason
+    }
     return this.snapshot(MAX_RECENT_ITEMS)
   }
 
@@ -190,11 +219,9 @@ export class ActivityStore {
   }
 
   private clearStale(): void {
-    this.stale = false
-    this.error = undefined
-    for (const [id, item] of this.items) {
-      if (item.stale) this.items.set(id, { ...item, stale: false })
-    }
+    const staleItems = [...this.items.values()].filter(item => item.stale)
+    this.stale = staleItems.length > 0
+    this.error = staleItems.find(item => item.error)?.error
   }
 
   private trim(): void {
