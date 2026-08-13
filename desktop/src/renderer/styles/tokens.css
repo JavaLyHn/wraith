@@ -403,3 +403,19 @@ html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180
   .ruler-highlight, .ruler-mark { transition: none; }
   .ruler-mark--in { animation: none; }
 }
+
+/* Session row hover marquee — long-title reveal + double-click rename */
+@keyframes sessionMarquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+.animate-marquee {
+  animation: sessionMarquee 30s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee {
+    animation: none;
+  }
+}

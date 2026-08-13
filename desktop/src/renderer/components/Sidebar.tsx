@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { cn } from '../lib/utils'
 import {
   Tooltip,
   TooltipTrigger,
@@ -29,10 +30,26 @@ export function SessionRow({ s, active, running, onSelect, onToggleStar, onRenam
   const [draft, setDraft] = useState('')
   const editRef = useRef<HTMLInputElement>(null)
   const doneRef = useRef(false)   // 防 Escape 后 onBlur 二次提交
+  const titleRef = useRef<HTMLDivElement>(null)
+  const [isOverflowing, setIsOverflowing] = useState(false)
+  const [hovered, setHovered] = useState(false)
 
   useEffect(() => {
     if (editing) { doneRef.current = false; editRef.current?.focus(); editRef.current?.select() }
   }, [editing])
+
+  useEffect(() => {
+    const el = titleRef.current
+    if (!el) return
+    const check = (): void => {
+      setIsOverflowing(el.scrollWidth > el.clientWidth + 1)
+    }
+    check()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => { ro.disconnect() }
+  }, [s.name, s.title])
 
   const startEdit = (): void => { setDraft(s.name ?? s.title ?? ''); setEditing(true) }
   const finishEdit = (save: boolean): void => {
@@ -58,18 +75,36 @@ export function SessionRow({ s, active, running, onSelect, onToggleStar, onRenam
   }
 
   return (
-    <div className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 ' +
-      (active ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent' : 'hover:bg-fg/5')}>
+    <div
+      className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 ' +
+        (active ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent' : 'hover:bg-fg/5')}
+      onDoubleClick={startEdit}
+    >
       {running && (
         <span data-testid="session-running-dot" className="relative ml-1 flex h-2 w-2 shrink-0" title="运行中">
           <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-accent opacity-75 motion-reduce:hidden" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
         </span>
       )}
-      <button data-testid="conversation-item" onClick={() => onSelect(s.id)}
-        className={'flex-1 truncate px-2 py-2 text-left text-xs ' + (active ? 'text-fg' : 'text-fg-muted')}
-        title={sessionDisplayName(s)}>
-        {sessionDisplayName(s)}
+      <button
+        data-testid="conversation-item"
+        onClick={() => onSelect(s.id)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        aria-label={sessionDisplayName(s)}
+        className={'flex-1 overflow-hidden px-2 py-2 text-left text-xs ' + (active ? 'text-fg' : 'text-fg-muted')}
+      >
+        <div ref={titleRef} className="relative overflow-hidden">
+          <div className={cn(
+            'inline-flex whitespace-nowrap',
+            isOverflowing && hovered && 'animate-marquee'
+          )}>
+            <span className="pr-8">{sessionDisplayName(s)}</span>
+            {isOverflowing && hovered && (
+              <span className="pr-8" aria-hidden="true">{sessionDisplayName(s)}</span>
+            )}
+          </div>
+        </div>
       </button>
       <button data-testid="session-star" title={s.starred ? '取消重点' : '标记重点'}
         onClick={() => onToggleStar(s.id, !s.starred)}
