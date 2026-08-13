@@ -18,6 +18,29 @@ export interface SessionActivityInput {
 
 const MAX_RECENT_ITEMS = 100
 
+/** Maps only the app-server notifications which are terminal/activity state changes. */
+export function sessionStatusForNotification(method: string): ActivityStatus | undefined {
+  switch (method) {
+    case 'approval.requested':
+    case 'choice.requested':
+    case 'plan.review.requested': return 'waiting'
+    case 'turn.completed':
+    case 'message.done': return 'completed'
+    case 'turn.failed':
+    case 'turn.error':
+    case 'error': return 'failed'
+    default: return undefined
+  }
+}
+
+/** `task.cancel` returns an acknowledgement, unlike task.get/list. */
+export function isDurableTaskSnapshot(value: unknown): value is DurableTaskView {
+  return !!value
+    && typeof value === 'object'
+    && typeof (value as { id?: unknown }).id === 'string'
+    && typeof (value as { status?: unknown }).status === 'string'
+}
+
 function taskStatus(status: DurableTaskView['status']): ActivityStatus {
   switch (status) {
     case 'enqueued':
@@ -72,6 +95,20 @@ export class ActivityStore {
     const existing = this.items.get(activityId)
     if (!existing) return this.snapshot(MAX_RECENT_ITEMS)
     return this.replace({ ...existing, ...patch, updatedAt: patch.updatedAt ?? Date.now(), stale: false })
+  }
+
+  /** Replace the temporary wire id when the backend persists the active session. */
+  promoteSession(fromId: string, toId: string): ActivitySnapshot {
+    if (fromId === toId) return this.snapshot(MAX_RECENT_ITEMS)
+    const previous = this.items.get(`session:${fromId}`)
+    if (!previous) return this.snapshot(MAX_RECENT_ITEMS)
+    this.items.delete(previous.activityId)
+    return this.replace({
+      ...previous,
+      activityId: `session:${toId}`,
+      sessionId: toId,
+      updatedAt: Date.now(),
+    })
   }
 
   registerTask(task: DurableTaskView): ActivitySnapshot {

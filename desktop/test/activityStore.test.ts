@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ActivityStore } from '../src/main/activityStore'
+import { ActivityStore, isDurableTaskSnapshot, sessionStatusForNotification } from '../src/main/activityStore'
 import type { AutomationRun, DurableTaskView } from '../src/shared/types'
 
 const session = (id: string) => ({
@@ -106,5 +106,23 @@ describe('ActivityStore', () => {
     const repeated = store.registerTask(task('t-1', 'running'))
 
     expect(repeated).toEqual(first)
+  })
+
+  it('maps the app-server turn.failed notification to a failed terminal session', () => {
+    expect(sessionStatusForNotification('turn.failed')).toBe('failed')
+  })
+
+  it('does not treat a task.cancel acknowledgement as a durable task snapshot', () => {
+    expect(isDurableTaskSnapshot({ ok: true })).toBe(false)
+  })
+
+  it('promotes a temporary running session to its persistent id without duplicate rows', () => {
+    const store = new ActivityStore()
+    store.registerSession(session('sess_temporary'))
+    store.promoteSession('sess_temporary', '20260813T123000')
+
+    expect(store.snapshot(10).activities).toEqual([
+      expect.objectContaining({ activityId: 'session:20260813T123000', sessionId: '20260813T123000' }),
+    ])
   })
 })

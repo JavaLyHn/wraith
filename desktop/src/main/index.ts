@@ -58,7 +58,7 @@ import { detectEditors, detectWindowsEditors, uniqueDownloadName, performUndo, r
 import type { EditorApp } from '../shared/editors'
 import { documentsDir, ensureDocumentsDir, listDocuments, resolveInVault, addDocuments, removeDocument } from './documents'
 import { requestGitStatus } from './gitStatusBridge'
-import { ActivityStore } from './activityStore'
+import { ActivityStore, isDurableTaskSnapshot, sessionStatusForNotification } from './activityStore'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -151,27 +151,30 @@ function updateActivity(mutation: () => ActivitySnapshot): void {
 }
 
 function sessionIdFromNotification(params: unknown): string | null {
-  // App-server swaps its temporary session id for the persisted id on completion.
-  // The registry was created from the active temporary id, so retain that key.
-  if (currentSessionId) return currentSessionId
   if (!params || typeof params !== 'object') return null
   const value = (params as { sessionId?: unknown }).sessionId
   return typeof value === 'string' ? value : null
 }
 
 function updateActivityForNotification(method: string, params: unknown): void {
-  const sessionId = sessionIdFromNotification(params)
-  if (!sessionId) return
-  if (method === 'approval.requested' || method === 'choice.requested' || method === 'plan.review.requested') {
-    updateActivity(() => activityStore.updateSession(sessionId, { status: 'waiting' }))
-  } else if (method === 'turn.completed' || method === 'message.done') {
-    updateActivity(() => activityStore.updateSession(sessionId, { status: 'completed' }))
-  } else if (method === 'turn.error' || method === 'error') {
+  const status = sessionStatusForNotification(method)
+  if (!status) return
+  const reportedSessionId = sessionIdFromNotification(params)
+  if (!reportedSessionId) return
+  if (currentSessionId && currentSessionId !== reportedSessionId) {
+    updateActivity(() => activityStore.promoteSession(currentSessionId!, reportedSessionId))
+    currentSessionId = reportedSessionId
+  }
+  if (status === 'failed') {
     const message = params && typeof params === 'object' && typeof (params as { message?: unknown }).message === 'string'
       ? (params as { message: string }).message
-      : undefined
-    updateActivity(() => activityStore.updateSession(sessionId, { status: 'failed', error: message }))
+      : params && typeof params === 'object' && typeof (params as { error?: unknown }).error === 'string'
+        ? (params as { error: string }).error
+        : undefined
+    updateActivity(() => activityStore.updateSession(reportedSessionId, { status, error: message }))
+    return
   }
+  updateActivity(() => activityStore.updateSession(reportedSessionId, { status }))
 }
 
 function registerTaskActivities(tasks: DurableTaskView[]): void {
@@ -1268,8 +1271,10 @@ ipcMain.handle('wraith:taskGet', async (_e, id: string) => {
 })
 ipcMain.handle('wraith:taskCancel', async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
-  const result = await client.request('task.cancel', { id }) as DurableTaskView
-  registerTaskActivities([result])
+  const result = await client.request('task.cancel', { id })
+  // task.cancel is an { ok } acknowledgement, not a DurableTaskView. Polling
+  // will ingest the authoritative canceled snapshot without creating task:undefined.
+  if (isDurableTaskSnapshot(result)) registerTaskActivities([result])
   return result
 })
 ipcMain.handle('wraith:taskDelete', async (_e, id: string) => {
@@ -1444,7 +1449,9 @@ ipcMain.handle('wraith:listBuiltinTools', async () => {
 
 ipcMain.handle('wraith:resumeSession', async (_e, sessionId: string) => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('session.resume', { sessionId })
+  const result = await client.request('session.resume', { sessionId }) as { sessionId?: string }
+  currentSessionId = result.sessionId ?? sessionId
+  return result
 })
 
 ipcMain.handle('wraith:peekSession', async (_e, sessionId: string) => {
