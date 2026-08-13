@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import type { HTMLAttributes } from 'react'
 import {
   planStatusIcon, planStatusClass, planStatusAnimation, planProgressLabel,
   type PlanStepStatus,
 } from '../lib/planStatus'
 import { useStickToBottom } from '../lib/stickToBottom'
+import { cn } from '../lib/utils'
 
 interface PlanStep { id: string; description: string; status: PlanStepStatus; result?: string; output?: string }
 interface PlanItem { type: 'plan'; planId: string; goal: string; steps: PlanStep[]; plannerOutput?: string }
@@ -14,6 +16,15 @@ interface PlanReviewItem {
   goal: string
   steps: { id: string; description: string }[]
   resolved: boolean
+}
+
+interface PlanChecklistProps extends HTMLAttributes<HTMLDivElement> {
+  item: PlanItem
+}
+
+interface PlanReviewCardProps extends HTMLAttributes<HTMLDivElement> {
+  item: PlanReviewItem
+  onReview: (reviewId: string, decision: 'execute' | 'supplement' | 'cancel', feedback?: string) => void
 }
 
 /**
@@ -64,7 +75,7 @@ function PlanStepRow({ s }: { s: PlanStep }): JSX.Element {
   )
 }
 
-export function PlanChecklist({ item }: { item: PlanItem }): JSX.Element {
+export function PlanChecklist({ item, className: incomingClass, ...rest }: PlanChecklistProps): JSX.Element {
   // 计划表(steps)到达前的"规划中"实时正文:消除数秒空窗的"死机感"。steps 一到即收敛为清单
   // (规划阶段流出的是计划 JSON 原文,计划表出来后再展示原文冗余,故仅生成期显示)。
   const generating = item.steps.length === 0
@@ -72,7 +83,7 @@ export function PlanChecklist({ item }: { item: PlanItem }): JSX.Element {
   const progress = planProgressLabel(item.steps)
   const running = item.steps.some(s => s.status === 'running')
   return (
-    <div className="my-1.5 rounded-lg border border-border bg-surface p-3 text-xs font-mono">
+    <div className={cn(incomingClass, "my-1.5 rounded-lg border border-border bg-surface p-3 text-xs font-mono")} {...rest}>
       <div className="mb-2 flex items-center gap-2">
         <span className="font-semibold text-accent">计划{item.goal ? ` · ${item.goal}` : ''}</span>
         {/* 实时进度:光看一排图标数不出来跑到第几步了 */}
@@ -104,16 +115,13 @@ export function PlanChecklist({ item }: { item: PlanItem }): JSX.Element {
 }
 
 export function PlanReviewCard(
-  { item, onReview }: {
-    item: PlanReviewItem
-    onReview: (reviewId: string, decision: 'execute' | 'supplement' | 'cancel', feedback?: string) => void
-  },
+  { item, onReview, className: incomingClass, ...rest }: PlanReviewCardProps,
 ): JSX.Element {
   const [supplementing, setSupplementing] = useState(false)
   const [feedback, setFeedback] = useState('')
   if (item.resolved) return <></>
   return (
-    <div className="my-1.5 rounded-lg border border-accent bg-surface p-3 text-xs font-mono">
+    <div className={cn(incomingClass, "my-1.5 rounded-lg border border-accent bg-surface p-3 text-xs font-mono")} {...rest}>
       <div className="mb-2 font-semibold text-accent">复审计划 · {item.goal}</div>
       <ul className="mb-3 flex flex-col gap-1">
         {item.steps.map(s => (

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react'
+import type { HTMLAttributes } from 'react'
 import { useSettings } from '../settings/SettingsContext'
 import { userAvatarGlyph } from '../lib/chatIdentity'
 import type { AttachmentRef } from '../../shared/transcriptReducer'
 import type { RunMode } from '../../shared/types'
+import { cn } from '../lib/utils'
 
 /**
  * 本轮实际生效的模式标签。ReAct 是缺省模式，标出来只是噪音；Plan / Team 是用户
@@ -11,7 +13,7 @@ import type { RunMode } from '../../shared/types'
  */
 const MODE_LABEL: Partial<Record<RunMode, string>> = { plan: 'Plan', team: 'Team' }
 
-interface UserMessageProps {
+interface UserMessageProps extends HTMLAttributes<HTMLDivElement> {
   text: string
   /** 本轮实际生效的执行模式(后端回声);老后端不回声时为 undefined。 */
   mode?: RunMode
@@ -29,7 +31,7 @@ interface UserMessageProps {
 }
 
 /** 用户气泡:hover 浮现编辑/删除;编辑就地展开;删除二次点击确认(真回溯,裁掉之后全部)。 */
-export default function UserMessage({ text, mode, attachments, ordinal, isLastUser, busy, onEdit, onDelete, onResend }: UserMessageProps): JSX.Element {
+export default function UserMessage({ text, mode, attachments, ordinal, isLastUser, busy, onEdit, onDelete, onResend, className: incomingClass, ...rest }: UserMessageProps): JSX.Element {
   const { prefs } = useSettings()
   const glyph = userAvatarGlyph(prefs.profile)
   const [editing, setEditing] = useState(false)
@@ -52,7 +54,7 @@ export default function UserMessage({ text, mode, attachments, ordinal, isLastUs
 
   if (editing) {
     return (
-      <div className="self-end w-[85%] rounded-2xl border border-accent/40 bg-accent/5 p-2">
+      <div className={cn(incomingClass, "self-end w-[85%] rounded-2xl border border-accent/40 bg-accent/5 p-2")} {...rest}>
         <textarea
           data-testid="msg-edit-input"
           value={draft}
@@ -92,7 +94,7 @@ export default function UserMessage({ text, mode, attachments, ordinal, isLastUs
   const files = (attachments ?? []).filter(a => a.kind !== 'image')
 
   return (
-    <div className="group flex items-start justify-end gap-1.5 self-end max-w-[85%]">
+    <div className={cn(incomingClass, "group flex items-start justify-end gap-1.5 self-end max-w-[85%]")} {...rest}>
       {!busy && (
         <span className="flex shrink-0 gap-1 opacity-0 transition-opacity group-hover:opacity-100">
           <button

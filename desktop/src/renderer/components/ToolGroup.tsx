@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import type { HTMLAttributes } from 'react'
 import type { ToolCard as ToolCardType } from '../../shared/transcriptReducer'
 import { toolCardFailed } from '../../shared/toolBadge'
 import ToolCard from './ToolCard'
+import { cn } from '../lib/utils'
 
-interface ToolGroupProps {
+interface ToolGroupProps extends HTMLAttributes<HTMLDivElement> {
   cards: ToolCardType[]
 }
 
@@ -12,7 +14,7 @@ interface ToolGroupProps {
  * 默认折叠，显示 "⚙ 工作过程 · N 步"，若有失败项附红色提示。
  * 点击展开后渲染各 ToolCard（各自也默认折叠，仅失败展开）。
  */
-export default function ToolGroup({ cards }: ToolGroupProps): JSX.Element {
+export default function ToolGroup({ cards, className: incomingClass, ...rest }: ToolGroupProps): JSX.Element {
   const [expanded, setExpanded] = useState(false)
 
   const hasFailed = cards.some(toolCardFailed)
@@ -21,7 +23,8 @@ export default function ToolGroup({ cards }: ToolGroupProps): JSX.Element {
   return (
     <div
       data-testid="tool-group"
-      className="my-1 overflow-hidden rounded-xl border border-border bg-surface font-mono text-xs"
+      className={cn(incomingClass, "my-1 overflow-hidden rounded-xl border border-border bg-surface font-mono text-xs")}
+      {...rest}
     >
       {/* 折叠头部 */}
       <button

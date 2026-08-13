@@ -1,12 +1,14 @@
 import { useState } from 'react'
+import type { HTMLAttributes } from 'react'
 import { ChevronDown, FileDiff, FilePlus, RotateCcw, X, XCircle } from 'lucide-react'
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover'
 import { baseName } from '../lib/paths'
 import { OpenWithMenu } from './OpenWithMenu'
 import type { ArtifactFile } from '../../shared/artifactSummary'
 import type { EditorApp } from '../../shared/editors'
+import { cn } from '../lib/utils'
 
-export interface FileArtifactCardProps {
+export interface FileArtifactCardProps extends HTMLAttributes<HTMLDivElement> {
   file: ArtifactFile
   workspace: string | null
   editors: EditorApp[]
@@ -21,7 +23,7 @@ export interface FileArtifactCardProps {
  * + 打开方式 + 撤销(文件级写回)。before===null(仅 no-op 无 diff)→ 查看更改/审核/撤销 不渲染。
  * 撤销带 confirm,成功进「已撤销」终态(此后隐藏打开方式等一切动作);失败弹窗显示真实原因。
  */
-export function FileArtifactCardInner({ file, workspace, editors, onOpenPreview, onOpenDiff, onUndo }: FileArtifactCardProps): JSX.Element {
+export function FileArtifactCardInner({ file, workspace, editors, onOpenPreview, onOpenDiff, onUndo, className: incomingClass, ...rest }: FileArtifactCardProps): JSX.Element {
   const [open, setOpen] = useState(false)
   const [undone, setUndone] = useState(false)
   const [pending, setPending] = useState(false)
@@ -39,7 +41,7 @@ export function FileArtifactCardInner({ file, workspace, editors, onOpenPreview,
   }
   return (
     <>
-      <div data-testid="file-artifact-card" className="flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2">
+      <div data-testid="file-artifact-card" className={cn(incomingClass, "flex items-center gap-3 rounded-lg border border-border bg-surface px-3 py-2")} {...rest}>
         {created
           ? <FilePlus className="h-4 w-4 shrink-0 text-ok" strokeWidth={1.5} />
           : <FileDiff className="h-4 w-4 shrink-0 text-fg-subtle" strokeWidth={1.5} />}

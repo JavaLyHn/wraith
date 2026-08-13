@@ -1,12 +1,14 @@
 import { useState } from 'react'
+import type { HTMLAttributes } from 'react'
+import { cn } from '../lib/utils'
 
-interface ThinkingBlockProps {
+interface ThinkingBlockProps extends HTMLAttributes<HTMLDivElement> {
   label: string
   text: string
   done: boolean
 }
 
-export default function ThinkingBlock({ label, text, done }: ThinkingBlockProps): JSX.Element {
+export default function ThinkingBlock({ label, text, done, className: incomingClass, ...rest }: ThinkingBlockProps): JSX.Element {
   // 手动开合优先;未手动时流式中展开(实时看思考)、完成后自动折叠
   const [manual, setManual] = useState<boolean | null>(null)
   const open = manual ?? !done
@@ -14,7 +16,7 @@ export default function ThinkingBlock({ label, text, done }: ThinkingBlockProps)
 
   return (
     // 无框:思考过程是低调旁注,不用实心边框卡(避免一排排带框横条与消息卡抢视觉)。
-    <div data-testid="thinking" className="my-1.5 font-mono text-xs">
+    <div data-testid="thinking" className={cn(incomingClass, "my-1.5 font-mono text-xs")} {...rest}>
       <div
         className="flex w-fit cursor-pointer select-none items-center gap-2 py-1 text-fg-subtle transition-colors hover:text-fg-muted"
         onClick={toggle}

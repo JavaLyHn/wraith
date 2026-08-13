@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import type { Item } from '../../shared/transcriptReducer'
 import type { RunMode } from '../../shared/types'
 import WorkingIndicator from './WorkingIndicator'
@@ -19,6 +19,8 @@ import TaskDonePill from './TaskDonePill'
 import type { PanelId } from '../lib/panelActions'
 import type { GatewayState } from '../../shared/gateway'
 import { groupToolRuns } from '../lib/groupToolRuns'
+import RulerTimeline from './RulerTimeline'
+import { timelineMarksAttrs } from '../lib/timelineMarks'
 
 interface TranscriptProps {
   items: Item[]
@@ -52,18 +54,33 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
   const contentRef = useRef<HTMLDivElement>(null)
   // 贴底跟随:初始 true(载入历史直接落底);用户上翻(离底 >80px)即停跟,不打断阅读
   const stickRef = useRef(true)
+  const [hoveredHid, setHoveredHid] = useState<string | null>(null)
   const chipsByMsg = useMemo(() => filesUnderMessages(items), [items])
+  const renderNodes = useMemo(() => groupToolRuns(items), [items])
+  const marks = useMemo(() => timelineMarksAttrs(renderNodes), [renderNodes])
 
-  const renderChips = (idx: number): JSX.Element | null => {
+  const makeAttrs = (i: number): React.HTMLAttributes<HTMLDivElement> & Record<string, unknown> => {
+    const m = marks[i]
+    if (!m) return {}
+    return {
+      'data-tl-hid': m.hid,
+      ...(m.markType ? { 'data-tl-mark-type': m.markType } : {}),
+      onMouseEnter: () => setHoveredHid(m.hid),
+      onMouseLeave: () => setHoveredHid(null),
+    }
+  }
+
+  const renderChips = (idx: number, nodeIdx: number): JSX.Element | null => {
     const chips = chipsByMsg.get(idx)
     if (!chips) return null
+    const attrs = makeAttrs(nodeIdx)
     return (
       <div className="flex gap-2.5">
         <div className="w-6 shrink-0" aria-hidden />
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           {chips.map(f => (
             <FileArtifactHoverPreview key={f.path} file={f} workspace={workspace ?? null} editors={editors ?? []}
-              onOpenPreview={onOpenArtifact} onOpenDiff={onOpenDiff} onUndo={onUndo} />
+              onOpenPreview={onOpenArtifact} onOpenDiff={onOpenDiff} onUndo={onUndo} {...attrs} />
           ))}
         </div>
       </div>
@@ -114,96 +131,104 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
       onWheel={markGesture}
       onTouchMove={markGesture}
       data-testid="transcript"
-      className="flex-1 overflow-y-auto px-4 py-4 [overflow-anchor:none]"
+      className="flex-1 overflow-y-auto px-4 py-4 [overflow-anchor:none] relative pl-10"
     >
-    <div ref={contentRef} className="flex flex-col gap-1 [&>*]:shrink-0">
-      {groupToolRuns(items).map((node, nodeIdx) => {
-        // 工具组：单张卡片直接渲染（避免双层展开），≥2 张才用可折叠 ToolGroup
-        if (node.kind === 'toolGroup') {
-          // 用首张卡片的 callId 作为稳定 key（同一 run 内 callId 唯一）
-          const firstCallId = node.cards[0]?.callId ?? `toolgroup-${nodeIdx}`
-          if (node.cards.length === 1) {
-            return <ToolCard key={firstCallId} card={node.cards[0]} />
+      <RulerTimeline
+        contentRef={containerRef}
+        scrollRef={containerRef}
+        activeHid={hoveredHid}
+        onHover={setHoveredHid}
+      />
+      <div ref={contentRef} className="flex flex-col gap-1 [&>*]:shrink-0">
+        {renderNodes.map((node, nodeIdx) => {
+          const attrs = makeAttrs(nodeIdx)
+          // 工具组：单张卡片直接渲染（避免双层展开），≥2 张才用可折叠 ToolGroup
+          if (node.kind === 'toolGroup') {
+            // 用首张卡片的 callId 作为稳定 key（同一 run 内 callId 唯一）
+            const firstCallId = node.cards[0]?.callId ?? `toolgroup-${nodeIdx}`
+            if (node.cards.length === 1) {
+              return <ToolCard key={firstCallId} card={node.cards[0]} {...attrs} />
+            }
+            return <ToolGroup key={firstCallId} cards={node.cards} {...attrs} />
           }
-          return <ToolGroup key={firstCallId} cards={node.cards} />
-        }
 
-        // 普通 item：按类型分发渲染；用 originalIdx 作 key，工具追加时不随分组位置偏移
-        const { item, originalIdx } = node
-        if (item.type === 'user') {
-          userOrdinal++
-          return (
-            <Fragment key={`user-${userOrdinal}`}>
-              <UserMessage
-                text={item.text}
-                mode={item.mode}
-                attachments={item.attachments}
-                ordinal={userOrdinal}
-                isLastUser={userOrdinal === totalUsers}
-                busy={busy}
-                onEdit={onEditMessage}
-                onDelete={onDeleteMessage}
-                onResend={onResendMessage}
-              />
-              {renderChips(originalIdx)}
-            </Fragment>
-          )
-        }
-        if (item.type === 'message') {
-          return (
-            <Fragment key={`msg-${originalIdx}`}>
-              <AgentMessage text={item.text} />
-              {renderChips(originalIdx)}
-            </Fragment>
-          )
-        }
-        if (item.type === 'error') {
-          return (
-            <div key={`err-${originalIdx}`} data-testid="turn-error"
-              className="self-start max-w-[85%] rounded-2xl border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">
-              ⚠️ 这一轮出错了:{item.text}
-            </div>
-          )
-        }
-        if (item.type === 'thinking') {
-          return <ThinkingBlock key={`think-${originalIdx}`} label={item.label} text={item.text} done={item.done} />
-        }
-        if (item.type === 'diff') return null
-        if (item.type === 'action') {
-          return <ActionCard key={`action-${originalIdx}`} panel={item.panel} onOpenPanel={onOpenPanel} />
-        }
-        if (item.type === 'im-bind') {
-          return <ImConnectCard key={`imbind-${originalIdx}`} platform={item.platform} workspace={workspace} onOpenPanel={onOpenPanel} onBound={onImBound} />
-        }
-        if (item.type === 'system-event') {
-          return (
-            <div key={`sysev-${originalIdx}`} data-testid="system-event"
-              className="self-center max-w-[85%] rounded-full border border-border bg-surface/60 px-3 py-1 text-2xs text-fg-subtle">
-              ⊙ {item.text}
-            </div>
-          )
-        }
-        if (item.type === 'task-done') {
-          return (
-            <TaskDonePill key={`taskdone-${item.taskId}`} text={item.text} ok={item.ok}
-              onOpen={() => onOpenPanel('tasks')} />
-          )
-        }
-        if (item.type === 'plan') {
-          return <PlanChecklist key={item.planId} item={item} />
-        }
-        if (item.type === 'planReview') {
-          return <PlanReviewCard key={item.reviewId} item={item} onReview={onPlanReview} />
-        }
-        if (item.type === 'team') {
-          return <TeamCard key={item.teamId} item={item} />
-        }
-        return null
-      })}
-      {/* 处理中占位:轮次运行中且尚无任何输出(最后一项仍是刚发的 user 气泡)时显示,
-          任何真实内容(plan/team 卡片、thinking、message、tool)到达后 last 不再是 user,自动消失。 */}
-      {busy && items[items.length - 1]?.type === 'user' && <WorkingIndicator mode={mode} />}
-    </div>
+          // 普通 item：按类型分发渲染；用 originalIdx 作 key，工具追加时不随分组位置偏移
+          const { item, originalIdx } = node
+          if (item.type === 'user') {
+            userOrdinal++
+            return (
+              <Fragment key={`user-${userOrdinal}`}>
+                <UserMessage
+                  {...attrs}
+                  text={item.text}
+                  mode={item.mode}
+                  attachments={item.attachments}
+                  ordinal={userOrdinal}
+                  isLastUser={userOrdinal === totalUsers}
+                  busy={busy}
+                  onEdit={onEditMessage}
+                  onDelete={onDeleteMessage}
+                  onResend={onResendMessage}
+                />
+                {renderChips(originalIdx, nodeIdx)}
+              </Fragment>
+            )
+          }
+          if (item.type === 'message') {
+            return (
+              <Fragment key={`msg-${originalIdx}`}>
+                <AgentMessage {...attrs} text={item.text} />
+                {renderChips(originalIdx, nodeIdx)}
+              </Fragment>
+            )
+          }
+          if (item.type === 'error') {
+            return (
+              <div key={`err-${originalIdx}`} data-testid="turn-error" {...attrs}
+                className="self-start max-w-[85%] rounded-2xl border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger">
+                ⚠️ 这一轮出错了:{item.text}
+              </div>
+            )
+          }
+          if (item.type === 'thinking') {
+            return <ThinkingBlock key={`think-${originalIdx}`} label={item.label} text={item.text} done={item.done} {...attrs} />
+          }
+          if (item.type === 'diff') return null
+          if (item.type === 'action') {
+            return <ActionCard key={`action-${originalIdx}`} panel={item.panel} onOpenPanel={onOpenPanel} {...attrs} />
+          }
+          if (item.type === 'im-bind') {
+            return <ImConnectCard key={`imbind-${originalIdx}`} platform={item.platform} workspace={workspace} onOpenPanel={onOpenPanel} onBound={onImBound} {...attrs} />
+          }
+          if (item.type === 'system-event') {
+            return (
+              <div key={`sysev-${originalIdx}`} data-testid="system-event" {...attrs}
+                className="self-center max-w-[85%] rounded-full border border-border bg-surface/60 px-3 py-1 text-2xs text-fg-subtle">
+                ⊙ {item.text}
+              </div>
+            )
+          }
+          if (item.type === 'task-done') {
+            return (
+              <TaskDonePill key={`taskdone-${item.taskId}`} text={item.text} ok={item.ok}
+                onOpen={() => onOpenPanel('tasks')} {...attrs} />
+            )
+          }
+          if (item.type === 'plan') {
+            return <PlanChecklist key={item.planId} item={item} {...attrs} />
+          }
+          if (item.type === 'planReview') {
+            return <PlanReviewCard key={item.reviewId} item={item} onReview={onPlanReview} {...attrs} />
+          }
+          if (item.type === 'team') {
+            return <TeamCard key={item.teamId} item={item} {...attrs} />
+          }
+          return null
+        })}
+        {/* 处理中占位:轮次运行中且尚无任何输出(最后一项仍是刚发的 user 气泡)时显示,
+            任何真实内容(plan/team 卡片、thinking、message、tool)到达后 last 不再是 user,自动消失。 */}
+        {busy && items[items.length - 1]?.type === 'user' && <WorkingIndicator mode={mode} />}
+      </div>
     </div>
   )
 }
