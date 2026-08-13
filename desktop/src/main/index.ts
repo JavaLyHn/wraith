@@ -38,6 +38,8 @@ import type { LegacyAutomationTask } from './automationMigration'
 import type { AutomationTask, AutomationRun, AutomationEvent } from '../shared/types'
 import type { SkillUpsertPayload } from '../shared/types'
 import { resolveInterruptTurnId } from './interruptTurnId'
+import { submitActivityTurn } from './activitySubmission'
+import { refreshActivitySources } from './activitySourceRefresh'
 import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from './notificationFilter'
 import { GatewayManager } from './gatewayManager'
 import { PtyManager } from './pty'
@@ -118,6 +120,8 @@ let client: JsonRpcClient | null = null
 let currentSessionId: string | null = null
 /** Last turnId returned by turn.submit. */
 let currentTurnId: string | null = null
+/** Session whose turn.submit request may still race its terminal notification. */
+let submittingSessionId: string | null = null
 /** Workspace follows session.start so a submitted turn has a local project target. */
 let currentSessionProjectPath = ''
 const activityStore = new ActivityStore()
@@ -174,7 +178,13 @@ function updateActivityForNotification(method: string, params: unknown): void {
   if (!status) return
   const reportedSessionId = sessionIdFromNotification(params)
   if (!reportedSessionId) return
-  if (shouldPromoteSessionIdentity(currentSessionId, currentTurnId, reportedSessionId, turnIdFromNotification(params))) {
+  if (shouldPromoteSessionIdentity(
+    currentSessionId,
+    currentTurnId,
+    reportedSessionId,
+    turnIdFromNotification(params),
+    submittingSessionId === currentSessionId,
+  )) {
     updateActivity(() => activityStore.promoteSession(currentSessionId!, reportedSessionId))
     currentSessionId = reportedSessionId
   }
@@ -570,27 +580,16 @@ ipcMain.handle('wraith:startSession', async (_e, workspaceDir: string | null) =>
 
 ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { path: string; kind: string }[], mode?: 'react' | 'plan' | 'team') => {
   if (!client) throw new Error('Backend not connected')
-  // T11 硬化:进入早窗(submit 在途、尚未 resolve)前清零 currentTurnId,
-  // 使此窗口内的 turn.interrupt 发送 null 而非陈旧的上一 turn id。
-  // 后端按线程中断、不读 turnId,运行时行为不变(纯防御性)。
-  currentTurnId = null
-  const result = await client.request('turn.submit', {
-    sessionId: currentSessionId,
-    input,
-    ...(attachments?.length ? { attachments: attachments.map(a => ({ path: a.path, kind: a.kind })) } : {}),
-    mode: mode ?? 'react',
-  })
-  const r = result as { turnId: string; status: string }
-  currentTurnId = r.turnId
-  const sessionId = currentSessionId
-  if (sessionId) {
-    updateActivity(() => activityStore.registerSession({
-      sessionId,
-      projectPath: currentSessionProjectPath,
-      title: input,
-    }))
-  }
-  return r
+  const rpcClient = client
+  return submitActivityTurn({
+    store: activityStore,
+    currentSessionId: () => currentSessionId,
+    currentProjectPath: () => currentSessionProjectPath,
+    request: (method, params) => rpcClient.request(method, params),
+    setCurrentTurnId: turnId => { currentTurnId = turnId },
+    setSubmissionPending: sessionId => { submittingSessionId = sessionId },
+    updateActivity,
+  }, input, attachments, mode)
 })
 
 ipcMain.handle('wraith:pickAttachments', async () => {
@@ -1608,6 +1607,14 @@ registerActivityIpc({
   // The app-server git.status is scoped to its current workspace, so activity snapshots
   // resolve every referenced local project independently and only when the panel asks.
   listSnapshot: async limit => {
+    await refreshActivitySources({
+      store: activityStore,
+      request: (method, params) => {
+        if (!client) return Promise.reject(new Error('Backend not connected'))
+        return client.request(method, params)
+      },
+      updateActivity,
+    })
     const enriched = await enrichActivitySnapshot(activityStore.snapshot(limit))
     activityStore.mergeGitContext(enriched.activities)
     return enriched

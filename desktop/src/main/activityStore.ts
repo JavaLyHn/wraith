@@ -194,12 +194,13 @@ export function shouldPromoteSessionIdentity(
   currentTurnId: string | null,
   reportedSessionId: string,
   reportedTurnId: string | null,
+  submissionPending = false,
 ): boolean {
   return !!currentSessionId
     && currentSessionId.startsWith('sess_')
     && currentSessionId !== reportedSessionId
-    && !!currentTurnId
-    && currentTurnId === reportedTurnId
+    && ((!!currentTurnId && currentTurnId === reportedTurnId)
+      || (submissionPending && !!reportedTurnId))
 }
 
 function taskStatus(status: DurableTaskView['status']): ActivityStatus {
@@ -231,6 +232,8 @@ function automationStatus(status: AutomationRun['status']): ActivityStatus {
  */
 export class ActivityStore {
   private readonly items = new Map<string, ActivityItem>()
+  /** Source fetch errors survive even when that source has not produced a row yet. */
+  private readonly sourceErrors = new Map<ActivityItem['kind'], string>()
   private stale = false
   private error: string | undefined
 
@@ -249,6 +252,15 @@ export class ActivityStore {
       startedAt: input.startedAt ?? now,
       updatedAt: now,
     })
+  }
+
+  /** Restores the row that existed before a locally rejected turn submission. */
+  rollbackSessionSubmission(sessionId: string, previous?: ActivityItem): ActivitySnapshot {
+    const activityId = `session:${sessionId}`
+    if (previous) this.items.set(activityId, { ...previous })
+    else this.items.delete(activityId)
+    this.clearStale()
+    return this.snapshot(MAX_RECENT_ITEMS)
   }
 
   updateSession(id: string, patch: Partial<Omit<ActivityItem, 'activityId' | 'kind' | 'sessionId' | 'startedAt'>>): ActivitySnapshot {
@@ -348,21 +360,18 @@ export class ActivityStore {
 
   /** A failed source refresh must not make unrelated sources appear stale. */
   markSourceStale(kind: ActivityItem['kind'], reason: string): ActivitySnapshot {
-    let changed = false
+    this.sourceErrors.set(kind, reason)
     for (const [id, item] of this.items) {
       if (item.kind !== kind) continue
-      changed = true
       this.items.set(id, { ...item, stale: true, error: reason })
     }
-    if (changed) {
-      this.stale = true
-      this.error = reason
-    }
+    this.clearStale()
     return this.snapshot(MAX_RECENT_ITEMS)
   }
 
   /** A successful source read, including an empty result, makes only that source fresh. */
   clearSourceStale(kind: ActivityItem['kind']): ActivitySnapshot {
+    this.sourceErrors.delete(kind)
     for (const [id, item] of this.items) {
       if (item.kind === kind && item.stale) {
         const { stale: _stale, error: _error, ...fresh } = item
@@ -395,8 +404,9 @@ export class ActivityStore {
 
   private clearStale(): void {
     const staleItems = [...this.items.values()].filter(item => item.stale)
-    this.stale = staleItems.length > 0
-    this.error = staleItems.find(item => item.error)?.error
+    const sourceError = this.sourceErrors.values().next().value as string | undefined
+    this.stale = staleItems.length > 0 || !!sourceError
+    this.error = staleItems.find(item => item.error)?.error ?? sourceError
   }
 
   private trim(): void {
