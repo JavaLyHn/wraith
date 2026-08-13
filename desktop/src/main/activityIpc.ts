@@ -3,7 +3,8 @@ import type { ActivityCancelRequest, ActivityCancelResult, ActivityItem, Activit
 export interface ActivityIpcRegistration {
   handle(channel: string, handler: (_event: unknown, ...args: unknown[]) => Promise<unknown> | unknown): void
   snapshot(limit: number): ActivitySnapshot
-  request(method: 'turn.interrupt' | 'task.cancel' | 'automations.stop', params: Record<string, string | null>): Promise<unknown>
+  request(method: 'turn.interrupt' | 'task.cancel', params: Record<string, string | null>): Promise<unknown>
+  currentSessionId(): string | null
   sessionInterruptParams(item: ActivityItem): Record<string, string | null>
 }
 
@@ -28,6 +29,18 @@ function cancelResult(value: unknown): ActivityCancelResult {
   return typeof message === 'string' ? { ok, message } : { ok }
 }
 
+function failure(error: unknown): ActivityCancelResult {
+  return { ok: false, message: error instanceof Error ? error.message : String(error) }
+}
+
+function sourceId(item: ActivityItem): string | undefined {
+  switch (item.kind) {
+    case 'session': return item.sessionId
+    case 'task': return item.taskId
+    case 'automation': return item.runId
+  }
+}
+
 /** Registers the renderer's narrow activity surface; callers cannot choose arbitrary RPC names. */
 export function registerActivityIpc(deps: ActivityIpcRegistration): void {
   deps.handle('wraith:activityList', (_event, limit?: unknown) => {
@@ -39,14 +52,23 @@ export function registerActivityIpc(deps: ActivityIpcRegistration): void {
 
     const item = activeActivity(deps.snapshot(100), value)
     if (!item) return { ok: false, message: '活动项不存在或已结束' }
+    if (!sourceId(item)) {
+      const labels: Record<ActivityKind, string> = { session: '会话', task: '任务', automation: '自动化运行' }
+      return { ok: false, message: `活动项缺少${labels[item.kind]}标识` }
+    }
 
-    switch (item.kind) {
+    try {
+      switch (item.kind) {
       case 'session':
+        if (item.sessionId !== deps.currentSessionId()) return { ok: false, message: '只能停止当前会话' }
         return cancelResult(await deps.request('turn.interrupt', deps.sessionInterruptParams(item)))
       case 'task':
         return cancelResult(await deps.request('task.cancel', { id: item.taskId! }))
       case 'automation':
-        return cancelResult(await deps.request('automations.stop', { runId: item.runId! }))
+        return { ok: false, message: '自动化运行暂不支持从活动中心停止' }
+      }
+    } catch (error) {
+      return failure(error)
     }
   })
 }

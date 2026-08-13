@@ -1608,6 +1608,7 @@ registerActivityIpc({
     if (!client) return Promise.reject(new Error('Backend not connected'))
     return client.request(method, params)
   },
+  currentSessionId: () => currentSessionId,
   sessionInterruptParams: item => ({
     sessionId: item.sessionId ?? '',
     // Other sessions cannot safely borrow the current turn id.
