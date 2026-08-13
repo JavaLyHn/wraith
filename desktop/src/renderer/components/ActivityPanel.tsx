@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertCircle, ArrowLeft, Ban, CheckCircle2, CircleDashed, Clock3, Eye, LoaderCircle, OctagonAlert, PauseCircle, XCircle } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Ban, CheckCircle2, CircleDashed, Eye, LoaderCircle, OctagonAlert, PauseCircle, XCircle } from 'lucide-react'
 import type { ActivityCancelResult, ActivityItem, ActivitySnapshot } from '../../shared/types'
 import { activityGroups, activityStatusLabel, activityTargetLabel } from '../lib/activityView'
 
@@ -124,7 +124,7 @@ export default function ActivityPanel({
                     return (
                       <article key={item.activityId} data-testid={`activity-card-${item.activityId}`} tabIndex={0}
                         onKeyDown={event => {
-                          if (event.key === 'Enter' || event.key === ' ') {
+                          if (event.currentTarget === event.target && (event.key === 'Enter' || event.key === ' ')) {
                             event.preventDefault()
                             open(item)
                           }

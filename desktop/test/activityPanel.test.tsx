@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { Mock } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import ActivityPanel from '../src/renderer/components/ActivityPanel'
@@ -102,9 +103,22 @@ describe('ActivityPanel', () => {
     fireEvent.click(screen.getByTestId('activity-open-task:one'))
     fireEvent.click(screen.getByTestId('activity-open-automation:one'))
 
-    expect(callbacks.onOpenSession).toHaveBeenCalledWith(session)
-    expect(callbacks.onOpenTask).toHaveBeenCalledWith(task)
-    expect(callbacks.onOpenAutomation).toHaveBeenCalledWith(automation)
+    expect((callbacks.onOpenSession as Mock<(item: ActivityItem) => void>).mock.calls[0]?.[0]).toBe(session)
+    expect((callbacks.onOpenTask as Mock<(item: ActivityItem) => void>).mock.calls[0]?.[0]).toBe(task)
+    expect((callbacks.onOpenAutomation as Mock<(item: ActivityItem) => void>).mock.calls[0]?.[0]).toBe(automation)
+  })
+
+  it('does not route a nested cancel button keyboard action through the focusable card', () => {
+    const running = activity({ activityId: 'task:one', kind: 'task', taskId: 'one', sessionId: undefined })
+    const onCancel = vi.fn(async () => ({ ok: true }))
+    const callbacks = renderPanel(snapshot([running]), { onCancel })
+    const cancel = screen.getByTestId('activity-cancel-task:one')
+
+    fireEvent.keyDown(cancel, { key: 'Enter' })
+    fireEvent.click(cancel)
+
+    expect(onCancel).toHaveBeenCalledOnce()
+    expect(callbacks.onOpenTask).not.toHaveBeenCalled()
   })
 
   it('keeps a failed cancellation status and shows the returned reason', async () => {
