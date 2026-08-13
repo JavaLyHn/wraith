@@ -149,4 +149,32 @@ describe('ActivityStore', () => {
   it('does not promote the active temporary session for an unrelated notification turn', () => {
     expect(shouldPromoteSessionIdentity('sess_active', 'turn-active', 'other-session', 'turn-other')).toBe(false)
   })
+
+  it('clears only task stale state after a successful empty task refresh', () => {
+    const store = new ActivityStore()
+    store.registerTask(task('t-1', 'running'))
+    store.registerAutomation(automation('r-1', 'running'))
+    store.markSourceStale('task', 'task list unavailable')
+
+    const fresh = store.clearSourceStale('task')
+    const byId = new Map(fresh.activities.map(item => [item.activityId, item]))
+
+    expect(fresh.stale).toBe(false)
+    expect(byId.get('task:t-1')).not.toHaveProperty('stale', true)
+    expect(byId.get('automation:r-1')).not.toHaveProperty('stale', true)
+  })
+
+  it('clears only automation stale state after a successful empty automation refresh', () => {
+    const store = new ActivityStore()
+    store.registerTask(task('t-1', 'running'))
+    store.registerAutomation(automation('r-1', 'running'))
+    store.markSourceStale('automation', 'automation runs unavailable')
+
+    const fresh = store.clearSourceStale('automation')
+    const byId = new Map(fresh.activities.map(item => [item.activityId, item]))
+
+    expect(fresh.stale).toBe(false)
+    expect(byId.get('automation:r-1')).not.toHaveProperty('stale', true)
+    expect(byId.get('task:t-1')).not.toHaveProperty('stale', true)
+  })
 })

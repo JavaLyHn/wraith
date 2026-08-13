@@ -198,6 +198,18 @@ export class ActivityStore {
     return this.snapshot(MAX_RECENT_ITEMS)
   }
 
+  /** A successful source read, including an empty result, makes only that source fresh. */
+  clearSourceStale(kind: ActivityItem['kind']): ActivitySnapshot {
+    for (const [id, item] of this.items) {
+      if (item.kind === kind && item.stale) {
+        const { stale: _stale, error: _error, ...fresh } = item
+        this.items.set(id, fresh)
+      }
+    }
+    this.clearStale()
+    return this.snapshot(MAX_RECENT_ITEMS)
+  }
+
   private replace(item: ActivityItem): ActivitySnapshot {
     this.items.set(item.activityId, item)
     this.clearStale()

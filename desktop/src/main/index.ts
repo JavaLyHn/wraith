@@ -201,6 +201,10 @@ function markActivitySourceStale(kind: 'task' | 'automation', error: unknown): v
   updateActivity(() => activityStore.markSourceStale(kind, reason))
 }
 
+function clearActivitySourceStale(kind: 'task' | 'automation'): void {
+  updateActivity(() => activityStore.clearSourceStale(kind))
+}
+
 function pushBadge(): void {
   // Best-effort: ask daemon for current runs; fall back to local legacy file if client not ready.
   const ud = app.getPath('userData')
@@ -1261,6 +1265,7 @@ ipcMain.handle('wraith:taskList', async (_e, limit: number) => {
   if (!client) throw new Error('Backend not connected')
   try {
     const result = await client.request('task.list', { limit: limit ?? 20 }) as { tasks?: DurableTaskView[] }
+    clearActivitySourceStale('task')
     registerTaskActivities(result.tasks ?? [])
     return result
   } catch (e) {
@@ -1282,9 +1287,15 @@ ipcMain.handle('wraith:taskAdd', async (_e, prompt: string) => {
 })
 ipcMain.handle('wraith:taskGet', async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
-  const result = await client.request('task.get', { id }) as DurableTaskView
-  registerTaskActivities([result])
-  return result
+  try {
+    const result = await client.request('task.get', { id }) as DurableTaskView
+    clearActivitySourceStale('task')
+    registerTaskActivities([result])
+    return result
+  } catch (error) {
+    markActivitySourceStale('task', error)
+    throw error
+  }
 })
 ipcMain.handle('wraith:taskCancel', async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
@@ -1540,6 +1551,7 @@ ipcMain.handle('wraith:automationRuns', async () => {
   if (!client) throw new Error('Backend not connected')
   try {
     const result = await client.request('automations.runs', {}) as { runs?: AutomationRun[] }
+    clearActivitySourceStale('automation')
     registerAutomationActivities(result.runs ?? [])
     return result
   } catch (error) {
@@ -1577,6 +1589,7 @@ ipcMain.handle('wraith:automationsRuns', async (_e, taskId?: string) => {
   if (!client) throw new Error('Backend not connected')
   try {
     const result = await client.request('automations.runs', taskId ? { taskId } : {}) as { runs?: AutomationRun[] }
+    clearActivitySourceStale('automation')
     registerAutomationActivities(result.runs ?? [])
     return result
   } catch (error) {
@@ -1839,6 +1852,7 @@ async function pollAndNotify(): Promise<void> {
   try {
     const res = await client.request('automations.runs', {}) as { runs?: AutomationRun[] }
     const runs = res.runs ?? []
+    clearActivitySourceStale('automation')
     registerAutomationActivities(runs)
 
     let maxEndedAt = notifyPollLastSeen
