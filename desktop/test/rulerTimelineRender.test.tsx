@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, act } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import React, { useEffect, useRef, useState } from 'react'
 import Transcript from '../src/renderer/components/Transcript'
 import RulerTimeline from '../src/renderer/components/RulerTimeline'
@@ -107,25 +107,28 @@ describe('T5 RulerTimeline + Transcript 集成渲染测试', () => {
     expect(hidEls.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('T5.2: user → message → toolGroup(1 个 write_file) → 有 3 个 mark 节点，类型依次是 dot/square/diamond', () => {
+  it('T5.2: user → message → toolGroup(write_file) → 只有 user 消息有 dot 标记，其余 null', () => {
     const items = buildUserMsgAgentMsgWriteTool()
 
     const nodes = groupToolRuns(items)
     const marks = timelineMarksAttrs(nodes)
     const markTypes = marks.map(m => m.markType)
-    expect(markTypes).toEqual(['dot', 'square', 'diamond'])
+    // 一问一答=一条横线：只有 user 消息产生 dot，message 和 toolGroup 都是 null
+    expect(markTypes).toEqual(['dot', null, null])
 
     const { container } = renderWithSettings(<Transcript {...baseProps} items={items} />)
 
+    // 只有 user 消息带 data-tl-mark-type
     const topTypes = collectTopLevelMarkTypes(container)
-    expect(topTypes).toEqual(['dot', 'square', 'diamond'])
+    expect(topTypes).toEqual(['dot'])
 
     const dotEls = container.querySelectorAll('[data-tl-mark-type="dot"]')
     expect(dotEls.length).toBeGreaterThanOrEqual(1)
+    // 不应该存在 square 或 diamond 类型的标记
     const squareEls = container.querySelectorAll('[data-tl-mark-type="square"]')
-    expect(squareEls.length).toBeGreaterThanOrEqual(1)
+    expect(squareEls.length).toBe(0)
     const diamondEls = container.querySelectorAll('[data-tl-mark-type="diamond"]')
-    expect(diamondEls.length).toBeGreaterThanOrEqual(1)
+    expect(diamondEls.length).toBe(0)
   })
 
   it('T5.3: RulerTimeline 在 Transcript 内可挂载且 data-testid 存在', () => {
@@ -150,11 +153,11 @@ describe('T5 RulerTimeline + Transcript 集成渲染测试', () => {
     const markTypeEls = container.querySelectorAll('[data-tl-mark-type]')
     expect(markTypeEls.length).toBe(0)
 
-    const markNodes = ruler.querySelectorAll('.ruler-mark-node')
+    const markNodes = ruler.querySelectorAll('.ruler-mark')
     expect(markNodes.length).toBe(0)
   })
 
-  it('T5.5: Transcript item hover → RulerTimeline 对应 mark 加 is-active 类，mouseLeave 后消失', () => {
+  it('T5.5: Transcript item hover → RulerTimeline 对应 mark 加 ruler-mark--on 类，mouseLeave 后消失', () => {
     const items = buildUserMsgAgentMsg()
     const { container } = renderWithSettings(<Transcript {...baseProps} items={items} />)
 
@@ -168,14 +171,14 @@ describe('T5 RulerTimeline + Transcript 集成渲染测试', () => {
     fireEvent.mouseEnter(firstHidEl)
 
     const ruler = screen.getByTestId('ruler-timeline')
-    const activeSegs = ruler.querySelectorAll('.ruler-highlight-seg.is-active')
-    const activeMarks = ruler.querySelectorAll('.ruler-mark-node.is-active')
+    const activeSegs = ruler.querySelectorAll('.ruler-highlight.ruler-highlight--visible')
+    const activeMarks = ruler.querySelectorAll('.ruler-mark.ruler-mark--on')
     expect(activeSegs.length + activeMarks.length).toBeGreaterThanOrEqual(1)
 
     fireEvent.mouseLeave(firstHidEl)
 
-    const activeSegsAfter = ruler.querySelectorAll('.ruler-highlight-seg.is-active')
-    const activeMarksAfter = ruler.querySelectorAll('.ruler-mark-node.is-active')
+    const activeSegsAfter = ruler.querySelectorAll('.ruler-highlight.ruler-highlight--visible')
+    const activeMarksAfter = ruler.querySelectorAll('.ruler-mark.ruler-mark--on')
     expect(activeSegsAfter.length + activeMarksAfter.length).toBe(0)
   })
 
@@ -205,7 +208,7 @@ describe('T5 RulerTimeline + Transcript 集成渲染测试', () => {
     render(<Fixture />)
 
     const ruler = screen.getByTestId('ruler-timeline')
-    const markNode = ruler.querySelector('.ruler-mark-node') as HTMLElement | null
+    const markNode = ruler.querySelector('.ruler-mark') as HTMLElement | null
     expect(markNode).toBeTruthy()
 
     if (markNode) {
@@ -219,18 +222,18 @@ describe('T5 RulerTimeline + Transcript 集成渲染测试', () => {
     }
   })
 
-  it('T5.7: 入场动画：mark 节点 DOM 元素存在且有 ruler-mark-node base class（至少 2 个）', () => {
+  it('T5.7: 入场动画：mark 节点 DOM 元素存在且有 ruler-mark base class（至少 1 个）', () => {
     const items = buildUserMsgAgentMsg()
     const { container } = renderWithSettings(<Transcript {...baseProps} items={items} />)
 
     triggerRulerMeasure(container)
 
     const ruler = screen.getByTestId('ruler-timeline')
-    const markNodes = ruler.querySelectorAll('.ruler-mark-node')
-    expect(markNodes.length).toBeGreaterThanOrEqual(2)
+    const markNodes = ruler.querySelectorAll('.ruler-mark')
+    expect(markNodes.length).toBeGreaterThanOrEqual(1)
 
     markNodes.forEach(node => {
-      expect(node.className.includes('ruler-mark-node')).toBe(true)
+      expect(node.className.includes('ruler-mark')).toBe(true)
     })
   })
 })

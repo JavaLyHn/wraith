@@ -1,4 +1,4 @@
-﻿import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
+import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
 import type { BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire, GitStatusView } from '../shared/types'
 import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
@@ -354,20 +354,65 @@ export default function App(): JSX.Element {
   }, [fetchMcpResources, fetchGitStatus])
 
   // ── session list helpers ───────────────────────────────────────────────────
+  // 手动排序：用户拖拽后记录顺序在 localStorage，fetchSessions 返回后应用
+  const manualOrderRef = useRef<string[]>([])
+  const applyManualOrder = useCallback((list: SessionMeta[]): SessionMeta[] => {
+    const order = manualOrderRef.current
+    if (order.length === 0) return list
+    const orderMap = new Map<string, number>()
+    order.forEach((id, i) => orderMap.set(id, i))
+    // 手动排序的排前面，新会话（不在 order 里的）按 updatedAt 倒序排在后面
+    const ordered: SessionMeta[] = []
+    const unordered: SessionMeta[] = []
+    for (const s of list) {
+      if (orderMap.has(s.id)) ordered.push(s)
+      else unordered.push(s)
+    }
+    ordered.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0))
+    unordered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    return [...ordered, ...unordered]
+  }, [])
   const fetchSessions = useCallback(async () => {
     try {
       const { sessions } = await window.wraith.listSessions()
-      setSessions(sessions)
+      setSessions(applyManualOrder(sessions))
     } catch (err) {
       console.error('[wraith] listSessions error:', err)
     }
-  }, [])
+  }, [applyManualOrder])
 
   // sessionId 变化即刷新侧栏:新会话在 turn.started 时后端已落桩并带回真实 id,
   // 这里拉一次 listSessions,使会话「发送即出现」在左侧(不必等 turn 结束)。
   useEffect(() => {
     if (state.sessionId) void fetchSessions()
   }, [state.sessionId, fetchSessions])
+
+  // 初始化时加载手动排序
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('wraith.sidebar.sessionOrder')
+      if (raw) manualOrderRef.current = JSON.parse(raw) as string[]
+    } catch { /* ignore */ }
+  }, [])
+
+  // 拖拽排序：把 sourceId 移到 targetId 的位置
+  const handleReorderSession = useCallback((sourceId: string, targetId: string) => {
+    setSessions(prev => {
+      const ids = prev.map(s => s.id)
+      const sourceIdx = ids.indexOf(sourceId)
+      const targetIdx = ids.indexOf(targetId)
+      if (sourceIdx === -1 || targetIdx === -1 || sourceIdx === targetIdx) return prev
+      // 重新排列
+      const next = [...prev]
+      const [moved] = next.splice(sourceIdx, 1)
+      next.splice(targetIdx, 0, moved)
+      // 更新 manualOrder
+      const newOrder = next.map(s => s.id)
+      manualOrderRef.current = newOrder
+      try { localStorage.setItem('wraith.sidebar.sessionOrder', JSON.stringify(newOrder)) } catch { /* ignore */ }
+      return next
+    })
+  }, [])
 
   // ── automationApprovalRef:缓存最近一次 approval push(唯一弹窗入口是运行历史「处理审批」钮) ──
   const automationApprovalRef = useRef<{ runId: string; payload: Record<string, unknown> } | null>(null)
@@ -1198,6 +1243,7 @@ export default function App(): JSX.Element {
           onToggleStar={handleToggleStar}
           onRenameSession={handleRenameSession}
           onArchiveSession={handleArchiveSession}
+          onReorderSession={handleReorderSession}
           onActivateProject={switchToProject}
           onAddProject={handleAddProject}
           onOpenAllProjects={() => setView('projects')}

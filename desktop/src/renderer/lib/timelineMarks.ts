@@ -1,19 +1,20 @@
 import type { RenderNode } from './groupToolRuns'
 
-export type RulerMarkType = 'dot' | 'square' | 'diamond'
+export type RulerMarkType = 'dot'
 
 export interface RulerMarkAttr {
   hid: string
   markType: null | RulerMarkType
 }
 
-const WRITE_TOOLS = new Set<string>(['write_file', 'execute_command', 'create_project'])
-
+/**
+ * 一问一答算一条横线：每个 user 消息产生一个 dot 标记，
+ * 同一轮次内的所有内容（agent 回答、工具调用、thinking 等）共享同一个 hid。
+ * 用户发完消息中断（无 agent 回答）也算一条。
+ */
 export function timelineMarksAttrs(nodes: RenderNode[]): RulerMarkAttr[] {
-  let userOrdinal = 0
-  let hidForAgent = 'prelude'
-  let agentFirstMsg = true
-  let writeEmphasisCount = 0
+  let turnOrdinal = 0
+  let currentHid = 'prelude'
 
   const result: RulerMarkAttr[] = []
 
@@ -22,37 +23,14 @@ export function timelineMarksAttrs(nodes: RenderNode[]): RulerMarkAttr[] {
       const item = node.item
 
       if (item.type === 'user') {
-        userOrdinal++
-        hidForAgent = `a${userOrdinal}`
-        agentFirstMsg = true
-        writeEmphasisCount = 0
-        result.push({ hid: `u${userOrdinal}`, markType: 'dot' })
-      } else if (item.type === 'message') {
-        if (agentFirstMsg) {
-          agentFirstMsg = false
-          result.push({ hid: hidForAgent, markType: 'square' })
-        } else {
-          result.push({ hid: hidForAgent, markType: null })
-        }
-      } else if (item.type === 'tool') {
-        const card = item.card
-        if (WRITE_TOOLS.has(card.name) && writeEmphasisCount < 3) {
-          writeEmphasisCount++
-          result.push({ hid: hidForAgent, markType: 'diamond' })
-        } else {
-          result.push({ hid: hidForAgent, markType: null })
-        }
+        turnOrdinal++
+        currentHid = `turn${turnOrdinal}`
+        result.push({ hid: currentHid, markType: 'dot' })
       } else {
-        result.push({ hid: hidForAgent, markType: null })
+        result.push({ hid: currentHid, markType: null })
       }
     } else if (node.kind === 'toolGroup') {
-      const firstWriteCard = node.cards.find(c => WRITE_TOOLS.has(c.name))
-      if (firstWriteCard && writeEmphasisCount < 3) {
-        writeEmphasisCount++
-        result.push({ hid: hidForAgent, markType: 'diamond' })
-      } else {
-        result.push({ hid: hidForAgent, markType: null })
-      }
+      result.push({ hid: currentHid, markType: null })
     }
   }
 

@@ -18,12 +18,18 @@ import { userAvatarGlyph, accountGlyphDuplicatesName } from '../lib/chatIdentity
 import type { ProfilePrefs } from '../settings/prefs'
 import type { SessionMeta, ProjectView } from '../../shared/types'
 
-export function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onArchive }: {
+export function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onArchive, dragState, onDragStart, onDragOver, onDrop, onDragEnd }: {
   s: SessionMeta; active: boolean; running: boolean
   onSelect: (id: string) => void
   onToggleStar: (id: string, starred: boolean) => void
   onRename: (id: string, name: string) => void
   onArchive: (id: string) => void
+  /** 拖拽状态（由 Sidebar 管理，传给每行做视觉反馈） */
+  dragState?: { draggingId: string | null; overId: string | null } | null
+  onDragStart?: (id: string) => void
+  onDragOver?: (id: string) => void
+  onDrop?: (id: string) => void
+  onDragEnd?: () => void
 }): JSX.Element {
   // 行内改名:Electron 渲染进程不支持 window.prompt,故用就地输入框
   const [editing, setEditing] = useState(false)
@@ -74,10 +80,20 @@ export function SessionRow({ s, active, running, onSelect, onToggleStar, onRenam
     )
   }
 
+  const isDragging = dragState?.draggingId === s.id
+  const isDragOver = dragState?.overId === s.id && dragState?.draggingId !== s.id
+
   return (
     <div
-      className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 ' +
-        (active ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent' : 'hover:bg-fg/5')}
+      draggable
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', s.id); onDragStart?.(s.id) }}
+      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; onDragOver?.(s.id) }}
+      onDrop={(e) => { e.preventDefault(); onDrop?.(s.id) }}
+      onDragEnd={() => { onDragEnd?.() }}
+      className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 transition-opacity ' +
+        (active ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent' : 'hover:bg-fg/5') +
+        (isDragging ? ' opacity-40' : '') +
+        (isDragOver ? ' ring-1 ring-accent/50' : '')}
       onDoubleClick={startEdit}
     >
       {running && (
@@ -194,6 +210,8 @@ interface SidebarProps {
   onToggleStar: (id: string, starred: boolean) => void
   onRenameSession: (id: string, name: string) => void
   onArchiveSession: (id: string) => void
+  /** 拖拽排序：把 sourceId 移到 targetId 的位置 */
+  onReorderSession?: (sourceId: string, targetId: string) => void
   onActivateProject: (path: string) => void
   onAddProject: () => void
   /** 进「项目」面板看全量(改名/移出/整理都在那儿)。 */
@@ -234,6 +252,7 @@ export default function Sidebar({
   onToggleStar,
   onRenameSession,
   onArchiveSession,
+  onReorderSession,
   onActivateProject,
   onAddProject,
   onOpenAllProjects,
@@ -265,6 +284,8 @@ export default function Sidebar({
     if (activeNav !== null) setToolsExpanded(true)
   }, [activeNav])
   const showTools = toolsExpanded
+  // 拖拽排序状态
+  const [dragState, setDragState] = useState<{ draggingId: string | null; overId: string | null }>({ draggingId: null, overId: null })
   // 会话列表分组模式:recent=最新平铺(默认)/ time=按时间分组;记忆在 localStorage
   const [groupMode, setGroupMode] = useState<'recent' | 'time'>(() => {
     try { return localStorage.getItem('wraith.sidebar.sessionGroupMode') === 'time' ? 'time' : 'recent' } catch { return 'recent' }
@@ -419,7 +440,12 @@ export default function Sidebar({
                 <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
                   running={s.id === runningSessionId}
                   onSelect={onSelectSession} onToggleStar={onToggleStar}
-                  onRename={onRenameSession} onArchive={onArchiveSession} />
+                  onRename={onRenameSession} onArchive={onArchiveSession}
+                  dragState={dragState}
+                  onDragStart={(id) => setDragState({ draggingId: id, overId: null })}
+                  onDragOver={(id) => setDragState(prev => prev.draggingId ? { ...prev, overId: id } : prev)}
+                  onDrop={(id) => { if (dragState.draggingId && dragState.draggingId !== id) onReorderSession?.(dragState.draggingId, id); setDragState({ draggingId: null, overId: null }) }}
+                  onDragEnd={() => setDragState({ draggingId: null, overId: null })} />
               ))
               // sticky 表头:滚动时标题不动,内容从下方滑过(半透明 + 模糊)
               const headerCls = 'sticky top-0 z-20 mt-4 sidebar-sticky pl-5 pr-3 pb-1.5 pt-2 text-3xs uppercase tracking-wider text-fg-subtle'

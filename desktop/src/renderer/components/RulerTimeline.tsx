@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '../lib/utils'
 
 export interface RulerTimelineProps {
@@ -13,7 +13,7 @@ interface MeasuredMark {
   top: number
   mid: number
   hid: string
-  markType: null | 'dot' | 'square' | 'diamond'
+  markType: null | 'dot'
 }
 
 interface HighlightSeg {
@@ -72,8 +72,8 @@ export default function RulerTimeline({
       const top = rect.top - containerRect.top + container.scrollTop
       const height = rect.height
       const hid = el.getAttribute('data-tl-hid') ?? ''
-      const markAttr = el.getAttribute('data-tl-mark-type') as null | 'dot' | 'square' | 'diamond'
-      const markType = markAttr === 'dot' || markAttr === 'square' || markAttr === 'diamond' ? markAttr : null
+      const markAttr = el.getAttribute('data-tl-mark-type') as null | 'dot'
+      const markType = markAttr === 'dot' ? 'dot' : null
       marks.push({ top, mid: top + height / 2, hid, markType })
     }
     return marks
@@ -106,6 +106,18 @@ export default function RulerTimeline({
     return segs
   }, [measured])
 
+  /** 点击标记 → 滚动到对应对话轮次的起始位置 */
+  const scrollToHid = useCallback((hid: string): void => {
+    const container = scrollRef.current
+    if (!container) return
+    const target = container.querySelector<HTMLElement>(`[data-tl-hid="${hid}"]`)
+    if (!target) return
+    const containerRect = container.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    const offset = targetRect.top - containerRect.top + container.scrollTop - 16
+    container.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
+  }, [scrollRef])
+
   return (
     <div
       className={cn('ruler-timeline', className)}
@@ -115,28 +127,32 @@ export default function RulerTimeline({
       {segments.map((seg, i) => (
         <div
           key={`seg-${seg.hid}-${i}`}
-          className={cn('ruler-highlight-seg', activeHid === seg.hid && 'is-active')}
+          className={cn('ruler-highlight', activeHid === seg.hid && 'ruler-highlight--visible')}
           style={{
             top: seg.top,
             height: seg.bottom - seg.top,
           }}
+          onMouseEnter={() => { onHover(seg.hid) }}
+          onMouseLeave={() => { onHover(null) }}
+          onClick={() => { scrollToHid(seg.hid) }}
         />
       ))}
       {measured.map((m, i) => (
-        <div
-          key={`mark-${m.hid}-${i}`}
-          className={cn(
-            'ruler-mark-node',
-            m.markType === 'dot' && 'ruler-mark-dot',
-            m.markType === 'square' && 'ruler-mark-square',
-            m.markType === 'diamond' && 'ruler-mark-diamond',
-            activeHid === m.hid && 'is-active',
-          )}
-          style={{ top: m.mid - 4 }}
-          onMouseEnter={() => { onHover(m.hid) }}
-          onMouseLeave={() => { onHover(null) }}
-          data-tl-ruler-mark={m.markType ?? 'none'}
-        />
+        m.markType && (
+          <div
+            key={`mark-${m.hid}-${i}`}
+            className={cn(
+              'ruler-mark',
+              `ruler-mark--${m.markType}`,
+              activeHid === m.hid && 'ruler-mark--on',
+            )}
+            style={{ top: m.mid - 8 }}
+            onMouseEnter={() => { onHover(m.hid) }}
+            onMouseLeave={() => { onHover(null) }}
+            onClick={() => { scrollToHid(m.hid) }}
+            data-tl-ruler-mark={m.markType}
+          />
+        )
       ))}
     </div>
   )
