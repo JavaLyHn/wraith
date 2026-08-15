@@ -33,7 +33,8 @@ describe('withinWorkspace 路径守卫', () => {
 
   // POSIX 系列(Windows 上也跑——函数不依赖真实 fs,只依赖 path.normalize 行为)
   it('POSIX 正常路径', () => {
-    expect(withinWorkspace('/home/user/project/src/a.ts', getPosix)).toBe('/home/user/project/src/a.ts')
+    const input = '/home/user/project/src/a.ts'
+    expect(withinWorkspace(input, getPosix)).toBe(path.normalize(input))
   })
   it('POSIX .. 逃逸', () => {
     expect(() => withinWorkspace('/home/user/project/../shadow/x', getPosix)).toThrow(/工作区/)
