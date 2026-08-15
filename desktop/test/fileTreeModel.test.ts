@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { describe, it, expect } from 'vitest'
 import { buildTreeFromFlat, insertSubtree } from '../src/renderer/lib/fileTreeModel'
 import type { FsNode } from '../src/shared/types'
@@ -49,5 +50,67 @@ describe('buildTreeFromFlat', () => {
     const { root: rebuilt } = buildTreeFromFlat(allNodes, root)
     const deep = rebuilt.children.find(c => c.node.name === 'deep')!
     expect(deep.children).toHaveLength(2)
+  })
+
+  it('F1: root 缺失时合成根节点并加入 flatIndex', () => {
+    const root = 'd:\\projects\\myapp'
+    const nodes: FsNode[] = [
+      n('d:\\projects\\myapp\\src', 'dir', root),
+      n('d:\\projects\\myapp\\src\\index.ts', 'file', 'd:\\projects\\myapp\\src'),
+      n('d:\\projects\\myapp\\README.md', 'file', root),
+    ]
+    const { root: tree, flatIndex } = buildTreeFromFlat(nodes, root)
+    const rootFromIndex = flatIndex.get(root)
+    expect(rootFromIndex).toBeDefined()
+    expect(rootFromIndex?.kind).toBe('dir')
+    expect(rootFromIndex?.parentPath).toBe('')
+    expect(rootFromIndex?.path).toBe(root)
+    expect(tree.node).toBe(rootFromIndex)
+    expect(tree.children.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('F2: path.normalize 防御 POSIX 斜杠和 dot segments', () => {
+    const root = '/home/user/workspace'
+    const rootN = path.normalize(root)
+    const srcN = path.normalize('/home/user/workspace/src')
+    const mainN = path.normalize('/home/user/workspace/src/main.ts')
+    const readmeN = path.normalize('/home/user/workspace/README.md')
+    const nodes: FsNode[] = [
+      {
+        path: '/home/user/./workspace/src',
+        parentPath: '/home/user/./workspace/./.',
+        name: 'src',
+        kind: 'dir',
+      },
+      {
+        path: '/home/user/./workspace/src/./lib/../main.ts',
+        parentPath: '/home/user/./workspace/src',
+        name: 'main.ts',
+        kind: 'file',
+      },
+      {
+        path: '/home/a/../user/workspace/./README.md',
+        parentPath: '/home/a/../user/./workspace',
+        name: 'README.md',
+        kind: 'file',
+      },
+    ]
+    const { root: tree, flatIndex } = buildTreeFromFlat(nodes, root)
+    for (const key of flatIndex.keys()) {
+      expect(key).not.toMatch(/[\\/]\.\.?[\\/]/)
+      expect(key).not.toMatch(/[\\/]\.\.$/)
+      expect(key).not.toMatch(/[\\/]\.$/)
+    }
+    expect(tree.node.path).toBe(rootN)
+    const srcChild = tree.children.find(c => c.node.name === 'src')
+    expect(srcChild).toBeDefined()
+    expect(srcChild?.node.parentPath).toBe(rootN)
+    const mainTs = flatIndex.get(mainN)
+    expect(mainTs).toBeDefined()
+    expect(mainTs?.name).toBe('main.ts')
+    expect(mainTs?.parentPath).toBe(srcN)
+    const readme = flatIndex.get(readmeN)
+    expect(readme).toBeDefined()
+    expect(readme?.parentPath).toBe(rootN)
   })
 })

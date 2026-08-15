@@ -1,3 +1,4 @@
+import path from 'node:path'
 import type { FsNode } from '../../shared/types'
 
 /** 用于渲染的 children 树节点。完全由 flat FsNode[] 派生,纯函数重建无副作用。 */
@@ -11,37 +12,48 @@ export interface TreeNode {
  * 父节点缺失时子节点会被挂到 root 下(容错,不抛)。
  */
 export function buildTreeFromFlat(nodes: FsNode[], rootPath: string): { root: TreeNode; flatIndex: Map<string, FsNode> } {
+  const rootN = path.normalize(rootPath)
+  const normalizedNodes: FsNode[] = nodes.map(n => ({
+    ...n,
+    path: path.normalize(n.path),
+    parentPath: n.parentPath ? path.normalize(n.parentPath) : '',
+  }))
+
   const flatIndex = new Map<string, FsNode>()
-  for (const n of nodes) flatIndex.set(n.path, n)
+  for (const n of normalizedNodes) flatIndex.set(n.path, n)
 
   const byParent = new Map<string, TreeNode[]>()
   const all = new Map<string, TreeNode>()
-  for (const n of nodes) {
+  for (const n of normalizedNodes) {
     const tn: TreeNode = { node: n, children: [] }
     all.set(n.path, tn)
     const key = n.parentPath || ''
     if (!byParent.has(key)) byParent.set(key, [])
     byParent.get(key)!.push(tn)
   }
-  // 挂载 children:先按 parent 拼
   for (const [parentPath, kids] of byParent) {
-    if (parentPath === '') continue   // root 的 kids 最后处理
+    if (parentPath === '') continue
     const p = all.get(parentPath)
     if (p) p.children.push(...kids)
     else {
-      // 父节点丢失(常见于截断返回),容错挂到 root 的 parent='' 桶
       const rootBucket = byParent.get('') ?? []
       rootBucket.push(...kids)
       byParent.set('', rootBucket)
     }
   }
-  const rootNode = all.get(rootPath) ?? {
-    node: { path: rootPath, parentPath: '', name: rootPath.split(/[\\/]/).pop() || rootPath, kind: 'dir' as const },
-    children: [],
+  let rootNode = all.get(rootN)
+  if (!rootNode) {
+    const synthesized: FsNode = {
+      path: rootN,
+      parentPath: '',
+      name: rootN.split(/[\\/]/).pop() || rootN,
+      kind: 'dir',
+    }
+    rootNode = { node: synthesized, children: [] }
+    flatIndex.set(rootN, synthesized)
   }
   const rootChildren = byParent.get('') ?? []
   rootNode.children.push(...rootChildren.filter(c => c.node.path !== rootNode.node.path))
-  // sort:目录先于文件,同类按名字不区分大小写
   const sort = (nodes: TreeNode[]): void => {
     nodes.sort((a, b) => {
       const ak = a.node.kind, bk = b.node.kind
@@ -59,8 +71,12 @@ export function buildTreeFromFlat(nodes: FsNode[], rootPath: string): { root: Tr
 
 /** 把懒加载得到的 parentPath 子节点 flat list 合并进已有的 flatIndex (in-place mutate)。 */
 export function insertSubtree(flatIndex: Map<string, FsNode>, _parentPath: string, newNodes: FsNode[]): void {
-  for (const n of newNodes) {
-    // 即便已存在也覆写(保证 mtime 刷新)
+  for (const raw of newNodes) {
+    const n: FsNode = {
+      ...raw,
+      path: path.normalize(raw.path),
+      parentPath: raw.parentPath ? path.normalize(raw.parentPath) : '',
+    }
     flatIndex.set(n.path, n)
   }
 }
