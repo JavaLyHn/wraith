@@ -67,7 +67,7 @@ export default function FilePreviewPanel({ path, kind, onPathChange }: Props): J
     )
   } else if (k === 'code' || k === 'markdown') {
     body = text ? (
-      <CodeView content={text.content} truncated={text.truncated} language={k === 'markdown' ? 'markdown' : lang} />
+      <CodeView content={text.content} truncated={text.truncated} language={lang} />
     ) : (
       <div className="p-3 text-xs text-fg-subtle">读取文件…</div>
     )

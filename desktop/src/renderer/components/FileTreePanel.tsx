@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { ChevronRight, Folder, FolderOpen, FileText, File as FileIcon } from 'lucide-react'
+import { ChevronRight, Folder, FolderOpen, FileText, File as FileIcon, Link2 } from 'lucide-react'
 import { buildTreeFromFlat, insertSubtree, type TreeNode } from '../lib/fileTreeModel'
 import type { FsNode } from '../../shared/types'
 import { previewKind } from '../lib/filePreviewKind'
@@ -10,11 +10,12 @@ interface Props {
   onError?: (err: Error) => void
 }
 
+type TreeUiState = { expanded: Set<string>; loadedDirs: Set<string> }
+
 export default function FileTreePanel({ rootPath, onOpenFile, onError }: Props): JSX.Element {
   const [tree, setTree] = useState<TreeNode | null>(null)
   const [flatIndex, setFlatIndex] = useState<Map<string, FsNode>>(new Map())
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [loadedDirs, setLoadedDirs] = useState<Set<string>>(new Set())
+  const [ui, setUi] = useState<TreeUiState>(() => ({ expanded: new Set(), loadedDirs: new Set() }))
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
 
@@ -31,8 +32,7 @@ export default function FileTreePanel({ rootPath, onOpenFile, onError }: Props):
       const { root: built, flatIndex: idx } = buildTreeFromFlat(data.nodes, actualRoot)
       setTree(built)
       setFlatIndex(idx)
-      setLoadedDirs(new Set([built.node.path]))
-      setExpanded(new Set([built.node.path]))
+      setUi({ expanded: new Set([built.node.path]), loadedDirs: new Set([built.node.path]) })
       setErr(null)
     } catch (e: any) {
       setErr(String(e?.message ?? e))
@@ -45,25 +45,75 @@ export default function FileTreePanel({ rootPath, onOpenFile, onError }: Props):
   const toggleExpand = useCallback(async (node: TreeNode) => {
     if (node.node.kind !== 'dir') return
     const path = node.node.path
-    setExpanded(prev => {
-      const next = new Set(prev)
-      if (next.has(path)) { next.delete(path); return next }
-      next.add(path)
-      return next
+    let needsFetch = false
+    setUi(prev => {
+      const nextExpanded = new Set(prev.expanded)
+      const nextLoaded = new Set(prev.loadedDirs)
+      if (nextExpanded.has(path)) {
+        nextExpanded.delete(path)
+      } else {
+        nextExpanded.add(path)
+      }
+      if (!nextLoaded.has(path)) {
+        nextLoaded.add(path)
+        needsFetch = true
+      }
+      return { expanded: nextExpanded, loadedDirs: nextLoaded }
     })
-    if (!loadedDirs.has(path)) {
+    if (needsFetch) {
       try {
         const sub = await window.wraith.fs.tree(path, { maxDepth: 1 })
-        const newIdx = new Map(flatIndex)
-        insertSubtree(newIdx, path, sub.nodes)
-        const newRootPath = tree?.node.path ?? resolveRootPath(Array.from(newIdx.values()), rootPath)
-        const { root: rebuilt, flatIndex: rebuiltIdx } = buildTreeFromFlat(Array.from(newIdx.values()), newRootPath)
-        setFlatIndex(rebuiltIdx)
-        setLoadedDirs(prev => { const n = new Set(prev); n.add(path); return n })
-        setTree(rebuilt)
+        setFlatIndex(prevFlat => {
+          const newIdx = new Map(prevFlat)
+          insertSubtree(newIdx, path, sub.nodes)
+          const newRootPath = tree?.node.path ?? resolveRootPath(Array.from(newIdx.values()), rootPath)
+          const { root: rebuilt, flatIndex: rebuiltIdx } = buildTreeFromFlat(Array.from(newIdx.values()), newRootPath)
+          setTree(rebuilt)
+          return rebuiltIdx
+        })
       } catch (e: any) { setErr(String(e?.message ?? e)) }
     }
-  }, [flatIndex, tree, loadedDirs, rootPath, resolveRootPath])
+  }, [tree, rootPath, resolveRootPath])
+
+  const handleDirAction = useCallback((node: TreeNode, action: 'toggle' | 'expand' | 'collapse') => {
+    if (node.node.kind !== 'dir') return
+    const path = node.node.path
+    let needsFetch = false
+    setUi(prev => {
+      const nextExpanded = new Set(prev.expanded)
+      const nextLoaded = new Set(prev.loadedDirs)
+      const isExpanded = nextExpanded.has(path)
+      if (action === 'toggle') {
+        if (isExpanded) nextExpanded.delete(path)
+        else nextExpanded.add(path)
+      } else if (action === 'expand') {
+        if (!isExpanded) nextExpanded.add(path)
+      } else if (action === 'collapse') {
+        if (isExpanded) nextExpanded.delete(path)
+      }
+      const willExpand = nextExpanded.has(path)
+      if (willExpand && !nextLoaded.has(path)) {
+        nextLoaded.add(path)
+        needsFetch = true
+      }
+      return { expanded: nextExpanded, loadedDirs: nextLoaded }
+    })
+    if (needsFetch) {
+      (async () => {
+        try {
+          const sub = await window.wraith.fs.tree(path, { maxDepth: 1 })
+          setFlatIndex(prevFlat => {
+            const newIdx = new Map(prevFlat)
+            insertSubtree(newIdx, path, sub.nodes)
+            const newRootPath = tree?.node.path ?? resolveRootPath(Array.from(newIdx.values()), rootPath)
+            const { root: rebuilt, flatIndex: rebuiltIdx } = buildTreeFromFlat(Array.from(newIdx.values()), newRootPath)
+            setTree(rebuilt)
+            return rebuiltIdx
+          })
+        } catch (e: any) { setErr(String(e?.message ?? e)) }
+      })()
+    }
+  }, [tree, rootPath, resolveRootPath])
 
   const handleOpen = (absPath: string) => {
     setSelectedPath(absPath)
@@ -103,9 +153,10 @@ export default function FileTreePanel({ rootPath, onOpenFile, onError }: Props):
               key={c.node.path}
               depth={0}
               node={c}
-              expanded={expanded}
+              expanded={ui.expanded}
               selectedPath={selectedPath}
               onToggle={toggleExpand}
+              onDirAction={handleDirAction}
               onOpen={handleOpen}
             />
           ))
@@ -118,42 +169,71 @@ export default function FileTreePanel({ rootPath, onOpenFile, onError }: Props):
 function TreeRow(props: {
   node: TreeNode; depth: number; expanded: Set<string>; selectedPath: string | null
   onToggle: (n: TreeNode) => void
+  onDirAction: (n: TreeNode, action: 'toggle' | 'expand' | 'collapse') => void
   onOpen: (path: string) => void
 }): JSX.Element {
-  const { node, depth, expanded, selectedPath, onToggle, onOpen } = props
+  const { node, depth, expanded, selectedPath, onToggle, onDirAction, onOpen } = props
   const isDir = node.node.kind === 'dir'
+  const isLink = node.node.kind === 'symlink'
   const isExpanded = expanded.has(node.node.path)
   const isSelected = selectedPath === node.node.path
 
   const DirIcon = isExpanded ? FolderOpen : Folder
-  const isCode = !isDir && previewKind(node.node.path) !== 'binary'
-  const Icon = isDir ? DirIcon : (isCode ? FileText : FileIcon)
+  const isCode = !isDir && !isLink && previewKind(node.node.path) !== 'binary'
+  const Icon = isDir ? DirIcon : (isLink ? Link2 : (isCode ? FileText : FileIcon))
+
+  const handleRowClick = () => {
+    if (isDir) onToggle(node)
+    else if (isLink) { /* symlink no-op */ }
+    else onOpen(node.node.path)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isLink) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault() }
+      return
+    }
+    if (!isDir && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault()
+      onOpen(node.node.path)
+    }
+    if (isDir) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault()
+        onDirAction(node, 'toggle')
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault()
+        onDirAction(node, 'expand')
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault()
+        onDirAction(node, 'collapse')
+      }
+    }
+  }
+
+  const rowTitle = isLink ? `符号链接:不自动导航\n${node.node.path}` : node.node.path
 
   return (
     <div>
       <div
         role={isDir ? 'button' : 'treeitem'}
         aria-selected={isSelected}
-        onClick={() => (isDir ? onToggle(node) : onOpen(node.node.path))}
-        onKeyDown={(e) => {
-          if (!isDir && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onOpen(node.node.path) }
-          if (isDir && (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
-            e.preventDefault(); onToggle(node)
-          }
-        }}
+        onClick={handleRowClick}
+        onKeyDown={handleKeyDown}
         tabIndex={0}
         className={
           'ft-row relative flex cursor-pointer select-none items-center gap-0.5 rounded px-1.5 py-1 text-xs text-fg ' +
-          (isSelected ? 'ft-row-selected ' : 'hover:bg-fg/5 ')
+          (isSelected ? 'ft-row-selected ' : 'hover:bg-fg/5 ') +
+          (isLink ? 'ft-row-link ' : '')
         }
         style={{ paddingLeft: 6 + depth * 14 }}
-        title={node.node.path}
+        title={rowTitle}
       >
         {isDir
           ? <ChevronRight className={'h-3 w-3 shrink-0 text-fg-subtle transition-transform ' + (isExpanded ? 'rotate-90' : '')} strokeWidth={2} aria-hidden />
           : <span className="inline-block h-3 w-3 shrink-0" aria-hidden />
         }
-        <Icon className="h-3.5 w-3.5 shrink-0 text-fg-subtle" strokeWidth={1.5} aria-hidden />
+        <Icon className={'h-3.5 w-3.5 shrink-0 ' + (isLink ? 'text-brand' : 'text-fg-subtle')} strokeWidth={1.5} aria-hidden />
         <span className="ml-1 min-w-0 flex-1 truncate">{node.node.name}</span>
       </div>
       {isDir && isExpanded && node.children.length > 0 && (
@@ -166,6 +246,7 @@ function TreeRow(props: {
               expanded={expanded}
               selectedPath={selectedPath}
               onToggle={onToggle}
+              onDirAction={onDirAction}
               onOpen={onOpen}
             />
           ))}
