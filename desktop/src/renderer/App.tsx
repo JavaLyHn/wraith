@@ -45,7 +45,7 @@ import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { compactionNotice } from './lib/compactView'
-import { Download, Wand2 } from 'lucide-react'
+import { Download, Wand2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -77,6 +77,9 @@ import RagPanel from './components/RagPanel'
 import DocumentsPanel from './components/DocumentsPanel'
 import ProjectsPanel from './components/ProjectsPanel'
 import SettingsPanel from './components/SettingsPanel'
+import WorkbenchTabBar, { type WorkbenchTab, makeFileTab } from './components/WorkbenchTabBar'
+import FileTreePanel from './components/FileTreePanel'
+import FilePreviewPanel from './components/FilePreviewPanel'
 import TerminalDrawer from './components/TerminalDrawer'
 import RightDock, { type RightDockPane } from './components/RightDock'
 import SummaryPopover from './components/SummaryPopover'
@@ -213,6 +216,74 @@ export default function App(): JSX.Element {
   const [rightPreview, setRightPreview] = useState<RightPreview | null>(null)
   // 关闭确认对话框:主进程发 'wraith:close:request' 时弹出
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+
+  // ── Workbench 工作台(文件浏览器 + 聊天 Tab 混排) ──────────────────────────
+  const [tabs, setTabs] = useState<WorkbenchTab[]>(() => [{ id: 'chat', title: '聊天' }])
+  const [activeTabId, setActiveTabId] = useState<string>('chat')
+  const [fileTreeVisible, setFileTreeVisible] = useState<boolean>(() => {
+    try { return localStorage.getItem('wraith.workbench.fileTreeVisible') === '1' } catch { return false }
+  })
+  const [fileTreeWidth, setFileTreeWidth] = useState<number>(() => {
+    try {
+      const w = parseInt(localStorage.getItem('wraith.workbench.fileTreeWidth') ?? '', 10)
+      return Number.isFinite(w) && w >= 200 && w <= 560 ? w : 260
+    } catch { return 260 }
+  })
+  const resizingRef = useRef<{ startX: number; startW: number } | null>(null)
+
+  const handleOpenWorkspaceFile = useCallback((absPath: string) => {
+    const tid = `file:${absPath}` as const
+    setTabs(prev => {
+      if (prev.some(t => t.id === tid)) return prev
+      return [...prev, makeFileTab(absPath)]
+    })
+    setActiveTabId(tid as string)
+  }, [])
+
+  const handleCloseTab = useCallback((fileId: Extract<WorkbenchTab['id'], `file:${string}`>) => {
+    setTabs(prev => {
+      if (prev.length === 0) return prev
+      const idx = prev.findIndex(t => t.id === fileId)
+      if (idx === -1) return prev
+      const next = [...prev]
+      next.splice(idx, 1)
+      setActiveTabId(cur => {
+        if (cur !== fileId) return cur
+        const neighbor = next[idx] ?? next[idx - 1] ?? next[0]
+        return neighbor ? neighbor.id : 'chat'
+      })
+      return next.length === 0 ? [{ id: 'chat', title: '聊天' } as WorkbenchTab] : next
+    })
+  }, [])
+
+  const handleActivateTab = useCallback((id: WorkbenchTab['id']) => {
+    setActiveTabId(id as string)
+  }, [])
+
+  const handleOpenWorkspace = useCallback(() => {
+    setView('chat')
+    setFileTreeVisible(true)
+  }, [])
+
+  // Workbench 文件树分隔线拖拽
+  const onResizeMouseDown = (e: React.MouseEvent): void => {
+    e.preventDefault()
+    resizingRef.current = { startX: e.clientX, startW: fileTreeWidth }
+    const onMove = (ev: MouseEvent): void => {
+      const r = resizingRef.current; if (!r) return
+      const next = Math.min(560, Math.max(200, r.startW + (ev.clientX - r.startX)))
+      setFileTreeWidth(next)
+    }
+    const onUp = (ev: MouseEvent): void => {
+      void ev
+      resizingRef.current = null
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
   const openArtifact = useCallback((filePath: string, content: string): void => {
     setRightPreview({ kind: 'content', filePath, content })
     setRightDockPane('artifact')
@@ -293,6 +364,13 @@ export default function App(): JSX.Element {
   useEffect(() => {
     try { localStorage.setItem('wraith.sidebar.collapsed', sidebarCollapsed ? '1' : '0') } catch { /* localStorage 不可用:忽略 */ }
   }, [sidebarCollapsed])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('wraith.workbench.fileTreeVisible', fileTreeVisible ? '1' : '0')
+      localStorage.setItem('wraith.workbench.fileTreeWidth', String(fileTreeWidth))
+    } catch { /* 忽略 */ }
+  }, [fileTreeVisible, fileTreeWidth])
 
   // 预览覆盖态:running 时只读显示另一会话或空白新会话页
   const [preview, setPreview] = useState<Preview>(null)
@@ -1262,6 +1340,7 @@ export default function App(): JSX.Element {
           onOpenBrowser={() => setView('browser')}
           onOpenRag={() => setView('rag')}
           onOpenDocuments={() => setView('documents')}
+          onOpenWorkspace={handleOpenWorkspace}
           onOpenSettings={() => setView('settings')}
           automationBadge={automationBadge}
           onOpenSearch={() => setPaletteOpen(true)}
@@ -1269,205 +1348,243 @@ export default function App(): JSX.Element {
       </SidebarDock>
 
       <div className="flex min-w-0 flex-1 flex-row">
-      <div className={'relative flex min-w-0 flex-1 flex-col ' + (view === 'chat' ? 'bg-surface' : 'bg-bg')}>
-        {state.connection === 'disconnected' && (
-          <DisconnectedBanner onRestart={handleRestart} />
-        )}
-        {modelFallbackNotice && (
-          <ModelFallbackBanner onDismiss={() => setModelFallbackNotice(false)} />
-        )}
-        {submitError && (() => {
-          const lu = lastUserMessage(state.items)
-          return (
-            <SubmitErrorBanner
-              message={submitError}
-              onDismiss={() => setSubmitError(null)}
-              onResend={lu ? () => handleResendMessage(lu.ordinal, lu.text) : undefined}
-            />
-          )
-        })()}
-        {updateNotice && (
-          <div data-testid="update-banner" className="flex items-center gap-3 border-b border-border bg-accent/10 px-4 py-2 text-xs text-fg">
-            <span>有新版 v{updateNotice.latest}</span>
-            <button className="text-accent" onClick={() => void window.wraith.openExternal(updateNotice.url)}>打开下载 ↗</button>
-            <button className="ml-auto text-fg-subtle hover:text-fg" onClick={() => setUpdateNotice(null)}>✕</button>
+      {view === 'chat' ? (
+        <div className="flex min-w-0 flex-1 flex-col bg-surface">
+          <WorkbenchTabBar tabs={tabs} activeId={activeTabId} onActivate={handleActivateTab} onClose={handleCloseTab} />
+          <div className="flex min-h-0 flex-1">
+            {fileTreeVisible && (
+              <>
+                <div style={{ width: fileTreeWidth }} className="shrink-0 border-r border-border bg-bg">
+                  <FileTreePanel rootPath={state.workspace || undefined} onOpenFile={handleOpenWorkspaceFile} />
+                </div>
+                <div
+                  onMouseDown={onResizeMouseDown}
+                  className="w-1 shrink-0 cursor-col-resize select-none bg-border/0 hover:bg-accent/40 transition-colors"
+                  title="拖动调整宽度"
+                  role="separator"
+                  aria-orientation="vertical"
+                />
+              </>
+            )}
+            <div className="relative flex min-w-0 flex-1 flex-col">
+              {activeTabId === 'chat' ? (
+                <>
+                  {state.connection === 'disconnected' && <DisconnectedBanner onRestart={handleRestart} />}
+                  {modelFallbackNotice && <ModelFallbackBanner onDismiss={() => setModelFallbackNotice(false)} />}
+                  {submitError && (() => {
+                    const lu = lastUserMessage(state.items)
+                    return (
+                      <SubmitErrorBanner
+                        message={submitError}
+                        onDismiss={() => setSubmitError(null)}
+                        onResend={lu ? () => handleResendMessage(lu.ordinal, lu.text) : undefined}
+                      />
+                    )
+                  })()}
+                  {updateNotice && (
+                    <div data-testid="update-banner" className="flex items-center gap-3 border-b border-border bg-accent/10 px-4 py-2 text-xs text-fg">
+                      <span>有新版 v{updateNotice.latest}</span>
+                      <button className="text-accent" onClick={() => void window.wraith.openExternal(updateNotice.url)}>打开下载 ↗</button>
+                      <button className="ml-auto text-fg-subtle hover:text-fg" onClick={() => setUpdateNotice(null)}>✕</button>
+                    </div>
+                  )}
+                  {pv.showReturnBanner && <PreviewBanner onReturn={() => setPreview(null)} />}
+                  {(() => {
+                    const composer = (
+                      <Composer
+                        value={inputValue}
+                        onChange={setInputValue}
+                        onSubmit={handleSubmit}
+                        onInterrupt={handleInterrupt}
+                        running={state.turn === 'running'}
+                        approvalAuto={state.approvalMode === 'auto'}
+                        onToggleApproval={handleToggleApproval}
+                        model={state.model}
+                        workspace={state.workspace}
+                        onSwitchWorkspace={handleAddProject}
+                        centered={pv.showWelcome}
+                        status={state.status}
+                        watermark={state.context.watermark}
+                        onOpenContextPanel={() => { setRightDockPane('context'); setRightDockOpen(true) }}
+                        resources={mcpResources}
+                        attachments={attachments}
+                        onPickAttachments={handlePickAttachments}
+                        onRemoveAttachment={handleRemoveAttachment}
+                        onAddAttachments={handleAddAttachments}
+                        onModelSwitched={(m) => dispatch({ type: 'setModel', model: m })}
+                        mode={pendingMode}
+                        onModeChange={setPendingMode}
+                        focusSignal={composerFocus}
+                      />
+                    )
+                    return !pv.showWelcome ? (
+                      <>
+                        <div className="flex shrink-0 items-center gap-2 px-4 py-1.5">
+                          <button
+                            data-testid="workbench-toggle-filetree"
+                            type="button"
+                            onClick={() => setFileTreeVisible(v => !v)}
+                            title={fileTreeVisible ? '隐藏文件树' : '显示文件树'}
+                            className="mr-1 flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg"
+                          >
+                            {fileTreeVisible
+                              ? <PanelLeftClose className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5}/>
+                              : <PanelLeftOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5}/>}
+                            {fileTreeVisible ? '收文件树' : '开文件树'}
+                          </button>
+                          {compactNotice && (
+                            <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
+                          )}
+                          <SummaryPopover items={state.items} workspace={state.workspace ?? null} onOpenArtifact={openArtifact} />
+                          <button
+                            data-testid="chat-compact"
+                            onClick={() => void handleCompact()}
+                            disabled={compactDisabled}
+                            title="压缩上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
+                            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '压缩中…' : '压缩'}
+                          </button>
+                          <button
+                            data-testid="chat-export"
+                            onClick={() => void handleExport()}
+                            disabled={!pv.items.length}
+                            title="导出当前对话为 Markdown"
+                            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />导出
+                          </button>
+                        </div>
+                        <Transcript items={pv.items} busy={pv.transcriptBusy}
+                          onEditMessage={handleEditMessage} onDeleteMessage={handleDeleteMessage}
+                          onResendMessage={handleResendMessage} onPlanReview={handlePlanReview}
+                          mode={pendingMode} onOpenArtifact={openArtifact} onOpenDiff={openDiff} onUndo={handleUndo}
+                          editors={editors} workspace={state.workspace ?? null}
+                          onOpenPanel={(id) => setView(id)} onImBound={handleImBound}
+                        />
+                        <div className="shrink-0 px-4 py-3">{composer}</div>
+                        <TerminalDrawer open={terminalOpen} cwd={state.workspace ?? null} onClose={() => setTerminalOpen(false)} />
+                      </>
+                    ) : (
+                      <div className="min-h-0 flex-1">
+                        <WelcomeEmptyState categories={PROMPT_CATEGORIES}
+                          onPickExample={(t) => { setInputValue(t); setComposerFocus(n => n + 1) }}
+                          notices={(showNoModel || taskDoneNotices.length > 0) ? (
+                            <>
+                              {showNoModel && <NoModelNotice onConfigure={() => setView('providers')} />}
+                              {taskDoneNotices.map((n) => (
+                                <TaskDonePill key={n.taskId} text={n.text} ok={n.ok} onOpen={() => setView('tasks')} />
+                              ))}
+                            </>
+                          ) : undefined}>
+                          {composer}
+                        </WelcomeEmptyState>
+                      </div>
+                    )
+                  })()}
+                </>
+              ) : (
+                (() => {
+                  const tab = tabs.find(t => t.id === activeTabId)
+                  if (!tab || tab.id === 'chat') return null
+                  return <FilePreviewPanel path={tab.path} kind={tab.kind} />
+                })()
+              )}
+            </div>
           </div>
-        )}
-
-        {view === 'chat' && pv.showReturnBanner && (
-          <PreviewBanner onReturn={() => setPreview(null)} />
-        )}
-
-        {view === 'plugins' ? (
-          <PluginsPanel
-            servers={mcpServers}
-            configError={mcpConfigError}
-            busy={state.turn === 'running'}
-            onBack={() => setView('chat')}
-            onRefresh={fetchMcp}
-            onToggle={handleMcpToggle}
-            onRestart={handleMcpRestart}
-            onRemove={handleMcpRemove}
-            onSubmitForm={handleMcpSubmitForm}
-          />
-        ) : view === 'automations' ? (
-          <AutomationsPanel projects={projects} onBack={() => setView('chat')}
-            onOpenSession={handleOpenAutomationSession} onApprove={handleReopenApproval} />
-        ) : view === 'im-gateway' ? (
-          <ImGatewayPanel onBack={() => setView('chat')} />
-        ) : view === 'providers' ? (
-          <ProvidersPanel
-            onBack={() => setView('chat')}
-            onSaved={() => {
-              // 存完不能盲目认为「配好了」—— 后端要真的热装上 client 才算。
-              // 回问一次 model.list:current.provider 非空才收起引导条。
-              void (async () => {
-                try {
-                  const m = await window.wraith.modelList()
-                  const cur = (m as { current?: { provider?: string; model?: string } }).current
-                  setNoModel(needsModelSetup({ currentProvider: cur?.provider ?? '' }))
-                  if (cur?.model) dispatch({ type: 'setModel', model: cur.model })
-                } catch { /* 拿不到就维持原状,不擅自收起 */ }
-              })()
-            }}
-          />
-        ) : view === 'skills' ? (
-          <SkillsPanel onBack={() => setView('chat')} />
-        ) : view === 'memory' ? (
-          <MemoryPanel onBack={() => setView('chat')} />
-        ) : view === 'snapshots' ? (
-          <SnapshotPanel onBack={() => setView('chat')} />
-        ) : view === 'tasks' ? (
-          <TaskPanel onBack={() => setView('chat')} />
-        ) : view === 'policy' ? (
-          <PolicyPanel onBack={() => setView('chat')} onSandboxChange={applySandbox} />
-        ) : view === 'browser' ? (
-          <BrowserPanel onBack={() => setView('chat')} />
-        ) : view === 'rag' ? (
-          <RagPanel onBack={() => setView('chat')} />
-        ) : view === 'documents' ? (
-          <DocumentsPanel onBack={() => setView('chat')} />
-        ) : view === 'projects' ? (
-          <ProjectsPanel
-            projects={projects}
-            activePath={state.workspace ?? ''}
-            busy={state.turn === 'running'}
-            onOpen={handleOpenProject}
-            onNewConversation={handleProjectNewConversation}
-            onToggleStar={handleToggleProjectStar}
-            onOpenSession={handleOpenProjectSession}
-            onRename={handleRenameProject}
-            onArchiveChats={handleArchiveProjectChats}
-            onRemove={handleRemoveProject}
-            onAdd={handleAddProject}
-            onMove={handleMoveProject}
-          />
-        ) : view === 'settings' ? (
-          <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} onArchiveChanged={() => void fetchSessions()} />
-        ) : (
-          /* 既有 welcome ↔ transcript+composer 条件块整体原样嵌此 else */
-          (() => {
-            const composer = (
-              <Composer
-                value={inputValue}
-                onChange={setInputValue}
-                onSubmit={handleSubmit}
-                onInterrupt={handleInterrupt}
-                running={state.turn === 'running'}
-                approvalAuto={state.approvalMode === 'auto'}
-                onToggleApproval={handleToggleApproval}
-                model={state.model}
-                workspace={state.workspace}
-                onSwitchWorkspace={handleAddProject}
-                centered={pv.showWelcome}
-                status={state.status}
-                watermark={state.context.watermark}
-                onOpenContextPanel={() => { setRightDockPane('context'); setRightDockOpen(true) }}
-                resources={mcpResources}
-                attachments={attachments}
-                onPickAttachments={handlePickAttachments}
-                onRemoveAttachment={handleRemoveAttachment}
-                onAddAttachments={handleAddAttachments}
-                onModelSwitched={(m) => dispatch({ type: 'setModel', model: m })}
-                mode={pendingMode}
-                onModeChange={setPendingMode}
-                focusSignal={composerFocus}
+        </div>
+      ) : (
+        <div className="relative flex min-w-0 flex-1 flex-col bg-bg">
+          {state.connection === 'disconnected' && (
+            <DisconnectedBanner onRestart={handleRestart} />
+          )}
+          {modelFallbackNotice && (
+            <ModelFallbackBanner onDismiss={() => setModelFallbackNotice(false)} />
+          )}
+          {submitError && (() => {
+            const lu = lastUserMessage(state.items)
+            return (
+              <SubmitErrorBanner
+                message={submitError}
+                onDismiss={() => setSubmitError(null)}
+                onResend={lu ? () => handleResendMessage(lu.ordinal, lu.text) : undefined}
               />
             )
-            return (
-              <>
-                {/* 顶部工具条:压缩/导出仅活跃对话显示;终端/右侧面板键在内容列顶行右簇 */}
-                {!pv.showWelcome && (
-                  <div className="flex shrink-0 items-center justify-end gap-2 px-4 py-1.5">
-                    {compactNotice && (
-                      <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
-                    )}
-                    <SummaryPopover items={state.items} workspace={state.workspace ?? null} onOpenArtifact={openArtifact} />
-                    <button
-                      data-testid="chat-compact"
-                      onClick={() => void handleCompact()}
-                      disabled={compactDisabled}
-                      title="压缩上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
-                      className={'flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40'}
-                    >
-                      <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '压缩中…' : '压缩'}
-                    </button>
-                    <button
-                      data-testid="chat-export"
-                      onClick={() => void handleExport()}
-                      disabled={!pv.items.length}
-                      title="导出当前对话为 Markdown"
-                      className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />导出
-                    </button>
-                  </div>
-                )}
-                {!pv.showWelcome ? (
-                  <>
-                    <Transcript
-                      items={pv.items}
-                      busy={pv.transcriptBusy}
-                      onEditMessage={handleEditMessage}
-                      onDeleteMessage={handleDeleteMessage}
-                      onResendMessage={handleResendMessage}
-                      onPlanReview={handlePlanReview}
-                      mode={pendingMode}
-                      onOpenArtifact={openArtifact}
-                      onOpenDiff={openDiff}
-                      onUndo={handleUndo}
-                      editors={editors}
-                      workspace={state.workspace ?? null}
-                      onOpenPanel={(id) => setView(id)}
-                      onImBound={handleImBound}
-                    />
-                    <div className="shrink-0 px-4 py-3">{composer}</div>
-                  </>
-                ) : (
-                  <div className="min-h-0 flex-1">
-                    {/* 空态也要能显后台任务完成:从面板提交任务后回到新会话时,
-                        Transcript 不渲染(showWelcome),通知否则就丢了。 */}
-                    <WelcomeEmptyState
-                      categories={PROMPT_CATEGORIES}
-                      onPickExample={(t) => { setInputValue(t); setComposerFocus(n => n + 1) }}
-                      notices={(showNoModel || taskDoneNotices.length > 0) ? (
-                        <>
-                          {showNoModel && <NoModelNotice onConfigure={() => setView('providers')} />}
-                          {taskDoneNotices.map((n) => (
-                            <TaskDonePill key={n.taskId} text={n.text} ok={n.ok} onOpen={() => setView('tasks')} />
-                          ))}
-                        </>
-                      ) : undefined}
-                    >{composer}</WelcomeEmptyState>
-                  </div>
-                )}
-                {/* 终端抽屉:最底部(Composer 下方),常驻挂载,由 open 控制丝滑展开/收起 */}
-                <TerminalDrawer open={terminalOpen} cwd={state.workspace ?? null} onClose={() => setTerminalOpen(false)} />
-              </>
-            )
-          })()
-        )}
-      </div>
+          })()}
+          {updateNotice && (
+            <div data-testid="update-banner" className="flex items-center gap-3 border-b border-border bg-accent/10 px-4 py-2 text-xs text-fg">
+              <span>有新版 v{updateNotice.latest}</span>
+              <button className="text-accent" onClick={() => void window.wraith.openExternal(updateNotice.url)}>打开下载 ↗</button>
+              <button className="ml-auto text-fg-subtle hover:text-fg" onClick={() => setUpdateNotice(null)}>✕</button>
+            </div>
+          )}
+          {view === 'plugins' ? (
+            <PluginsPanel
+              servers={mcpServers}
+              configError={mcpConfigError}
+              busy={state.turn === 'running'}
+              onBack={() => setView('chat')}
+              onRefresh={fetchMcp}
+              onToggle={handleMcpToggle}
+              onRestart={handleMcpRestart}
+              onRemove={handleMcpRemove}
+              onSubmitForm={handleMcpSubmitForm}
+            />
+          ) : view === 'automations' ? (
+            <AutomationsPanel projects={projects} onBack={() => setView('chat')}
+              onOpenSession={handleOpenAutomationSession} onApprove={handleReopenApproval} />
+          ) : view === 'im-gateway' ? (
+            <ImGatewayPanel onBack={() => setView('chat')} />
+          ) : view === 'providers' ? (
+            <ProvidersPanel
+              onBack={() => setView('chat')}
+              onSaved={() => {
+                void (async () => {
+                  try {
+                    const m = await window.wraith.modelList()
+                    const cur = (m as { current?: { provider?: string; model?: string } }).current
+                    setNoModel(needsModelSetup({ currentProvider: cur?.provider ?? '' }))
+                    if (cur?.model) dispatch({ type: 'setModel', model: cur.model })
+                  } catch { /* 拿不到就维持原状,不擅自收起 */ }
+                })()
+              }}
+            />
+          ) : view === 'skills' ? (
+            <SkillsPanel onBack={() => setView('chat')} />
+          ) : view === 'memory' ? (
+            <MemoryPanel onBack={() => setView('chat')} />
+          ) : view === 'snapshots' ? (
+            <SnapshotPanel onBack={() => setView('chat')} />
+          ) : view === 'tasks' ? (
+            <TaskPanel onBack={() => setView('chat')} />
+          ) : view === 'policy' ? (
+            <PolicyPanel onBack={() => setView('chat')} onSandboxChange={applySandbox} />
+          ) : view === 'browser' ? (
+            <BrowserPanel onBack={() => setView('chat')} />
+          ) : view === 'rag' ? (
+            <RagPanel onBack={() => setView('chat')} />
+          ) : view === 'documents' ? (
+            <DocumentsPanel onBack={() => setView('chat')} />
+          ) : view === 'projects' ? (
+            <ProjectsPanel
+              projects={projects}
+              activePath={state.workspace ?? ''}
+              busy={state.turn === 'running'}
+              onOpen={handleOpenProject}
+              onNewConversation={handleProjectNewConversation}
+              onToggleStar={handleToggleProjectStar}
+              onOpenSession={handleOpenProjectSession}
+              onRename={handleRenameProject}
+              onArchiveChats={handleArchiveProjectChats}
+              onRemove={handleRemoveProject}
+              onAdd={handleAddProject}
+              onMove={handleMoveProject}
+            />
+          ) : view === 'settings' ? (
+            <SettingsPanel onBack={() => setView('chat')} onOpenProviders={() => setView('providers')} onArchiveChanged={() => void fetchSessions()} />
+          ) : null}
+        </div>
+      )}
       <RightDock
         open={rightDockOpen}
         cwd={state.workspace ?? null}
