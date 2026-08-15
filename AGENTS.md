@@ -276,6 +276,7 @@ src/main/java/com/lyhn/wraith/
 | MCP | McpServerManager.java + McpClient.java |
 | TUI/渲染 | render/Renderer.java + RendererFactory.java |
 | 桌面宠物（Pets） | desktop/src/shared/pets.ts + petState.ts + petWindow.ts + desktop/src/main/petStore.ts + petWindow.ts + settings.ts(PetConfig) + desktop/src/preload/pet.ts + desktop/src/renderer/lib/petMotion.ts + desktop/src/renderer/pet.html/pet.tsx + components/PetWindowApp.tsx + PetSprite.tsx + PetsSettings.tsx |
+| 文件管理（只读） | desktop/src/renderer/components/FileTreePanel.tsx + FilePreviewPanel.tsx + WorkbenchTabBar.tsx + App.tsx (工作台三栏) + main/fileExplorer.ts + Sidebar 文件入口 |
 
 ## 当前已知边界
 
