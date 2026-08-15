@@ -147,6 +147,7 @@ export function SessionRow({ s, active, running, onSelect, onToggleStar, onRenam
 
 type ToolNav = 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills'
   | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents'
+  | 'workspace'
 
 /**
  * 工具项分组。依据是**什么时候会点它**,不是功能相似:
@@ -192,6 +193,7 @@ const TOOL_GROUPS: { label: string; items: { nav: ToolNav; testId: string; label
     label: '资料',
     items: [
       { nav: 'documents', testId: 'nav-documents', label: '文档', Icon: FolderOpen },
+      { nav: 'workspace', testId: 'nav-workspace', label: '文件', Icon: ListTree },
     ],
   },
 ]
@@ -218,7 +220,7 @@ interface SidebarProps {
   onOpenAllProjects: () => void
   /** 账户行的头像/昵称来源(设置→「我」)。沙箱状态已移出侧栏,见顶栏的盾图标。 */
   profile: ProfilePrefs
-  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'projects' | 'settings' | null
+  activeNav: 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'workspace' | 'projects' | 'settings' | null
   onOpenPlugins: () => void
   onOpenAutomations: () => void
   onOpenImGateway: () => void
@@ -231,6 +233,7 @@ interface SidebarProps {
   onOpenBrowser: () => void
   onOpenRag: () => void
   onOpenDocuments: () => void
+  onOpenWorkspace?: () => void
   onOpenSettings: () => void
   automationBadge: boolean
   /** 后台任务活跃数(running + enqueued);0 = 不显示。全局队列,不区分会话。 */
@@ -270,6 +273,7 @@ export default function Sidebar({
   onOpenBrowser,
   onOpenRag,
   onOpenDocuments,
+  onOpenWorkspace = () => {},
   onOpenSettings,
   automationBadge,
   taskActiveCount,
@@ -308,6 +312,7 @@ export default function Sidebar({
     rag: onOpenRag,
     tasks: onOpenTasks,
     documents: onOpenDocuments,
+    workspace: onOpenWorkspace,
   }
   const toggleGroupMode = (): void => setGroupMode(m => {
     const next = m === 'time' ? 'recent' : 'time'
