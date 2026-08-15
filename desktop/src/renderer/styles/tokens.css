@@ -422,3 +422,76 @@ html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180
     animation: none;
   }
 }
+
+/* =========================================================
+ * File Explorer (workspace) visual tokens
+ * 与现有 tokens.css 的变量语义保持一致。
+ * ========================================================= */
+
+/* --- FileTreePanel:选中行 --- */
+.ft-row-selected {
+  position: relative;
+  background: rgb(var(--brand-rgb, 139 92 246) / 0.14);
+  color: rgb(var(--fg-rgb));
+}
+.ft-row-selected::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: rgb(var(--brand-rgb, 139 92 246));
+}
+
+/* --- WorkbenchTabBar:活跃 tab 下划线 --- */
+.wb-tab-active {
+  border-bottom-width: 2px;
+  border-bottom-style: solid;
+  border-bottom-color: rgb(var(--brand-rgb, 139 92 246));
+}
+.wb-tab-close:hover {
+  background: rgb(var(--fg-rgb) / 0.06);
+  color: rgb(var(--fg-rgb));
+}
+
+/* --- FilePreviewPanel:行号 + 代码行 hover --- */
+.preview-line {
+  display: block;
+  padding: 0 16px 0 0;
+}
+.preview-line:hover {
+  background: rgb(var(--fg-rgb) / 0.03);
+}
+.preview-ln {
+  display: inline-block;
+  width: 40px;
+  margin-right: 16px;
+  text-align: right;
+  color: rgb(var(--fg-subtle-rgb));
+  user-select: none;
+  -webkit-user-select: none;
+}
+.preview-code {
+  font-family: "SF Mono", Consolas, Menlo, "Cascadia Mono", "Liberation Mono", monospace;
+  font-size: 12.5px;
+  line-height: 1.65;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* highlight.js 主题和 tokens 的 fg/bg 对齐 (atom-one-dark 的轻量适配) */
+.hljs {
+  background: transparent;
+  color: rgb(var(--fg-rgb));
+}
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section, .hljs-link { color: #c586c0; }
+.hljs-string, .hljs-title, .hljs-name, .hljs-type, .hljs-attribute, .hljs-symbol, .hljs-bullet, .hljs-addition, .hljs-template-tag, .hljs-template-variable { color: #ce9178; }
+.hljs-comment, .hljs-quote, .hljs-deletion, .hljs-meta { color: #6a9955; font-style: italic; }
+.hljs-number, .hljs-regexp, .hljs-built_in, .hljs-builtin-name { color: #b5cea8; }
+.hljs-function .hljs-title, .hljs-title.function_ { color: #dcdcaa; }
+.hljs-class .hljs-title, .hljs-title.class_, .hljs-title.class_.inherited__ { color: #4ec9b0; }
+.hljs-variable, .hljs-attr { color: #9cdcfe; }
+.hljs-tag, .hljs-name { color: #569cd6; }
