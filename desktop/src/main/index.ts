@@ -24,6 +24,7 @@ import {
   writePetConfig,
   readCloseMode,
   writeCloseMode,
+  readSettings,
   type PetConfig,
 } from './settings'
 import { createTray, destroyTray, trayAlive } from './tray'
@@ -58,6 +59,7 @@ import { detectEditors, detectWindowsEditors, uniqueDownloadName, performUndo, r
 import type { EditorApp } from '../shared/editors'
 import { documentsDir, ensureDocumentsDir, listDocuments, resolveInVault, addDocuments, removeDocument } from './documents'
 import { requestGitStatus } from './gitStatusBridge'
+import * as fileX from './fileExplorer'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -1612,6 +1614,28 @@ ipcMain.handle('wraith:documents:reveal', (_e, name: string) => {
   const r = resolveInVault(docsDir(), name)
   if (r.status === 'missing') throw new Error('文件已不存在')
   shell.showItemInFolder(r.path)
+})
+
+// ---- wraith:fs:* 工作区文件树 + 只读预览 (全链路 withinWorkspace 守卫) ----
+// workspace 路径必须动态读:用户可以在运行中切换项目,所以不能固化为启动时的值
+const getWorkspaceRoot = (): string => {
+  return readSettings(app.getPath('userData')).workspace ?? process.cwd()
+}
+
+ipcMain.handle('wraith:fs:tree', async (_e, rootPath: string, opts?: { maxDepth?: number }) => {
+  return fileX.listTree(rootPath, getWorkspaceRoot, opts)
+})
+ipcMain.handle('wraith:fs:readText', async (_e, absPath: string, maxBytes?: number) => {
+  return fileX.readText(absPath, getWorkspaceRoot, maxBytes)
+})
+ipcMain.handle('wraith:fs:stat', async (_e, absPath: string) => {
+  return fileX.statFile(absPath, getWorkspaceRoot)
+})
+ipcMain.handle('wraith:fs:reveal', async (_e, absPath: string) => {
+  return fileX.revealInFolder(absPath, getWorkspaceRoot)
+})
+ipcMain.handle('wraith:fs:openExternal', async (_e, absPath: string) => {
+  return fileX.openWithDefault(absPath, getWorkspaceRoot)
 })
 
 ipcMain.handle('wraith:downloadCopy', async (_e, p: string): Promise<string> => {

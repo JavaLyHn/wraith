@@ -217,6 +217,14 @@ export interface WraithApi {
     open(name: string): Promise<void>
     reveal(name: string): Promise<void>
   }
+  /** 工作区文件浏览器:只读,所有路径必经 main 侧 withinWorkspace 守卫。入参必须是绝对路径。 */
+  fs: {
+    tree(rootPath: string, opts?: { maxDepth?: number }): Promise<import('../shared/types').FsTreeResult>
+    readText(absPath: string, maxBytes?: number): Promise<{ content: string; truncated: boolean; size: number }>
+    stat(absPath: string): Promise<import('../shared/types').FsNode>
+    reveal(absPath: string): Promise<void>
+    openExternal(absPath: string): Promise<void>
+  }
   /** 窗口控制:Windows 无边框自绘窗控用(最小/最大化切换/关闭 + 最大化状态订阅)。 */
   windowControls: WindowControlsApi
   /** 关闭行为:读已记住的 closeMode + 监听 close 请求 + 执行用户选择。 */
@@ -825,6 +833,25 @@ const wraith: WraithApi = {
     remove(name) { return ipcRenderer.invoke('wraith:documents:remove', name) as Promise<void> },
     open(name) { return ipcRenderer.invoke('wraith:documents:open', name) as Promise<void> },
     reveal(name) { return ipcRenderer.invoke('wraith:documents:reveal', name) as Promise<void> },
+  },
+
+  /** 工作区文件浏览器:只读,所有路径必经 main 侧 withinWorkspace 守卫。入参必须是绝对路径。 */
+  fs: {
+    tree(rootPath: string, opts?: { maxDepth?: number }) {
+      return ipcRenderer.invoke('wraith:fs:tree', rootPath, opts) as ReturnType<typeof import('../main/fileExplorer').listTree>
+    },
+    readText(absPath: string, maxBytes?: number) {
+      return ipcRenderer.invoke('wraith:fs:readText', absPath, maxBytes) as ReturnType<typeof import('../main/fileExplorer').readText>
+    },
+    stat(absPath: string) {
+      return ipcRenderer.invoke('wraith:fs:stat', absPath) as Promise<import('../shared/types').FsNode>
+    },
+    reveal(absPath: string) {
+      return ipcRenderer.invoke('wraith:fs:reveal', absPath) as Promise<void>
+    },
+    openExternal(absPath: string) {
+      return ipcRenderer.invoke('wraith:fs:openExternal', absPath) as Promise<void>
+    },
   },
 
   windowControls: {
