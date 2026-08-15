@@ -864,3 +864,29 @@ export interface CloseExecutePayload {
   /** 用户勾选了「下次别问」则把 closeMode 持久化为对应 mode;未勾则 null=保持 ask。 */
   remember: 'background' | 'quit' | null
 }
+
+// ---------------------------------------------------------------------------
+// 工作区文件树 & 预览 (file explorer)
+// ---------------------------------------------------------------------------
+
+/** 文件树 flat 节点 (IPC 返回的单条记录)。path/parentPath 都已经过 path.resolve 归一。 */
+export interface FsNode {
+  path: string
+  /** 根节点 (workspace 自身) 的 parentPath 为 ''。 */
+  parentPath: string
+  name: string
+  kind: 'dir' | 'file' | 'symlink'
+  /** 文件字节数;目录始终 undefined (避免前后端对 0 / undefined 语义分歧)。 */
+  size?: number
+  /** 修改时间 epoch ms。读取失败时 undefined。 */
+  mtime?: number
+}
+
+/** `fs.tree` 返回值: flat 节点数组 + 是否被截断(提示用户单独展开深层目录)。 */
+export interface FsTreeResult {
+  nodes: FsNode[]
+  truncated: boolean
+}
+
+/** 文件预览分发类别: 决定 FilePreviewPanel 的渲染分支。 */
+export type PreviewKind = 'code' | 'markdown' | 'image' | 'pdf' | 'binary'
