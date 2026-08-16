@@ -1,7 +1,45 @@
 import path from 'node:path'
 import { describe, it, expect } from 'vitest'
-import { buildTreeFromFlat, insertSubtree } from '../src/renderer/lib/fileTreeModel'
+import { buildTreeFromFlat, insertSubtree, normalizePath } from '../src/renderer/lib/fileTreeModel'
 import type { FsNode } from '../src/shared/types'
+
+describe('normalizePath (renderer 内零 node:path 依赖的替代实现)', () => {
+  const cases = [
+    '/home/user/./workspace/src',
+    '/home/user/workspace/src/./lib/../main.ts',
+    '/home/a/../user/workspace/./README.md',
+    '/home/user/project//nested///deeper',
+    '/home/user/trailing/',
+    '/',
+    'd:\\wraith\\src\\.\\Foo.java',
+    'd:\\wraith\\src\\..\\lib',
+    'd:\\wraith\\\\double\\\\sep',
+    'd:\\',
+    'src/relative/../lib',
+  ]
+  for (const c of cases) {
+    it(`对齐 path.normalize: ${c}`, () => {
+      // renderer 版本只保证"同输入同输出 + 语义归一",分隔符风格与 node:path 在
+      // Windows(win32) 上可能对正斜杠输入有差异,因此只在同风格输入下比对。
+      const expected = path.normalize(c)
+      const actual = normalizePath(c)
+      if (c.includes('\\') && path.sep === '\\') {
+        expect(actual).toBe(expected)
+      } else if (!c.includes('\\')) {
+        // POSIX 风格输入在 win32 上 node 会转成反斜杠,renderer 版保留原风格;
+        // 断言语义等价: 段序列一致 + 绝对输入保持 / 开头
+        const segs = (s: string) => s.split(/[\\/]/).filter(s => s !== '')
+        expect(segs(actual)).toEqual(segs(expected))
+        if (c.startsWith('/')) expect(actual.startsWith('/')).toBe(true)
+      } else {
+        expect(actual).toBe(expected)
+      }
+    })
+  }
+  it('空串/undefined 安全', () => {
+    expect(normalizePath('')).toBe('')
+  })
+})
 
 const n = (p: string, kind: 'dir'|'file', parentPath = ''): FsNode => {
   const name = p.split(/[\\/]/).pop()!
@@ -69,12 +107,14 @@ describe('buildTreeFromFlat', () => {
     expect(tree.children.length).toBeGreaterThanOrEqual(1)
   })
 
-  it('F2: path.normalize 防御 POSIX 斜杠和 dot segments', () => {
+  it('F2: normalizePath 防御 POSIX 斜杠和 dot segments', () => {
     const root = '/home/user/workspace'
-    const rootN = path.normalize(root)
-    const srcN = path.normalize('/home/user/workspace/src')
-    const mainN = path.normalize('/home/user/workspace/src/main.ts')
-    const readmeN = path.normalize('/home/user/workspace/README.md')
+    // renderer 的 normalizePath 保留输入分隔符风格(POSIX 输入 → POSIX 输出),
+    // 不做 node:path win32 的 / → \ 转换;期望值直接写死语义结果。
+    const rootN = '/home/user/workspace'
+    const srcN = '/home/user/workspace/src'
+    const mainN = '/home/user/workspace/src/main.ts'
+    const readmeN = '/home/user/workspace/README.md'
     const nodes: FsNode[] = [
       {
         path: '/home/user/./workspace/src',
