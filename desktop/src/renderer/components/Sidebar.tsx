@@ -212,8 +212,10 @@ interface SidebarProps {
   onToggleStar: (id: string, starred: boolean) => void
   onRenameSession: (id: string, name: string) => void
   onArchiveSession: (id: string) => void
-  /** 拖拽排序：把 sourceId 移到 targetId 的位置 */
-  onReorderSession?: (sourceId: string, targetId: string) => void
+  /** 拖拽排序：把 sourceId 移到 targetId 的位置。
+   *  targetSection 标识 drop 目标所在分区 —— 跨分区拖拽(普通⇄重点)由 App 层
+   *  语义化为自动星标切换,否则 partitionStarred 渲染时会把它弹回原分区,表现为"拖不进"。 */
+  onReorderSession?: (sourceId: string, targetId: string, targetSection?: 'starred' | 'rest') => void
   onActivateProject: (path: string) => void
   onAddProject: () => void
   /** 进「项目」面板看全量(改名/移出/整理都在那儿)。 */
@@ -441,7 +443,7 @@ export default function Sidebar({
           <>
             {(() => {
               const { starred, rest } = partitionStarred(sessions)
-              const renderRows = (list: SessionMeta[]): JSX.Element[] => list.map(s => (
+              const renderRows = (list: SessionMeta[], section: 'starred' | 'rest'): JSX.Element[] => list.map(s => (
                 <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
                   running={s.id === runningSessionId}
                   onSelect={onSelectSession} onToggleStar={onToggleStar}
@@ -449,7 +451,7 @@ export default function Sidebar({
                   dragState={dragState}
                   onDragStart={(id) => setDragState({ draggingId: id, overId: null })}
                   onDragOver={(id) => setDragState(prev => prev.draggingId ? { ...prev, overId: id } : prev)}
-                  onDrop={(id) => { if (dragState.draggingId && dragState.draggingId !== id) onReorderSession?.(dragState.draggingId, id); setDragState({ draggingId: null, overId: null }) }}
+                  onDrop={(id) => { if (dragState.draggingId && dragState.draggingId !== id) onReorderSession?.(dragState.draggingId, id, section); setDragState({ draggingId: null, overId: null }) }}
                   onDragEnd={() => setDragState({ draggingId: null, overId: null })} />
               ))
               // sticky 表头:滚动时标题不动,内容从下方滑过(半透明 + 模糊)
@@ -460,7 +462,7 @@ export default function Sidebar({
                   {sessions.length === 0 && !newDraftActive && <div className="mt-4 px-3 py-2 text-xs text-fg-subtle">还没有历史会话</div>}
                   {starred.length > 0 && <>
                     <div className={headerCls + ' flex items-center gap-1'}><Star className="h-3 w-3 shrink-0" strokeWidth={1.5} />重点</div>
-                    <div className="px-2">{renderRows(starred)}</div>
+                    <div className="px-2">{renderRows(starred, 'starred')}</div>
                   </>}
                   {(rest.length > 0 || newDraftActive) && <>
                     <div className={headerCls + ' flex items-center'}>
@@ -496,10 +498,10 @@ export default function Sidebar({
                       ? groupSessionsByTime(rest, Date.now()).map(g => (
                         <div key={g.label}>
                           <div className={groupLabelCls}>{g.label}</div>
-                          <div className="px-2">{renderRows(g.sessions)}</div>
+                          <div className="px-2">{renderRows(g.sessions, 'rest')}</div>
                         </div>
                       ))
-                      : <div className="px-2">{renderRows(rest)}</div>}
+                      : <div className="px-2">{renderRows(rest, 'rest')}</div>}
                   </>}
                 </>
               )

@@ -473,24 +473,31 @@ export default function App(): JSX.Element {
     } catch { /* ignore */ }
   }, [])
 
-  // 拖拽排序：把 sourceId 移到 targetId 的位置
-  const handleReorderSession = useCallback((sourceId: string, targetId: string) => {
+  // 拖拽排序：把 sourceId 移到 targetId 的位置。
+  // 跨分区拖拽(targetSection 给出)语义化为星标切换:普通会话拖进「重点」区自动加星,
+  // 重点会话拖回「对话」区自动取消 —— 否则渲染端 partitionStarred 会把它弹回原分区,
+  // 用户看到的就是"拖不进收藏"。星标走后端持久化,排序写 localStorage,两者fire-and-forget。
+  const handleReorderSession = useCallback((sourceId: string, targetId: string, targetSection?: 'starred' | 'rest') => {
+    const wantStar = targetSection === 'starred'
+    const src = sessions.find(s => s.id === sourceId)
+    const crossSection = targetSection != null && src != null && src.starred !== wantStar
     setSessions(prev => {
       const ids = prev.map(s => s.id)
       const sourceIdx = ids.indexOf(sourceId)
       const targetIdx = ids.indexOf(targetId)
       if (sourceIdx === -1 || targetIdx === -1 || sourceIdx === targetIdx) return prev
-      // 重新排列
+      // 重新排列;跨分区时用新对象翻转星标,不动原引用
       const next = [...prev]
       const [moved] = next.splice(sourceIdx, 1)
-      next.splice(targetIdx, 0, moved)
+      next.splice(targetIdx, 0, crossSection ? { ...moved, starred: wantStar } : moved)
       // 更新 manualOrder
       const newOrder = next.map(s => s.id)
       manualOrderRef.current = newOrder
       try { localStorage.setItem('wraith.sidebar.sessionOrder', JSON.stringify(newOrder)) } catch { /* ignore */ }
       return next
     })
-  }, [])
+    if (crossSection) void window.wraith.setSessionStarred(sourceId, wantStar)
+  }, [sessions])
 
   // ── automationApprovalRef:缓存最近一次 approval push(唯一弹窗入口是运行历史「处理审批」钮) ──
   const automationApprovalRef = useRef<{ runId: string; payload: Record<string, unknown> } | null>(null)

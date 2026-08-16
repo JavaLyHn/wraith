@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import { SessionRow } from '../src/renderer/components/Sidebar'
+import { SessionRow, default as Sidebar } from '../src/renderer/components/Sidebar'
 import type { SessionMeta } from '../src/shared/types'
 
 function meta(over: Partial<SessionMeta> = {}): SessionMeta {
@@ -102,5 +102,79 @@ describe('SessionRow 双击改名 + marquee', () => {
     const spans = btn.querySelectorAll('span')
     expect(spans.length).toBeGreaterThan(0)
     expect(spans[0].textContent).toContain('这是一个非常')
+  })
+})
+
+describe('跨分区拖拽:拖进重点区 = 加星,拖回对话区 = 取消', () => {
+  // jsdom 的 dragstart/drop 需要 mock dataTransfer
+  const dt = (): DataTransfer => ({ setData: vi.fn(), effectAllowed: '', dropEffect: '' } as unknown as DataTransfer)
+  const starred1 = meta({ id: 'star1', title: '已收藏A', starred: true })
+  const starred2 = meta({ id: 'star2', title: '已收藏B', starred: true })
+  const rest1 = meta({ id: 'rest1', title: '普通A' })
+  const rest2 = meta({ id: 'rest2', title: '普通B' })
+
+  function renderSidebar(onReorderSession: ReturnType<typeof vi.fn>): void {
+    render(<Sidebar
+      workspace="d:/wrk" projects={[]} busy={false}
+      sessions={[starred1, starred2, rest1, rest2]}
+      activeSessionId="" runningSessionId="" newDraftActive={false}
+      onNewConversation={() => {}} onSelectSession={() => {}}
+      onToggleStar={() => {}} onRenameSession={() => {}} onArchiveSession={() => {}}
+      onReorderSession={onReorderSession}
+      onActivateProject={() => {}} onAddProject={() => {}} onOpenAllProjects={() => {}}
+      profile={{ name: '', avatar: '' } as never} automationBadge={false} taskActiveCount={0}
+      onOpenSearch={() => {}} onOpenPlugins={() => {}} onOpenAutomations={() => {}}
+      onOpenImGateway={() => {}} onOpenProviders={() => {}} onOpenSkills={() => {}}
+      onOpenMemory={() => {}} onOpenSnapshots={() => {}} onOpenTasks={() => {}}
+      onOpenPolicy={() => {}} onOpenBrowser={() => {}} onOpenRag={() => {}}
+      onOpenDocuments={() => {}} onOpenSettings={() => {}}
+      activeNav={null}
+    />)
+  }
+  const rowById = (id: string): HTMLElement => {
+    // conversation-item 按钮在 SessionRow 根 div 内,拿按钮再向上找 draggable 根
+    const btn = screen.getAllByTestId('conversation-item')
+      .find(b => b.textContent?.includes(id === 'star1' ? '已收藏A' : id === 'star2' ? '已收藏B' : id === 'rest1' ? '普通A' : '普通B'))
+    if (!btn) throw new Error('row not found: ' + id)
+    const root = btn.closest('[draggable="true"]')
+    if (!root) throw new Error('draggable root not found')
+    return root as HTMLElement
+  }
+
+  it('1. 普通会话拖到重点区行上 → onReorderSession 带 targetSection=starred', () => {
+    const onReorder = vi.fn()
+    renderSidebar(onReorder)
+    fireEvent.dragStart(rowById('rest1'), { dataTransfer: dt() })
+    fireEvent.dragOver(rowById('star1'), { dataTransfer: dt() })
+    fireEvent.drop(rowById('star1'), { dataTransfer: dt() })
+    expect(onReorder).toHaveBeenCalledWith('rest1', 'star1', 'starred')
+  })
+  it('2. 重点会话拖回对话区行上 → onReorderSession 带 targetSection=rest', () => {
+    const onReorder = vi.fn()
+    renderSidebar(onReorder)
+    fireEvent.dragStart(rowById('star2'), { dataTransfer: dt() })
+    fireEvent.drop(rowById('rest2'), { dataTransfer: dt() })
+    expect(onReorder).toHaveBeenCalledWith('star2', 'rest2', 'rest')
+  })
+  it('3. 同分区(重点⇄重点)拖拽 → targetSection=starred(星标无变化由 App 层判定)', () => {
+    const onReorder = vi.fn()
+    renderSidebar(onReorder)
+    fireEvent.dragStart(rowById('star2'), { dataTransfer: dt() })
+    fireEvent.drop(rowById('star1'), { dataTransfer: dt() })
+    expect(onReorder).toHaveBeenCalledWith('star2', 'star1', 'starred')
+  })
+  it('4. 同分区(普通⇄普通)拖拽 → targetSection=rest', () => {
+    const onReorder = vi.fn()
+    renderSidebar(onReorder)
+    fireEvent.dragStart(rowById('rest2'), { dataTransfer: dt() })
+    fireEvent.drop(rowById('rest1'), { dataTransfer: dt() })
+    expect(onReorder).toHaveBeenCalledWith('rest2', 'rest1', 'rest')
+  })
+  it('5. 拖到自己身上 → 不触发 reorder', () => {
+    const onReorder = vi.fn()
+    renderSidebar(onReorder)
+    fireEvent.dragStart(rowById('rest1'), { dataTransfer: dt() })
+    fireEvent.drop(rowById('rest1'), { dataTransfer: dt() })
+    expect(onReorder).not.toHaveBeenCalled()
   })
 })
