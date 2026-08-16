@@ -45,7 +45,7 @@ import { pendingModeAfterSubmit } from './lib/nextPendingMode'
 import { shouldBlockImageSend } from '../shared/modelVision'
 import { transcriptToMarkdown } from './lib/transcriptMarkdown'
 import { compactionNotice } from './lib/compactView'
-import { Download, Wand2, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { Download, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
 import ApprovalModal from './components/ApprovalModal'
@@ -1357,7 +1357,8 @@ export default function App(): JSX.Element {
       <div className="flex min-w-0 flex-1 flex-row">
       {view === 'chat' ? (
         <div className="flex min-w-0 flex-1 flex-col bg-surface">
-          <WorkbenchTabBar tabs={tabs} activeId={activeTabId} onActivate={handleActivateTab} onClose={handleCloseTab} />
+          <WorkbenchTabBar tabs={tabs} activeId={activeTabId} onActivate={handleActivateTab} onClose={handleCloseTab}
+            fileTreeVisible={fileTreeVisible} onToggleFileTree={() => setFileTreeVisible(v => !v)} />
           <div className="flex min-h-0 flex-1">
             {fileTreeVisible && (
               <>
@@ -1427,18 +1428,7 @@ export default function App(): JSX.Element {
                     return !pv.showWelcome ? (
                       <>
                         <div className="flex shrink-0 items-center gap-2 px-4 py-1.5">
-                          <button
-                            data-testid="workbench-toggle-filetree"
-                            type="button"
-                            onClick={() => setFileTreeVisible(v => !v)}
-                            title={fileTreeVisible ? '隐藏文件树' : '显示文件树'}
-                            className="mr-1 flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg"
-                          >
-                            {fileTreeVisible
-                              ? <PanelLeftClose className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5}/>
-                              : <PanelLeftOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5}/>}
-                            {fileTreeVisible ? '收文件树' : '开文件树'}
-                          </button>
+                          {/* 文件树开关已移到 WorkbenchTabBar 尾部常驻(原位置在文件 tab 激活时不可见,表现为"关不掉") */}
                           {compactNotice && (
                             <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
                           )}

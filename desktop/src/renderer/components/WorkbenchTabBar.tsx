@@ -1,4 +1,4 @@
-import { MessageSquare, FileText, FileSpreadsheet, FileImage, FileType, File as FileIcon, X } from 'lucide-react'
+import { MessageSquare, FileText, FileSpreadsheet, FileImage, FileType, File as FileIcon, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import type { PreviewKind } from '../../shared/types'
 import { previewKind } from '../lib/filePreviewKind'
 
@@ -11,6 +11,9 @@ interface Props {
   activeId: string
   onActivate: (id: WorkbenchTab['id']) => void
   onClose: (fileTabId: Extract<WorkbenchTab['id'], `file:${string}`>) => void
+  /** 文件树开关 —— 放在 tab 栏尾部常驻:文件 tab 激活时(此时聊天区工具行不渲染)也要能收起文件树 */
+  fileTreeVisible: boolean
+  onToggleFileTree: () => void
 }
 
 const ICON_FOR_KIND: Record<PreviewKind, typeof FileText> = {
@@ -22,7 +25,7 @@ const ICON_FOR_KIND: Record<PreviewKind, typeof FileText> = {
 }
 void FileSpreadsheet   // 保留扩展位
 
-export default function WorkbenchTabBar({ tabs, activeId, onActivate, onClose }: Props): JSX.Element {
+export default function WorkbenchTabBar({ tabs, activeId, onActivate, onClose, fileTreeVisible, onToggleFileTree }: Props): JSX.Element {
   return (
     <div
       role="tablist"
@@ -30,6 +33,7 @@ export default function WorkbenchTabBar({ tabs, activeId, onActivate, onClose }:
       className="flex flex-nowrap items-stretch gap-0 overflow-x-auto border-b border-border bg-bg-muted px-1"
       style={{ scrollbarWidth: 'none' }}
     >
+      {/* 尾部粘性开关:tab 多到横向滚动时也不被滚走 */}
       {tabs.map((t) => {
         const active = t.id === activeId
         const isChat = t.id === 'chat'
@@ -67,6 +71,18 @@ export default function WorkbenchTabBar({ tabs, activeId, onActivate, onClose }:
           </button>
         )
       })}
+      <button
+        data-testid="workbench-toggle-filetree"
+        type="button"
+        onClick={onToggleFileTree}
+        title={fileTreeVisible ? '隐藏文件树' : '显示文件树'}
+        className="sticky right-0 ml-auto flex shrink-0 items-center gap-1.5 border-l border-border bg-bg-muted px-2.5 text-xs text-fg-muted hover:text-fg"
+      >
+        {fileTreeVisible
+          ? <PanelLeftClose className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5}/>
+          : <PanelLeftOpen className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5}/>}
+        <span className="whitespace-nowrap">{fileTreeVisible ? '收文件树' : '开文件树'}</span>
+      </button>
     </div>
   )
 }

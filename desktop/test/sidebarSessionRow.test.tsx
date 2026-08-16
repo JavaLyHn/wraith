@@ -30,10 +30,9 @@ describe('SessionRow 双击改名 + marquee', () => {
     expect(screen.getByTestId('session-rename-input')).toBeTruthy()
   })
 
-  it('2. 单击铅笔图标仍然能改名(原有路径保留)', () => {
+  it('2. 改名按钮已删除(双击改名覆盖该功能),不再渲染 session-rename', () => {
     render(<SessionRow {...props()} />)
-    fireEvent.click(screen.getByTestId('session-rename'))
-    expect(screen.getByTestId('session-rename-input')).toBeTruthy()
+    expect(screen.queryByTestId('session-rename')).toBeNull()
   })
 
   it('3. 双击改名后 Escape 取消,onRename 不被调用', () => {

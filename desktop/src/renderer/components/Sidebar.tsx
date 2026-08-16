@@ -8,7 +8,7 @@ import {
 } from './ui/tooltip'
 import {
   Plus, Search, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
-  Star, ListTree, List, Pencil, Archive, Settings, Wrench, ChevronDown, ListTodo, Shield, User, FolderOpen,
+  Star, ListTree, List, Archive, Settings, Wrench, ChevronDown, ListTodo, Shield, User, FolderOpen,
   type LucideIcon,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
@@ -90,7 +90,7 @@ export function SessionRow({ s, active, running, onSelect, onToggleStar, onRenam
       onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; onDragOver?.(s.id) }}
       onDrop={(e) => { e.preventDefault(); onDrop?.(s.id) }}
       onDragEnd={() => { onDragEnd?.() }}
-      className={'group mb-0.5 flex items-center gap-1 rounded-lg px-1 transition-opacity ' +
+      className={'group relative mb-0.5 flex items-center rounded-lg px-1 transition-opacity ' +
         (active ? 'relative bg-fg/10 before:absolute before:left-1 before:top-1/2 before:h-3.5 before:w-0.5 before:-translate-y-1/2 before:rounded-full before:bg-accent' : 'hover:bg-fg/5') +
         (isDragging ? ' opacity-40' : '') +
         (isDragOver ? ' ring-1 ring-accent/50' : '')}
@@ -108,7 +108,7 @@ export function SessionRow({ s, active, running, onSelect, onToggleStar, onRenam
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         aria-label={sessionDisplayName(s)}
-        className={'flex-1 overflow-hidden px-2 py-2 text-left text-xs ' + (active ? 'text-fg' : 'text-fg-muted')}
+        className={'min-w-0 flex-1 overflow-hidden px-2 py-2 text-left text-xs ' + (active ? 'text-fg' : 'text-fg-muted')}
       >
         <div ref={titleRef} className="relative overflow-hidden">
           <div className={cn(
@@ -122,25 +122,26 @@ export function SessionRow({ s, active, running, onSelect, onToggleStar, onRenam
           </div>
         </div>
       </button>
-      <button data-testid="session-star" title={s.starred ? '取消重点' : '标记重点'}
-        onClick={() => onToggleStar(s.id, !s.starred)}
-        className={'shrink-0 px-1 ' + (s.starred ? 'text-warn' : 'text-fg-subtle opacity-0 hover:text-fg group-hover:opacity-100')}>
-        <Star className="h-3 w-3" strokeWidth={1.5} fill={s.starred ? 'currentColor' : 'none'} />
-      </button>
-      <button data-testid="session-rename" title="改名"
-        onClick={startEdit}
-        className="shrink-0 px-1 text-fg-subtle opacity-0 hover:text-fg group-hover:opacity-100">
-        <Pencil className="h-3 w-3" strokeWidth={1.5} />
-      </button>
-      {/* 归档可逆(设置里能恢复),故单击生效不做二次确认;二次确认留给真正不可逆的永久删除 */}
-      <button data-testid="session-archive"
-        title={running ? '会话进行中,不可归档' : '归档(从列表收起,可在设置 › 归档中找回)'}
-        disabled={running}
-        onClick={() => onArchive(s.id)}
-        className={'shrink-0 px-1 opacity-0 group-hover:opacity-100 text-fg-subtle hover:text-fg ' +
-          (running ? 'disabled:cursor-not-allowed disabled:opacity-40' : '')}>
-        <Archive className="h-3 w-3" strokeWidth={1.5} />
-      </button>
+      {/* 浮层操作组:不占布局空间(标题排满整行),hover 行或已星标时浮出。
+          改名按钮已删 —— 双击行即可改名;左侧渐变让文字在按钮下方渐隐,避免生硬截断。 */}
+      <div
+        className={'absolute right-1 top-1/2 flex -translate-y-1/2 items-center rounded-md bg-gradient-to-r from-transparent to-bg pl-5 pr-0.5 transition-opacity ' +
+          (s.starred ? 'opacity-100' : 'opacity-0 group-hover:opacity-100')}
+      >
+        <button data-testid="session-star" title={s.starred ? '取消重点' : '标记重点'}
+          onClick={() => onToggleStar(s.id, !s.starred)}
+          className={s.starred ? 'px-1 text-warn' : 'px-1 text-fg-subtle hover:text-fg'}>
+          <Star className="h-3 w-3" strokeWidth={1.5} fill={s.starred ? 'currentColor' : 'none'} />
+        </button>
+        {/* 归档可逆(设置里能恢复),故单击生效不做二次确认;二次确认留给真正不可逆的永久删除 */}
+        <button data-testid="session-archive"
+          title={running ? '会话进行中,不可归档' : '归档(从列表收起,可在设置 › 归档中找回)'}
+          disabled={running}
+          onClick={() => onArchive(s.id)}
+          className={'px-1 text-fg-subtle hover:text-fg ' + (running ? 'cursor-not-allowed opacity-40' : '')}>
+          <Archive className="h-3 w-3" strokeWidth={1.5} />
+        </button>
+      </div>
     </div>
   )
 }

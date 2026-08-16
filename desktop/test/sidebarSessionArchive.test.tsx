@@ -44,16 +44,16 @@ describe('SessionRow 归档', () => {
     expect((screen.getByTestId('session-archive') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('重点与改名按钮不受影响', () => {
+  it('重点按钮不受影响;改名按钮已删(双击改名)', () => {
     render(<SessionRow {...props()} />)
     expect(screen.getByTestId('session-star')).toBeTruthy()
-    expect(screen.getByTestId('session-rename')).toBeTruthy()
+    expect(screen.queryByTestId('session-rename')).toBeNull()
   })
 
-  it('改名仍是行内输入框', () => {
+  it('改名仍是行内输入框(双击行触发)', () => {
     const p = props()
     render(<SessionRow {...p} />)
-    fireEvent.click(screen.getByTestId('session-rename'))
+    fireEvent.doubleClick(screen.getByTestId('conversation-item'))
     expect(screen.getByTestId('session-rename-input')).toBeTruthy()
   })
 })
