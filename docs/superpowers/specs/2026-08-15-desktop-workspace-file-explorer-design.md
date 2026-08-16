@@ -237,7 +237,7 @@ const [activeTabId, setActiveTabId] = useState<string>('chat')
 
 - `window.wraith.fs.readText(absPath, maxChars?): Promise<{ content: string; truncated: boolean; size: number; encoding: 'utf-8' }>`
   - 安全：后端校验 absPath 必须是 workspace 根下、是文件、非 symlink 指向 workspace 外（symlink 跟随 target 判定）
-  - 编码：先按 UTF-8 读；若 UTF-8 decode 有 2% 以上 replacement char 再回退 GBK（中文 Windows 上常见历史文件；Java `StandardCharsets.UTF_8` 解码→检测→fallback）
+  - 编码：先按 UTF-8 读；出现 replacement char 且（比例 >2%，或内容 <64 字符时只要有 1 个）→ 试 GBK 重解，仅当 GBK 结果的 replacement char 数量严格更少才采纳（防止 UTF-8 局部损坏 1 字节被误换成整篇 GBK 乱码）
 - `window.wraith.fs.stat(absPath): Promise<FsNode>`：预览头用来展示路径、大小、mtime
 - `window.wraith.fs.reveal(absPath): Promise<void>` → `shell.showItemInFolder(p)`
 - `window.wraith.fs.openExternal(absPath): Promise<void>` → `shell.openPath(p)`，失败把错误串 throw 出来（renderer 用 `ipcErrorText` 剥掉前缀）

@@ -19,9 +19,20 @@ export const MAX_TREE_NODES = 500
 export const MAX_TREE_BYTES = 524_288
 
 /**
+ * 单节点 IPC 体积估算(UTF-16 2B/字符近似)。
+ * envelope = V8 对象头 + JSON 结构字符 + kind/size/mtime 数字字段的序列化开销。
+ * parentPath 必须计入: 它是完整目录路径,与 path 同量级,漏算会让实际响应体明显超过预算。
+ */
+export const NODE_ENVELOPE_BYTES = 96
+export function estimateNodeBytes(n: FsNode): number {
+  return (n.path.length + n.parentPath.length + n.name.length) * 2 + NODE_ENVELOPE_BYTES
+}
+
+/**
  * 路径安全单入口守卫。返回 normalize 后的绝对路径;违规直接 throw。
- * 注意: realpath 解 symlink 在 list/read/stat 内部调用各自在打开文件后再做;这里只做静态路径校验,
- * 因为对不存在的路径做 realpath 会抛,影响目录枚举前的合法性判断。
+ * 注意: 这里只做静态路径校验,不解析 symlink ——
+ * 1) 对不存在的路径做 realpath 会抛,影响目录枚举前的合法性判断;
+ * 2) follow-symlink 场景由 resolveRealWithin 在真正打开文件前兜底(见其注释)。
  */
 export function withinWorkspace(absPath: string, getWorkspaceRoot: () => string): string {
   if (!path.isAbsolute(absPath)) {
@@ -36,6 +47,49 @@ export function withinWorkspace(absPath: string, getWorkspaceRoot: () => string)
     throw new Error('路径不在工作区')
   }
   return norm
+}
+
+/**
+ * realpath 结果的二次断言(纯函数,便于注入测试)。
+ * Windows 大小写不敏感: realpath 返回"真实大小写",可能与绑定 root 的拼写不一致
+ * (用户手输 config 的小写盘符),两侧 fold 成小写再比较,避免合法文件被误拒。
+ */
+export function assertRealWithin(
+  realPath: string,
+  getWorkspaceRoot: () => string,
+  isWindows: boolean,
+): string {
+  const rootN = path.normalize(getWorkspaceRoot())
+  const realN = path.normalize(realPath)
+  const sep = path.sep
+  let inWork: boolean
+  if (isWindows) {
+    const rootL = rootN.toLowerCase()
+    const realL = realN.toLowerCase()
+    inWork = realL === rootL || realL.startsWith(rootL + sep)
+  } else {
+    inWork = realN === rootN || realN.startsWith(rootN + sep)
+  }
+  if (!inWork) {
+    throw new Error('路径不在工作区')
+  }
+  return realN
+}
+
+/**
+ * 第二道守卫(spec §8 第 4 关): fs.realpath 解析 symlink 链后再复验落在工作区内。
+ * fs.open / fs.stat / shell.openPath 都会 follow symlink —— 只过 withinWorkspace 静态校验
+ * 验证的是"链接自身的路径",在 workspace 里放一个指向外部文件的符号链接即可绕过校验
+ * 读取工作区外的内容。所有会打开/读取/唤起系统程序的入口必须先走这里。
+ */
+export async function resolveRealWithin(
+  absPath: string,
+  getWorkspaceRoot: () => string,
+  realpath: (p: string) => Promise<string> = (p) => fs.realpath(p),
+): Promise<string> {
+  const norm = withinWorkspace(absPath, getWorkspaceRoot)
+  const real = await realpath(norm)
+  return assertRealWithin(real, getWorkspaceRoot, process.platform === 'win32')
 }
 
 /** 当前 workspace 根路径自身作为 FsNode 的辅助工厂。 */
@@ -105,7 +159,7 @@ export async function listTree(
     } catch { /* 某层权限不足跳过,不影响整体 */ }
     for (const n of layer) {
       if (nodes.length >= MAX_TREE_NODES) { truncated = true; break }
-      const estBytes = n.path.length * 2 + n.name.length * 2 + 32
+      const estBytes = estimateNodeBytes(n)
       if (byteBudget - estBytes <= 0) { truncated = true; break }
       byteBudget -= estBytes
       nodes.push(n)
@@ -123,7 +177,7 @@ export async function readText(
   getWorkspaceRoot: () => string,
   maxBytes = 1_572_864,
 ): Promise<{ content: string; truncated: boolean; size: number }> {
-  const p = withinWorkspace(absPath, getWorkspaceRoot)
+  const p = await resolveRealWithin(absPath, getWorkspaceRoot)
   const fh = await fs.open(p, 'r')
   try {
     const stat = await fh.stat()
@@ -135,14 +189,22 @@ export async function readText(
     const useSlice = truncated ? slice.subarray(0, maxBytes) : slice
     const dec = new TextDecoder('utf-8', { fatal: false })
     let content = dec.decode(useSlice)
-    // 检测 replacement chars 的比例:>2% 认为不是 UTF-8,退回 GBK
+    // 编码检测回退 GBK:
+    // 1) 触发: 出现 replacement char,且比例 >2%,或内容很短(<64 字符)时只要有 1 个就触发 ——
+    //    比例阈值在极短内容上是统计噪声,老中文小文件常被漏检。
+    // 2) 采纳: GBK 重解的 replacement char 数量必须严格更少才替换 ——
+    //    UTF-8 文件局部损坏 1 字节时,盲目换 GBK 会把整篇变成乱码(比保留局部 U+FFFD 更糟)。
     let bad = 0
     for (const ch of content) if (ch === '\uFFFD') bad++
-    if (content.length > 0 && bad / content.length > 0.02) {
+    const ratio = content.length > 0 ? bad / content.length : 0
+    if (bad > 0 && (ratio > 0.02 || content.length < 64)) {
       try {
         // @ts-ignore - TextDecoder 的 'gbk' 在 Node/Electron 中可用,类型库可能漏
-        content = new TextDecoder('gbk', { fatal: false }).decode(useSlice)
-      } catch { /* 退化保留 UTF-8 结果即可 */ }
+        const gbk = new TextDecoder('gbk', { fatal: false }).decode(useSlice)
+        let gbkBad = 0
+        for (const ch of gbk) if (ch === '\uFFFD') gbkBad++
+        if (gbkBad < bad) content = gbk
+      } catch { /* 编码不可用时保留 UTF-8 结果 */ }
     }
     return { content, truncated, size: Number(stat.size) }
   } finally {
@@ -151,7 +213,7 @@ export async function readText(
 }
 
 export async function statFile(absPath: string, getWorkspaceRoot: () => string): Promise<FsNode> {
-  const p = withinWorkspace(absPath, getWorkspaceRoot)
+  const p = await resolveRealWithin(absPath, getWorkspaceRoot)
   const st = await fs.stat(p, { bigint: false })
   const parent = path.dirname(p)
   const name = path.basename(p)
@@ -167,12 +229,12 @@ export async function statFile(absPath: string, getWorkspaceRoot: () => string):
 }
 
 export async function revealInFolder(absPath: string, getWorkspaceRoot: () => string): Promise<void> {
-  const p = withinWorkspace(absPath, getWorkspaceRoot)
+  const p = await resolveRealWithin(absPath, getWorkspaceRoot)
   shell.showItemInFolder(p)
 }
 
 export async function openWithDefault(absPath: string, getWorkspaceRoot: () => string): Promise<void> {
-  const p = withinWorkspace(absPath, getWorkspaceRoot)
+  const p = await resolveRealWithin(absPath, getWorkspaceRoot)
   const err = await shell.openPath(p)
   if (err) throw new Error(err)
 }
