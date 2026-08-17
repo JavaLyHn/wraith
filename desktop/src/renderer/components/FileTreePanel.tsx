@@ -42,78 +42,43 @@ export default function FileTreePanel({ rootPath, onOpenFile, onError }: Props):
 
   useEffect(() => { void loadRoot() }, [loadRoot])
 
-  const toggleExpand = useCallback(async (node: TreeNode) => {
-    if (node.node.kind !== 'dir') return
-    const path = node.node.path
-    let needsFetch = false
-    setUi(prev => {
-      const nextExpanded = new Set(prev.expanded)
-      const nextLoaded = new Set(prev.loadedDirs)
-      if (nextExpanded.has(path)) {
-        nextExpanded.delete(path)
-      } else {
-        nextExpanded.add(path)
-      }
-      if (!nextLoaded.has(path)) {
-        nextLoaded.add(path)
-        needsFetch = true
-      }
-      return { expanded: nextExpanded, loadedDirs: nextLoaded }
-    })
-    if (needsFetch) {
-      try {
-        const sub = await window.wraith.fs.tree(path, { maxDepth: 1 })
-        setFlatIndex(prevFlat => {
-          const newIdx = new Map(prevFlat)
-          insertSubtree(newIdx, path, sub.nodes)
-          const newRootPath = tree?.node.path ?? resolveRootPath(Array.from(newIdx.values()), rootPath)
-          const { root: rebuilt, flatIndex: rebuiltIdx } = buildTreeFromFlat(Array.from(newIdx.values()), newRootPath)
-          setTree(rebuilt)
-          return rebuiltIdx
-        })
-      } catch (e: any) { setErr(String(e?.message ?? e)) }
-    }
+  // fetch 判定必须用闭包态直接算,不能在 setState updater 里赋外部变量 ——
+  // updater 是否同步执行取决于 React 调度(非契约),推迟时外部变量恒为初始值,
+  // 子目录 fetch 永不发起,表现为"展开文件夹没有内容"。
+  const fetchChildren = useCallback(async (dirPath: string) => {
+    try {
+      const sub = await window.wraith.fs.tree(dirPath, { maxDepth: 1 })
+      setFlatIndex(prevFlat => {
+        const newIdx = new Map(prevFlat)
+        insertSubtree(newIdx, dirPath, sub.nodes)
+        const newRootPath = tree?.node.path ?? resolveRootPath(Array.from(newIdx.values()), rootPath)
+        const { root: rebuilt, flatIndex: rebuiltIdx } = buildTreeFromFlat(Array.from(newIdx.values()), newRootPath)
+        setTree(rebuilt)
+        return rebuiltIdx
+      })
+    } catch (e: any) { setErr(String(e?.message ?? e)) }
   }, [tree, rootPath, resolveRootPath])
 
   const handleDirAction = useCallback((node: TreeNode, action: 'toggle' | 'expand' | 'collapse') => {
     if (node.node.kind !== 'dir') return
     const path = node.node.path
-    let needsFetch = false
+    const isExpandedNow = ui.expanded.has(path)
+    const willExpand = action === 'toggle' ? !isExpandedNow : action === 'expand'
+    const needsFetch = willExpand && !ui.loadedDirs.has(path)
     setUi(prev => {
       const nextExpanded = new Set(prev.expanded)
       const nextLoaded = new Set(prev.loadedDirs)
-      const isExpanded = nextExpanded.has(path)
-      if (action === 'toggle') {
-        if (isExpanded) nextExpanded.delete(path)
-        else nextExpanded.add(path)
-      } else if (action === 'expand') {
-        if (!isExpanded) nextExpanded.add(path)
-      } else if (action === 'collapse') {
-        if (isExpanded) nextExpanded.delete(path)
-      }
-      const willExpand = nextExpanded.has(path)
-      if (willExpand && !nextLoaded.has(path)) {
-        nextLoaded.add(path)
-        needsFetch = true
-      }
+      if (willExpand) nextExpanded.add(path)
+      else nextExpanded.delete(path)
+      nextLoaded.add(path)
       return { expanded: nextExpanded, loadedDirs: nextLoaded }
     })
-    if (needsFetch) {
-      (async () => {
-        try {
-          const sub = await window.wraith.fs.tree(path, { maxDepth: 1 })
-          setFlatIndex(prevFlat => {
-            const newIdx = new Map(prevFlat)
-            insertSubtree(newIdx, path, sub.nodes)
-            const newRootPath = tree?.node.path ?? resolveRootPath(Array.from(newIdx.values()), rootPath)
-            const { root: rebuilt, flatIndex: rebuiltIdx } = buildTreeFromFlat(Array.from(newIdx.values()), newRootPath)
-            setTree(rebuilt)
-            return rebuiltIdx
-          })
-        } catch (e: any) { setErr(String(e?.message ?? e)) }
-      })()
-    }
-  }, [tree, rootPath, resolveRootPath])
+    if (needsFetch) void fetchChildren(path)
+  }, [ui, fetchChildren])
+
+  const toggleExpand = useCallback((node: TreeNode) => {
+    handleDirAction(node, 'toggle')
+  }, [handleDirAction])
 
   const handleOpen = (absPath: string) => {
     setSelectedPath(absPath)

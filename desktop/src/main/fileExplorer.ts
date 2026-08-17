@@ -131,21 +131,22 @@ async function readDirLayer(
 }
 
 /**
- * BFS 列出当前工作区 flat 节点。默认最多 maxDepth = 2 层,防止巨型项目首屏卡死。
- * rootPath 必须严格等于 getWorkspaceRoot()——否则 renderer 可能伪造其他根。
+ * BFS 列出工作区 flat 节点,以 rootPath(工作区根或其任意子目录,懒加载展开用)为起点。
+ * 默认最多 maxDepth = 2 层,防止巨型项目首屏卡死。
+ * 伪造其他根由 withinWorkspace 挡(工作区外/.. 逃逸直接拒),不要求严格等于根 ——
+ * 否则子目录懒加载请求全被"只能枚举当前绑定的工作区"拒绝,展开永远无内容。
  */
 export async function listTree(
   rootPath: string,
   getWorkspaceRoot: () => string,
   opts: { maxDepth?: number } = {},
 ): Promise<FsTreeResult> {
-  const root = getWorkspaceRoot()
-  const normRoot = path.normalize(rootPath)
-  if (path.normalize(root) !== normRoot) {
-    throw new Error('只能枚举当前绑定的工作区')
-  }
+  const normRoot = withinWorkspace(rootPath, getWorkspaceRoot)
+  const isWorkspaceRoot = path.normalize(getWorkspaceRoot()) === normRoot
   const maxDepth = opts.maxDepth ?? 2
-  const nodes: FsNode[] = [rootFsNode(normRoot)]
+  // 仅工作区根调用返回自身节点(renderer 的 resolveRootPath 依赖 !parentPath 找根);
+  // 子目录调用若返回自身,parentPath:'' 会把已有节点顶成孤儿、挂到根下重复显示
+  const nodes: FsNode[] = isWorkspaceRoot ? [rootFsNode(normRoot)] : []
   let truncated = false
   const queue: { dir: string; depth: number }[] = [{ dir: normRoot, depth: 1 }]
   let byteBudget = MAX_TREE_BYTES - 256

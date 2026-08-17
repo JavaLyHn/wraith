@@ -1,10 +1,12 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 // withinWorkspace 会被 fileExplorer.ts 导出;我们只测纯逻辑,所以直接 import named
-import { withinWorkspace, assertRealWithin, resolveRealWithin, estimateNodeBytes } from '../src/main/fileExplorer'
+import { withinWorkspace, assertRealWithin, resolveRealWithin, estimateNodeBytes, listTree } from '../src/main/fileExplorer'
 import type { FsNode } from '../src/shared/types'
 
 /** path.sep 的跨平台结果通过动态 import node:path。 */
 import path from 'node:path'
+import fs from 'node:fs'
+import os from 'node:os'
 
 const ROOT_WIN = 'd:\\wraith'
 const getWin = () => ROOT_WIN
@@ -108,5 +110,40 @@ describe('estimateNodeBytes 节点体积估算', () => {
     const shortParent = mk('/a/b/c.txt', '', 'c.txt')
     const longParent = mk('/a/b/c.txt', '/very/long/parent/directory/path/here', 'c.txt')
     expect(estimateNodeBytes(longParent)).toBeGreaterThan(estimateNodeBytes(shortParent))
+  })
+})
+
+describe('listTree 子目录懒加载(真实临时目录)', () => {
+  let tmp: string
+  beforeAll(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wraith-ft-'))
+    fs.mkdirSync(path.join(tmp, 'docs'))
+    fs.mkdirSync(path.join(tmp, 'docs', 'sub'))
+    fs.writeFileSync(path.join(tmp, 'docs', 'a.md'), 'x')
+    fs.writeFileSync(path.join(tmp, 'root.txt'), 'y')
+  })
+  afterAll(() => { fs.rmSync(tmp, { recursive: true, force: true }) })
+
+  it('以子目录为根:maxDepth 1 只返回直接子节点,不含自身', async () => {
+    const docs = path.join(tmp, 'docs')
+    const res = await listTree(docs, () => tmp, { maxDepth: 1 })
+    // 不含子目录自身 —— 否则 parentPath:'' 会把已有节点顶成孤儿挂到根下重复显示
+    expect(res.nodes.some(n => path.normalize(n.path) === path.normalize(docs))).toBe(false)
+    expect(res.nodes.map(n => n.name).sort()).toEqual(['a.md', 'sub'])
+    for (const n of res.nodes) {
+      expect(path.normalize(n.parentPath)).toBe(path.normalize(docs))
+    }
+  })
+
+  it('以工作区根为根:返回自身节点(renderer resolveRootPath 依赖 !parentPath)', async () => {
+    const res = await listTree(tmp, () => tmp, { maxDepth: 1 })
+    const self = res.nodes.find(n => path.normalize(n.path) === path.normalize(tmp))
+    expect(self).toBeTruthy()
+    expect(self!.parentPath).toBe('')
+    expect(res.nodes.map(n => n.name).sort()).toEqual(['docs', 'root.txt', path.basename(tmp)].sort())
+  })
+
+  it('工作区外路径被拒(伪造其他根)', async () => {
+    await expect(listTree(path.join(os.tmpdir(), '..'), () => tmp)).rejects.toThrow(/工作区|绝对路径/)
   })
 })
