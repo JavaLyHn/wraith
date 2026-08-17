@@ -78,6 +78,7 @@ import DocumentsPanel from './components/DocumentsPanel'
 import ProjectsPanel from './components/ProjectsPanel'
 import SettingsPanel from './components/SettingsPanel'
 import WorkbenchTabBar, { type WorkbenchTab, makeFileTab } from './components/WorkbenchTabBar'
+import { useWorkspaceTabsReset } from './lib/useWorkspaceTabsReset'
 import FileTreePanel from './components/FileTreePanel'
 import FilePreviewPanel from './components/FilePreviewPanel'
 import TerminalDrawer from './components/TerminalDrawer'
@@ -259,6 +260,9 @@ export default function App(): JSX.Element {
   const handleActivateTab = useCallback((id: WorkbenchTab['id']) => {
     setActiveTabId(id as string)
   }, [])
+
+  // 切 workspace 即清 file tab:tab 持有绝对路径,切项目后旧路径已失效(打不开/误导显示旧项目内容)
+  useWorkspaceTabsReset(state.workspace, setTabs, setActiveTabId)
 
   const handleOpenWorkspace = useCallback(() => {
     setView('chat')
