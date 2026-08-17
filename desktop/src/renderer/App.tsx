@@ -1358,7 +1358,29 @@ export default function App(): JSX.Element {
       {view === 'chat' ? (
         <div className="flex min-w-0 flex-1 flex-col bg-surface">
           <WorkbenchTabBar tabs={tabs} activeId={activeTabId} onActivate={handleActivateTab} onClose={handleCloseTab}
-            fileTreeVisible={fileTreeVisible} onToggleFileTree={() => setFileTreeVisible(v => !v)} />
+            fileTreeVisible={fileTreeVisible} onToggleFileTree={() => setFileTreeVisible(v => !v)}>
+            {/* 右上角动作簇(文件树开关右侧,与最初布局一致):产物/压缩/导出常驻 tab 栏,
+                文件 tab 激活或欢迎页时也可见 —— 它们作用于聊天会话本身,与当前激活 tab 无关 */}
+            <SummaryPopover items={state.items} workspace={state.workspace ?? null} onOpenArtifact={openArtifact} />
+            <button
+              data-testid="chat-compact"
+              onClick={() => void handleCompact()}
+              disabled={compactDisabled}
+              title="压缩上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
+              className="flex items-center gap-1.5 border-l border-border px-2.5 text-xs text-fg-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '压缩中…' : '压缩'}
+            </button>
+            <button
+              data-testid="chat-export"
+              onClick={() => void handleExport()}
+              disabled={!pv.items.length}
+              title="导出当前对话为 Markdown"
+              className="flex items-center gap-1.5 border-l border-border px-2.5 text-xs text-fg-muted hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />导出
+            </button>
+          </WorkbenchTabBar>
           <div className="flex min-h-0 flex-1">
             {fileTreeVisible && (
               <>
@@ -1427,31 +1449,12 @@ export default function App(): JSX.Element {
                     )
                     return !pv.showWelcome ? (
                       <>
-                        <div className="flex shrink-0 items-center gap-2 px-4 py-1.5">
-                          {/* 文件树开关已移到 WorkbenchTabBar 尾部常驻(原位置在文件 tab 激活时不可见,表现为"关不掉") */}
-                          {compactNotice && (
-                            <span data-testid="compact-notice" className="mr-auto truncate text-2xs text-fg-subtle">{compactNotice}</span>
-                          )}
-                          <SummaryPopover items={state.items} workspace={state.workspace ?? null} onOpenArtifact={openArtifact} />
-                          <button
-                            data-testid="chat-compact"
-                            onClick={() => void handleCompact()}
-                            disabled={compactDisabled}
-                            title="压缩上下文:把较早的对话压成摘要,释放上下文窗口(不改可见记录)"
-                            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            <Wand2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />{compactBusy ? '压缩中…' : '压缩'}
-                          </button>
-                          <button
-                            data-testid="chat-export"
-                            onClick={() => void handleExport()}
-                            disabled={!pv.items.length}
-                            title="导出当前对话为 Markdown"
-                            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-fg-muted hover:bg-fg/5 hover:text-fg disabled:cursor-not-allowed disabled:opacity-40"
-                          >
-                            <Download className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />导出
-                          </button>
-                        </div>
+                        {/* 产物/压缩/导出已上移 WorkbenchTabBar 右上角;此行仅在压缩提示存在时渲染 */}
+                        {compactNotice && (
+                          <div className="flex shrink-0 items-center px-4 py-1.5">
+                            <span data-testid="compact-notice" className="truncate text-2xs text-fg-subtle">{compactNotice}</span>
+                          </div>
+                        )}
                         <Transcript items={pv.items} busy={pv.transcriptBusy}
                           onEditMessage={handleEditMessage} onDeleteMessage={handleDeleteMessage}
                           onResendMessage={handleResendMessage} onPlanReview={handlePlanReview}
