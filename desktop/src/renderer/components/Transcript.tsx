@@ -58,6 +58,8 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
   const chipsByMsg = useMemo(() => filesUnderMessages(items), [items])
   const renderNodes = useMemo(() => groupToolRuns(items), [items])
   const marks = useMemo(() => timelineMarksAttrs(renderNodes), [renderNodes])
+  // 横线列:每个 user 消息(=一轮交互,一问一答/中断各算一轮)一条横线
+  const turns = useMemo(() => marks.filter(m => m.markType === 'dot').map(m => m.hid), [marks])
 
   const makeAttrs = (i: number): React.HTMLAttributes<HTMLDivElement> & Record<string, unknown> => {
     const m = marks[i]
@@ -122,24 +124,38 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
     return () => ro.disconnect()
   }, [])
 
+  /** 点击横线 → 滚动会话内容到对应轮次起始位置 */
+  const scrollToHid = (hid: string): void => {
+    const container = containerRef.current
+    if (!container) return
+    const target = container.querySelector<HTMLElement>(`[data-tl-hid="${hid}"]`)
+    if (!target) return
+    const containerRect = container.getBoundingClientRect()
+    const targetRect = target.getBoundingClientRect()
+    const offset = targetRect.top - containerRect.top + container.scrollTop - 16
+    container.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' })
+  }
+
   // [&>*]:shrink-0 必不可少:卡片类子项(tool/thinking/diff)带 overflow-hidden,
   // 其 flex 自动最小高度为 0——内容一旦溢出容器,flex 会把它们压成 2px 边框线
+  // 布局:左侧固定横线列(数量=轮次数,独立滚动,不随内容滚) + 右侧内容滚动区
   return (
-    <div
-      ref={containerRef}
-      onScroll={handleScroll}
-      onWheel={markGesture}
-      onTouchMove={markGesture}
-      data-testid="transcript"
-      className="flex-1 overflow-y-auto px-4 py-4 [overflow-anchor:none] relative pl-10"
-    >
+    <div className="flex min-h-0 flex-1">
       <RulerTimeline
-        contentRef={containerRef}
-        scrollRef={containerRef}
+        turns={turns}
         activeHid={hoveredHid}
         onHover={setHoveredHid}
+        onJump={scrollToHid}
       />
-      <div ref={contentRef} className="flex flex-col gap-1 [&>*]:shrink-0">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        onWheel={markGesture}
+        onTouchMove={markGesture}
+        data-testid="transcript"
+        className="min-w-0 flex-1 overflow-y-auto px-4 py-4 [overflow-anchor:none]"
+      >
+        <div ref={contentRef} className="flex flex-col gap-1 [&>*]:shrink-0">
         {renderNodes.map((node, nodeIdx) => {
           const attrs = makeAttrs(nodeIdx)
           // 工具组：单张卡片直接渲染（避免双层展开），≥2 张才用可折叠 ToolGroup
@@ -228,6 +244,7 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
         {/* 处理中占位:轮次运行中且尚无任何输出(最后一项仍是刚发的 user 气泡)时显示,
             任何真实内容(plan/team 卡片、thinking、message、tool)到达后 last 不再是 user,自动消失。 */}
         {busy && items[items.length - 1]?.type === 'user' && <WorkingIndicator mode={mode} />}
+        </div>
       </div>
     </div>
   )

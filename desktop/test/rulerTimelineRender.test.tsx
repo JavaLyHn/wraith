@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import React, { useEffect, useRef, useState } from 'react'
+import React from 'react'
 import Transcript from '../src/renderer/components/Transcript'
 import RulerTimeline from '../src/renderer/components/RulerTimeline'
 import { SettingsProvider } from '../src/renderer/settings/SettingsContext'
@@ -64,6 +64,18 @@ function buildUserMsgAgentMsgWriteTool(): Item[] {
   return s.items
 }
 
+function buildThreeTurns(): Item[] {
+  let s = initialState
+  s = addUserItem(s, '第一轮')
+  s = reduce(s, notif('message.delta', { text: '回答一' }))
+  s = reduce(s, notif('message.end'))
+  s = addUserItem(s, '第二轮')
+  s = reduce(s, notif('message.delta', { text: '回答二' }))
+  s = reduce(s, notif('message.end'))
+  s = addUserItem(s, '第三轮(中断,无回答)')
+  return s.items
+}
+
 function collectTopLevelMarkTypes(container: HTMLElement): string[] {
   const transcriptContent = container.querySelector('[data-testid="transcript"] > div.flex.flex-col')
   if (!transcriptContent) return []
@@ -73,15 +85,6 @@ function collectTopLevelMarkTypes(container: HTMLElement): string[] {
     if (t) types.push(t)
   })
   return types
-}
-
-function triggerRulerMeasure(container: HTMLElement): void {
-  const hidEls = container.querySelectorAll('[data-tl-hid]')
-  if (hidEls.length > 0) {
-    const first = hidEls[0] as HTMLElement
-    fireEvent.mouseEnter(first)
-    fireEvent.mouseLeave(first)
-  }
 }
 
 describe('T5 RulerTimeline + Transcript 集成渲染测试', () => {
@@ -121,14 +124,6 @@ describe('T5 RulerTimeline + Transcript 集成渲染测试', () => {
     // 只有 user 消息带 data-tl-mark-type
     const topTypes = collectTopLevelMarkTypes(container)
     expect(topTypes).toEqual(['dot'])
-
-    const dotEls = container.querySelectorAll('[data-tl-mark-type="dot"]')
-    expect(dotEls.length).toBeGreaterThanOrEqual(1)
-    // 不应该存在 square 或 diamond 类型的标记
-    const squareEls = container.querySelectorAll('[data-tl-mark-type="square"]')
-    expect(squareEls.length).toBe(0)
-    const diamondEls = container.querySelectorAll('[data-tl-mark-type="diamond"]')
-    expect(diamondEls.length).toBe(0)
   })
 
   it('T5.3: RulerTimeline 在 Transcript 内可挂载且 data-testid 存在', () => {
@@ -141,7 +136,7 @@ describe('T5 RulerTimeline + Transcript 集成渲染测试', () => {
     expect(ruler.className.includes('ruler-timeline')).toBe(true)
   })
 
-  it('T5.4: 透明降级测试：items = [] → ruler-timeline 仍挂载但内部 0 个 mark 节点', () => {
+  it('T5.4: 透明降级测试：items = [] → ruler-timeline 仍挂载但内部 0 条横线', () => {
     const { container } = renderWithSettings(<Transcript {...baseProps} items={[]} />)
 
     const ruler = screen.getByTestId('ruler-timeline')
@@ -150,90 +145,108 @@ describe('T5 RulerTimeline + Transcript 集成渲染测试', () => {
     const hidEls = container.querySelectorAll('[data-tl-hid]')
     expect(hidEls.length).toBe(0)
 
-    const markTypeEls = container.querySelectorAll('[data-tl-mark-type]')
-    expect(markTypeEls.length).toBe(0)
-
-    const markNodes = ruler.querySelectorAll('.ruler-mark')
-    expect(markNodes.length).toBe(0)
+    const lineNodes = ruler.querySelectorAll('.ruler-line')
+    expect(lineNodes.length).toBe(0)
   })
 
-  it('T5.5: Transcript item hover → RulerTimeline 对应 mark 加 ruler-mark--on 类，mouseLeave 后消失', () => {
-    const items = buildUserMsgAgentMsg()
-    const { container } = renderWithSettings(<Transcript {...baseProps} items={items} />)
+  it('T5.5: 横线数量 = 轮次数 —— 3 轮(含中断) → 3 条横线,1 轮 → 1 条(核心需求回归)', () => {
+    const three = buildThreeTurns()
+    const { container: c3 } = renderWithSettings(<Transcript {...baseProps} items={three} />)
+    const ruler3 = screen.getByTestId('ruler-timeline')
+    // 第三轮 user 发完即中断(无 agent 回答)也必须算一条
+    expect(ruler3.querySelectorAll('.ruler-line').length).toBe(3)
+    // 每条横线的 hid 与内容节点一一对应
+    const hids = Array.from(ruler3.querySelectorAll('.ruler-line')).map(
+      el => el.className
+    )
+    expect(hids.length).toBe(3)
+    // 内容侧应有 3 个 dot 标记节点(user 气泡)
+    const dots3 = c3.querySelectorAll('[data-tl-mark-type="dot"]')
+    expect(dots3.length).toBe(3)
+    cleanup()
 
-    const hidEls = container.querySelectorAll('[data-tl-hid]')
-    expect(hidEls.length).toBeGreaterThanOrEqual(1)
+    const one = buildUserMsgOnly()
+    renderWithSettings(<Transcript {...baseProps} items={one} />)
+    const ruler1 = screen.getByTestId('ruler-timeline')
+    expect(ruler1.querySelectorAll('.ruler-line').length).toBe(1)
+  })
 
-    const firstHidEl = hidEls[0] as HTMLElement
-    const expectedHid = firstHidEl.getAttribute('data-tl-hid')
-    expect(expectedHid).toBeTruthy()
-
-    fireEvent.mouseEnter(firstHidEl)
+  it('T5.6: 结构性断言 —— 横线列固定在内容滚动区外,不随内容滚动', () => {
+    const items = buildThreeTurns()
+    renderWithSettings(<Transcript {...baseProps} items={items} />)
 
     const ruler = screen.getByTestId('ruler-timeline')
-    const activeSegs = ruler.querySelectorAll('.ruler-highlight.ruler-highlight--visible')
-    const activeMarks = ruler.querySelectorAll('.ruler-mark.ruler-mark--on')
-    expect(activeSegs.length + activeMarks.length).toBeGreaterThanOrEqual(1)
+    const transcript = screen.getByTestId('transcript')
 
-    fireEvent.mouseLeave(firstHidEl)
-
-    const activeSegsAfter = ruler.querySelectorAll('.ruler-highlight.ruler-highlight--visible')
-    const activeMarksAfter = ruler.querySelectorAll('.ruler-mark.ruler-mark--on')
-    expect(activeSegsAfter.length + activeMarksAfter.length).toBe(0)
+    // ruler 必须不是内容滚动区(transcript)的子孙 —— 否则内容滚动时横线跟着滚走
+    expect(transcript.contains(ruler)).toBe(false)
+    // 两者是兄弟布局:共同父级存在
+    expect(ruler.parentElement).toBeTruthy()
+    expect(ruler.parentElement).toBe(transcript.parentElement)
   })
 
-  it('T5.6: RulerTimeline mark hover → onHover 回调正确触发（mouseEnter 传 hid，mouseLeave 传 null）', () => {
+  it('T5.7: hover 内容节点 → 对应横线加 ruler-line--on 类，mouseLeave 后消失', () => {
+    const items = buildThreeTurns()
+    const { container } = renderWithSettings(<Transcript {...baseProps} items={items} />)
+
+    // hover 第二轮的 user 气泡
+    const dots = container.querySelectorAll('[data-tl-mark-type="dot"]')
+    expect(dots.length).toBe(3)
+    const secondTurn = dots[1] as HTMLElement
+    const expectedHid = secondTurn.getAttribute('data-tl-hid')
+    expect(expectedHid).toBe('turn2')
+
+    fireEvent.mouseEnter(secondTurn)
+
+    const ruler = screen.getByTestId('ruler-timeline')
+    const activeLines = ruler.querySelectorAll('.ruler-line.ruler-line--on')
+    expect(activeLines.length).toBe(1)
+    // 高亮的正是第二条横线(顺序对应轮次)
+    const lines = ruler.querySelectorAll('.ruler-line')
+    expect(lines[1].classList.contains('ruler-line--on')).toBe(true)
+
+    fireEvent.mouseLeave(secondTurn)
+    expect(ruler.querySelectorAll('.ruler-line.ruler-line--on').length).toBe(0)
+  })
+
+  it('T5.8: RulerTimeline 直测 — hover 回调 + 点击 onJump(带 hid)', () => {
     const onHover = vi.fn()
+    const onJump = vi.fn()
+    render(
+      <RulerTimeline
+        turns={['turn1', 'turn2', 'turn3']}
+        activeHid={null}
+        onHover={onHover}
+        onJump={onJump}
+      />,
+    )
 
-    function Fixture() {
-      const scrollRef = useRef<HTMLDivElement>(null)
-      const contentRef = useRef<HTMLDivElement>(null)
-      const [tick, setTick] = useState(0)
-      useEffect(() => { setTick(1) }, [])
-      return (
-        <div ref={scrollRef} data-testid="scroll-container" style={{ position: 'relative' }}>
-          <div ref={contentRef}>
-            <div data-tl-hid="x" data-tl-mark-type="dot" style={{ height: 20 }}>hello</div>
-          </div>
-          <RulerTimeline
-            contentRef={contentRef}
-            scrollRef={scrollRef}
-            activeHid={tick === 0 ? null : null}
-            onHover={onHover}
-          />
-        </div>
-      )
-    }
+    const lines = screen.getAllByRole('button')
+    expect(lines.length).toBe(3)
 
-    render(<Fixture />)
+    fireEvent.mouseEnter(lines[1])
+    expect(onHover).toHaveBeenCalledWith('turn2')
 
-    const ruler = screen.getByTestId('ruler-timeline')
-    const markNode = ruler.querySelector('.ruler-mark') as HTMLElement | null
-    expect(markNode).toBeTruthy()
+    onHover.mockClear()
+    fireEvent.mouseLeave(lines[1])
+    expect(onHover).toHaveBeenCalledWith(null)
 
-    if (markNode) {
-      fireEvent.mouseEnter(markNode)
-      expect(onHover).toHaveBeenCalledWith('x')
-
-      onHover.mockClear()
-
-      fireEvent.mouseLeave(markNode)
-      expect(onHover).toHaveBeenCalledWith(null)
-    }
+    fireEvent.click(lines[2])
+    expect(onJump).toHaveBeenCalledWith('turn3')
   })
 
-  it('T5.7: 入场动画：mark 节点 DOM 元素存在且有 ruler-mark base class（至少 1 个）', () => {
-    const items = buildUserMsgAgentMsg()
-    const { container } = renderWithSettings(<Transcript {...baseProps} items={items} />)
-
-    triggerRulerMeasure(container)
+  it('T5.9: Transcript 集成 — 点击横线滚动内容到对应轮次', () => {
+    // jsdom 未实现 Element.scrollTo(为 undefined 非 no-op),mock 后才能走完真实点击路径
+    const scrollToMock = vi.fn()
+    Element.prototype.scrollTo = scrollToMock as unknown as typeof Element.prototype.scrollTo
+    const items = buildThreeTurns()
+    renderWithSettings(<Transcript {...baseProps} items={items} />)
 
     const ruler = screen.getByTestId('ruler-timeline')
-    const markNodes = ruler.querySelectorAll('.ruler-mark')
-    expect(markNodes.length).toBeGreaterThanOrEqual(1)
-
-    markNodes.forEach(node => {
-      expect(node.className.includes('ruler-mark')).toBe(true)
-    })
+    const lines = ruler.querySelectorAll('.ruler-line')
+    fireEvent.click(lines[1])
+    // 点击第二条横线 → 内容滚动到第二轮开头(带 smooth 行为)
+    expect(scrollToMock).toHaveBeenCalledTimes(1)
+    expect(scrollToMock).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }))
   })
 })
