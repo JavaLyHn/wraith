@@ -328,6 +328,11 @@ html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180
   overscroll-behavior: contain; /* 滚到头不链式外溢到其它滚动区 */
   scrollbar-width: none;        /* Firefox 隐藏滚动条 */
   padding: 16px 0;              /* 与内容区 py-4 对齐 */
+  /* 长度有范围:轮次少时列只占需要的高度,垂直居中于父级;
+     轮次多到填满父级后 max-height 卡住,列长不再增长,超出靠 overflow-y 滚动。
+     align-self: center 脱离默认 stretch(否则列高恒等于内容区,横线散落且无"范围"概念)。 */
+  align-self: center;
+  max-height: 100%;
   /* 轮次少时横线在列内垂直居中,而非全堆在顶部;safe center 保证
      横线多到溢出时退化为顶部对齐,仍可滚到首条(flex+overflow 顶部可达) */
   display: flex;
