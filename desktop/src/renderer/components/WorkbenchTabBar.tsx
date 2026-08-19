@@ -1,4 +1,5 @@
-import { MessageSquare, FileText, FileSpreadsheet, FileImage, FileType, File as FileIcon, X, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { MessageSquare, FileText, FileSpreadsheet, FileImage, FileType, File as FileIcon, X, PanelLeftClose, PanelLeftOpen, ChevronLeft, ChevronRight } from 'lucide-react'
 import type { PreviewKind } from '../../shared/types'
 import { previewKind } from '../lib/filePreviewKind'
 
@@ -27,15 +28,70 @@ const ICON_FOR_KIND: Record<PreviewKind, typeof FileText> = {
 }
 void FileSpreadsheet   // 保留扩展位
 
+/** 每次点箭头横滚的像素步长(约一个中等长度 tab 宽) */
+const SCROLL_STEP = 220
+
 export default function WorkbenchTabBar({ tabs, activeId, onActivate, onClose, fileTreeVisible, onToggleFileTree, children }: Props): JSX.Element {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const [canLeft, setCanLeft] = useState(false)
+  const [canRight, setCanRight] = useState(false)
+
+  // 测量横向溢出状态:左/右是否还有可滚空间。tab 增减、容器 resize、滚动位置变化都触发
+  const updateScrollState = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    setCanLeft(el.scrollLeft > 0)
+    // +1 容忍亚像素,避免最后一格永远差 1px 显示可右滚
+    setCanRight(el.scrollLeft < el.scrollWidth - el.clientWidth - 1)
+  }, [])
+
+  useEffect(() => {
+    updateScrollState()
+    const el = scrollRef.current
+    if (!el) return
+    el.addEventListener('scroll', updateScrollState, { passive: true })
+    // tab 数量变化或容器宽度变化(窗口缩放/侧栏开合)都要重测
+    const ro = new ResizeObserver(updateScrollState)
+    ro.observe(el)
+    return () => { el.removeEventListener('scroll', updateScrollState); ro.disconnect() }
+  }, [updateScrollState, tabs.length])
+
+  const scrollBy = (dir: 1 | -1): void => {
+    const el = scrollRef.current
+    if (!el) return
+    // 瞬时滚动:tab 列表横滚无需动画,且避开 jsdom/部分环境对 smooth 的不完整实现
+    el.scrollBy({ left: dir * SCROLL_STEP })
+  }
+
+  // 鼠标滚轮垂直滚动 → 横向滚动 tab(tabs 是横向溢出,垂直滚轮原生只滚页面不滚 tab)
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>): void => {
+    // 触控板横向滑动(deltaX 为主)时走原生,不抢
+    if (Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollLeft += e.deltaY
+  }
+
   return (
     <div
+      ref={scrollRef}
       role="tablist"
       aria-label="工作区 Tab"
-      className="flex flex-nowrap items-stretch gap-0 overflow-x-auto border-b border-border bg-bg-muted px-1"
-      style={{ scrollbarWidth: 'none' }}
+      className="wb-tab-scroll flex flex-nowrap items-stretch gap-0 overflow-x-auto border-b border-border bg-bg px-1"
+      onWheel={onWheel}
     >
-      {/* 尾部粘性开关:tab 多到横向滚动时也不被滚走 */}
+      {/* 左箭头:仅当左侧有可滚空间(scrollLeft>0)时显示;sticky 浮于滚动内容上方,
+          不透明 bg-bg 遮住下方滚过的 tab 文字,避免重合模糊 */}
+      {canLeft && (
+        <button
+          type="button"
+          aria-label="向左滚动 tab"
+          onClick={() => scrollBy(-1)}
+          className="sticky left-0 z-10 flex shrink-0 items-center bg-bg px-1 text-fg-subtle hover:text-fg"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+        </button>
+      )}
       {tabs.map((t) => {
         const active = t.id === activeId
         const isChat = t.id === 'chat'
@@ -51,7 +107,7 @@ export default function WorkbenchTabBar({ tabs, activeId, onActivate, onClose, f
             className={
               'group relative flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-xs transition-colors ' +
               (active
-                ? 'wb-tab-active text-fg bg-bg'
+                ? 'wb-tab-active text-fg bg-surface'
                 : 'border-transparent text-fg-muted hover:bg-surface hover:text-fg')
             }
           >
@@ -73,8 +129,19 @@ export default function WorkbenchTabBar({ tabs, activeId, onActivate, onClose, f
           </button>
         )
       })}
-      {/* 右上角常驻簇:文件树开关 + 动作槽(产物/压缩/导出)。整簇 sticky 吸右,tab 横向滚动时不被滚走 */}
-      <div className="sticky right-0 ml-auto flex shrink-0 items-stretch bg-bg-muted">
+      {/* 右上角常驻簇:右箭头(条件) + 文件树开关 + 动作槽(产物/压缩/导出)。
+          整簇 sticky 吸右,不透明 bg-bg 遮住滚过的 tab,tab 横向滚动时不被滚走 */}
+      <div className="sticky right-0 z-10 ml-auto flex shrink-0 items-stretch bg-bg">
+        {canRight && (
+          <button
+            type="button"
+            aria-label="向右滚动 tab"
+            onClick={() => scrollBy(1)}
+            className="flex items-center px-1 text-fg-subtle hover:text-fg"
+          >
+            <ChevronRight className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+          </button>
+        )}
         <button
           data-testid="workbench-toggle-filetree"
           type="button"

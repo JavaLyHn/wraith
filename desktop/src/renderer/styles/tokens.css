@@ -423,6 +423,10 @@ html.is-mac[data-theme="dark"] .sidebar-sticky { background: linear-gradient(180
   background: rgb(var(--fg-rgb) / 0.06);
   color: rgb(var(--fg-rgb));
 }
+/* tab 横向滚动条隐藏:用左右箭头 + 滚轮转横向替代原生滚动条,
+   避免滚动条挤占 tab 高度并造成视觉噪点 */
+.wb-tab-scroll { scrollbar-width: none; }            /* Firefox */
+.wb-tab-scroll::-webkit-scrollbar { display: none; } /* Chromium/Electron */
 
 /* --- FilePreviewPanel:行号 + 代码行 hover --- */
 .preview-line {
