@@ -7,7 +7,7 @@ import {
 } from './ui/tooltip'
 import {
   Plus, Search, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
-  Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown, ListTodo, Shield, User, FolderOpen,
+  Star, ListTree, List, Pencil, Trash2, Check, Settings, Wrench, ChevronDown, ListTodo, Shield, User, FolderOpen, AlertTriangle,
   type LucideIcon,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
@@ -17,8 +17,8 @@ import { userAvatarGlyph, accountGlyphDuplicatesName } from '../lib/chatIdentity
 import type { ProfilePrefs } from '../settings/prefs'
 import type { SessionMeta, ProjectView } from '../../shared/types'
 
-function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDelete }: {
-  s: SessionMeta; active: boolean; running: boolean
+function SessionRow({ s, active, running, failed, onSelect, onToggleStar, onRename, onDelete }: {
+  s: SessionMeta; active: boolean; running: boolean; failed: boolean
   onSelect: (id: string) => void
   onToggleStar: (id: string, starred: boolean) => void
   onRename: (id: string, name: string) => void
@@ -66,6 +66,13 @@ function SessionRow({ s, active, running, onSelect, onToggleStar, onRename, onDe
         <span data-testid="session-running-dot" className="relative ml-1 flex h-2 w-2 shrink-0" title="运行中">
           <span className="absolute inline-flex h-2 w-2 animate-ping rounded-full bg-accent opacity-75 motion-reduce:hidden" />
           <span className="relative inline-flex h-2 w-2 rounded-full bg-accent" />
+        </span>
+      )}
+      {/* 异常中断标记:本轮问答出过问题(LLM 调用失败 / 后端断开等)。常显、优先于 hover 操作,
+          但运行态让位给圆点 —— 新的一轮在跑,旧问题不再喧宾夺主。 */}
+      {failed && !running && (
+        <span data-testid="session-failed" className="shrink-0 pl-1" title="此会话曾有异常中断,点击会话可查看">
+          <AlertTriangle className="h-3 w-3 text-danger" strokeWidth={2} fill="currentColor" fillOpacity={0.15} />
         </span>
       )}
       <button data-testid="conversation-item" onClick={() => onSelect(s.id)}
@@ -152,6 +159,8 @@ interface SidebarProps {
   projects: ProjectView[]
   busy: boolean
   sessions: SessionMeta[]
+  /** 异常中断(LLM 失败/后端断开等)的会话 id 集合:对应会话行右侧显示感叹号。 */
+  failedSessions: ReadonlySet<string>
   activeSessionId: string
   runningSessionId: string
   /** 当前是尚未落桩的空白新会话:侧栏顶部显示一条「新对话」草稿行并高亮。 */
@@ -193,6 +202,7 @@ export default function Sidebar({
   projects,
   busy,
   sessions,
+  failedSessions,
   activeSessionId,
   runningSessionId,
   newDraftActive,
@@ -387,6 +397,7 @@ export default function Sidebar({
               const renderRows = (list: SessionMeta[]): JSX.Element[] => list.map(s => (
                 <SessionRow key={s.id} s={s} active={s.id === activeSessionId}
                   running={s.id === runningSessionId}
+                  failed={failedSessions.has(s.id)}
                   onSelect={onSelectSession} onToggleStar={onToggleStar}
                   onRename={onRenameSession} onDelete={onDeleteSession} />
               ))
