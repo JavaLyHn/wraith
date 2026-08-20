@@ -197,6 +197,9 @@ export default function App(): JSX.Element {
   const [inputValue, setInputValue] = useState('')
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
   const [sessions, setSessions] = useState<SessionMeta[]>([])
+  // 异常中断(LLM 失败/后端断开等)的会话 id 集合 → 侧栏会话行右侧显示感叹号。
+  // 只跟踪本桌面会话内的故障,不落盘:后端在 turn.failed/进程死亡时不持久化,重启后 ! 消失。
+  const [failedSessions, setFailedSessions] = useState<Set<string>>(() => new Set())
   const [projects, setProjects] = useState<ProjectView[]>([])
   const [view, setView] = useState<'chat' | 'projects' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'settings'>('chat')
   const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
@@ -364,6 +367,13 @@ export default function App(): JSX.Element {
     turnRef.current = state.turn
   }, [state.turn])
 
+  // sessionIdRef:onEvent 回调里读当前会话 id 的即时快照(dispatch 后组件尚未重渲染,
+  // 闭包里的 state.sessionId 仍是旧值,漏标记/错标记都从这里来)。
+  const sessionIdRef = useRef(state.sessionId)
+  useEffect(() => {
+    sessionIdRef.current = state.sessionId
+  }, [state.sessionId])
+
   // 折叠状态持久化
   useEffect(() => {
     try { localStorage.setItem('wraith.sidebar.collapsed', sidebarCollapsed ? '1' : '0') } catch { /* localStorage 不可用:忽略 */ }
@@ -434,6 +444,52 @@ export default function App(): JSX.Element {
       unsubscribe()
     }
   }, [fetchMcpResources, fetchGitStatus])
+
+  // ── 会话异常标记:turn.failed / turn.completed(error) / 后端断开时,把当前会话标记为异常中断 ──────
+  // 感叹号是会话级状态,不在 reducer 里(避免给 transcriptReducer 增加与正文无关的副作用)。
+  // 只读 sessionIdRef 即时快照:turn.failed 通知与 markStarted 同轮到达时,state.sessionId
+  // 可能仍是旧值(或空),闭包读取会漏标记 / 错标记到旧会话。
+  useEffect(() => {
+    return window.wraith.onEvent((evt: BackendEvent) => {
+      if (evt.kind !== 'notification') {
+        // 后端断开:任何进行中的轮次都已异常终止(后端进程死了,没有 turn.* 通知可等)。
+        if (evt.kind === 'connection' && evt.state === 'disconnected') {
+          const id = sessionIdRef.current
+          if (id) setFailedSessions(prev => (prev.has(id) ? prev : new Set(prev).add(id)))
+        }
+        return
+      }
+      if (evt.method === 'turn.failed') {
+        const id = sessionIdRef.current
+        if (id) setFailedSessions(prev => (prev.has(id) ? prev : new Set(prev).add(id)))
+        return
+      }
+      // turn.completed:后端把「静默失败」(LLM 调用异常 / budget 耗尽,错误文本已兜底发出)挂在
+      // error 字段上 —— 轮次确实异常中断,侧栏该会话要打感叹号;无 error 则是正常完成,
+      // 同一会话此前的异常标记不再成立,顺手清掉。
+      if (evt.method === 'turn.completed') {
+        const p = evt.params as { sessionId?: string; error?: string } | null
+        const id = (typeof p?.sessionId === 'string' && p.sessionId) ? p.sessionId : sessionIdRef.current
+        if (!id) return
+        const hasError = typeof p?.error === 'string' && p.error.length > 0
+        setFailedSessions(prev => {
+          const marked = prev.has(id)
+          if (hasError && !marked) return new Set(prev).add(id)
+          if (!hasError && marked) { const next = new Set(prev); next.delete(id); return next }
+          return prev
+        })
+      }
+    })
+  }, [])
+
+  // ── 会话异常标记的清除:恢复 / 切到该会话时,过去的问题不该一直挂在上面 ────
+  // resume 成功后红感叹号消失(会话回到可控状态);同一 effect 里顺带把上次「未完成」
+  // 轮次的标记一起清掉 —— 新一轮已成功开始,上一轮的异常状态不再有意义。
+  useEffect(() => {
+    setFailedSessions(prev => (prev.has(state.sessionId) ? (() => {
+      const next = new Set(prev); next.delete(state.sessionId); return next
+    })() : prev))
+  }, [state.sessionId])
 
   // ── session list helpers ───────────────────────────────────────────────────
   // 手动排序：用户拖拽后记录顺序在 localStorage，fetchSessions 返回后应用
@@ -1324,6 +1380,7 @@ export default function App(): JSX.Element {
           projects={projects}
           busy={state.turn === 'running'}
           sessions={sessions}
+          failedSessions={failedSessions}
           activeSessionId={pv.activeSessionId}
           runningSessionId={pv.runningSessionId}
           newDraftActive={!pv.activeSessionId}

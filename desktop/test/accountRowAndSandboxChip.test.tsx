@@ -12,6 +12,7 @@ type SidebarProps = React.ComponentProps<typeof Sidebar>
 function sidebarProps(over: Partial<SidebarProps> = {}): SidebarProps {
   return {
     workspace: '/proj', projects: [], busy: false, sessions: [],
+    failedSessions: new Set(),
     activeSessionId: '', runningSessionId: '', newDraftActive: false,
     onNewConversation: vi.fn(), onSelectSession: vi.fn(), onToggleStar: vi.fn(),
     onRenameSession: vi.fn(), onArchiveSession: vi.fn(),

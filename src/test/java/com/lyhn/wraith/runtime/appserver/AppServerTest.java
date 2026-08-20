@@ -232,6 +232,11 @@ class AppServerTest {
 
         JsonNode deltaParams = msgs.get(deltaIdx).get("params");
         assertEquals(errorText, deltaParams.get("text").asText());
+
+        // 静默失败时 turn.completed 必须携带 error 字段,让前端侧栏能打感叹号
+        JsonNode completedMsg = msgs.get(completedIdx);
+        assertEquals(errorText, completedMsg.get("params").get("error").asText(),
+                "turn.completed 应携带 error 字段,值为 runTurn 的返回值");
     }
 
     /** 回归护栏：已流式正文的轮次不应把 runTurn 返回值重复当作兜底再发一次。 */

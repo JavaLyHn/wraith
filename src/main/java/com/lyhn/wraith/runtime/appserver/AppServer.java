@@ -1382,7 +1382,8 @@ public final class AppServer {
             try {
                 String returned = session.runTurn(effectiveInput, attFinal.imageParts(), attFinal.imageNames(), modeFinal);
                 EventStreamRenderer renderer = session.renderer();
-                if (shouldEmitFallback(renderer.emittedAssistantContent(), returned)) {
+                boolean silentFailure = shouldEmitFallback(renderer.emittedAssistantContent(), returned);
+                if (silentFailure) {
                     // ReAct 静默失败兜底：本轮没有流出任何正文，但 runTurn 返回了非空白文本
                     // （典型如 Agent.runReActLoopInner 捕获 LLM IOException 后返回的 "❌ 调用 LLM 失败: ..."）。
                     // Plan/Team 已经通过流式 emitPlan*/emitTeam* 或 getLastCleanResult 机制把最终答案发出，
@@ -1396,7 +1397,14 @@ public final class AppServer {
                     sessionId = persisted;
                     session.renderer().setSessionId(sessionId); // 同上:两处换号点都要同步渲染器
                 }
-                writer.notify("turn.completed", Map.of("sessionId", reported, "turnId", turnId, "status", "completed"));
+                if (silentFailure) {
+                    // 静默失败:该轮次确实异常中断(LLM 调用失败 / budget 耗尽等),但错误文本已兜底发出,
+                    // 不算 turn.failed(否则桌面端会误报「空轮次」)。挂一个 error 字段让前端侧栏
+                    // 能给对应会话打上感叹号,用户一眼看出哪轮出过问题。
+                    writer.notify("turn.completed", Map.of("sessionId", reported, "turnId", turnId, "status", "completed", "error", returned));
+                } else {
+                    writer.notify("turn.completed", Map.of("sessionId", reported, "turnId", turnId, "status", "completed"));
+                }
             } catch (Exception e) {
                 writer.notify("turn.failed", Map.of("sessionId", sessionId, "turnId", turnId, "error", e.toString()));
             }

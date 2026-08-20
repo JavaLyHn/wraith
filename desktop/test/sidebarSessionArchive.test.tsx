@@ -13,7 +13,7 @@ function meta(over: Partial<SessionMeta> = {}): SessionMeta {
 
 function props(over: Partial<React.ComponentProps<typeof SessionRow>> = {}) {
   return {
-    s: meta(), active: false, running: false,
+    s: meta(), active: false, running: false, failed: false,
     onSelect: vi.fn(), onToggleStar: vi.fn(), onRename: vi.fn(), onArchive: vi.fn(),
     ...over,
   }

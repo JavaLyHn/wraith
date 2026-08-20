@@ -13,7 +13,7 @@ function meta(over: Partial<SessionMeta> = {}): SessionMeta {
 
 function props(over: Partial<React.ComponentProps<typeof SessionRow>> = {}) {
   return {
-    s: meta(), active: false, running: false,
+    s: meta(), active: false, running: false, failed: false,
     onSelect: vi.fn(), onToggleStar: vi.fn(), onRename: vi.fn(), onArchive: vi.fn(),
     ...over,
   }
@@ -117,6 +117,7 @@ describe('跨分区拖拽:拖进重点区 = 加星,拖回对话区 = 取消', ()
       workspace="d:/wrk" projects={[]} busy={false}
       sessions={[starred1, starred2, rest1, rest2]}
       activeSessionId="" runningSessionId="" newDraftActive={false}
+      failedSessions={new Set()}
       onNewConversation={() => {}} onSelectSession={() => {}}
       onToggleStar={() => {}} onRenameSession={() => {}} onArchiveSession={() => {}}
       onReorderSession={onReorderSession}
