@@ -28,7 +28,7 @@ import {
   type PetConfig,
 } from './settings'
 import { createTray, destroyTray, trayAlive } from './tray'
-import type { BackendEvent, CloseExecutePayload } from '../shared/types'
+import type { BackendEvent, CloseExecutePayload, ActivitySnapshot, DurableTaskView } from '../shared/types'
 import {
   readTasks as autoReadTasks,
   readRuns as autoReadRuns, readLastPanelOpenedAt, writeLastPanelOpenedAt, badgeVisible,
@@ -39,6 +39,8 @@ import type { LegacyAutomationTask } from './automationMigration'
 import type { AutomationTask, AutomationRun, AutomationEvent } from '../shared/types'
 import type { SkillUpsertPayload } from '../shared/types'
 import { resolveInterruptTurnId } from './interruptTurnId'
+import { submitActivityTurn } from './activitySubmission'
+import { refreshActivitySources } from './activitySourceRefresh'
 import { shouldForwardNotification, MULTI_SESSION_FILTER_ENABLED } from './notificationFilter'
 import { GatewayManager } from './gatewayManager'
 import { PtyManager } from './pty'
@@ -60,6 +62,14 @@ import type { EditorApp } from '../shared/editors'
 import { documentsDir, ensureDocumentsDir, listDocuments, resolveInVault, addDocuments, removeDocument } from './documents'
 import { requestGitStatus } from './gitStatusBridge'
 import * as fileX from './fileExplorer'
+import {
+  ActivityStore,
+  enrichActivitySnapshot,
+  isDurableTaskSnapshot,
+  sessionStatusForNotification,
+  shouldPromoteSessionIdentity,
+} from './activityStore'
+import { registerActivityIpc } from './activityIpc'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -112,6 +122,11 @@ let client: JsonRpcClient | null = null
 let currentSessionId: string | null = null
 /** Last turnId returned by turn.submit. */
 let currentTurnId: string | null = null
+/** turn.submit result available before its awaiting renderer callback resumes. */
+let pendingSubmissionTurnId: string | null = null
+/** Workspace follows session.start so a submitted turn has a local project target. */
+let currentSessionProjectPath = ''
+const activityStore = new ActivityStore()
 
 const defaultJar = defaultJarPath(os.homedir())
 
@@ -136,6 +151,72 @@ function pushAutomation(evt: AutomationEvent): void {
   try {
     mainWindow?.webContents.send('wraith:automation-event', evt)
   } catch { /* window destroyed — 静默降级 */ }
+}
+
+/** Only changed snapshots are pushed; initial state is read through wraith:activityList. */
+function updateActivity(mutation: () => ActivitySnapshot): void {
+  const before = JSON.stringify(activityStore.snapshot(100))
+  const after = mutation()
+  if (JSON.stringify(after) === before) return
+  try {
+    mainWindow?.webContents.send('wraith:activity-event', after)
+  } catch { /* window destroyed — best effort */ }
+}
+
+function sessionIdFromNotification(params: unknown): string | null {
+  if (!params || typeof params !== 'object') return null
+  const value = (params as { sessionId?: unknown }).sessionId
+  return typeof value === 'string' ? value : null
+}
+
+function turnIdFromNotification(params: unknown): string | null {
+  if (!params || typeof params !== 'object') return null
+  const value = (params as { turnId?: unknown }).turnId
+  return typeof value === 'string' ? value : null
+}
+
+function updateActivityForNotification(method: string, params: unknown): void {
+  const status = sessionStatusForNotification(method)
+  if (!status) return
+  const reportedSessionId = sessionIdFromNotification(params)
+  if (!reportedSessionId) return
+  if (shouldPromoteSessionIdentity(
+    currentSessionId,
+    currentTurnId,
+    reportedSessionId,
+    turnIdFromNotification(params),
+    pendingSubmissionTurnId,
+  )) {
+    updateActivity(() => activityStore.promoteSession(currentSessionId!, reportedSessionId))
+    currentSessionId = reportedSessionId
+  }
+  if (status === 'failed') {
+    const message = params && typeof params === 'object' && typeof (params as { message?: unknown }).message === 'string'
+      ? (params as { message: string }).message
+      : params && typeof params === 'object' && typeof (params as { error?: unknown }).error === 'string'
+        ? (params as { error: string }).error
+        : undefined
+    updateActivity(() => activityStore.updateSession(reportedSessionId, { status, error: message }))
+    return
+  }
+  updateActivity(() => activityStore.updateSession(reportedSessionId, { status }))
+}
+
+function registerTaskActivities(tasks: DurableTaskView[]): void {
+  for (const task of tasks) updateActivity(() => activityStore.registerTask(task))
+}
+
+function registerAutomationActivities(runs: AutomationRun[]): void {
+  for (const run of runs) updateActivity(() => activityStore.registerAutomation(run))
+}
+
+function markActivitySourceStale(kind: 'task' | 'automation', error: unknown): void {
+  const reason = error instanceof Error ? error.message : String(error)
+  updateActivity(() => activityStore.markSourceStale(kind, reason))
+}
+
+function clearActivitySourceStale(kind: 'task' | 'automation'): void {
+  updateActivity(() => activityStore.clearSourceStale(kind))
 }
 
 function pushBadge(): void {
@@ -246,6 +327,7 @@ function spawnBackend(): void {
     // waiting_approval 的自动化 run 才点亮,交互式审批(无对应自动化 run)不受影响。会话过滤仅决定
     // 是否转发给 renderer,红点属全局自动化态,故置于过滤门之前。
     if (method === 'approval.requested') pushBadge()
+    updateActivityForNotification(method, params)
     if (!shouldForwardNotification(currentSessionId, params, MULTI_SESSION_FILTER_ENABLED)) return
     sendEvent({ kind: 'notification', method, params })
   })
@@ -271,6 +353,7 @@ function spawnBackend(): void {
     if (client !== rpcClient) return
     client = null
     child = null
+    updateActivity(() => activityStore.markStale('backend disconnected'))
     sendEvent({ kind: 'connection', state: 'disconnected' })
     rpcClient.rejectAll('backend disconnected')
   }
@@ -493,24 +576,22 @@ ipcMain.handle('wraith:startSession', async (_e, workspaceDir: string | null) =>
   const result = await client.request('session.start', { workspaceDir })
   const r = result as { sessionId: string }
   currentSessionId = r.sessionId
+  currentSessionProjectPath = workspaceDir ?? ''
   return r
 })
 
 ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { path: string; kind: string }[], mode?: 'react' | 'plan' | 'team') => {
   if (!client) throw new Error('Backend not connected')
-  // T11 硬化:进入早窗(submit 在途、尚未 resolve)前清零 currentTurnId,
-  // 使此窗口内的 turn.interrupt 发送 null 而非陈旧的上一 turn id。
-  // 后端按线程中断、不读 turnId,运行时行为不变(纯防御性)。
-  currentTurnId = null
-  const result = await client.request('turn.submit', {
-    sessionId: currentSessionId,
-    input,
-    ...(attachments?.length ? { attachments: attachments.map(a => ({ path: a.path, kind: a.kind })) } : {}),
-    mode: mode ?? 'react',
-  })
-  const r = result as { turnId: string; status: string }
-  currentTurnId = r.turnId
-  return r
+  const rpcClient = client
+  return submitActivityTurn({
+    store: activityStore,
+    currentSessionId: () => currentSessionId,
+    currentProjectPath: () => currentSessionProjectPath,
+    request: (method, params, onResult) => rpcClient.request(method, params, onResult),
+    setCurrentTurnId: turnId => { currentTurnId = turnId },
+    setPendingTurnId: turnId => { pendingSubmissionTurnId = turnId },
+    updateActivity,
+  }, input, attachments, mode)
 })
 
 ipcMain.handle('wraith:pickAttachments', async () => {
@@ -903,6 +984,8 @@ ipcMain.handle('wraith:interrupt', async () => {
     sessionId: currentSessionId,
     turnId: resolveInterruptTurnId(currentTurnId)
   })
+  const interruptedSessionId = currentSessionId
+  if (interruptedSessionId) updateActivity(() => activityStore.updateSession(interruptedSessionId, { status: 'interrupted' }))
 })
 
 /**
@@ -1186,8 +1269,12 @@ ipcMain.handle('wraith:contextState', async () => {
 ipcMain.handle('wraith:taskList', async (_e, limit: number) => {
   if (!client) throw new Error('Backend not connected')
   try {
-    return await client.request('task.list', { limit: limit ?? 20 })
+    const result = await client.request('task.list', { limit: limit ?? 20 }) as { tasks?: DurableTaskView[] }
+    clearActivitySourceStale('task')
+    registerTaskActivities(result.tasks ?? [])
+    return result
   } catch (e) {
+    markActivitySourceStale('task', e)
     // 后端的 task.list 挂在 SessionRunner 上,会话建立前一律回 "no session"。
     // 但这是**轮询**接口(侧栏计数 / 完成提醒每 15s 拉一次),启动窗口内必然撞上 ——
     // 让它抛出去的话,Electron 会给每一次轮询打一整段 "Error occurred in handler" 栈,
@@ -1205,11 +1292,23 @@ ipcMain.handle('wraith:taskAdd', async (_e, prompt: string) => {
 })
 ipcMain.handle('wraith:taskGet', async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('task.get', { id })
+  try {
+    const result = await client.request('task.get', { id }) as DurableTaskView
+    clearActivitySourceStale('task')
+    registerTaskActivities([result])
+    return result
+  } catch (error) {
+    markActivitySourceStale('task', error)
+    throw error
+  }
 })
 ipcMain.handle('wraith:taskCancel', async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('task.cancel', { id })
+  const result = await client.request('task.cancel', { id })
+  // task.cancel is an { ok } acknowledgement, not a DurableTaskView. Polling
+  // will ingest the authoritative canceled snapshot without creating task:undefined.
+  if (isDurableTaskSnapshot(result)) registerTaskActivities([result])
+  return result
 })
 ipcMain.handle('wraith:taskDelete', async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
@@ -1383,7 +1482,9 @@ ipcMain.handle('wraith:listBuiltinTools', async () => {
 
 ipcMain.handle('wraith:resumeSession', async (_e, sessionId: string) => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('session.resume', { sessionId })
+  const result = await client.request('session.resume', { sessionId }) as { sessionId?: string }
+  currentSessionId = result.sessionId ?? sessionId
+  return result
 })
 
 ipcMain.handle('wraith:peekSession', async (_e, sessionId: string) => {
@@ -1453,7 +1554,15 @@ ipcMain.handle('wraith:automationStop', async (_e, runId: string) => {
 })
 ipcMain.handle('wraith:automationRuns', async () => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('automations.runs', {})
+  try {
+    const result = await client.request('automations.runs', {}) as { runs?: AutomationRun[] }
+    clearActivitySourceStale('automation')
+    registerAutomationActivities(result.runs ?? [])
+    return result
+  } catch (error) {
+    markActivitySourceStale('automation', error)
+    throw error
+  }
 })
 // Fix-B: param contract aligned to Fix-A — forwards { approvalId, decision } to daemon.
 ipcMain.handle('wraith:automationRespondApproval', async (_e, approvalId: string, decision: 'approve' | 'reject') => {
@@ -1483,7 +1592,45 @@ ipcMain.handle('wraith:automationsRemove', async (_e, id: string) => {
 })
 ipcMain.handle('wraith:automationsRuns', async (_e, taskId?: string) => {
   if (!client) throw new Error('Backend not connected')
-  return client.request('automations.runs', taskId ? { taskId } : {})
+  try {
+    const result = await client.request('automations.runs', taskId ? { taskId } : {}) as { runs?: AutomationRun[] }
+    clearActivitySourceStale('automation')
+    registerAutomationActivities(result.runs ?? [])
+    return result
+  } catch (error) {
+    markActivitySourceStale('automation', error)
+    throw error
+  }
+})
+
+registerActivityIpc({
+  handle: ipcMain.handle.bind(ipcMain),
+  snapshot: limit => activityStore.snapshot(limit),
+  // The app-server git.status is scoped to its current workspace, so activity snapshots
+  // resolve every referenced local project independently and only when the panel asks.
+  listSnapshot: async limit => {
+    await refreshActivitySources({
+      store: activityStore,
+      request: (method, params) => {
+        if (!client) return Promise.reject(new Error('Backend not connected'))
+        return client.request(method, params)
+      },
+      updateActivity,
+    })
+    const enriched = await enrichActivitySnapshot(activityStore.snapshot(limit))
+    activityStore.mergeGitContext(enriched.activities)
+    return enriched
+  },
+  request: (method, params) => {
+    if (!client) return Promise.reject(new Error('Backend not connected'))
+    return client.request(method, params)
+  },
+  currentSessionId: () => currentSessionId,
+  sessionInterruptParams: item => ({
+    sessionId: item.sessionId ?? '',
+    // Other sessions cannot safely borrow the current turn id.
+    turnId: item.sessionId === currentSessionId ? resolveInterruptTurnId(currentTurnId) : null,
+  }),
 })
 
 ipcMain.handle('wraith:qqPending', async () => {
@@ -1760,6 +1907,8 @@ async function pollAndNotify(): Promise<void> {
   try {
     const res = await client.request('automations.runs', {}) as { runs?: AutomationRun[] }
     const runs = res.runs ?? []
+    clearActivitySourceStale('automation')
+    registerAutomationActivities(runs)
 
     let maxEndedAt = notifyPollLastSeen
     let sawNew = false
@@ -1782,8 +1931,8 @@ async function pollAndNotify(): Promise<void> {
       pushBadge()
     }
     if (sawNew) pushAutomation({ kind: 'runs-changed' })   // 触发 renderer 刷新会话/运行历史
-  } catch {
-    // best-effort: poll failure is silent
+  } catch (error) {
+    markActivitySourceStale('automation', error)
   }
 }
 

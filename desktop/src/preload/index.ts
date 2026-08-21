@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, ProjectSummary, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, SnapshotSettingsView, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, RagScopeView, SearchStatusView, GitStatusView, SearchTestResult, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult, CloseMode, CloseExecutePayload } from '../shared/types'
+import type { BackendEvent, SessionMeta, ResumedMessage, ProjectView, ProjectSummary, McpListResult, McpResourceView, McpUpsertPayload, McpTestResult, AutomationTask, AutomationRun, AutomationEvent, ModelListResult, SkillListResult, SkillDetail, SkillUpsertPayload, AppInfo, UpdateResult, RunMode, BuiltinToolView, MemoryListResult, PendingListResult, ExtractNowResult, ProjectMemoryInitResult, SnapshotListResult, SnapshotRestoreResult, SnapshotSettingsView, PolicyStatusView, AuditListResult, SandboxState, BrowserCmdResult, EmbeddingConfigView, EmbeddingTestResult, RagScopeView, SearchStatusView, GitStatusView, SearchTestResult, PricingListResult, PricingEntryView, RagStatus, RagIndexResult, RagSearchResult, RagGraphResult, TaskListResult, DurableTaskView, QqPendingItem, DocEntry, DocAddResult, CloseMode, CloseExecutePayload, ActivityCancelRequest, ActivityCancelResult, ActivitySnapshot } from '../shared/types'
 import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, GatewayConfigView, GatewayEvent, GatewayStatus } from '../shared/gateway'
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
@@ -66,6 +66,9 @@ export interface WraithApi {
   mcpTest(payload: McpUpsertPayload): Promise<McpTestResult>
   mcpConfigRemove(scope: 'user' | 'project', name: string): Promise<{ ok: boolean }>
   onEvent(cb: (evt: BackendEvent) => void): () => void
+  activityList(limit?: number): Promise<ActivitySnapshot>
+  activityCancel(item: ActivityCancelRequest): Promise<ActivityCancelResult>
+  onActivityEvent(cb: (snapshot: ActivitySnapshot) => void): () => void
   automationList(): Promise<{ tasks: AutomationTask[] }>
   automationUpsert(task: AutomationTask): Promise<{ ok: boolean }>
   automationRemove(id: string): Promise<{ ok: boolean }>
@@ -448,6 +451,20 @@ const wraith: WraithApi = {
     return () => {
       ipcRenderer.removeListener('wraith:event', listener)
     }
+  },
+
+  activityList(limit) {
+    return ipcRenderer.invoke('wraith:activityList', limit) as Promise<ActivitySnapshot>
+  },
+
+  activityCancel(item) {
+    return ipcRenderer.invoke('wraith:activityCancel', item) as Promise<ActivityCancelResult>
+  },
+
+  onActivityEvent(cb) {
+    const listener = (_event: Electron.IpcRendererEvent, snapshot: ActivitySnapshot) => cb(snapshot)
+    ipcRenderer.on('wraith:activity-event', listener)
+    return () => { ipcRenderer.removeListener('wraith:activity-event', listener) }
   },
 
   automationList() {

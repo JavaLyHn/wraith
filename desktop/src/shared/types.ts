@@ -354,6 +354,68 @@ export interface TaskListResult {
   error?: string
 }
 
+// ---------------------------------------------------------------------------
+// Activity center: local sessions, durable tasks, and automation runs
+// ---------------------------------------------------------------------------
+
+export type ActivityKind = 'session' | 'task' | 'automation'
+
+export type ActivityStatus =
+  | 'running'
+  | 'waiting'
+  | 'completed'
+  | 'failed'
+  | 'canceled'
+  | 'interrupted'
+  | 'unknown'
+
+/** Read-only Git context resolved for an activity's own project path. */
+export interface ActivityGitContext {
+  branch: string | null
+  worktree: string
+  changedFiles: number
+  additions: number
+  deletions: number
+  error?: string
+}
+
+/** A normalized local activity record consumed by the desktop activity center. */
+export interface ActivityItem {
+  activityId: string
+  kind: ActivityKind
+  status: ActivityStatus
+  projectPath: string
+  sessionId?: string
+  taskId?: string
+  runId?: string
+  title?: string
+  summary?: string
+  branch?: string
+  worktree?: string
+  git?: ActivityGitContext
+  startedAt: number
+  updatedAt: number
+  error?: string
+  stale?: boolean
+}
+
+export interface ActivitySnapshot {
+  activities: ActivityItem[]
+  stale: boolean
+  error?: string
+}
+
+/** Renderer input for the narrow activity cancellation IPC. */
+export interface ActivityCancelRequest {
+  kind: ActivityKind
+  id: string
+}
+
+export interface ActivityCancelResult {
+  ok: boolean
+  message?: string
+}
+
 export interface SnapshotRestoreResult {
   ok: boolean
   message: string

@@ -17,6 +17,7 @@ type NotificationCallback = (method: string, params: unknown) => void
 interface PendingRequest {
   resolve: (value: unknown) => void
   reject: (reason: Error) => void
+  onResult?: (value: unknown) => void
 }
 
 export class JsonRpcClient {
@@ -33,10 +34,10 @@ export class JsonRpcClient {
    * Send a JSON-RPC 2.0 request.
    * Returns a Promise that resolves with `result` or rejects with the `error`.
    */
-  request(method: string, params: object): Promise<unknown> {
+  request(method: string, params: object, onResult?: (value: unknown) => void): Promise<unknown> {
     const id = this.nextId++
     return new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject })
+      this.pending.set(id, { resolve, reject, onResult })
       const message = JSON.stringify({ jsonrpc: '2.0', id, method, params })
       this.writeLine(message)
     })
@@ -64,6 +65,7 @@ export class JsonRpcClient {
       if (pending) {
         this.pending.delete(id)
         if ('result' in msg) {
+          pending.onResult?.(msg['result'])
           pending.resolve(msg['result'])
         } else {
           const err = msg['error'] as Record<string, unknown> | undefined
