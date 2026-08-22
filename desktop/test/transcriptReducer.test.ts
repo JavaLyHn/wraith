@@ -58,7 +58,16 @@ describe('message items', () => {
 
     expect(s.items).toHaveLength(2)
     expect(s.items[0]).toMatchObject({ type: 'message', text: 'first' })
+    // message.end 后,首条消息应有 timestampMs
+    expect((s.items[0] as { timestampMs?: number }).timestampMs).toBeGreaterThan(0)
+    // 第二条尚未 end,暂无 timestampMs
+    expect((s.items[1] as { timestampMs?: number }).timestampMs).toBeUndefined()
     expect(s.items[1]).toMatchObject({ type: 'message', text: 'second' })
+  })
+
+  it('message.end on empty items is a no-op', () => {
+    const s = reduce(initialState, notif('message.end'))
+    expect(s).toEqual(initialState)
   })
 })
 

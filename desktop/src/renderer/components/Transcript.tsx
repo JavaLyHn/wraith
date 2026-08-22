@@ -193,7 +193,7 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
           if (item.type === 'message') {
             return (
               <Fragment key={`msg-${originalIdx}`}>
-                <AgentMessage {...attrs} text={item.text} />
+                <AgentMessage {...attrs} text={item.text} timestampMs={item.timestampMs} />
                 {renderChips(originalIdx, nodeIdx)}
               </Fragment>
             )

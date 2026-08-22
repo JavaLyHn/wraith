@@ -4,6 +4,7 @@ import type { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Logo from './Logo'
 import { stripDsml } from '../lib/toolContent'
+import { absoluteTime } from '../lib/memoryView'
 import { cn } from '../lib/utils'
 
 /** Agent 消息 markdown 正文的自定义渲染:表格外包横向滚动容器、链接走系统浏览器。
@@ -30,12 +31,16 @@ export const MARKDOWN_COMPONENTS: Components = {
 
 interface AgentMessageProps extends HTMLAttributes<HTMLDivElement> {
   text: string
+  /** 消息完成时刻(ms 时间戳);悬停时显示绝对时间。未设置(如历史恢复)则不显示。 */
+  timestampMs?: number
 }
 
-/** Agent 消息:左侧主题感知 Wraith logo 头像+名字,右侧全宽 markdown 正文(GFM + 主题样式)。 */
-export default function AgentMessage({ text, className: incomingClass, ...rest }: AgentMessageProps): JSX.Element {
+/** Agent 消息:左侧主题感知 Wraith logo 头像+名字,右侧全宽 markdown 正文(GFM + 主题样式)。
+ * 悬停时显示消息完成时间。 */
+export default function AgentMessage({ text, timestampMs, className: incomingClass, ...rest }: AgentMessageProps): JSX.Element {
+  const title = timestampMs != null ? `回答时间: ${absoluteTime(timestampMs)}` : undefined
   return (
-    <div data-testid="agent-msg" className={cn(incomingClass, "flex gap-2.5")} {...rest}>
+    <div data-testid="agent-msg" title={title} className={cn(incomingClass, "flex gap-2.5")} {...rest}>
       <Logo className="mt-0.5 h-6 w-6 shrink-0 object-contain" />
       <div className="min-w-0 flex-1">
         <div className="mb-0.5 text-2xs font-semibold text-fg-muted">Wraith</div>

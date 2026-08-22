@@ -144,7 +144,7 @@ export type Item =
    * 不臆造一个默认值 —— 显示一个没被证实的模式与不显示同样糟。
    */
   | { type: 'user'; text: string; attachments?: AttachmentRef[]; mode?: RunMode }
-  | { type: 'message'; text: string }
+  | { type: 'message'; text: string; timestampMs?: number }
   | { type: 'error'; text: string }
   | { type: 'thinking'; label: string; text: string; done: boolean }
   | { type: 'tool'; card: ToolCard }
@@ -383,8 +383,17 @@ export function reduce(state: TranscriptState, evt: BackendEvent): TranscriptSta
       }
     }
 
-    case 'message.end':
+    case 'message.end': {
+      // 记录回答完成时刻:前端收到 message.end 即视为该条回复的完成时间
+      // 不依赖后端时间戳,避免额外协议字段
+      const last = state.items[state.items.length - 1]
+      if (last && last.type === 'message') {
+        const ts = Date.now()
+        const items = [...state.items.slice(0, -1), { ...last, timestampMs: ts }]
+        return { ...state, _messageOpen: false, items }
+      }
       return { ...state, _messageOpen: false }
+    }
 
     // ── thinking streaming ──────────────────────────────────────────────────
     case 'thinking.begin': {
