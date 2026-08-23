@@ -86,6 +86,8 @@ public final class AppServer {
         }
         /** 归档某项目下全部未归档会话,返回条数。默认 0。 */
         default int archiveProjectSessions(String path) { return 0; }
+        /** 从指定会话创建分支:复制消息到新会话文件,返回新 id;默认 null(不支持)。 */
+        default String branchSession(String sourceId) { return null; }
         /** MCP 操作面。实现可返回 null(表示 mcp 不可用)。默认 null。 */
         default McpOps mcp() { return null; }
         /**
@@ -479,6 +481,7 @@ public final class AppServer {
             case "session.setArchived" -> handleSessionSetArchived(msg);
             case "session.listArchived" -> handleListArchived(msg);
             case "session.archiveProject" -> handleArchiveProject(msg);
+            case "session.branch" -> handleSessionBranch(msg);
             case "mcp.list" -> handleMcp(msg, ops -> writer.result(msg.id(), ops.list()));
             case "mcp.enable" -> handleMcpNamed(msg, (ops, name) -> { ops.enable(name); ok(msg); });
             case "mcp.disable" -> handleMcpNamed(msg, (ops, name) -> { ops.disable(name); ok(msg); });
@@ -1689,6 +1692,20 @@ public final class AppServer {
         }
         result.put("cards", session.readCards(id));
         writer.result(msg.id(), result);
+    }
+
+    /** 从指定会话创建分支:复制源会话消息到新会话,返回新会话 id。 */
+    private void handleSessionBranch(JsonRpc.Incoming msg) {
+        if (session == null) { writer.error(msg.id(), -32000, "no session"); return; }
+        JsonNode p = msg.params();
+        String sourceId = (p != null && p.hasNonNull("sessionId")) ? p.get("sessionId").asText() : "";
+        if (sourceId.isBlank()) { writer.error(msg.id(), -32602, "missing sessionId"); return; }
+        String newId = session.branchSession(sourceId);
+        if (newId == null || newId.isBlank()) {
+            writer.error(msg.id(), -32000, "branch failed: source session not found or empty");
+            return;
+        }
+        writer.result(msg.id(), Map.of("sessionId", newId));
     }
 
     private void handleSessionPeek(JsonRpc.Incoming msg) {

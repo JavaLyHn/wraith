@@ -50,6 +50,8 @@ export interface WraithApi {
   listSessions(): Promise<{ sessions: SessionMeta[] }>
   resumeSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[]; provider?: string; model?: string; modelFallback?: boolean; cards?: Array<{ turnOrdinal: number; events: Array<{ method: string; params: unknown }> }> }>
   peekSession(sessionId: string): Promise<{ sessionId: string; messages: ResumedMessage[]; cards?: Array<{ turnOrdinal: number; events: Array<{ method: string; params: unknown }> }> }>
+  /** 从指定会话创建分支:复制全部消息到新会话,返回新 sessionId。 */
+  branchSession(sessionId: string): Promise<{ sessionId: string }>
   rewindSession(userOrdinal: number): Promise<{ ok: boolean }>
   setSessionStarred(sessionId: string, starred: boolean): Promise<{ ok: boolean }>
   renameSession(sessionId: string, name: string): Promise<{ ok: boolean }>
@@ -398,6 +400,10 @@ const wraith: WraithApi = {
 
   deleteSession(sessionId, path) {
     return ipcRenderer.invoke('wraith:deleteSession', sessionId, path) as Promise<{ ok: boolean }>
+  },
+
+  branchSession(sessionId) {
+    return ipcRenderer.invoke('wraith:branchSession', sessionId) as Promise<{ sessionId: string }>
   },
 
   mcpList() {

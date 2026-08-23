@@ -45,9 +45,13 @@ interface TranscriptProps {
   onOpenPanel: (id: PanelId) => void
   /** IM 卡绑定成功上报 —— 上层据此补一轮系统事件让 agent 知情。 */
   onImBound?: (platform: string, gatewayState: GatewayState | null) => void
+  /** 分支回调:在某条 Wraith 回复处创建会话分支。 */
+  onBranch?: (msgIndex: number) => void
+  /** 分支操作执行中(禁用按钮)。 */
+  branchingMsgIndex?: number | null
 }
 
-export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode, onOpenArtifact, onOpenDiff, onUndo, editors, workspace, onOpenPanel, onImBound }: TranscriptProps): JSX.Element {
+export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode, onOpenArtifact, onOpenDiff, onUndo, editors, workspace, onOpenPanel, onImBound, onBranch, branchingMsgIndex }: TranscriptProps): JSX.Element {
   let userOrdinal = 0 // 渲染期为 user 气泡计数(1-based),rewind 用
   const totalUsers = items.filter(i => i.type === 'user').length
   const containerRef = useRef<HTMLDivElement>(null)
@@ -193,7 +197,13 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
           if (item.type === 'message') {
             return (
               <Fragment key={`msg-${originalIdx}`}>
-                <AgentMessage {...attrs} text={item.text} timestampMs={item.timestampMs} />
+                <AgentMessage
+                  {...attrs}
+                  text={item.text}
+                  timestampMs={item.timestampMs}
+                  onBranch={onBranch ? () => onBranch(originalIdx) : undefined}
+                  branching={branchingMsgIndex === originalIdx}
+                />
                 {renderChips(originalIdx, nodeIdx)}
               </Fragment>
             )

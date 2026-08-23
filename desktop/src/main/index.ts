@@ -1493,6 +1493,12 @@ ipcMain.handle('wraith:peekSession', async (_e, sessionId: string) => {
   return client.request('session.peek', { sessionId })
 })
 
+ipcMain.handle('wraith:branchSession', async (_e, sessionId: string) => {
+  if (!client) throw new Error('Backend not connected')
+  // 从源会话创建分支:不切换 currentSessionId(分支由 renderer 主动切换)。
+  return client.request('session.branch', { sessionId })
+})
+
 ipcMain.handle('wraith:rewindSession', async (_e, userOrdinal: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.rewind', { sessionId: currentSessionId, userOrdinal })

@@ -180,6 +180,44 @@ public final class SessionStore {
         return currentId;
     }
 
+    /**
+     * 从指定会话创建分支:读取源会话全部消息,写入新会话文件,返回新会话 id。
+     * 新会话继承源会话的 cwd / provider / model / 消息内容;title 从源会话首条用户消息派生
+     * (空消息列表返回 null)。不修改源会话。
+     *
+     * @param sourceId 源会话 id
+     * @return 新分支会话 id;源会话不存在或读取失败返回 null
+     */
+    public synchronized String branch(String sourceId) {
+        if (sourceId == null || sourceId.isBlank()) {
+            return null;
+        }
+        SessionRecord rec = read(sourceId);
+        if (rec == null || rec.messages().isEmpty()) {
+            return null;
+        }
+        String now = Instant.now().toString();
+        String newId = newId();
+        SessionMeta srcMeta = rec.meta();
+        // 保留源会话的 cwd/provider/model/title/turns,新建 createdAt/updatedAt/id
+        SessionMeta newMeta = new SessionMeta(
+                newId, srcMeta.cwd(), now, now,
+                srcMeta.provider(), srcMeta.model(), srcMeta.title(),
+                srcMeta.turns(), srcMeta.starred(), srcMeta.name(),
+                srcMeta.origin(), srcMeta.archivedAt()
+        );
+        List<LlmClient.Message> convo = new ArrayList<>();
+        for (LlmClient.Message m : rec.messages()) {
+            convo.add(m.withoutImageContent());
+        }
+        try {
+            write(newMeta, convo);
+        } catch (IOException e) {
+            return null;
+        }
+        return newId;
+    }
+
     /** 删除当前会话文件并重置(rewind 清空到无用户消息时用):无当前会话则为 no-op。 */
     public synchronized void deleteCurrent() {
         if (currentId != null) {

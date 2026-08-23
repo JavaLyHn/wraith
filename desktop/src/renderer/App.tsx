@@ -212,6 +212,8 @@ export default function App(): JSX.Element {
   const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
   const [modelFallbackNotice, setModelFallbackNotice] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  /** 分支操作正在执行的消息 index(用于禁用按钮,防重复点击)。 */
+  const [branchingMsgIndex, setBranchingMsgIndex] = useState<number | null>(null)
   const { prefs: appPrefs } = useSettings()
   const [updateNotice, setUpdateNotice] = useState<{ latest: string; url: string } | null>(null)
   const [pendingMode, setPendingMode] = useState<RunMode>('react')
@@ -669,6 +671,26 @@ export default function App(): JSX.Element {
     } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
     void fetchSessions()
   }, [fetchSessions])
+
+  /** 从指定消息索引处创建会话分支:复制当前会话历史到新会话,切换到新会话。
+   * msgIndex 指示用户点击的 message item 位置,但当前实现是"复制全部历史",所以索引仅用于 UI 禁用状态。
+   */
+  const handleBranchConversation = useCallback(async (msgIndex: number) => {
+    if (turnRef.current === 'running') return
+    const srcId = state.sessionId
+    if (!srcId) return
+    setBranchingMsgIndex(msgIndex)
+    try {
+      const { sessionId: newId } = await window.wraith.branchSession(srcId)
+      // 分支创建成功后,用 commitSwitchTo 完整切换到新会话
+      await commitSwitchTo(newId)
+    } catch (err) {
+      console.error('[wraith] branchSession error:', err)
+      setSubmitError(err instanceof Error ? err.message : '创建分支失败')
+    } finally {
+      setBranchingMsgIndex(null)
+    }
+  }, [state.sessionId, commitSwitchTo])
 
   const handleSelectSession = useCallback(async (id: string) => {
     const act = selectAction(turnRef.current, id, state.sessionId)
@@ -1594,6 +1616,7 @@ export default function App(): JSX.Element {
                           mode={pendingMode} onOpenArtifact={openArtifact} onOpenDiff={openDiff} onUndo={handleUndo}
                           editors={editors} workspace={state.workspace ?? null}
                           onOpenPanel={(id) => setView(id)} onImBound={handleImBound}
+                          onBranch={handleBranchConversation} branchingMsgIndex={branchingMsgIndex}
                         />
                         <div className="shrink-0 px-4 py-3">{composer}</div>
                         <TerminalDrawer open={terminalOpen} cwd={state.workspace ?? null} onClose={() => setTerminalOpen(false)} />

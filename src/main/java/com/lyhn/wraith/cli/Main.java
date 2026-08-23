@@ -1573,6 +1573,10 @@ public class Main {
                         return sessionStore.peek(id);   // 纯读,不碰 agent/currentId
                     }
                     @Override
+                    public String branchSession(String sourceId) {
+                        return sessionStore.branch(sourceId);
+                    }
+                    @Override
                     public java.util.List<com.lyhn.wraith.llm.LlmClient.Tool> builtinTools() {
                         return agent.getToolRegistry().getToolDefinitions();   // 权威目录,只读
                     }
