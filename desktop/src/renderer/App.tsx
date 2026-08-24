@@ -1,11 +1,11 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
-import type { ActivityItem, ActivitySnapshot, BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire, GitStatusView } from '../shared/types'
+import type { ActivityItem, BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire, GitStatusView } from '../shared/types'
 import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
 import type { EditorApp } from '../shared/editors'
 import type { McpFormValue } from './components/McpServerForm'
 import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
-import { createThrottleLatest, type ThrottledPush } from '../shared/throttleLatest'
+
 import {
   initialState,
   reduce,
@@ -78,8 +78,7 @@ import RagPanel from './components/RagPanel'
 import DocumentsPanel from './components/DocumentsPanel'
 import ProjectsPanel from './components/ProjectsPanel'
 import SettingsPanel from './components/SettingsPanel'
-import WorkbenchTabBar, { type WorkbenchTab, makeFileTab } from './components/WorkbenchTabBar'
-import { useWorkspaceTabsReset } from './lib/useWorkspaceTabsReset'
+import WorkbenchTabBar from './components/WorkbenchTabBar'
 import FileTreePanel from './components/FileTreePanel'
 import FilePreviewPanel from './components/FilePreviewPanel'
 import TerminalDrawer from './components/TerminalDrawer'
@@ -88,6 +87,12 @@ import SummaryPopover from './components/SummaryPopover'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './components/ui/dialog'
 import { useSettings } from './settings/SettingsContext'
 import { activityBadgeCount } from './lib/activityView'
+import { useWorkbench } from './lib/useWorkbench'
+import { useSidebarCollapse } from './lib/useSidebarCollapse'
+import { useSessionFailureTracking } from './lib/useSessionFailureTracking'
+import { useActivityManager } from './lib/useActivityManager'
+import { useSessionListManager } from './lib/useSessionListManager'
+import { useBackendEventSubscription } from './lib/useBackendEventSubscription'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -198,13 +203,12 @@ export default function App(): JSX.Element {
   const [state, dispatch] = useReducer(reduceAdapter, connectedInitialState)
   const [inputValue, setInputValue] = useState('')
   const [attachments, setAttachments] = useState<AttachmentItem[]>([])
-  const [sessions, setSessions] = useState<SessionMeta[]>([])
   // 异常中断(LLM 失败/后端断开等)的会话 id 集合 → 侧栏会话行右侧显示感叹号。
   // 只跟踪本桌面会话内的故障,不落盘:后端在 turn.failed/进程死亡时不持久化,重启后 ! 消失。
-  const [failedSessions, setFailedSessions] = useState<Set<string>>(() => new Set())
+  const { failedSessions, setFailedSessions, sessionIdRef } = useSessionFailureTracking()
   const [projects, setProjects] = useState<ProjectView[]>([])
   const [view, setView] = useState<'chat' | 'projects' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'activity' | 'settings'>('chat')
-  const [activitySnapshot, setActivitySnapshot] = useState<ActivitySnapshot>({ activities: [], stale: false })
+  const { activitySnapshot, loadActivities } = useActivityManager()
   const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
   const [automationBadge, setAutomationBadge] = useState(false)
   const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
@@ -227,74 +231,17 @@ export default function App(): JSX.Element {
   const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
 
   // ── Workbench 工作台(文件浏览器 + 聊天 Tab 混排) ──────────────────────────
-  const [tabs, setTabs] = useState<WorkbenchTab[]>(() => [{ id: 'chat', title: '聊天' }])
-  const [activeTabId, setActiveTabId] = useState<string>('chat')
-  const [fileTreeVisible, setFileTreeVisible] = useState<boolean>(() => {
-    try { return localStorage.getItem('wraith.workbench.fileTreeVisible') === '1' } catch { return false }
-  })
-  const [fileTreeWidth, setFileTreeWidth] = useState<number>(() => {
-    try {
-      const w = parseInt(localStorage.getItem('wraith.workbench.fileTreeWidth') ?? '', 10)
-      return Number.isFinite(w) && w >= 200 && w <= 560 ? w : 260
-    } catch { return 260 }
-  })
-  const resizingRef = useRef<{ startX: number; startW: number } | null>(null)
-
-  const handleOpenWorkspaceFile = useCallback((absPath: string) => {
-    const tid = `file:${absPath}` as const
-    setTabs(prev => {
-      if (prev.some(t => t.id === tid)) return prev
-      return [...prev, makeFileTab(absPath)]
-    })
-    setActiveTabId(tid as string)
-  }, [])
-
-  const handleCloseTab = useCallback((fileId: Extract<WorkbenchTab['id'], `file:${string}`>) => {
-    setTabs(prev => {
-      if (prev.length === 0) return prev
-      const idx = prev.findIndex(t => t.id === fileId)
-      if (idx === -1) return prev
-      const next = [...prev]
-      next.splice(idx, 1)
-      setActiveTabId(cur => {
-        if (cur !== fileId) return cur
-        const neighbor = next[idx] ?? next[idx - 1] ?? next[0]
-        return neighbor ? neighbor.id : 'chat'
-      })
-      return next.length === 0 ? [{ id: 'chat', title: '聊天' } as WorkbenchTab] : next
-    })
-  }, [])
-
-  const handleActivateTab = useCallback((id: WorkbenchTab['id']) => {
-    setActiveTabId(id as string)
-  }, [])
-
-  // 切 workspace 即清 file tab:tab 持有绝对路径,切项目后旧路径已失效(打不开/误导显示旧项目内容)
-  useWorkspaceTabsReset(state.workspace, setTabs, setActiveTabId)
-
+  const workbench = useWorkbench(state.workspace)
+  const { tabs, activeTabId,
+    fileTreeVisible, setFileTreeVisible,
+    fileTreeWidth, resizingRef,
+    handleOpenWorkspaceFile, handleCloseTab, handleActivateTab,
+    handleOpenWorkspace: handleOpenWorkspaceBase, onResizeMouseDown } = workbench
+  // 补充:原 handleOpenWorkspace 还会把视图切到「聊天」
   const handleOpenWorkspace = useCallback(() => {
     setView('chat')
-    setFileTreeVisible(true)
-  }, [])
-
-  // Workbench 文件树分隔线拖拽
-  const onResizeMouseDown = (e: React.MouseEvent): void => {
-    e.preventDefault()
-    resizingRef.current = { startX: e.clientX, startW: fileTreeWidth }
-    const onMove = (ev: MouseEvent): void => {
-      const r = resizingRef.current; if (!r) return
-      const next = Math.min(560, Math.max(200, r.startW + (ev.clientX - r.startX)))
-      setFileTreeWidth(next)
-    }
-    const onUp = (ev: MouseEvent): void => {
-      void ev
-      resizingRef.current = null
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup', onUp)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-  }
+    handleOpenWorkspaceBase()
+  }, [handleOpenWorkspaceBase])
 
   const openArtifact = useCallback((filePath: string, content: string): void => {
     setRightPreview({ kind: 'content', filePath, content })
@@ -358,16 +305,9 @@ export default function App(): JSX.Element {
   const [noModel, setNoModel] = useState(false)
   // 用户真实仓库的只读状态。null = 还没拉回来 / 不是仓库,顶栏 pill 整块不渲染。
   const [gitStatus, setGitStatus] = useState<GitStatusView | null>(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
-    try { return localStorage.getItem('wraith.sidebar.collapsed') === '1' } catch { return false }
-  })
-  const [sidebarPeek, setSidebarPeek] = useState(false)
+  const { sidebarCollapsed, setSidebarCollapsed, sidebarPeek, setSidebarPeek } = useSidebarCollapse()
   const startedRef = useRef(false)
-  // 首次失败与“曾成功读到空列表”不同：前者显示首屏错误，后者是有效空快照。
-  const hasActivitySnapshotRef = useRef(false)
-  // 每次读取或主进程推送都会推进版本，避免旧的异步读取倒灌较新的快照。
-  const activitySnapshotVersionRef = useRef(0)
-  const statusThrottleRef = useRef<ThrottledPush<BackendEvent> | null>(null)
+  // 注:statusThrottleRef 由 useBackendEventSubscription 生成,见下文
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
   // 消除「dispatch(markStarted) → 组件重渲染」之间的闭包陈旧:markStarted 已在提交瞬间置 running,
   // 但用旧 state.turn 闭包的回调直到下次重渲染前读到的仍是 'idle',守卫会漏放行;改读 ref 即时可见。
@@ -376,24 +316,12 @@ export default function App(): JSX.Element {
     turnRef.current = state.turn
   }, [state.turn])
 
-  // sessionIdRef:onEvent 回调里读当前会话 id 的即时快照(dispatch 后组件尚未重渲染,
-  // 闭包里的 state.sessionId 仍是旧值,漏标记/错标记都从这里来)。
-  const sessionIdRef = useRef(state.sessionId)
+  // sessionIdRef 由 useSessionFailureTracking 提供,这里让它随 state.sessionId 同步
   useEffect(() => {
     sessionIdRef.current = state.sessionId
   }, [state.sessionId])
 
-  // 折叠状态持久化
-  useEffect(() => {
-    try { localStorage.setItem('wraith.sidebar.collapsed', sidebarCollapsed ? '1' : '0') } catch { /* localStorage 不可用:忽略 */ }
-  }, [sidebarCollapsed])
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('wraith.workbench.fileTreeVisible', fileTreeVisible ? '1' : '0')
-      localStorage.setItem('wraith.workbench.fileTreeWidth', String(fileTreeWidth))
-    } catch { /* 忽略 */ }
-  }, [fileTreeVisible, fileTreeWidth])
+  // 折叠状态持久化(由 useSidebarCollapse 内部处理)
 
   // 预览覆盖态:running 时只读显示另一会话或空白新会话页
   const [preview, setPreview] = useState<Preview>(null)
@@ -421,182 +349,40 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  // 活动中心只从这一处读取。读取失败时保留最后一张可用快照并显式标旧，避免
-  // 暂时不可用被误画成“暂无活动”；silent 只压低诊断噪声，不改变失败语义。
-  const loadActivities = useCallback(async (silent: boolean): Promise<void> => {
-    const requestVersion = ++activitySnapshotVersionRef.current
-    try {
-      const next = await window.wraith.activityList()
-      if (requestVersion !== activitySnapshotVersionRef.current) return
-      hasActivitySnapshotRef.current = true
-      setActivitySnapshot(next)
-    } catch (error) {
-      if (requestVersion !== activitySnapshotVersionRef.current) return
-      const message = error instanceof Error ? error.message : String(error)
-      setActivitySnapshot(previous => hasActivitySnapshotRef.current
-        ? { ...previous, stale: true, error: message }
-        : { activities: [], stale: false, error: message })
-      if (!silent) console.error('[wraith] activityList error:', error)
-    }
-  }, [])
-
-  // 初次查询拿完整快照，后续仅消费主进程的变更推送；不新加固定高频轮询。
-  useEffect(() => {
-    void loadActivities(false)
-    return window.wraith.onActivityEvent(snapshot => {
-      activitySnapshotVersionRef.current++
-      hasActivitySnapshotRef.current = true
-      setActivitySnapshot(snapshot)
-    })
-  }, [loadActivities])
+  // 活动中心已由 useActivityManager 负责加载 / 订阅 (loadActivities 来自该 hook)。
 
   // ── subscribe to backend events on mount (status 高频 → 100ms 窗口合并) ────
-  useEffect(() => {
-    const throttledStatus = createThrottleLatest<BackendEvent>(100, evt => dispatch(evt))
-    statusThrottleRef.current = throttledStatus
-    const unsubscribe = window.wraith.onEvent((evt: BackendEvent) => {
-      if (evt.kind === 'notification' && evt.method === 'mcp.status') {
-        const p = evt.params as { name: string; state: McpServerView['state']; error?: string }
-        setMcpServers(prev => prev.map(s => (s.name === p.name ? { ...s, state: p.state, enabled: p.state !== 'disabled', error: p.error } : s)))
-        if (p.state === 'ready') {
-          void fetchMcpResources()
-          void fetchMcp() // ready 后工具清单才可用:真后端 starting 期 list 的 tools 为空
-        }
-        return
-      }
-      if (evt.kind === 'notification' && evt.method === 'status') {
-        throttledStatus(evt)
-        return
-      }
-      // Agent 刚改完文件,正是最该刷的点 —— 「数字变了」与「Agent 做了事」在时间上对得上。
-      // 刻意不轮询:空闲时零开销,而且轮询大多数时候刷出来的结果和上一次一模一样。
-      // turn.failed 也刷:失败的 turn 一样可能已经改了文件。
-      if (evt.kind === 'notification'
-          && (evt.method === 'turn.completed' || evt.method === 'turn.failed')) {
-        void fetchGitStatus()
-        void loadActivities(true)
-      }
-      dispatch(evt)
-    })
-    return () => {
-      throttledStatus.cancel()
-      unsubscribe()
-    }
-  }, [fetchMcpResources, fetchGitStatus, loadActivities])
+  // (由 useBackendEventSubscription 集中处理;statusThrottleRef 从此处导出,供外部 .cancel() 使用)
+  const { statusThrottleRef } = useBackendEventSubscription({
+    dispatch,
+    setMcpServers,
+    onMcpReady: () => { void fetchMcpResources(); void fetchMcp() },
+    onTurnCompleted: () => { void fetchGitStatus(); void loadActivities(true) },
+    onTurnFailed: () => { void fetchGitStatus(); void loadActivities(true) },
+  })
 
-  // ── 会话异常标记:turn.failed / turn.completed(error) / 后端断开时,把当前会话标记为异常中断 ──────
-  // 感叹号是会话级状态,不在 reducer 里(避免给 transcriptReducer 增加与正文无关的副作用)。
-  // 只读 sessionIdRef 即时快照:turn.failed 通知与 markStarted 同轮到达时,state.sessionId
-  // 可能仍是旧值(或空),闭包读取会漏标记 / 错标记到旧会话。
-  useEffect(() => {
-    return window.wraith.onEvent((evt: BackendEvent) => {
-      if (evt.kind !== 'notification') {
-        // 后端断开:任何进行中的轮次都已异常终止(后端进程死了,没有 turn.* 通知可等)。
-        if (evt.kind === 'connection' && evt.state === 'disconnected') {
-          const id = sessionIdRef.current
-          if (id) setFailedSessions(prev => (prev.has(id) ? prev : new Set(prev).add(id)))
-        }
-        return
-      }
-      if (evt.method === 'turn.failed') {
-        const id = sessionIdRef.current
-        if (id) setFailedSessions(prev => (prev.has(id) ? prev : new Set(prev).add(id)))
-        return
-      }
-      // turn.completed:后端把「静默失败」(LLM 调用异常 / budget 耗尽,错误文本已兜底发出)挂在
-      // error 字段上 —— 轮次确实异常中断,侧栏该会话要打感叹号;无 error 则是正常完成,
-      // 同一会话此前的异常标记不再成立,顺手清掉。
-      if (evt.method === 'turn.completed') {
-        const p = evt.params as { sessionId?: string; error?: string } | null
-        const id = (typeof p?.sessionId === 'string' && p.sessionId) ? p.sessionId : sessionIdRef.current
-        if (!id) return
-        const hasError = typeof p?.error === 'string' && p.error.length > 0
-        setFailedSessions(prev => {
-          const marked = prev.has(id)
-          if (hasError && !marked) return new Set(prev).add(id)
-          if (!hasError && marked) { const next = new Set(prev); next.delete(id); return next }
-          return prev
-        })
-      }
-    })
-  }, [])
-
-  // ── 会话异常标记的清除:恢复 / 切到该会话时,过去的问题不该一直挂在上面 ────
-  // resume 成功后红感叹号消失(会话回到可控状态);同一 effect 里顺带把上次「未完成」
-  // 轮次的标记一起清掉 —— 新一轮已成功开始,上一轮的异常状态不再有意义。
+  // ── 会话异常标记:由 useSessionFailureTracking 订阅。
+  // 这里保留“切会话时清感叹号”的逻辑(写 hook 导出的 setter)。
   useEffect(() => {
     setFailedSessions(prev => (prev.has(state.sessionId) ? (() => {
       const next = new Set(prev); next.delete(state.sessionId); return next
     })() : prev))
-  }, [state.sessionId])
+  }, [state.sessionId, setFailedSessions])
 
-  // ── session list helpers ───────────────────────────────────────────────────
-  // 手动排序：用户拖拽后记录顺序在 localStorage，fetchSessions 返回后应用
-  const manualOrderRef = useRef<string[]>([])
-  const applyManualOrder = useCallback((list: SessionMeta[]): SessionMeta[] => {
-    const order = manualOrderRef.current
-    if (order.length === 0) return list
-    const orderMap = new Map<string, number>()
-    order.forEach((id, i) => orderMap.set(id, i))
-    // 手动排序的排前面，新会话（不在 order 里的）按 updatedAt 倒序排在后面
-    const ordered: SessionMeta[] = []
-    const unordered: SessionMeta[] = []
-    for (const s of list) {
-      if (orderMap.has(s.id)) ordered.push(s)
-      else unordered.push(s)
-    }
-    ordered.sort((a, b) => (orderMap.get(a.id) ?? 0) - (orderMap.get(b.id) ?? 0))
-    unordered.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    return [...ordered, ...unordered]
-  }, [])
-  const fetchSessions = useCallback(async () => {
-    try {
-      const { sessions } = await window.wraith.listSessions()
-      setSessions(applyManualOrder(sessions))
-    } catch (err) {
-      console.error('[wraith] listSessions error:', err)
-    }
-  }, [applyManualOrder])
+  // ── session list helpers(由 useSessionListManager 集中管理) ──────────────
+  const { sessions, setSessions, fetchSessions, handleReorderSession } = useSessionListManager(
+    async (id, starred) => { await window.wraith.setSessionStarred(id, starred) },
+  )
+  const handleToggleStar = useCallback(async (id: string, starred: boolean) => {
+    await window.wraith.setSessionStarred(id, starred)
+    void fetchSessions()
+  }, [fetchSessions])
 
   // sessionId 变化即刷新侧栏:新会话在 turn.started 时后端已落桩并带回真实 id,
   // 这里拉一次 listSessions,使会话「发送即出现」在左侧(不必等 turn 结束)。
   useEffect(() => {
     if (state.sessionId) void fetchSessions()
   }, [state.sessionId, fetchSessions])
-
-  // 初始化时加载手动排序
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('wraith.sidebar.sessionOrder')
-      if (raw) manualOrderRef.current = JSON.parse(raw) as string[]
-    } catch { /* ignore */ }
-  }, [])
-
-  // 拖拽排序：把 sourceId 移到 targetId 的位置。
-  // 跨分区拖拽(targetSection 给出)语义化为星标切换:普通会话拖进「重点」区自动加星,
-  // 重点会话拖回「对话」区自动取消 —— 否则渲染端 partitionStarred 会把它弹回原分区,
-  // 用户看到的就是"拖不进收藏"。星标走后端持久化,排序写 localStorage,两者fire-and-forget。
-  const handleReorderSession = useCallback((sourceId: string, targetId: string, targetSection?: 'starred' | 'rest') => {
-    const wantStar = targetSection === 'starred'
-    const src = sessions.find(s => s.id === sourceId)
-    const crossSection = targetSection != null && src != null && src.starred !== wantStar
-    setSessions(prev => {
-      const ids = prev.map(s => s.id)
-      const sourceIdx = ids.indexOf(sourceId)
-      const targetIdx = ids.indexOf(targetId)
-      if (sourceIdx === -1 || targetIdx === -1 || sourceIdx === targetIdx) return prev
-      // 重新排列;跨分区时用新对象翻转星标,不动原引用
-      const next = [...prev]
-      const [moved] = next.splice(sourceIdx, 1)
-      next.splice(targetIdx, 0, crossSection ? { ...moved, starred: wantStar } : moved)
-      // 更新 manualOrder
-      const newOrder = next.map(s => s.id)
-      manualOrderRef.current = newOrder
-      try { localStorage.setItem('wraith.sidebar.sessionOrder', JSON.stringify(newOrder)) } catch { /* ignore */ }
-      return next
-    })
-    if (crossSection) void window.wraith.setSessionStarred(sourceId, wantStar)
-  }, [sessions])
 
   // ── automationApprovalRef:缓存最近一次 approval push(唯一弹窗入口是运行历史「处理审批」钮) ──
   const automationApprovalRef = useRef<{ runId: string; payload: Record<string, unknown> } | null>(null)
@@ -709,11 +495,6 @@ export default function App(): JSX.Element {
     try { setPreview(null); await commitSwitchTo(id) }
     catch (err) { console.error('[wraith] resumeSession error:', err) }
   }, [state.sessionId, commitSwitchTo])
-
-  const handleToggleStar = useCallback(async (id: string, starred: boolean) => {
-    await window.wraith.setSessionStarred(id, starred)
-    void fetchSessions()
-  }, [fetchSessions])
 
   const handleRenameSession = useCallback(async (id: string, name: string) => {
     await window.wraith.renameSession(id, name)
@@ -1453,7 +1234,7 @@ export default function App(): JSX.Element {
       <TopBar
         platform={window.wraith.platform}
         sidebarCollapsed={sidebarCollapsed}
-        onToggleSidebar={() => setSidebarCollapsed(v => !v)}
+        onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
         showChat={view === 'chat'}
         terminalOpen={terminalOpen}
         onToggleTerminal={() => setTerminalOpen(v => !v)}
@@ -1513,7 +1294,7 @@ export default function App(): JSX.Element {
       {view === 'chat' ? (
         <div className="flex min-w-0 flex-1 flex-col bg-surface">
           <WorkbenchTabBar tabs={tabs} activeId={activeTabId} onActivate={handleActivateTab} onClose={handleCloseTab}
-            fileTreeVisible={fileTreeVisible} onToggleFileTree={() => setFileTreeVisible(v => !v)}>
+            fileTreeVisible={fileTreeVisible} onToggleFileTree={() => setFileTreeVisible(!fileTreeVisible)}>
             {/* 右上角动作簇(文件树开关右侧,与最初布局一致):产物/压缩/导出常驻 tab 栏,
                 文件 tab 激活或欢迎页时也可见 —— 它们作用于聊天会话本身,与当前激活 tab 无关 */}
             <SummaryPopover items={state.items} workspace={state.workspace ?? null} onOpenArtifact={openArtifact} />
