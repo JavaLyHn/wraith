@@ -1,6 +1,6 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
-import type { ActivityItem, BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, SandboxState as SandboxStateWire, GitStatusView } from '../shared/types'
+import type { ActivityItem, BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, GitStatusView } from '../shared/types'
 import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
 import type { EditorApp } from '../shared/editors'
 import type { McpFormValue } from './components/McpServerForm'
@@ -29,8 +29,6 @@ import {
   type Item,
   type AttachmentRef,
 } from '../shared/transcriptReducer'
-import { messagesToItems } from '../shared/messagesToItems'
-import { spliceCards } from '../shared/spliceCards'
 import type { GatewayState } from '../shared/gateway'
 import { makeSystemEvent } from '../shared/systemEvent'
 import { imBoundEventText } from './lib/gatewayLabels'
@@ -62,7 +60,7 @@ import Sidebar from './components/Sidebar'
 import SidebarDock from './components/SidebarDock'
 import TopBar from './components/TopBar'
 import PreviewBanner from './components/PreviewBanner'
-import { selectAction, resolveOnIdle, deriveView, type Preview } from '../shared/sessionPreview'
+import { deriveView, type Preview } from '../shared/sessionPreview'
 import PluginsPanel from './components/PluginsPanel'
 import AutomationsPanel from './components/AutomationsPanel'
 import ImGatewayPanel from './components/ImGatewayPanel'
@@ -93,6 +91,8 @@ import { useSessionFailureTracking } from './lib/useSessionFailureTracking'
 import { useActivityManager } from './lib/useActivityManager'
 import { useSessionListManager } from './lib/useSessionListManager'
 import { useBackendEventSubscription } from './lib/useBackendEventSubscription'
+import { useSessionManager } from './lib/useSessionManager'
+import { useStartup } from './lib/useStartup'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -173,19 +173,6 @@ function reduceAdapter(state: TranscriptState, action: Action): TranscriptState 
   }
   // BackendEvent has 'kind' field
   return reduce(state, action as BackendEvent)
-}
-
-// ---------------------------------------------------------------------------
-// Sandbox value normalizer
-// ---------------------------------------------------------------------------
-
-function normalizeSandbox(sb: string | undefined): SandboxKindWire {
-  if (sb === 'none') return 'none'
-  if (sb === 'macos-seatbelt') return 'macos-seatbelt'
-  if (sb === 'windows-appcontainer') return 'windows-appcontainer'
-  // 认不出的值一律 unknown 而不是 none —— 前者是灰盾「状态未知」,
-  // 后者是红盾「未启用」。老后端 / 新前端组合下把未知说成异常是误报。
-  return 'unknown'
 }
 
 // Override initial state: treat initial connection as 'connected' to avoid
@@ -306,7 +293,7 @@ export default function App(): JSX.Element {
   // 用户真实仓库的只读状态。null = 还没拉回来 / 不是仓库,顶栏 pill 整块不渲染。
   const [gitStatus, setGitStatus] = useState<GitStatusView | null>(null)
   const { sidebarCollapsed, setSidebarCollapsed, sidebarPeek, setSidebarPeek } = useSidebarCollapse()
-  const startedRef = useRef(false)
+
   // 注:statusThrottleRef 由 useBackendEventSubscription 生成,见下文
   // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
   // 消除「dispatch(markStarted) → 组件重渲染」之间的闭包陈旧:markStarted 已在提交瞬间置 running,
@@ -373,10 +360,6 @@ export default function App(): JSX.Element {
   const { sessions, setSessions, fetchSessions, handleReorderSession } = useSessionListManager(
     async (id, starred) => { await window.wraith.setSessionStarred(id, starred) },
   )
-  const handleToggleStar = useCallback(async (id: string, starred: boolean) => {
-    await window.wraith.setSessionStarred(id, starred)
-    void fetchSessions()
-  }, [fetchSessions])
 
   // sessionId 变化即刷新侧栏:新会话在 turn.started 时后端已落桩并带回真实 id,
   // 这里拉一次 listSessions,使会话「发送即出现」在左侧(不必等 turn 结束)。
@@ -424,219 +407,75 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  const handleNewConversation = useCallback(async () => {
-    if (turnRef.current === 'running') { setPreview({ kind: 'new' }); setView('chat'); return }
-    setView('chat')
-    try {
-      await window.wraith.startSession(state.workspace || null)
-      statusThrottleRef.current?.cancel()
-      dispatch({ type: 'resetSession', ws: state.workspace })
-      setModelFallbackNotice(false)
-      setSubmitError(null)
-      setPreview(null)
-      void fetchSessions()
-    } catch (err) {
-      console.error('[wraith] newConversation error:', err)
-    }
-  }, [state.workspace, fetchSessions])
+  // ── useSessionManager wiring ──────────────────────────────────────────
+  const getTurn = useCallback(() => state.turn, [state.turn])
+  const getSessionId = useCallback(() => state.sessionId, [state.sessionId])
+  const getWorkspace = useCallback(() => state.workspace, [state.workspace])
+  const getProjects = useCallback(() => projects, [projects])
 
-  // 完整切换到某会话(仅 idle 安全调用):真实 resume 同步后端 agent+currentId + 前端载入。
-  const commitSwitchTo = useCallback(async (id: string) => {
-    const { sessionId, messages, model, modelFallback, cards } = await window.wraith.resumeSession(id)
-    statusThrottleRef.current?.cancel()
-    dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
-    dispatch({ kind: 'notification', method: 'context.reset', params: {} } as BackendEvent)
-    dispatch({ type: 'setSessionId', sessionId })
-    dispatch({ type: 'markResumed' })
-    if (model) dispatch({ type: 'setModel', model })
-    setModelFallbackNotice(modelFallback === true)
-    try {
-      const snap = await window.wraith.contextState()
-      dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
-      dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
-    } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
-    void fetchSessions()
-  }, [fetchSessions])
+  const sessionManager = useSessionManager({
+    preview,
+    setPreview,
+    getTurn,
+    getSessionId,
+    getWorkspace,
+    getProjects,
+    setView: (v: string) => setView(v as typeof view),
+    setModelFallbackNotice,
+    setSubmitError,
+    setBranchingMsgIndex,
+    setProjects,
+    setSessions,
+    dispatch: (action) => dispatch(action as Action),
+    statusThrottleRef,
+    fetchSessions,
+    fetchProjects,
+    fetchMcp,
+    fetchMcpResources,
+    loadActivities,
+    model: state.model,
+    pendingMode,
+    setPendingMode: (m) => setPendingMode(m as RunMode),
+  })
 
-  /** 从指定消息索引处创建会话分支:复制当前会话历史到新会话,切换到新会话。
-   * msgIndex 指示用户点击的 message item 位置,但当前实现是"复制全部历史",所以索引仅用于 UI 禁用状态。
-   */
-  const handleBranchConversation = useCallback(async (msgIndex: number) => {
-    if (turnRef.current === 'running') return
-    const srcId = state.sessionId
-    if (!srcId) return
-    setBranchingMsgIndex(msgIndex)
-    try {
-      const { sessionId: newId } = await window.wraith.branchSession(srcId)
-      // 分支创建成功后,用 commitSwitchTo 完整切换到新会话
-      await commitSwitchTo(newId)
-    } catch (err) {
-      console.error('[wraith] branchSession error:', err)
-      setSubmitError(err instanceof Error ? err.message : '创建分支失败')
-    } finally {
-      setBranchingMsgIndex(null)
-    }
-  }, [state.sessionId, commitSwitchTo])
+  // ── useStartup wiring ────────────────────────────────────────────────
+  const { applySandbox, refreshSandbox } = useStartup({
+    dispatch: (action) => dispatch(action as Action),
+    setModelFallbackNotice,
+    setNoModel,
+    setUpdateNotice,
+    statusThrottleRef,
+    fetchSessions,
+    fetchProjects,
+    fetchMcp,
+    fetchMcpResources,
+    fetchGitStatus,
+    connection: state.connection,
+    workspace: state.workspace,
+    getSessionId,
+    autoCheck: appPrefs.update.autoCheck,
+    beta: appPrefs.update.beta,
+  })
 
-  const handleSelectSession = useCallback(async (id: string) => {
-    const act = selectAction(turnRef.current, id, state.sessionId)
-    setView('chat')
-    if (act.mode === 'preview-return') { setPreview(null); return }
-    if (act.mode === 'preview-open') {
-      try {
-        const { messages, cards } = await window.wraith.peekSession(id)   // 纯读,后台 turn 不受扰
-        setPreview({ kind: 'session', sessionId: id, items: spliceCards(messagesToItems(messages), cards ?? []) })
-      } catch (err) {
-        console.error('[wraith] peekSession error:', err)                 // 失败则不进预览,留在 live
-      }
-      return
-    }
-    // full-switch(idle)
-    try { setPreview(null); await commitSwitchTo(id) }
-    catch (err) { console.error('[wraith] resumeSession error:', err) }
-  }, [state.sessionId, commitSwitchTo])
-
-  const handleRenameSession = useCallback(async (id: string, name: string) => {
-    await window.wraith.renameSession(id, name)
-    void fetchSessions()
-  }, [fetchSessions])
-
-  const handleDeleteSession = useCallback(async (id: string) => {
-    await window.wraith.deleteSession(id)
-    if (id === state.sessionId) {
-      // 删除的是当前会话:复用 handleNewConversation 做完整状态重置
-      // (startSession + statusThrottle.cancel + resetSession + 清横幅 + fetchSessions)
-      await handleNewConversation()
-    } else {
-      void fetchSessions()
-    }
-    // 删除边界:删的是当前预览目标则回 live
-    const pv = previewRef.current
-    if (pv && pv.kind === 'session' && pv.sessionId === id) setPreview(null)
-  }, [fetchSessions, state.sessionId, handleNewConversation])
-
-  // ── 归档一条会话:从侧栏收起,收进「设置 › 归档」。可逆,故无二次确认 ────────────
-  const handleArchiveSession = useCallback(async (sessionId: string) => {
-    try {
-      const { ok } = await window.wraith.setSessionArchived(sessionId, true)
-      if (!ok) {
-        console.error('[wraith] setSessionArchived returned ok:false for', sessionId)
-        return
-      }
-      void fetchSessions()
-      // 归档的正好是当前正在看的会话:不强行跳走 —— 用户可能正读着它。
-      // 侧栏没有高亮项了,下一步点任何会话或「新对话」自然离开。
-    } catch (err) {
-      console.error('[wraith] setSessionArchived error:', err)
-    }
-  }, [fetchSessions])
-
-  // ── 沙箱状态:App 是唯一真相源 ────────────────────────────────────────────
-  // 此前顶栏那枚盾只在 initialize 时被写过一次,面板里 sandbox.set 的结果只落在
-  // PolicyPanel 的局部 state —— 用户拨了开关,盾纹丝不动。把状态提到这里,
-  // 面板变成一个「上报 + 展示」的哑组件,两边就不可能再分叉。
-  const applySandbox = useCallback((s: SandboxStateWire | null | undefined): void => {
-    if (!s) return
-    dispatch({
-      type: 'setSandbox',
-      sandbox: normalizeSandbox(s.kind),
-      networkAllowed: s.networkAllowed === true,
-    })
-  }, [])
-
-  // sandbox.get 挂在 SessionRunner 上,会话建立前一律 "no session" —— 只在 startSession 之后调。
-  // 失败时**保留现有值**:把已知状态打回 unknown 等于用灰盾盖掉真相。
-  const refreshSandbox = useCallback(async (): Promise<void> => {
-    try { applySandbox(await window.wraith.sandboxGet()) } catch { /* 见上 */ }
-  }, [applySandbox])
-
-  // ── startup flow (runs once) ───────────────────────────────────────────────
-  useEffect(() => {
-    if (startedRef.current) return
-    startedRef.current = true
-
-    void (async () => {
-      try {
-        const ws = await window.wraith.getInitialWorkspace()
-        dispatch({ type: 'setWorkspace', ws: ws ?? '' })
-        const init = await window.wraith.initialize(ws)
-        const initObj = init as { model?: string; capabilities?: { sandbox?: string; modelConfigured?: boolean } }
-        if (initObj.model) {
-          dispatch({ type: 'setModel', model: initObj.model })
-        }
-        // 先用 initialize 播种种类(免得盾先闪一下「未知」);联网位要等会话起来后问 sandbox.get。
-        dispatch({
-          type: 'setSandbox',
-          sandbox: normalizeSandbox(initObj.capabilities?.sandbox),
-          networkAllowed: false,
-        })
-        // 全新装机:后端以「无模型」状态起来了(能配置、发不出对话)。这个状态在界面上
-        // 必须有出口 —— 否则用户只看到一个打字没反应的空壳,那句 `未找到可用 API Key`
-        // 只在控制台里,他看不到。
-        setNoModel(needsModelSetup({ modelConfigured: initObj.capabilities?.modelConfigured }))
-        await window.wraith.startSession(ws)
-        try {
-          const snap = await window.wraith.contextState()
-          dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
-          dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
-        } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
-        void refreshSandbox()
-        void fetchGitStatus()   // 会话起来后取一次,顶栏 pill 能在首条消息前就显示
-        void fetchSessions()
-        void fetchProjects()
-        void fetchMcp()
-        void fetchMcpResources()
-      } catch (err) {
-        console.error('[wraith] startup error:', err)
-      }
-    })()
-  }, [fetchSessions, fetchProjects, fetchMcp, fetchMcpResources, refreshSandbox, fetchGitStatus])
-
-  useEffect(() => {
-    if (!appPrefs.update.autoCheck) return
-    void window.wraith.checkUpdate(appPrefs.update.beta)
-      .then((r) => { if (r.hasUpdate && r.latest && r.url) setUpdateNotice({ latest: r.latest, url: r.url }) })
-      .catch(() => {})
-  }, [])  // 仅启动一次
-
-  // ── reconnect effect (fires on disconnected→connected, skips first connect) ──
-  const reconnectRef = useRef(false)
-  useEffect(() => {
-    if (state.connection === 'disconnected') {
-      reconnectRef.current = true
-      return
-    }
-    // connected
-    if (!reconnectRef.current) return // first connect is handled by startup effect
-    reconnectRef.current = false
-    const activeId = state.sessionId
-    void (async () => {
-      try {
-        const ws = state.workspace || null
-        const init = await window.wraith.initialize(ws)
-        const sb = (init as { capabilities?: { sandbox?: string } }).capabilities?.sandbox
-        dispatch({ type: 'setSandbox', sandbox: normalizeSandbox(sb), networkAllowed: false })
-        await window.wraith.startSession(ws)
-        void refreshSandbox()   // 重连后后端是全新进程,联网位回到默认值,必须重新问
-        void fetchGitStatus()    // 重连后 git 状态也需重取
-        if (activeId) {
-          const { messages, model, cards } = await window.wraith.resumeSession(activeId)
-          dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
-          if (model) {
-            dispatch({ type: 'setModel', model })
-          }
-        }
-        try {
-          const snap = await window.wraith.contextState()
-          dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
-          dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
-        } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
-        void fetchSessions()
-      } catch (err) {
-        console.error('[wraith] reconnect error:', err)
-      }
-    })()
-  }, [state.connection, state.workspace, fetchSessions, refreshSandbox, fetchGitStatus])
+  // ── 会话级操作:由 useSessionManager 提供 ────────────────────────────────
+  const handleNewConversation = sessionManager.handleNewConversation
+  const commitSwitchTo = sessionManager.commitSwitchTo
+  const handleBranchConversation = sessionManager.handleBranchConversation
+  const handleSelectSession = sessionManager.handleSelectSession
+  const handleToggleStar = sessionManager.handleToggleStar
+  const handleRenameSession = sessionManager.handleRenameSession
+  const handleDeleteSession = sessionManager.handleDeleteSession
+  const handleArchiveSession = sessionManager.handleArchiveSession
+  const switchToProject = sessionManager.switchToProject
+  const handleToggleProjectStar = sessionManager.handleToggleProjectStar
+  const handleMoveProject = sessionManager.handleMoveProject
+  const handleArchiveProjectChats = sessionManager.handleArchiveProjectChats
+  const handleOpenAutomationSession = sessionManager.handleOpenAutomationSession
+  const handleOpenActivitySession = sessionManager.handleOpenActivitySession
+  const archiveConfirm = sessionManager.archiveConfirm
+  const setArchiveConfirm = sessionManager.setArchiveConfirm
+  // setPreview 由 useSessionManager 内部持有 setter,这里回传给 App
+  // (App 其他地方也用到 setPreview,直接用 hook 回传的即可)
 
   // ── refresh session list when a turn completes ────────────
   const prevTurnRef = useRef(state.turn)
@@ -646,17 +485,6 @@ export default function App(): JSX.Element {
     }
     prevTurnRef.current = state.turn
   }, [state.turn, fetchSessions])
-
-  // ── 落定 preview:处于 idle 且有挂着的 preview 时,执行被推迟的真实切换。
-  // 覆盖两种情形:(a) turn 正常跑完;(b) 点会话与 turn 结束擦肩——peek 的 async
-  // setPreview 落在 turn→idle 之后、边沿已过,靠本 effect 的 idle+preview 条件兜住,
-  // 否则会留下"idle 悬挂预览"导致续聊打到错的后端会话。
-  useEffect(() => {
-    if (state.turn !== 'idle' || preview === null) return
-    const r = resolveOnIdle(preview)
-    if (r.action === 'resume') { setPreview(null); void commitSwitchTo(r.sessionId) }
-    else if (r.action === 'new') { void handleNewConversation() }   // 其内部走 idle 分支并清 preview
-  }, [preview, state.turn, commitSwitchTo, handleNewConversation])
 
   // ── pick attachments ──────────────────────────────────────────────────────
   const handlePickAttachments = useCallback(async () => {
@@ -940,53 +768,6 @@ export default function App(): JSX.Element {
     [],
   )
 
-  // ── project switch(激活 + 自动恢复最近会话)─────────────────────────────
-  const switchToProject = useCallback(
-    async (projectPath: string): Promise<boolean> => {
-      if (turnRef.current === 'running') return false // 读即时快照,避免闭包陈旧漏放行
-      try {
-        const { ok } = await window.wraith.activateProject(projectPath)
-        if (!ok) {
-          void fetchProjects() // 目录失踪 → 条目置灰,状态不变
-          return false
-        }
-        await window.wraith.startSession(projectPath)
-        statusThrottleRef.current?.cancel() // 紧贴 resetSession:消 await 期间 status 尾巴重新入窗
-        dispatch({ type: 'resetSession', ws: projectPath })
-        setModelFallbackNotice(false) // 切项目:先清残余回退通知,自动恢复后按会话重置
-        const { sessions } = await window.wraith.listSessions()
-        setSessions(sessions)
-        if (sessions.length > 0) {
-          // session.list 按 updatedAt 倒序:第一条即最近会话
-          const { sessionId, messages, model, modelFallback, cards } = await window.wraith.resumeSession(sessions[0]!.id)
-          dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
-          dispatch({ type: 'setSessionId', sessionId })
-          dispatch({ type: 'markResumed' }) // resume 是静态回放,不是 turn 在跑,turn 保持 idle
-          if (model) {
-            dispatch({ type: 'setModel', model }) // 自动恢复路径同 handleSelectSession:消费 provider/model
-          }
-          if (modelFallback === true) {
-            setModelFallbackNotice(true) // key 失效回退也要在切项目自动恢复时提示
-          }
-        }
-        try {
-          const snap = await window.wraith.contextState()
-          dispatch({ kind: 'notification', method: 'status', params: { status: snap } } as BackendEvent)
-          dispatch({ kind: 'notification', method: 'context.snapshot', params: snap } as BackendEvent)
-        } catch { /* 后端未就绪时静默:首条消息的 status 通知会补上 */ }
-        void fetchProjects() // lastUsedAt 刷新 → 浮顶
-        void fetchMcp()
-        void fetchMcpResources()
-        return true
-      } catch (err) {
-        console.error('[wraith] switchToProject error:', err)
-        void fetchProjects()
-        return false
-      }
-    },
-    [fetchProjects, fetchMcp, fetchMcpResources], // running 守卫改读 turnRef,不再依赖 state.turn
-  )
-
   // 添加项目(=Composer 重选目录汇流入口):选目录 → 入列表 → 切换
   const handleAddProject = useCallback(async () => {
     if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
@@ -1051,54 +832,6 @@ export default function App(): JSX.Element {
     }
     setView('chat')
     await handleSelectSession(sessionId)
-  }, [state.workspace, switchToProject, handleSelectSession])
-
-  // ── 项目面板:重点 ─────────────────────────────────────────────────────────
-  const handleToggleProjectStar = useCallback(async (projectPath: string, starred: boolean) => {
-    try {
-      await window.wraith.setProjectStarred(projectPath, starred)
-      void fetchProjects()   // 侧栏快切下拉的前 5 名也要跟着变
-    } catch (err) {
-      console.error('[wraith] setProjectStarred error:', err)
-    }
-  }, [fetchProjects])
-
-  const handleMoveProject = useCallback(async (projectPath: string, targetIndex: number) => {
-    try { await window.wraith.reorderProject(projectPath, targetIndex); await fetchProjects() }
-    catch (err) { console.error('[wraith] reorderProject error:', err); await fetchProjects() }
-  }, [fetchProjects])
-
-  // 批量归档确认:null=没有待确认项
-  const [archiveConfirm, setArchiveConfirm] = useState<{ path: string; label: string; count: number } | null>(null)
-
-  // ── 项目面板:批量归档某项目的聊天(破坏性,先确认) ────────────────────────────
-  const handleArchiveProjectChats = useCallback(async (projectPath: string, count: number) => {
-    const entry = projects.find(p => p.path === projectPath)
-    const label = entry?.name || baseName(projectPath)
-    // 批量归档是破坏性动作,用受控 Dialog 确认(本仓库不用原生 confirm/prompt)
-    setArchiveConfirm({ path: projectPath, label, count })
-  }, [projects])
-
-  // ── 运行历史:跳转到对应会话 ─────────────────────────────────────────────────
-  const handleOpenAutomationSession = useCallback(async (projectPath: string, sessionId: string) => {
-    if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
-    setView('chat')
-    if (projectPath !== state.workspace) {
-      const ok = await switchToProject(projectPath)
-      if (!ok) return
-    }
-    await handleSelectSession(sessionId)
-  }, [state.workspace, switchToProject, handleSelectSession]) // running 守卫改读 turnRef,不再依赖 state.turn
-
-  // 活动只负责定位，实际切项目/恢复会话仍走既有安全路径，避免另起一套
-  // running 守卫或遗漏 model/context 的恢复步骤。
-  const handleOpenActivitySession = useCallback(async (item: ActivityItem) => {
-    if (!item.sessionId || turnRef.current === 'running') return
-    if (item.projectPath && item.projectPath !== state.workspace) {
-      const ok = await switchToProject(item.projectPath)
-      if (!ok) return
-    }
-    await handleSelectSession(item.sessionId)
   }, [state.workspace, switchToProject, handleSelectSession])
 
   const handleOpenActivityTask = useCallback((_item: ActivityItem) => {
