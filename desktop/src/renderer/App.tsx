@@ -1,10 +1,8 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
-import type { ActivityItem, BackendEvent, SessionMeta, ProjectView, McpServerView, McpResourceView, RunMode, SandboxKindWire, GitStatusView } from '../shared/types'
+import type { BackendEvent, SessionMeta, RunMode, SandboxKindWire } from '../shared/types'
 import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
 import type { EditorApp } from '../shared/editors'
-import type { McpFormValue } from './components/McpServerForm'
-import type { ApprovalResponsePayload } from '../shared/buildApprovalResponse'
 
 import {
   initialState,
@@ -29,20 +27,14 @@ import {
   type Item,
   type AttachmentRef,
 } from '../shared/transcriptReducer'
-import type { GatewayState } from '../shared/gateway'
-import { makeSystemEvent } from '../shared/systemEvent'
-import { imBoundEventText } from './lib/gatewayLabels'
-import { useSystemEventQueue } from './lib/useSystemEventQueue'
+
 import { useBackgroundTasks } from './lib/useBackgroundTasks'
 import { taskDoneLabel } from '../shared/taskWatch'
 import { PROMPT_CATEGORIES } from './lib/welcomePrompts'
 import { lastUserMessage } from './lib/resend'
 import { resolveWorkspacePath, baseName } from './lib/paths'
 import { sessionDisplayName } from './lib/sessionView'
-import { pendingModeAfterSubmit } from './lib/nextPendingMode'
-import { shouldBlockImageSend } from '../shared/modelVision'
-import { transcriptToMarkdown } from './lib/transcriptMarkdown'
-import { compactionNotice } from './lib/compactView'
+
 import { Download, Wand2 } from 'lucide-react'
 import Transcript from './components/Transcript'
 import Composer, { type AttachmentItem } from './components/Composer'
@@ -55,12 +47,12 @@ import SubmitErrorBanner from './components/SubmitErrorBanner'
 import WelcomeEmptyState from './components/WelcomeEmptyState'
 import TaskDonePill from './components/TaskDonePill'
 import NoModelNotice from './components/NoModelNotice'
-import { needsModelSetup, showNoModelNotice } from './lib/modelReady'
+import { needsModelSetup } from './lib/modelReady'
 import Sidebar from './components/Sidebar'
 import SidebarDock from './components/SidebarDock'
 import TopBar from './components/TopBar'
 import PreviewBanner from './components/PreviewBanner'
-import { deriveView, type Preview } from '../shared/sessionPreview'
+import { type Preview } from '../shared/sessionPreview'
 import PluginsPanel from './components/PluginsPanel'
 import AutomationsPanel from './components/AutomationsPanel'
 import ImGatewayPanel from './components/ImGatewayPanel'
@@ -93,6 +85,19 @@ import { useSessionListManager } from './lib/useSessionListManager'
 import { useBackendEventSubscription } from './lib/useBackendEventSubscription'
 import { useSessionManager } from './lib/useSessionManager'
 import { useStartup } from './lib/useStartup'
+import { useMessageOperations } from './lib/useMessageOperations'
+import { useProjectManager } from './lib/useProjectManager'
+import { useMcpManager } from './lib/useMcpManager'
+import { useApprovalHandlers } from './lib/useApprovalHandlers'
+import { useChatSubmission } from './lib/useChatSubmission'
+import { useChoiceHandlers } from './lib/useChoiceHandlers'
+import { useDataFetchers } from './lib/useDataFetchers'
+import { useActivityHandlers } from './lib/useActivityHandlers'
+import { useKeyboardShortcuts } from './lib/useKeyboardShortcuts'
+import { useSystemControls } from './lib/useSystemControls'
+import { useExportAndCompact } from './lib/useExportAndCompact'
+import { useSystemEvents } from './lib/useSystemEvents'
+import { useDerivedViews } from './lib/useDerivedViews'
 
 // ---------------------------------------------------------------------------
 // Local action types (for non-BackendEvent dispatches)
@@ -193,14 +198,28 @@ export default function App(): JSX.Element {
   // 异常中断(LLM 失败/后端断开等)的会话 id 集合 → 侧栏会话行右侧显示感叹号。
   // 只跟踪本桌面会话内的故障,不落盘:后端在 turn.failed/进程死亡时不持久化,重启后 ! 消失。
   const { failedSessions, setFailedSessions, sessionIdRef } = useSessionFailureTracking()
-  const [projects, setProjects] = useState<ProjectView[]>([])
+  const {
+    projects, setProjects,
+    mcpServers, setMcpServers,
+    mcpConfigError, setMcpConfigError,
+    mcpResources, setMcpResources,
+    gitStatus, setGitStatus,
+    fetchProjects, fetchMcp, fetchMcpResources, fetchGitStatus,
+  } = useDataFetchers()
   const [view, setView] = useState<'chat' | 'projects' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'activity' | 'settings'>('chat')
   const { activitySnapshot, loadActivities } = useActivityManager()
-  const [automationApproval, setAutomationApproval] = useState<{ runId: string; payload: Record<string, unknown> } | null>(null)
+  const {
+    automationApproval,
+    setAutomationApproval,
+    automationApprovalRef,
+    handleAutomationApprovalRespond,
+    handleAutomationApprovalReject,
+    handleOpenActivityTask,
+    handleOpenActivityAutomation,
+    handleCancelActivity,
+    handleReopenApproval,
+  } = useActivityHandlers({ setView: (v) => setView(v as typeof view), loadActivities })
   const [automationBadge, setAutomationBadge] = useState(false)
-  const [mcpServers, setMcpServers] = useState<McpServerView[]>([])
-  const [mcpConfigError, setMcpConfigError] = useState<string | null>(null)
-  const [mcpResources, setMcpResources] = useState<McpResourceView[]>([])
   const [modelFallbackNotice, setModelFallbackNotice] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   /** 分支操作正在执行的消息 index(用于禁用按钮,防重复点击)。 */
@@ -290,8 +309,6 @@ export default function App(): JSX.Element {
   const [paletteOpen, setPaletteOpen] = useState(false)
   /** 后端起来了但一个模型都没配 —— 全新装机的常态,需要在空态给出引导。 */
   const [noModel, setNoModel] = useState(false)
-  // 用户真实仓库的只读状态。null = 还没拉回来 / 不是仓库,顶栏 pill 整块不渲染。
-  const [gitStatus, setGitStatus] = useState<GitStatusView | null>(null)
   const { sidebarCollapsed, setSidebarCollapsed, sidebarPeek, setSidebarPeek } = useSidebarCollapse()
 
   // 注:statusThrottleRef 由 useBackendEventSubscription 生成,见下文
@@ -314,27 +331,6 @@ export default function App(): JSX.Element {
   const [preview, setPreview] = useState<Preview>(null)
   const previewRef = useRef<Preview>(null)
   useEffect(() => { previewRef.current = preview }, [preview])
-
-  // Define fetchMcpResources before onEvent effect so it can be referenced in deps
-  const fetchMcpResources = useCallback(async () => {
-    try {
-      const { resources } = await window.wraith.mcpResources()
-      setMcpResources(resources)
-    } catch (err) {
-      console.error('[wraith] mcpResources error:', err)
-    }
-  }, [])
-
-  // 取数失败时**保留上一次成功的值**,只把 error 换上 —— 静默拿旧数据当新的是不允许的
-  // (与上下文治理「绝不静默」同一条规矩),所以 error 会在弹出层里明写出来。
-  // 声明在 onEvent effect 之前,以便后者在 deps 里引用(同 fetchMcpResources 的处理)。
-  const fetchGitStatus = useCallback(async (): Promise<void> => {
-    try {
-      setGitStatus(await window.wraith.gitStatus())
-    } catch (e) {
-      setGitStatus(prev => (prev ? { ...prev, error: String(e) } : null))
-    }
-  }, [])
 
   // 活动中心已由 useActivityManager 负责加载 / 订阅 (loadActivities 来自该 hook)。
 
@@ -367,9 +363,6 @@ export default function App(): JSX.Element {
     if (state.sessionId) void fetchSessions()
   }, [state.sessionId, fetchSessions])
 
-  // ── automationApprovalRef:缓存最近一次 approval push(唯一弹窗入口是运行历史「处理审批」钮) ──
-  const automationApprovalRef = useRef<{ runId: string; payload: Record<string, unknown> } | null>(null)
-
   // ── subscribe to automation events on mount ───────────────────────────────
   useEffect(() => {
     const unsub = window.wraith.onAutomationEvent(evt => {
@@ -387,25 +380,6 @@ export default function App(): JSX.Element {
     })
     return unsub
   }, [fetchSessions, loadActivities])
-
-  const fetchProjects = useCallback(async () => {
-    try {
-      const { projects } = await window.wraith.listProjects()
-      setProjects(projects)
-    } catch (err) {
-      console.error('[wraith] listProjects error:', err)
-    }
-  }, [])
-
-  const fetchMcp = useCallback(async () => {
-    try {
-      const r = await window.wraith.mcpList()
-      setMcpServers(r.servers)
-      setMcpConfigError(r.configError ?? null)
-    } catch (err) {
-      console.error('[wraith] mcpList error:', err)
-    }
-  }, [])
 
   // ── useSessionManager wiring ──────────────────────────────────────────
   const getTurn = useCallback(() => state.turn, [state.turn])
@@ -477,6 +451,36 @@ export default function App(): JSX.Element {
   // setPreview 由 useSessionManager 内部持有 setter,这里回传给 App
   // (App 其他地方也用到 setPreview,直接用 hook 回传的即可)
 
+  // ── useMessageOperations wiring ────────────────────────────────────
+  const { rewindAndResubmit, handleEditMessage, handleResendMessage, handleDeleteMessage } = useMessageOperations({
+    getTurn: () => turnRef.current,
+    dispatch: (action) => dispatch(action as Action),
+    fetchSessions,
+    setSubmitError,
+  })
+
+  // ── useApprovalHandlers wiring ─────────────────────────────────────
+  const { handleApprovalRespond, handleApprovalCancel, handlePlanReview, handleToggleApproval } = useApprovalHandlers({
+    dispatch: (action) => dispatch(action as Action),
+    getPendingApproval: () => state.pendingApproval,
+  })
+
+  // ── useProjectManager wiring ──────────────────────────────────────
+  const { handleAddProject, handleRemoveProject, handleRenameProject, handleOpenProject, handleProjectNewConversation, handleOpenProjectSession } = useProjectManager({
+    getTurn: () => turnRef.current,
+    getWorkspace: () => state.workspace,
+    setView: (v) => setView(v as typeof view),
+    fetchProjects,
+    switchToProject,
+    handleNewConversation,
+    handleSelectSession,
+  })
+
+  // ── useMcpManager wiring ──────────────────────────────────────────
+  const { handleMcpToggle, handleMcpRestart, handleMcpRemove, handleMcpSubmitForm } = useMcpManager({
+    fetchMcp,
+  })
+
   // ── refresh session list when a turn completes ────────────
   const prevTurnRef = useRef(state.turn)
   useEffect(() => {
@@ -517,198 +521,42 @@ export default function App(): JSX.Element {
     }
   }, [])
 
-  // ── input submit ──────────────────────────────────────────────────────────
-  const handleSubmit = useCallback(async () => {
-    const text = inputValue.trim()
-    if (!text || state.turn === 'running') return
-    // 发送前预检:确定不支持图片的模型 + 带图 → 就地拦下报错,保留输入与附件供切模型后重发
-    if (attachments.some(a => a.kind === 'image') && shouldBlockImageSend(state.model)) {
-      // 不点名具体模型:这里曾硬写「如 glm-5v-turbo」,而用户可能根本没有 GLM。
-      // 哪些模型支持视觉由 shared/modelVision.ts 判定,与 provider 无关。
-      setSubmitError(`当前模型「${state.model}」不支持图片。请切到支持视觉的模型,或移除图片后再发。`)
-      return
-    }
-    setInputValue('')
-    setSubmitError(null) // 新提交:清除上次遗留的错误横幅
-    const pendingAttachments = attachments
-    setAttachments([])
-    dispatch({ type: 'markStarted' })
-    dispatch({ type: 'addUserItem', text, attachments: pendingAttachments.length > 0 ? pendingAttachments : undefined })
-    try {
-      await window.wraith.submitTurn(text, pendingAttachments.length > 0 ? pendingAttachments.map(a => ({ path: a.path, kind: a.kind })) : undefined, pendingMode)
-      setPendingMode(pendingModeAfterSubmit(pendingMode))
-    } catch (err) {
-      console.error('[wraith] submitTurn error:', err)
-      // 失败路径:markStarted 已提前置 turn='running',但本地 RPC 失败(后端死/拒绝)时
-      // 不会再有 turn.started/turn.completed/turn.failed 通知到达来清 turn,会永久卡 running。
-      // 复用现有 turn.failed reducer 动作把 turn 归 idle(不新造事件类型,与现有风格一致)。
-      dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
-      const reason = err instanceof Error ? err.message : String(err)
-      // 只取 reason 的前 80 字符,避免泄露过长内部路径或 URL;不含 apiKey/secret。
-      const short = reason.replace(/https?:\/\/\S+/g, '').replace(/sk-\S+/g, '').slice(0, 80).trim()
-      setSubmitError(short ? `消息发送失败,请重试(${short})` : '消息发送失败,请重试')
-    }
-  }, [inputValue, state.turn, state.model, attachments, pendingMode])
+  const { handleSubmit } = useChatSubmission({
+    getInputValue: () => inputValue,
+    getAttachments: () => attachments,
+    getTurn: () => turnRef.current,
+    getModel: () => state.model,
+    getPendingMode: () => pendingMode,
+    setInputValue,
+    setAttachments,
+    setSubmitError,
+    setPendingMode: (m) => setPendingMode(m as RunMode),
+    dispatch: (action) => dispatch(action as Action),
+  })
 
-  // ── approval handlers ──────────────────────────────────────────────────────
-  const handleApprovalRespond = useCallback(
-    async (payload: ApprovalResponsePayload) => {
-      if (!state.pendingApproval) return
-      try {
-        await window.wraith.respondApproval(state.pendingApproval.approvalId, payload.decision, {
-          ...(payload.modifiedArgs ? { modifiedArgs: payload.modifiedArgs } : {}),
-          ...(payload.allowNetwork ? { allowNetwork: true } : {}),
-        })
-      } finally {
-        dispatch({ type: 'clearApproval' })
-      }
-    },
-    [state.pendingApproval],
-  )
+  const { handleChoiceRespond, handleChoiceReject } = useChoiceHandlers({
+    getPendingChoice: () => state.pendingChoice,
+    dispatch: (action) => dispatch(action as Action),
+  })
 
-  const handleReject = useCallback(async () => {
-    if (!state.pendingApproval) return
-    try {
-      await window.wraith.respondApproval(state.pendingApproval.approvalId, 'REJECTED')
-    } finally {
-      dispatch({ type: 'clearApproval' })
-    }
-  }, [state.pendingApproval])
+  const { handleRestart, handleInterrupt } = useSystemControls()
 
-  // ── choice handlers ───────────────────────────────────────────────────────
-  const handleChoiceRespond = useCallback(
-    async (selectedIndex: number) => {
-      if (!state.pendingChoice) return
-      try {
-        await window.wraith.respondChoice(state.pendingChoice.choiceId, false, selectedIndex)
-      } finally {
-        dispatch({ type: 'clearChoice' })
-      }
-    },
-    [state.pendingChoice],
-  )
+  // ── 全局键盘快捷键 ────────────────────────────────────────────────────────
+  useKeyboardShortcuts({
+    getTurn: () => state.turn,
+    onInterrupt: handleInterrupt,
+    onNewConversation: handleNewConversation,
+    onPaletteOpen: () => setPaletteOpen(v => !v),
+    onToggleProviders: () => setView('settings'),
+    getPendingApproval: () => !!state.pendingApproval,
+    getPendingChoice: () => !!state.pendingChoice,
+    getAutomationApproval: () => !!automationApproval,
+  })
 
-  const handleChoiceReject = useCallback(async () => {
-    if (!state.pendingChoice) return
-    try {
-      await window.wraith.respondChoice(state.pendingChoice.choiceId, true, -1)
-    } finally {
-      dispatch({ type: 'clearChoice' })
-    }
-  }, [state.pendingChoice])
-
-  // ── automation approval handler ────────────────────────────────────────────
-  const handleAutomationApprovalRespond = useCallback(async (_payload: ApprovalResponsePayload) => {
-    const cur = automationApproval
-    if (!cur) return
-    setAutomationApproval(null)
-    automationApprovalRef.current = null
-    try {
-      // daemon contract: only the exact lowercase string "approve" approves; map all approve variants.
-      await window.wraith.automationRespondApproval(
-        String(cur.payload['approvalId']),
-        'approve',
-      )
-    } catch (err) { console.error('[wraith] automation respond error:', err) }
-  }, [automationApproval])
-
-  const handleAutomationApprovalReject = useCallback(async () => {
-    const cur = automationApproval
-    if (!cur) return
-    setAutomationApproval(null)
-    automationApprovalRef.current = null
-    try {
-      await window.wraith.automationRespondApproval(String(cur.payload['approvalId']), 'reject')
-    } catch (err) { console.error('[wraith] automation reject error:', err) }
-  }, [automationApproval])
-
-  // ── restart backend ────────────────────────────────────────────────────────
-  const handleRestart = useCallback(async () => {
-    try {
-      await window.wraith.restartBackend()
-    } catch (err) {
-      console.error('[wraith] restartBackend error:', err)
-    }
-  }, [])
-
-  // ── interrupt ─────────────────────────────────────────────────────────────
-  const handleInterrupt = useCallback(async () => {
-    try {
-      await window.wraith.interrupt()
-    } catch (err) {
-      console.error('[wraith] interrupt error:', err)
-    }
-  }, [])
-
-  // ── Esc = 停止(running 且无审批弹窗时;弹窗打开时 Esc 归弹窗语义) ────────────
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return
-      if (state.turn !== 'running' || state.pendingApproval || state.pendingChoice || automationApproval) return
-      void window.wraith.interrupt().catch(err => console.error('[wraith] interrupt error:', err))
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [state.turn, state.pendingApproval, state.pendingChoice, automationApproval])
-
-  // ── 全局真快捷键:⌘K 开/关命令面板、⌘N 新对话、⌘, 设置 ────────────────────
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (!e.metaKey) return
-      if (e.key === 'k') { e.preventDefault(); setPaletteOpen(v => !v) }
-      else if (e.key === 'n') { e.preventDefault(); void handleNewConversation() }
-      else if (e.key === ',') { e.preventDefault(); setView('settings') }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [handleNewConversation])
-
-  // ── 消息编辑/重发/删除(真回溯:后端裁剪 → 本地裁剪 → 重发) ─────────────────
-  const rewindAndResubmit = useCallback(
-    async (ordinal: number, text: string) => {
-      if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
-      setSubmitError(null) // 重发:清除上次遗留的错误横幅
-      try {
-        await window.wraith.rewindSession(ordinal)
-        dispatch({ type: 'truncateAtUser', ordinal })
-        dispatch({ type: 'addUserItem', text })
-        void fetchSessions()
-        // 与主 submit 路径对称:submitTurn 前即置 running,从源头关闭 submit→turn.started 竞态窗。
-        dispatch({ type: 'markStarted' })
-        await window.wraith.submitTurn(text)
-      } catch (err) {
-        console.error('[wraith] rewindAndResubmit error:', err)
-        // 失败兜底:markStarted 已提前置 running,本地 RPC 失败时不会再有 turn.* 通知清 turn。
-        dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
-        const reason = err instanceof Error ? err.message : String(err)
-        const short = reason.replace(/https?:\/\/\S+/g, '').replace(/sk-\S+/g, '').slice(0, 80).trim()
-        setSubmitError(short ? `消息发送失败,请重试(${short})` : '消息发送失败,请重试')
-      }
-    },
-    [fetchSessions], // running 守卫读 turnRef,不依赖 state.turn
-  )
-
-  // ── IM 绑定成功 → 补一轮「系统事件」,让 agent 知情并向用户确认 ──────────────
-  // 只能走普通 turn.submit:app-server 没有旁路往历史塞一条的 RPC(见 shared/systemEvent
-  // 里对前缀的说明)。文本带 ⊙系统事件⊙ 前缀,会话恢复时由 messagesToItems 还原成
-  // 系统事件气泡,而不是一句用户从没说过的话。
-  const emitSystemEvent = useCallback((text: string) => {
-    dispatch({ type: 'addSystemEvent', text })
-    // 与主 submit 路径对称:submitTurn 前即置 running,从源头关掉 submit→turn.started 竞态窗。
-    dispatch({ type: 'markStarted' })
-    void window.wraith.submitTurn(makeSystemEvent(text)).catch((err: unknown) => {
-      console.error('[wraith] system event submit failed:', err)
-      // markStarted 已提前置 running,RPC 失败后不会再有 turn.* 通知来清,必须自己清。
-      dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
-    })
-  }, [])
-
-  // 绑定完成的时机由用户扫码决定,撞上正在跑的轮次是常态;排队器负责忙时压住、闲时补发。
-  const enqueueSystemEvent = useSystemEventQueue(state.turn === 'running', emitSystemEvent)
-
-  const handleImBound = useCallback((platform: string, gatewayState: GatewayState | null) => {
-    enqueueSystemEvent(imBoundEventText(platform, gatewayState))
-  }, [enqueueSystemEvent])
+  const { handleImBound } = useSystemEvents({
+    dispatch: (action) => dispatch(action as Action),
+    getTurn: () => state.turn,
+  })
 
   // 后台任务:队列是全局的(与终端 /task 共享),不属于任何会话 —— 这里只回答两件事:
   // 「现在有几个在跑」(侧栏计数)和「刚才那个跑完了」(对话里的静默药丸,点开看结果)。
@@ -720,247 +568,41 @@ export default function App(): JSX.Element {
     }
   }, []))
 
-  const handleEditMessage = useCallback(
-    (ordinal: number, newText: string) => { void rewindAndResubmit(ordinal, newText) },
-    [rewindAndResubmit],
-  )
+  // 活动相关 handler 已由 useActivityHandlers 提供
 
-  const handleResendMessage = useCallback(
-    (ordinal: number, text: string) => { void rewindAndResubmit(ordinal, text) },
-    [rewindAndResubmit],
-  )
-
-  const handleDeleteMessage = useCallback(
-    async (ordinal: number) => {
-      if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
-      try {
-        await window.wraith.rewindSession(ordinal)
-        dispatch({ type: 'truncateAtUser', ordinal })
-        void fetchSessions()
-      } catch (err) {
-        console.error('[wraith] deleteMessage error:', err)
-      }
-    },
-    [fetchSessions], // running 守卫改读 turnRef,不再依赖 state.turn
-  )
-
-  // ── plan review response ──────────────────────────────────────────────────
-  const handlePlanReview = useCallback(
-    (reviewId: string, decision: 'execute' | 'supplement' | 'cancel', feedback?: string) => {
-      void window.wraith.respondPlanReview(reviewId, decision, feedback)
-      dispatch({ type: 'markPlanReviewResolved', reviewId })
-    },
-    [],
-  )
-
-  // ── approval mode toggle ──────────────────────────────────────────────────
-  const handleToggleApproval = useCallback(
-    async (auto: boolean) => {
-      const mode = auto ? 'auto' : 'ask'
-      dispatch({ type: 'setApprovalMode', mode })
-      try {
-        await window.wraith.setApprovalMode(auto)
-      } catch (err) {
-        console.error('[wraith] setApprovalMode error:', err)
-        dispatch({ type: 'setApprovalMode', mode: auto ? 'ask' : 'auto' }) // rollback
-      }
-    },
-    [],
-  )
-
-  // 添加项目(=Composer 重选目录汇流入口):选目录 → 入列表 → 切换
-  const handleAddProject = useCallback(async () => {
-    if (turnRef.current === 'running') return // 读即时快照,避免闭包陈旧漏放行
-    try {
-      const picked = await window.wraith.addProject()
-      if (!picked) return
-      void fetchProjects() // addProject 已 upsert;先刷列表
-      if (picked !== state.workspace) await switchToProject(picked)
-    } catch (err) {
-      console.error('[wraith] addProject error:', err)
-    }
-  }, [state.workspace, fetchProjects, switchToProject]) // running 守卫改读 turnRef,不再依赖 state.turn
-
-  const handleRemoveProject = useCallback(
-    async (projectPath: string) => {
-      try {
-        await window.wraith.removeProject(projectPath)
-        void fetchProjects()
-      } catch (err) {
-        console.error('[wraith] removeProject error:', err)
-      }
-    },
-    [fetchProjects],
-  )
-
-  const handleRenameProject = useCallback(
-    async (projectPath: string, name: string) => {
-      try {
-        await window.wraith.renameProject(projectPath, name)
-        void fetchProjects()
-      } catch (err) {
-        console.error('[wraith] renameProject error:', err)
-      }
-    },
-    [fetchProjects],
-  )
-
-  // ── 项目面板:点行 = 切项目 + 恢复最近会话 + 回聊天页 ──────────────────────────
-  const handleOpenProject = useCallback(async (projectPath: string) => {
-    if (turnRef.current === 'running') return
-    const ok = projectPath === state.workspace ? true : await switchToProject(projectPath)
-    if (ok) setView('chat')
-  }, [state.workspace, switchToProject])
-
-  // ── 项目面板:✎ = 切项目 + 新会话 + 回聊天页 ────────────────────────────────
-  const handleProjectNewConversation = useCallback(async (projectPath: string) => {
-    if (turnRef.current === 'running') return
-    if (projectPath !== state.workspace) {
-      const ok = await switchToProject(projectPath)
-      if (!ok) return
-    }
-    setView('chat')
-    await handleNewConversation()
-  }, [state.workspace, switchToProject, handleNewConversation])
-
-  // ── 项目面板:展开里点会话 = 切项目 + resume + 回聊天页 ──────────────────────
-  const handleOpenProjectSession = useCallback(async (projectPath: string, sessionId: string) => {
-    if (turnRef.current === 'running') return
-    if (projectPath !== state.workspace) {
-      const ok = await switchToProject(projectPath)
-      if (!ok) return
-    }
-    setView('chat')
-    await handleSelectSession(sessionId)
-  }, [state.workspace, switchToProject, handleSelectSession])
-
-  const handleOpenActivityTask = useCallback((_item: ActivityItem) => {
-    setView('tasks')
-  }, [])
-
-  const handleOpenActivityAutomation = useCallback((item: ActivityItem) => {
-    // 自动化面板本身已有运行历史和会话回跳入口；不要用 runId 拼出不存在的
-    // session RPC。有关联 session 时仍由面板的既有路径决定何时恢复。
-    void item
-    setView('automations')
-  }, [])
-
-  const handleCancelActivity = useCallback(async (item: ActivityItem) => {
-    const id = item.kind === 'session' ? item.sessionId : item.kind === 'task' ? item.taskId : item.runId
-    if (!id) return { ok: false, message: '活动缺少可取消的来源标识' }
-    const result = await window.wraith.activityCancel({ kind: item.kind, id })
-    if (result.ok) void loadActivities(true)
-    return result
-  }, [loadActivities])
-
-  // ── 运行历史:重弹已缓存的审批弹窗(先验证 run 仍在 waiting_approval,再重弹) ──
-  const handleReopenApproval = useCallback(async (runId: string) => {
-    const cached = automationApprovalRef.current
-    if (!cached || cached.runId !== runId) return
-    try {
-      const { runs } = await window.wraith.automationRuns()
-      const run = runs.find(r => r.runId === runId)
-      if (run?.status === 'waiting_approval') {
-        setAutomationApproval(cached)
-      } else {
-        automationApprovalRef.current = null
-      }
-    } catch (err) {
-      console.error('[wraith] handleReopenApproval error:', err)
-    }
-  }, [])
-
-  const handleMcpToggle = useCallback(async (name: string, enable: boolean) => {
-    try { await (enable ? window.wraith.mcpEnable(name) : window.wraith.mcpDisable(name)); void fetchMcp() }
-    catch (err) { console.error('[wraith] mcp toggle error:', err) }
-  }, [fetchMcp])
-
-  const handleMcpRestart = useCallback(async (name: string) => {
-    try { await window.wraith.mcpRestart(name); void fetchMcp() }
-    catch (err) { console.error('[wraith] mcp restart error:', err) }
-  }, [fetchMcp])
-
-  const handleMcpRemove = useCallback(async (scope: 'user' | 'project', name: string) => {
-    try { await window.wraith.mcpConfigRemove(scope, name); void fetchMcp() }
-    catch (err) { console.error('[wraith] mcp remove error:', err) }
-  }, [fetchMcp])
-
-  const handleMcpSubmitForm = useCallback(async (v: McpFormValue): Promise<boolean> => {
-    try { await window.wraith.mcpConfigUpsert(v); void fetchMcp(); return true }
-    catch (err) { console.error('[wraith] mcp upsert error:', err); return false }
-  }, [fetchMcp])
-
-  // 派生视图模型:由 preview 覆盖态 + live 状态计算展示层数据(命名 pv,避开已有面板态 view)
-  const pv = deriveView(preview, {
+  const { pv, taskDoneNotices, showNoModel } = useDerivedViews({
+    preview,
     sessionId: state.sessionId,
     items: state.items,
     hasStarted: state.hasStarted,
     turn: state.turn,
+    noModel,
+    model: state.model,
   })
-
-  // 空态没有 Transcript,药丸得单独取出来喂给 WelcomeEmptyState。
-  // 只在空态用得上,故不做记忆化 —— items 本来就每轮在变。
-  const taskDoneNotices = pv.showWelcome
-    ? state.items.filter((i): i is Extract<Item, { type: 'task-done' }> => i.type === 'task-done')
-    : []
-
-  // 引导条不能只看 noModel 那个**快照** —— 它只在 initialize 和「存完 provider 回查」
-  // 两处采样。重启后从 config 读到模型、在别处设默认、切模型、后端热装,都不经过采样点,
-  // 快照就一直停在「没有模型」,于是出现「composer 上明明显示着模型,条子还挂在上面」。
-  // 与活信号 state.model 取交集:任何一处拿到了模型,条子立刻消失。
-  const showNoModel = showNoModelNotice(noModel, state.model)
 
   // 折叠态下导航目标变化(切会话/切视图)→ 自动收浮层
   useEffect(() => {
     if (sidebarCollapsed) setSidebarPeek(false)
   }, [pv.activeSessionId, view, sidebarCollapsed])
 
-  // 手动压缩上下文(压缩当前对话历史,释放上下文窗口;可见 transcript 不变)
-  const [compactBusy, setCompactBusy] = useState(false)
-  const [compactNotice, setCompactNotice] = useState<string | null>(null)
-  const compactNoticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // 压缩提示是「压缩」这一动作的瞬时确认,不是常驻横幅:设置后 6s 自动消失,且清掉上一枚定时器。
-  const flashCompactNotice = useCallback((msg: string | null): void => {
-    if (compactNoticeTimer.current) { clearTimeout(compactNoticeTimer.current); compactNoticeTimer.current = null }
-    setCompactNotice(msg)
-    if (msg) compactNoticeTimer.current = setTimeout(() => {
-      setCompactNotice(null); compactNoticeTimer.current = null
-    }, 6000)
-  }, [])
-  // 切/建会话即清:否则上一会话的「已压缩…」会泄漏到新会话顶部(sessionId 变化覆盖新建 resetSession 与切换 commitSwitchTo)。
+  const {
+    compactBusy,
+    compactNotice,
+    compactDisabled,
+    handleCompact,
+    handleExport,
+    clearCompactNotice,
+  } = useExportAndCompact({
+    getItems: () => pv.items,
+    getModel: () => state.model,
+    getWorkspace: () => state.workspace,
+    getTurn: () => state.turn,
+  })
+
   useEffect(() => {
-    if (compactNoticeTimer.current) { clearTimeout(compactNoticeTimer.current); compactNoticeTimer.current = null }
-    setCompactNotice(null)
+    clearCompactNotice()
     setRightPreview(null)
   }, [state.sessionId])
-  const handleCompact = useCallback(async (): Promise<void> => {
-    if (state.turn === 'running') return
-    setCompactBusy(true); flashCompactNotice(null)
-    try {
-      flashCompactNotice(compactionNotice(await window.wraith.compactHistory()))
-    } catch (err) {
-      flashCompactNotice('❌ 压缩失败:' + ((err as Error).message || '未知错误'))
-    } finally {
-      setCompactBusy(false)
-    }
-  }, [state.turn, flashCompactNotice])
-  // 压缩按钮共享禁用态:忙碌中/回合运行中/无消息可压——工具栏按钮与 ContextPanel 面板按钮两处复用同一表达式
-  const compactDisabled = compactBusy || state.turn === 'running' || !pv.items.length
-
-  // 导出当前对话为 Markdown(纯前端序列化 + Electron 保存对话框,不经 Java 后端)
-  const handleExport = useCallback(async (): Promise<void> => {
-    const items = pv.items
-    if (!items.length) return
-    const firstUser = items.find((i) => i.type === 'user') as { text: string } | undefined
-    const rawTitle = (firstUser?.text ?? 'Wraith 对话').replace(/\s+/g, ' ').trim().slice(0, 40) || 'Wraith 对话'
-    const d = new Date()
-    const p = (n: number): string => String(n).padStart(2, '0')
-    const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
-    const md = transcriptToMarkdown(items, { title: rawTitle, model: state.model, workspace: state.workspace, exportedAt: stamp })
-    const safeName = rawTitle.replace(/[/\\:*?"<>|]/g, '_').slice(0, 30) || 'wraith-对话'
-    const fileStamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
-    await window.wraith.saveTextFile(`${safeName}-${fileStamp}.md`, md)
-  }, [pv.items, state.model, state.workspace])
 
   return (
     <div className="flex h-screen flex-col overflow-hidden text-fg">
@@ -1292,7 +934,7 @@ export default function App(): JSX.Element {
           suggestion={state.pendingApproval.suggestion}
           beforeContent={state.pendingApproval.beforeContent}
           onRespond={handleApprovalRespond}
-          onReject={handleReject}
+          onReject={handleApprovalCancel}
         />
       )}
 
