@@ -1,32 +1,12 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
 import CommandPalette from './components/CommandPalette'
-import type { BackendEvent, SessionMeta, RunMode, SandboxKindWire } from '../shared/types'
-import type { RightPreview, ArtifactFile } from '../shared/artifactSummary'
-import type { EditorApp } from '../shared/editors'
+import type { BackendEvent, SessionMeta, RunMode } from '../shared/types'
 
 import {
   initialState,
-  reduce,
-  clearApproval,
-  clearChoice,
-  setModel,
-  markStarted,
-  markResumed,
-  setApprovalMode,
-  setWorkspace,
-  resetSession,
-  loadHistory,
-  setSessionId,
-  setSandbox,
-  addUserItem,
-  addSystemEventItem,
-  addTaskDoneItem,
-  truncateAtUserOrdinal,
-  markPlanReviewResolved,
   type TranscriptState,
-  type Item,
-  type AttachmentRef,
 } from '../shared/transcriptReducer'
+import { reduceAdapter, type AppAction } from './lib/reducerAdapter'
 
 import { useBackgroundTasks } from './lib/useBackgroundTasks'
 import { taskDoneLabel } from '../shared/taskWatch'
@@ -98,90 +78,25 @@ import { useSystemControls } from './lib/useSystemControls'
 import { useExportAndCompact } from './lib/useExportAndCompact'
 import { useSystemEvents } from './lib/useSystemEvents'
 import { useDerivedViews } from './lib/useDerivedViews'
+import { useCloseConfirm } from './lib/useCloseConfirm'
+import { useGlobalDragPrevent } from './lib/useGlobalDragPrevent'
+import { useAutomationEvents } from './lib/useAutomationEvents'
+import { useEditorsList } from './lib/useEditorsList'
+import { useArtifactHandlers } from './lib/useArtifactHandlers'
+import { useAttachmentManager } from './lib/useAttachmentManager'
+import { useRightDockPreview } from './lib/useRightDockPreview'
+import { useAppUiState } from './lib/useAppUiState'
+import { useStateGetters } from './lib/useStateGetters'
+import { useLivePreviewRef } from './lib/useLivePreviewRef'
+import { useTurnSyncRef } from './lib/useTurnSyncRef'
+import { useSessionIdSync } from './lib/useSessionIdSync'
+import { useTurnRefresh, useSidebarPeekReset, useSessionChangeCleanup } from './lib/useTurnLifecycle'
 
 // ---------------------------------------------------------------------------
-// Local action types (for non-BackendEvent dispatches)
-// ---------------------------------------------------------------------------
-
-type LocalAction =
-  | { type: 'clearApproval' }
-  | { type: 'clearChoice' }
-  | { type: 'setModel'; model: string }
-  | { type: 'markStarted' }
-  | { type: 'markResumed' }
-  | { type: 'setApprovalMode'; mode: 'ask' | 'auto' }
-  | { type: 'setWorkspace'; ws: string }
-  | { type: 'resetSession'; ws: string }
-  | { type: 'addUserItem'; text: string; attachments?: AttachmentRef[] }
-  | { type: 'addSystemEvent'; text: string }
-  | { type: 'addTaskDone'; taskId: string; text: string; ok: boolean }
-  | { type: 'loadHistory'; items: Item[] }
-  | { type: 'setSessionId'; sessionId: string }
-  | { type: 'setSandbox'; sandbox: SandboxKindWire; networkAllowed: boolean }
-  | { type: 'truncateAtUser'; ordinal: number }
-  | { type: 'markPlanReviewResolved'; reviewId: string }
-
-type Action = BackendEvent | LocalAction
-
-// ---------------------------------------------------------------------------
-// Reducer adapter that handles both BackendEvent and LocalAction
-// ---------------------------------------------------------------------------
-
-function reduceAdapter(state: TranscriptState, action: Action): TranscriptState {
-  if ('type' in action && action.type === 'clearApproval') {
-    return clearApproval(state)
-  }
-  if ('type' in action && action.type === 'clearChoice') {
-    return clearChoice(state)
-  }
-  if ('type' in action && action.type === 'setModel') {
-    return setModel(state, action.model)
-  }
-  if ('type' in action && action.type === 'markStarted') {
-    return markStarted(state)
-  }
-  if ('type' in action && action.type === 'markResumed') {
-    return markResumed(state)
-  }
-  if ('type' in action && action.type === 'setApprovalMode') {
-    return setApprovalMode(state, action.mode)
-  }
-  if ('type' in action && action.type === 'setWorkspace') {
-    return setWorkspace(state, action.ws)
-  }
-  if ('type' in action && action.type === 'resetSession') {
-    return resetSession(state, action.ws)
-  }
-  if ('type' in action && action.type === 'addUserItem') {
-    return addUserItem(state, action.text, action.attachments)
-  }
-  if ('type' in action && action.type === 'addSystemEvent') {
-    return addSystemEventItem(state, action.text)
-  }
-  if ('type' in action && action.type === 'addTaskDone') {
-    return addTaskDoneItem(state, action.taskId, action.text, action.ok)
-  }
-  if ('type' in action && action.type === 'loadHistory') {
-    return loadHistory(state, action.items)
-  }
-  if ('type' in action && action.type === 'setSessionId') {
-    return setSessionId(state, action.sessionId)
-  }
-  if ('type' in action && action.type === 'setSandbox') {
-    return setSandbox(state, action.sandbox, action.networkAllowed)
-  }
-  if ('type' in action && action.type === 'truncateAtUser') {
-    return truncateAtUserOrdinal(state, action.ordinal)
-  }
-  if ('type' in action && action.type === 'markPlanReviewResolved') {
-    return markPlanReviewResolved(state, action.reviewId)
-  }
-  // BackendEvent has 'kind' field
-  return reduce(state, action as BackendEvent)
-}
-
 // Override initial state: treat initial connection as 'connected' to avoid
 // a race where the connected event arrives before onEvent is registered.
+// ---------------------------------------------------------------------------
+
 const connectedInitialState: TranscriptState = {
   ...initialState,
   connection: 'connected',
@@ -194,10 +109,40 @@ const connectedInitialState: TranscriptState = {
 export default function App(): JSX.Element {
   const [state, dispatch] = useReducer(reduceAdapter, connectedInitialState)
   const [inputValue, setInputValue] = useState('')
-  const [attachments, setAttachments] = useState<AttachmentItem[]>([])
-  // 异常中断(LLM 失败/后端断开等)的会话 id 集合 → 侧栏会话行右侧显示感叹号。
-  // 只跟踪本桌面会话内的故障,不落盘:后端在 turn.failed/进程死亡时不持久化,重启后 ! 消失。
+
+  // ── 8 个低风险 hooks 提取 ─────────────────────────────────────────────
+  const { attachments, setAttachments, handlePickAttachments, handleRemoveAttachment, handleAddAttachments } = useAttachmentManager()
+  const { closeConfirmOpen, setCloseConfirmOpen, handleCloseConfirm, handleCloseConfirmCancel } = useCloseConfirm()
+  const { editors, setEditors } = useEditorsList()
+  const { rightDockOpen, setRightDockOpen, rightDockPane, setRightDockPane, rightPreview, setRightPreview } = useRightDockPreview()
+  const { openArtifact, openDiff, handleUndo } = useArtifactHandlers({
+    workspace: state.workspace,
+    onRequestPreview: setRightPreview,
+    onDockPaneChange: setRightDockPane,
+    onDockOpen: setRightDockOpen,
+  })
+  useGlobalDragPrevent()
+
+  // ── App UI state cluster hook ──────────────────────────────────────────
+  const {
+    view, setView,
+    automationBadge, setAutomationBadge,
+    modelFallbackNotice, setModelFallbackNotice,
+    submitError, setSubmitError,
+    branchingMsgIndex, setBranchingMsgIndex,
+    updateNotice, setUpdateNotice,
+    pendingMode, setPendingMode,
+    composerFocus, setComposerFocus,
+    terminalOpen, setTerminalOpen,
+    paletteOpen, setPaletteOpen,
+    noModel, setNoModel,
+  } = useAppUiState()
+
+  // ── 异常会话追踪 ────────────────────────────────────────────────────
   const { failedSessions, setFailedSessions, sessionIdRef } = useSessionFailureTracking()
+  const { sessionId: currentSessionId } = state
+
+  // ── 数据获取 ────────────────────────────────────────────────────────
   const {
     projects, setProjects,
     mcpServers, setMcpServers,
@@ -206,7 +151,6 @@ export default function App(): JSX.Element {
     gitStatus, setGitStatus,
     fetchProjects, fetchMcp, fetchMcpResources, fetchGitStatus,
   } = useDataFetchers()
-  const [view, setView] = useState<'chat' | 'projects' | 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills' | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents' | 'activity' | 'settings'>('chat')
   const { activitySnapshot, loadActivities } = useActivityManager()
   const {
     automationApproval,
@@ -219,28 +163,20 @@ export default function App(): JSX.Element {
     handleCancelActivity,
     handleReopenApproval,
   } = useActivityHandlers({ setView: (v) => setView(v as typeof view), loadActivities })
-  const [automationBadge, setAutomationBadge] = useState(false)
-  const [modelFallbackNotice, setModelFallbackNotice] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-  /** 分支操作正在执行的消息 index(用于禁用按钮,防重复点击)。 */
-  const [branchingMsgIndex, setBranchingMsgIndex] = useState<number | null>(null)
   const { prefs: appPrefs } = useSettings()
-  const [updateNotice, setUpdateNotice] = useState<{ latest: string; url: string } | null>(null)
-  const [pendingMode, setPendingMode] = useState<RunMode>('react')
-  // 类别是固定四组、不随机 —— 随机会让同一个人每次打开看到不同入口,反而记不住有什么能做
-  const [composerFocus, setComposerFocus] = useState(0)
-  const [terminalOpen, setTerminalOpen] = useState(false)
-  const [rightDockOpen, setRightDockOpen] = useState(false)
-  const [rightDockPane, setRightDockPane] = useState<RightDockPane>('browser')
-  const [rightPreview, setRightPreview] = useState<RightPreview | null>(null)
-  // 关闭确认对话框:主进程发 'wraith:close:request' 时弹出
-  const [closeConfirmOpen, setCloseConfirmOpen] = useState(false)
+  const { sidebarCollapsed, setSidebarCollapsed, sidebarPeek, setSidebarPeek } = useSidebarCollapse()
+
+  // ── 同步 refs 与 state ────────────────────────────────────────────────
+  const turnRef = useTurnSyncRef(state.turn)
+
+  // ── sessionIdRef 同步 + 切会话清感叹号 ────────────────────────────────
+  useSessionIdSync({ sessionId: currentSessionId, sessionIdRef, setFailedSessions })
 
   // ── Workbench 工作台(文件浏览器 + 聊天 Tab 混排) ──────────────────────────
   const workbench = useWorkbench(state.workspace)
   const { tabs, activeTabId,
     fileTreeVisible, setFileTreeVisible,
-    fileTreeWidth, resizingRef,
+    fileTreeWidth,
     handleOpenWorkspaceFile, handleCloseTab, handleActivateTab,
     handleOpenWorkspace: handleOpenWorkspaceBase, onResizeMouseDown } = workbench
   // 补充:原 handleOpenWorkspace 还会把视图切到「聊天」
@@ -249,88 +185,8 @@ export default function App(): JSX.Element {
     handleOpenWorkspaceBase()
   }, [handleOpenWorkspaceBase])
 
-  const openArtifact = useCallback((filePath: string, content: string): void => {
-    setRightPreview({ kind: 'content', filePath, content })
-    setRightDockPane('artifact')
-    setRightDockOpen(true)
-  }, [])
-  const openDiff = useCallback((filePath: string, before: string, after: string): void => {
-    setRightPreview({ kind: 'diff', filePath, before, after })
-    setRightDockPane('artifact')
-    setRightDockOpen(true)
-  }, [])
-  const handleUndo = useCallback(async (file: ArtifactFile): Promise<{ ok: boolean; message?: string }> => {
-    const abs = resolveWorkspacePath(file.path, state.workspace ?? null)
-    try {
-      return await window.wraith.undoFileEdit({ path: abs, before: file.before ?? '', kind: file.kind })
-    } catch (e) {
-      return { ok: false, message: (e as Error).message }
-    }
-  }, [state.workspace])
-  const [editors, setEditors] = useState<EditorApp[]>([])
-  useEffect(() => { void window.wraith.listEditors().then(setEditors).catch(() => {}) }, [])
-
-  // 关闭确认:监听主进程 'wraith:close:request'。
-  // 若已记住 closeMode≠'ask',直接 execute;否则弹 CloseConfirmModal。
-  useEffect(() => {
-    let cancelled = false
-    const off = window.wraith.closeBehavior.onRequest(async () => {
-      if (cancelled) return
-      try {
-        const mode = await window.wraith.closeBehavior.getMode()
-        if (mode === 'background' || mode === 'quit') {
-          // 已记住:直接执行
-          await window.wraith.closeBehavior.execute({ mode, remember: null })
-        } else {
-          // ask:弹 modal
-          setCloseConfirmOpen(true)
-        }
-      } catch {
-        // 读 mode 失败 → 兜底弹 modal
-        setCloseConfirmOpen(true)
-      }
-    })
-    return () => { cancelled = true; off() }
-  }, [])
-
-  const handleCloseConfirm = useCallback(async (mode: 'background' | 'quit', remember: boolean) => {
-    setCloseConfirmOpen(false)
-    try {
-      await window.wraith.closeBehavior.execute({ mode, remember: remember ? mode : null })
-    } catch {
-      // best-effort
-    }
-  }, [])
-
-  const handleCloseConfirmCancel = useCallback(() => {
-    setCloseConfirmOpen(false)
-    // 不调 execute,主窗继续运行
-  }, [])
-  const [paletteOpen, setPaletteOpen] = useState(false)
-  /** 后端起来了但一个模型都没配 —— 全新装机的常态,需要在空态给出引导。 */
-  const [noModel, setNoModel] = useState(false)
-  const { sidebarCollapsed, setSidebarCollapsed, sidebarPeek, setSidebarPeek } = useSidebarCollapse()
-
-  // 注:statusThrottleRef 由 useBackendEventSubscription 生成,见下文
-  // turnRef:与 state.turn 同步的即时快照,供 handleAddProject / switchToProject 的 running 守卫读取。
-  // 消除「dispatch(markStarted) → 组件重渲染」之间的闭包陈旧:markStarted 已在提交瞬间置 running,
-  // 但用旧 state.turn 闭包的回调直到下次重渲染前读到的仍是 'idle',守卫会漏放行;改读 ref 即时可见。
-  const turnRef = useRef(state.turn)
-  useEffect(() => {
-    turnRef.current = state.turn
-  }, [state.turn])
-
-  // sessionIdRef 由 useSessionFailureTracking 提供,这里让它随 state.sessionId 同步
-  useEffect(() => {
-    sessionIdRef.current = state.sessionId
-  }, [state.sessionId])
-
-  // 折叠状态持久化(由 useSidebarCollapse 内部处理)
-
-  // 预览覆盖态:running 时只读显示另一会话或空白新会话页
-  const [preview, setPreview] = useState<Preview>(null)
-  const previewRef = useRef<Preview>(null)
-  useEffect(() => { previewRef.current = preview }, [preview])
+  // ── 预览状态 ────────────────────────────────────────────────────────
+  const { preview, setPreview } = useLivePreviewRef()
 
   // 活动中心已由 useActivityManager 负责加载 / 订阅 (loadActivities 来自该 hook)。
 
@@ -360,31 +216,25 @@ export default function App(): JSX.Element {
   // sessionId 变化即刷新侧栏:新会话在 turn.started 时后端已落桩并带回真实 id,
   // 这里拉一次 listSessions,使会话「发送即出现」在左侧(不必等 turn 结束)。
   useEffect(() => {
-    if (state.sessionId) void fetchSessions()
-  }, [state.sessionId, fetchSessions])
+    if (currentSessionId) void fetchSessions()
+  }, [currentSessionId, fetchSessions])
 
   // ── subscribe to automation events on mount ───────────────────────────────
-  useEffect(() => {
-    const unsub = window.wraith.onAutomationEvent(evt => {
-      if (evt.kind === 'badge') setAutomationBadge(evt.show)
-      if (evt.kind === 'approval') {
-        // I-4: 审批 push 只缓存 payload,不强弹(spec §1.1-4/§6.2:通知+红点+运行历史「处理审批」,
-        // 用户在面板主动点开 ApprovalModal)。badge 与 OS 通知已由 main 侧推送,renderer 无需动作。
+  useAutomationEvents({
+    onBadge: (show) => setAutomationBadge(show),
+    onApproval: (evt) => {
+      // I-4: 审批 push 只缓存 payload,不强弹(spec §1.1-4/§6.2:通知+红点+运行历史「处理审批」,
+      // 用户在面板主动点开 ApprovalModal)。badge 与 OS 通知已由 main 侧推送,renderer 无需动作。
+      if (evt.runId) {
         automationApprovalRef.current = { runId: evt.runId, payload: evt.payload }
       }
-      if (evt.kind === 'open-panel') setView('automations')
-      if (evt.kind === 'runs-changed') {
-        void fetchSessions()
-        void loadActivities(true)
-      }
-    })
-    return unsub
-  }, [fetchSessions, loadActivities])
+    },
+    onOpenPanel: () => setView('automations'),
+    onRunsChanged: () => { void fetchSessions(); void loadActivities(true) },
+  })
 
   // ── useSessionManager wiring ──────────────────────────────────────────
-  const getTurn = useCallback(() => state.turn, [state.turn])
-  const getSessionId = useCallback(() => state.sessionId, [state.sessionId])
-  const getWorkspace = useCallback(() => state.workspace, [state.workspace])
+  const { getTurn, getSessionId, getWorkspace } = useStateGetters(state)
   const getProjects = useCallback(() => projects, [projects])
 
   const sessionManager = useSessionManager({
@@ -400,7 +250,7 @@ export default function App(): JSX.Element {
     setBranchingMsgIndex,
     setProjects,
     setSessions,
-    dispatch: (action) => dispatch(action as Action),
+    dispatch: (action) => dispatch(action as AppAction),
     statusThrottleRef,
     fetchSessions,
     fetchProjects,
@@ -414,7 +264,7 @@ export default function App(): JSX.Element {
 
   // ── useStartup wiring ────────────────────────────────────────────────
   const { applySandbox, refreshSandbox } = useStartup({
-    dispatch: (action) => dispatch(action as Action),
+    dispatch: (action) => dispatch(action as AppAction),
     setModelFallbackNotice,
     setNoModel,
     setUpdateNotice,
@@ -454,14 +304,14 @@ export default function App(): JSX.Element {
   // ── useMessageOperations wiring ────────────────────────────────────
   const { rewindAndResubmit, handleEditMessage, handleResendMessage, handleDeleteMessage } = useMessageOperations({
     getTurn: () => turnRef.current,
-    dispatch: (action) => dispatch(action as Action),
+    dispatch: (action) => dispatch(action as AppAction),
     fetchSessions,
     setSubmitError,
   })
 
   // ── useApprovalHandlers wiring ─────────────────────────────────────
   const { handleApprovalRespond, handleApprovalCancel, handlePlanReview, handleToggleApproval } = useApprovalHandlers({
-    dispatch: (action) => dispatch(action as Action),
+    dispatch: (action) => dispatch(action as AppAction),
     getPendingApproval: () => state.pendingApproval,
   })
 
@@ -482,44 +332,7 @@ export default function App(): JSX.Element {
   })
 
   // ── refresh session list when a turn completes ────────────
-  const prevTurnRef = useRef(state.turn)
-  useEffect(() => {
-    if (prevTurnRef.current === 'running' && state.turn === 'idle') {
-      void fetchSessions()
-    }
-    prevTurnRef.current = state.turn
-  }, [state.turn, fetchSessions])
-
-  // ── pick attachments ──────────────────────────────────────────────────────
-  const handlePickAttachments = useCallback(async () => {
-    try {
-      const picked = await window.wraith.pickAttachments()
-      if (picked.length > 0) {
-        setAttachments(prev => [...prev, ...picked])
-      }
-    } catch (err) {
-      console.error('[wraith] pickAttachments error:', err)
-    }
-  }, [])
-
-  const handleRemoveAttachment = useCallback((index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index))
-  }, [])
-
-  const handleAddAttachments = useCallback((items: AttachmentItem[]) => {
-    if (items.length > 0) setAttachments(prev => [...prev, ...items])
-  }, [])
-
-  // 全窗兜底:拖文件到 Composer 之外的空白处时,阻止 Electron 默认导航到 file://。
-  useEffect(() => {
-    const prevent = (e: DragEvent): void => { e.preventDefault() }
-    window.addEventListener('dragover', prevent)
-    window.addEventListener('drop', prevent)
-    return () => {
-      window.removeEventListener('dragover', prevent)
-      window.removeEventListener('drop', prevent)
-    }
-  }, [])
+  useTurnRefresh(state.turn, fetchSessions)
 
   const { handleSubmit } = useChatSubmission({
     getInputValue: () => inputValue,
@@ -531,12 +344,12 @@ export default function App(): JSX.Element {
     setAttachments,
     setSubmitError,
     setPendingMode: (m) => setPendingMode(m as RunMode),
-    dispatch: (action) => dispatch(action as Action),
+    dispatch: (action) => dispatch(action as AppAction),
   })
 
   const { handleChoiceRespond, handleChoiceReject } = useChoiceHandlers({
     getPendingChoice: () => state.pendingChoice,
-    dispatch: (action) => dispatch(action as Action),
+    dispatch: (action) => dispatch(action as AppAction),
   })
 
   const { handleRestart, handleInterrupt } = useSystemControls()
@@ -554,7 +367,7 @@ export default function App(): JSX.Element {
   })
 
   const { handleImBound } = useSystemEvents({
-    dispatch: (action) => dispatch(action as Action),
+    dispatch: (action) => dispatch(action as AppAction),
     getTurn: () => state.turn,
   })
 
@@ -581,9 +394,12 @@ export default function App(): JSX.Element {
   })
 
   // 折叠态下导航目标变化(切会话/切视图)→ 自动收浮层
-  useEffect(() => {
-    if (sidebarCollapsed) setSidebarPeek(false)
-  }, [pv.activeSessionId, view, sidebarCollapsed])
+  useSidebarPeekReset({
+    activeSessionId: pv.activeSessionId,
+    view,
+    sidebarCollapsed,
+    setSidebarPeek,
+  })
 
   const {
     compactBusy,
@@ -599,10 +415,11 @@ export default function App(): JSX.Element {
     getTurn: () => state.turn,
   })
 
-  useEffect(() => {
-    clearCompactNotice()
-    setRightPreview(null)
-  }, [state.sessionId])
+  useSessionChangeCleanup({
+    sessionId: currentSessionId,
+    clearCompactNotice,
+    setRightPreview,
+  })
 
   return (
     <div className="flex h-screen flex-col overflow-hidden text-fg">
