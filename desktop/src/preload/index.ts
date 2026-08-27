@@ -234,6 +234,15 @@ export interface WraithApi {
   windowControls: WindowControlsApi
   /** 关闭行为:读已记住的 closeMode + 监听 close 请求 + 执行用户选择。 */
   closeBehavior: CloseBehaviorApi
+  /** 输入历史:按会话持久化,供 Composer ↑/↓ 回显。 */
+  inputHistory: InputHistoryApi
+}
+
+/** 输入历史 API:按 sessionId 持久化的输入历史,供 Composer ↑/↓ 回显。 */
+export interface InputHistoryApi {
+  get(sessionId: string): Promise<string[]>
+  add(sessionId: string, text: string): Promise<void>
+  clear(sessionId: string): Promise<void>
 }
 
 /** 窗口控制 API:最小化/切换最大化/关闭 + 最大化状态变更订阅。仅 Windows 渲染窗控 UI,其它平台调用无害。 */
@@ -898,6 +907,13 @@ const wraith: WraithApi = {
     },
     execute(payload) { return ipcRenderer.invoke('wraith:close:execute', payload) as Promise<void> },
     resetMode() { return ipcRenderer.invoke('wraith:close:resetMode') as Promise<void> },
+  },
+
+  // 输入历史:按会话持久化,供 Composer ↑/↓ 回显
+  inputHistory: {
+    get(sessionId: string) { return ipcRenderer.invoke('wraith:inputHistory:get', sessionId) as Promise<string[]> },
+    add(sessionId: string, text: string) { return ipcRenderer.invoke('wraith:inputHistory:add', sessionId, text) as Promise<void> },
+    clear(sessionId: string) { return ipcRenderer.invoke('wraith:inputHistory:clear', sessionId) as Promise<void> },
   },
 }
 

@@ -70,6 +70,7 @@ import {
   shouldPromoteSessionIdentity,
 } from './activityStore'
 import { registerActivityIpc } from './activityIpc'
+import { getSessionHistory, addToSessionHistory, clearSessionHistory } from './inputHistoryStore'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -564,6 +565,19 @@ ipcMain.handle('wraith:close:execute', async (_e, payload: CloseExecutePayload) 
 // 设置面板「恢复询问」:把 closeMode 重置为 'ask',下次关窗重新弹确认框。
 ipcMain.handle('wraith:close:resetMode', () => {
   writeCloseMode(app.getPath('userData'), 'ask')
+})
+
+// ── 输入历史:按会话持久化,供 Composer ↑/↓ 回显 ────────────────────────────
+ipcMain.handle('wraith:inputHistory:get', (_e, sessionId: string) => {
+  return getSessionHistory(app.getPath('userData'), sessionId)
+})
+
+ipcMain.handle('wraith:inputHistory:add', (_e, sessionId: string, text: string) => {
+  addToSessionHistory(app.getPath('userData'), sessionId, text)
+})
+
+ipcMain.handle('wraith:inputHistory:clear', (_e, sessionId: string) => {
+  clearSessionHistory(app.getPath('userData'), sessionId)
 })
 
 ipcMain.handle('wraith:initialize', async (_e, workspaceDir: string | null) => {

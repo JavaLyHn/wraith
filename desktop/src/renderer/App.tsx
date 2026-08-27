@@ -573,6 +573,7 @@ export default function App(): JSX.Element {
                         mode={pendingMode}
                         onModeChange={setPendingMode}
                         focusSignal={composerFocus}
+                        sessionId={state.sessionId}
                       />
                     )
                     return !pv.showWelcome ? (

@@ -19,6 +19,7 @@ import { isImageMime, imageExtFromMime, pathsToAttachments } from '../lib/compos
 import { VadSegmenter, DEFAULT_VAD } from '../lib/vadSegmenter'
 import { OrderedAppender } from '../lib/orderedAppender'
 import { micLevel } from '../lib/waveform'
+import { useInputHistory } from '../lib/useInputHistory'
 
 export interface AttachmentItem {
   path: string
@@ -51,6 +52,8 @@ interface ComposerProps {
   mode?: RunMode
   onModeChange?: (m: RunMode) => void
   focusSignal?: number
+  /** 当前会话 ID:用于输入历史按会话隔离存储 */
+  sessionId?: string
 }
 
 export default function Composer({
@@ -77,6 +80,7 @@ export default function Composer({
   mode = 'react',
   onModeChange,
   focusSignal,
+  sessionId,
 }: ComposerProps): JSX.Element {
   const [mention, setMention] = useState<MentionState>({ active: false, start: 0, query: '' })
   const [mentionIndex, setMentionIndex] = useState(0)
@@ -123,6 +127,18 @@ export default function Composer({
   const items = mention.active ? filterMentionItems(resources, mention.query) : []
   const popoverOpen = mention.active && items.length > 0
 
+  // ── 输入历史:↑/↓ 回显之前提交过的文本 ──────────────────────────────────
+  const {
+    isBrowsing,
+    goOlder,
+    goNewer,
+    exitBrowsing,
+    addToHistory,
+  } = useInputHistory({
+    sessionId: sessionId ?? '',
+    onValueChange: onChange,
+  })
+
   // 为图片附件按需拉取缩略图 data:URL(每条只拉一次)
   useEffect(() => {
     let cancelled = false
@@ -157,6 +173,22 @@ export default function Composer({
           return
         }
       }
+
+      // 历史浏览:↑/↓ 回显(仅在 @-mention 弹出框未打开时)
+      if (!popoverOpen && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+        if (e.key === 'ArrowUp') {
+          e.preventDefault()
+          exitBrowsing()
+          goOlder()
+          return
+        }
+        if (e.key === 'ArrowDown') {
+          e.preventDefault()
+          goNewer()
+          return
+        }
+      }
+
       // IME 选词确认的 Enter(isComposing/keyCode 229)绝不发送;running 中也不发送
       if (
         shouldSendOnEnter(
@@ -165,10 +197,14 @@ export default function Composer({
         )
       ) {
         e.preventDefault()
+        // 提交时将当前文本追加到历史
+        addToHistory(value)
+        exitBrowsing()
         onSubmit()
       }
     },
-    [onSubmit, running, popoverOpen, items, mentionIndex, mention, value, onChange],
+    [onSubmit, running, popoverOpen, items, mentionIndex, mention, value, onChange,
+     goOlder, goNewer, exitBrowsing, addToHistory],
   )
 
   // 粘贴图片:剪贴板含 image blob → 落临时文件成附件;纯文本粘贴不拦(照常插入)
@@ -454,6 +490,8 @@ export default function Composer({
           data-testid="input"
           value={value}
           onChange={e => {
+            // 历史浏览模式下用户开始输入 → 自动退出浏览
+            if (isBrowsing) exitBrowsing()
             onChange(e.target.value)
             setMention(detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length))
             setMentionIndex(0)
