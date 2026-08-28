@@ -18,12 +18,10 @@ describe('PreviewPane', () => {
     render(<PreviewPane preview={{ kind: 'diff', filePath: 'sub/a.ts', before: 'x', after: 'y' }} />)
     expect(screen.getByTestId('diff-preview')).toBeTruthy()
   })
-  it('diff 分支:DiffView 以 fill 模式充满(host height 100%)', () => {
+  it('diff 分支:DiffView 先显示 loading 状态', () => {
     render(<PreviewPane preview={{ kind: 'diff', filePath: 'a.ts', before: 'x', after: 'y' }} />)
-    // 断言在 render() 之后同步执行:Monaco 动态 import 的 reject 走微任务,
-    // 此刻 DiffView 尚未 setFailed(true),host 仍是初始同步渲染出的 diff-view div。
-    const host = screen.getByTestId('diff-view') as HTMLElement
-    expect(host.style.height).toBe('100%')
+    // DiffView 新行为:先显示 loading 状态,Monaco 加载完成/失败后才显示 diff-view 或 fallback
+    expect(screen.getByTestId('diff-loading')).toBeTruthy()
   })
   it('diff 分支:有分两列切换按钮,点击翻转 aria-pressed', () => {
     render(<PreviewPane preview={{ kind: 'diff', filePath: 'a.ts', before: 'x', after: 'y' }} />)

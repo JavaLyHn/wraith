@@ -45,6 +45,18 @@ export default defineConfig({
         input: {
           index: 'src/renderer/index.html',
           pet: 'src/renderer/pet.html'
+        },
+        output: {
+          // Monaco 按需加载(DiffView 动态 import),单独拆 chunk 确保首屏零 Monaco
+          manualChunks(id) {
+            if (id.includes('node_modules/monaco-editor')) {
+              // editor.api 子路径单独分块,与 monaco 主包隔离
+              if (id.includes('editor.api') || id.includes('editor.worker')) {
+                return 'monaco-core'
+              }
+              return 'monaco'
+            }
+          }
         }
       }
     },
