@@ -1,4 +1,4 @@
-export interface TermTab { id: string; label: string }
+﻿export interface TermTab { id: string; label: string }
 export interface TabsState { tabs: TermTab[]; activeId: string | null }
 
 export function addTab(state: TabsState, tab: TermTab): TabsState {
@@ -12,7 +12,7 @@ export function closeTab(state: TabsState, id: string): TabsState {
   let activeId = state.activeId
   if (state.activeId === id) {
     if (tabs.length === 0) activeId = null
-    else activeId = (state.tabs[idx - 1] ?? state.tabs[idx + 1])?.id ?? tabs[0]!.id
+    else activeId = (state.tabs[idx - 1] ?? state.tabs[idx + 1])?.id ?? tabs[0]?.id ?? ""
   }
   return { tabs, activeId }
 }

@@ -60,8 +60,9 @@ export function buildTreeFromFlat(nodes: FsNode[], rootPath: string): { root: Tr
     const tn: TreeNode = { node: n, children: [] }
     all.set(n.path, tn)
     const key = n.parentPath || ''
-    if (!byParent.has(key)) byParent.set(key, [])
-    byParent.get(key)!.push(tn)
+    let bucket = byParent.get(key)
+    if (!bucket) { bucket = []; byParent.set(key, bucket) }
+    bucket.push(tn)
   }
   for (const [parentPath, kids] of byParent) {
     if (parentPath === '') continue

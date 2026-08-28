@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+﻿import { useState, useEffect, useCallback, useMemo } from 'react'
 import { ChevronRight, Folder, FolderOpen, FileText, File as FileIcon, Link2 } from 'lucide-react'
 import { buildTreeFromFlat, insertSubtree, type TreeNode } from '../lib/fileTreeModel'
 import type { FsNode } from '../../shared/types'
@@ -34,8 +34,8 @@ export default function FileTreePanel({ rootPath, onOpenFile, onError }: Props):
       setFlatIndex(idx)
       setUi({ expanded: new Set([built.node.path]), loadedDirs: new Set([built.node.path]) })
       setErr(null)
-    } catch (e: any) {
-      setErr(String(e?.message ?? e))
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : String(e))
       onError?.(e instanceof Error ? e : new Error(String(e)))
     }
   }, [rootPath, onError, resolveRootPath])
@@ -56,7 +56,7 @@ export default function FileTreePanel({ rootPath, onOpenFile, onError }: Props):
         setTree(rebuilt)
         return rebuiltIdx
       })
-    } catch (e: any) { setErr(String(e?.message ?? e)) }
+    } catch (e: unknown) { setErr(e instanceof Error ? e.message : String(e)) }
   }, [tree, rootPath, resolveRootPath])
 
   const handleDirAction = useCallback((node: TreeNode, action: 'toggle' | 'expand' | 'collapse') => {

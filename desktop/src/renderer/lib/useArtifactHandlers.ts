@@ -1,13 +1,13 @@
 import { useCallback } from 'react'
 import { resolveWorkspacePath } from './paths'
-import type { ArtifactFile } from '../../shared/artifactSummary'
+import type { ArtifactFile, RightPreview } from '../../shared/artifactSummary'
 
 /**
  * 产物预览/撤销 hook:封装 openArtifact/openDiff/handleUndo 回调。
  */
 export function useArtifactHandlers(params: {
   workspace: string | null
-  onRequestPreview: (preview: any) => void
+  onRequestPreview: (preview: RightPreview | null) => void
   onDockPaneChange: (pane: 'artifact') => void
   onDockOpen: (open: boolean) => void
 }) {

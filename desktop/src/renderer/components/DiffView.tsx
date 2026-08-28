@@ -64,8 +64,10 @@ export default function DiffView({ filePath, before, after, onStats, fill, sideB
         const origModel = monaco.editor.createModel(before, undefined, uriBefore)
         const modModel = monaco.editor.createModel(after, undefined, uriAfter)
         if (!origModel || !modModel) throw new Error('Monaco createModel returned null')
-        original = origModel
-        modified = modModel
+        const o = origModel
+        const m = modModel
+        original = o
+        modified = m
 
         const diffEditor = monaco.editor.createDiffEditor(hostRef.current, {
           readOnly: true,
@@ -77,12 +79,13 @@ export default function DiffView({ filePath, before, after, onStats, fill, sideB
           automaticLayout: true,
         })
         if (!diffEditor) throw new Error('Monaco createDiffEditor returned null')
-        editor = diffEditor
-        editor!.setModel({ original: original!, modified: modified! })
+        const de = diffEditor
+        de.setModel({ original: o, modified: m })
+        editor = de
         setLoading(false)
 
-        editor!.onDidUpdateDiff(() => {
-          const changes = editor!.getLineChanges() ?? []
+        de.onDidUpdateDiff(() => {
+          const changes = de.getLineChanges() ?? []
           let added = 0
           let removed = 0
           for (const c of changes) {
@@ -91,7 +94,7 @@ export default function DiffView({ filePath, before, after, onStats, fill, sideB
           }
           onStatsRef.current?.(added, removed)
           if (!fill) {
-            const contentH = editor!.getModifiedEditor().getContentHeight()
+            const contentH = de.getModifiedEditor().getContentHeight()
             setHeight(Math.min(Math.max(contentH, 80), 400))
           }
         })

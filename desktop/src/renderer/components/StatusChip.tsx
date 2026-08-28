@@ -33,14 +33,14 @@ export default function StatusChip({ status, watermark, onOpenPanel }: {
   watermark: WatermarkView | null
   onOpenPanel?: () => void
 }): JSX.Element | null {
-  const hasStatus = !!status && status.contextWindow > 0
+  const statusData = status && status.contextWindow > 0 ? status : null
   // status 与 watermark 皆无才隐藏。Plan/Team(或新会话首轮)只有 watermark、没有 react 的 status,
   // 此前 `!status` 一刀切导致 chip 消失、右侧面板却显水位——两处口径必须一致。
-  if (!hasStatus && !watermark) return null
-  const v = chipView(hasStatus ? status! : null, watermark)
+  if (!statusData && !watermark) return null
+  const v = chipView(statusData, watermark)
   // tooltip 分子/分母:live status 优先,否则回退 watermark 的 usedTokens/window。
-  const used = hasStatus ? status!.totalTokens : (watermark?.usedTokens ?? 0)
-  const window = hasStatus ? status!.contextWindow : (watermark?.window ?? 0)
+  const used = statusData ? statusData.totalTokens : (watermark?.usedTokens ?? 0)
+  const window = statusData ? statusData.contextWindow : (watermark?.window ?? 0)
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -54,15 +54,15 @@ export default function StatusChip({ status, watermark, onOpenPanel }: {
       </TooltipTrigger>
       <TooltipContent>
         <div className="space-y-0.5 text-xs">
-          <div>上下文: {used.toLocaleString()} / {window.toLocaleString()}{!hasStatus && watermark?.estimated ? '(估算)' : ''}</div>
-          {hasStatus && (
+          <div>上下文: {used.toLocaleString()} / {window.toLocaleString()}{!statusData && watermark?.estimated ? '(估算)' : ''}</div>
+          {statusData && (
             <div>
-              输入 {status!.inputTokens.toLocaleString()} · 输出 {status!.outputTokens.toLocaleString()} · 缓存命中{' '}
-              {status!.cachedInputTokens.toLocaleString()}
+              输入 {statusData.inputTokens.toLocaleString()} · 输出 {statusData.outputTokens.toLocaleString()} · 缓存命中{' '}
+              {statusData.cachedInputTokens.toLocaleString()}
             </div>
           )}
-          {hasStatus && status!.estimatedCost && <div>估算成本: {status!.estimatedCost}</div>}
-          {hasStatus && status!.phase === 'running' && <div>运行中 {Math.round(status!.elapsedMillis / 1000)}s</div>}
+          {statusData && statusData.estimatedCost && <div>估算成本: {statusData.estimatedCost}</div>}
+          {statusData && statusData.phase === 'running' && <div>运行中 {Math.round(statusData.elapsedMillis / 1000)}s</div>}
         </div>
       </TooltipContent>
     </Tooltip>

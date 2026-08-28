@@ -39,13 +39,16 @@ export function groupSessionsByTime(
   const buckets = new Map<string, SessionMeta[]>(order.map(l => [l, []]))
   for (const s of sessions) {
     const daysAgo = Math.round((startToday - startOfDay(new Date(s.updatedAt).getTime())) / DAY_MS)
-    const label =
+    const label: string =
       daysAgo <= 0 ? '今天'
         : daysAgo === 1 ? '昨天'
           : daysAgo <= 6 ? '近7天'
             : daysAgo <= 29 ? '近30天'
               : '更早'
-    buckets.get(label)!.push(s)
+    const arr = buckets.get(label) ?? []
+    arr.push(s)
   }
-  return order.filter(l => buckets.get(l)!.length > 0).map(l => ({ label: l, sessions: buckets.get(l)! }))
+  return order
+    .map((l): { label: string; sessions: SessionMeta[] } => ({ label: l, sessions: buckets.get(l) ?? [] }))
+    .filter(b => b.sessions.length > 0)
 }

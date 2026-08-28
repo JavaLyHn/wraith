@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import type { RightPreview } from '../../shared/artifactSummary'
 
 /**
  * turn 状态变化响应 hook:
@@ -39,7 +40,7 @@ export function useSidebarPeekReset(params: {
 export function useSessionChangeCleanup(params: {
   sessionId: string
   clearCompactNotice: () => void
-  setRightPreview: (p: any) => void
+  setRightPreview: (p: RightPreview | null) => void
 }): void {
   const { sessionId, clearCompactNotice, setRightPreview } = params
   useEffect(() => {
