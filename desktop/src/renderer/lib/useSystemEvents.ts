@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { logger } from './logger'
 import { makeSystemEvent } from '../../shared/systemEvent'
 import { imBoundEventText } from './gatewayLabels'
 import { useSystemEventQueue } from './useSystemEventQueue'
@@ -19,7 +20,7 @@ export function useSystemEvents(opts: UseSystemEventsOptions): UseSystemEventsRe
     opts.dispatch({ type: 'addSystemEvent', text })
     opts.dispatch({ type: 'markStarted' })
     void window.wraith.submitTurn(makeSystemEvent(text)).catch((err: unknown) => {
-      console.error('[wraith] system event submit failed:', err)
+      logger.error('wraith', 'system event submit failed:', err)
       opts.dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
     })
   }, [])

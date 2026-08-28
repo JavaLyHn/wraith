@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { logger } from './logger'
 import type { McpServerView, McpResourceView, ProjectView, GitStatusView } from '../../shared/types'
 
 export interface UseDataFetchersReturn {
@@ -30,7 +31,7 @@ export function useDataFetchers(): UseDataFetchersReturn {
       const { projects } = await window.wraith.listProjects()
       setProjects(projects)
     } catch (err) {
-      console.error('[wraith] listProjects error:', err)
+      logger.error('wraith', 'listProjects error:', err)
     }
   }, [])
 
@@ -40,7 +41,7 @@ export function useDataFetchers(): UseDataFetchersReturn {
       setMcpServers(r.servers)
       setMcpConfigError(r.configError ?? null)
     } catch (err) {
-      console.error('[wraith] mcpList error:', err)
+      logger.error('wraith', 'mcpList error:', err)
     }
   }, [])
 
@@ -49,7 +50,7 @@ export function useDataFetchers(): UseDataFetchersReturn {
       const { resources } = await window.wraith.mcpResources()
       setMcpResources(resources)
     } catch (err) {
-      console.error('[wraith] mcpResources error:', err)
+      logger.error('wraith', 'mcpResources error:', err)
     }
   }, [])
 

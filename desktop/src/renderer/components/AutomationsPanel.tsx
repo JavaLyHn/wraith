@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { logger } from '../lib/logger'
 import { isNarrowLayout } from '../lib/formStyles'
 import { ArrowLeft } from 'lucide-react'
 import type { AutomationTask, ProjectView, QqPendingItem } from '../../shared/types'
@@ -55,7 +56,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
 
   const fetchTasks = useCallback(async () => {
     try { const { tasks } = await window.wraith.automationList(); setTasks(tasks) }
-    catch (err) { console.error('[wraith] automationList error:', err) }
+    catch (err) { logger.error('wraith', 'automationList error:', err) }
   }, [])
 
   useEffect(() => {
@@ -140,7 +141,7 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
           : '任务正在收尾,稍后重试')
       }
     }
-    catch (err) { console.error('[wraith] automationRunNow error:', err) }
+    catch (err) { logger.error('wraith', 'automationRunNow error:', err) }
   }, [showRunNowHint])
 
   const handleRemove = useCallback((id: string) => {

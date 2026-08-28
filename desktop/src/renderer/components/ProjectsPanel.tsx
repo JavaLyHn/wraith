@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { logger } from '../lib/logger'
 import { Search, ArrowUp, ArrowDown, Star, Plus, FolderPlus } from 'lucide-react'
 import ProjectRow from './ProjectRow'
 import ProjectRowMenu from './ProjectRowMenu'
@@ -51,7 +52,7 @@ export default function ProjectsPanel({
         if (alive) setSummaries(got)
       } catch (err) {
         // 概况拉不到不该让整页空白:列表照渲染,只是没有会话数与时间
-        console.error('[wraith] projectSummary error:', err)
+        logger.error('wraith', 'projectSummary error:', err)
       }
     })()
     return () => { alive = false }

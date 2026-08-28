@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { logger } from '../lib/logger'
 import { ArrowLeft } from 'lucide-react'
 import type { GatewayBindPhase, GatewayConfigView, GatewayState, GatewayStatus } from '../../shared/gateway'
 import { maskId, bindPhaseLabel, platformStatusText, platformStatusColor } from '../lib/gatewayLabels'
@@ -86,7 +87,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
         setWxWorkspace(cfg.workspace ?? '')
       }
     } catch (err) {
-      console.error('[wraith] gatewayGetConfig error:', err)
+      logger.error('wraith', 'gatewayGetConfig error:', err)
       if (selectedPlatform === 'feishu') setFsHint('读取配置失败')
       else if (selectedPlatform === 'wecom') setWcHint('读取配置失败')
       else if (selectedPlatform === 'weixin') setWxHint('读取配置失败')
@@ -109,7 +110,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
 
   const refreshStatus = useCallback(async () => {
     try { setStatus(await window.wraith.gatewayStatus()) }
-    catch (err) { console.error('[wraith] gatewayStatus error:', err) }
+    catch (err) { logger.error('wraith', 'gatewayStatus error:', err) }
   }, [])
 
   useEffect(() => {
@@ -172,7 +173,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
     setShowLogs(next)
     if (next) {
       try { const { lines } = await window.wraith.gatewayLogs(); setLogs(lines) }
-      catch (err) { console.error('[wraith] gatewayLogs error:', err) }
+      catch (err) { logger.error('wraith', 'gatewayLogs error:', err) }
     }
   }, [showLogs])
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react'
+import { logger } from './logger'
 import type { BackendEvent, SandboxKindWire, SandboxState as SandboxStateWire } from '../../shared/types'
 import { messagesToItems } from '../../shared/messagesToItems'
 import { spliceCards } from '../../shared/spliceCards'
@@ -136,7 +137,7 @@ export function useStartup(opts: UseStartupOptions): UseStartupReturn {
         void fetchMcp()
         void fetchMcpResources()
       } catch (err) {
-        console.error('[wraith] startup error:', err)
+        logger.error('wraith', 'startup error:', err)
       }
     })()
   }, [dispatch, fetchSessions, fetchProjects, fetchMcp, fetchMcpResources, refreshSandbox, fetchGitStatus, setNoModel, onModelReady])
@@ -183,7 +184,7 @@ export function useStartup(opts: UseStartupOptions): UseStartupReturn {
         } catch { /* 后端未就绪时静默 */ }
         void fetchSessions()
       } catch (err) {
-        console.error('[wraith] reconnect error:', err)
+        logger.error('wraith', 'reconnect error:', err)
       }
     })()
   }, [connection, workspace, fetchSessions, refreshSandbox, fetchGitStatus, dispatch, getSessionId, onModelReady])

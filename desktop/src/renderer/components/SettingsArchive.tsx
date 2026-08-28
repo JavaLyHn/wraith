@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { logger } from '../lib/logger'
 import { Search, Undo2, Trash2, Check, Archive } from 'lucide-react'
 import Select from './ui/select'
 import { buildArchiveRows, filterArchive, archiveProjectOptions, type ArchiveRowData } from '../lib/archiveView'
@@ -41,7 +42,7 @@ export default function SettingsArchive({ onArchiveChanged }: SettingsArchivePro
         const { sessions: ss } = await window.wraith.listArchivedSessions(ps.map(p => p.path))
         if (alive) setSessions(ss)
       } catch (err) {
-        console.error('[wraith] listArchivedSessions error:', err)
+        logger.error('wraith', 'listArchivedSessions error:', err)
       } finally {
         if (alive) setLoading(false)
       }
@@ -68,7 +69,7 @@ export default function SettingsArchive({ onArchiveChanged }: SettingsArchivePro
       }
       onArchiveChanged()
     } catch (err) {
-      console.error('[wraith] archive mutate error:', err)
+      logger.error('wraith', 'archive mutate error:', err)
       setSessions(before)
     }
   }

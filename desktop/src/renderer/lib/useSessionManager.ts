@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { logger } from './logger'
 import type { ActivityItem, BackendEvent, ProjectView, SessionMeta } from '../../shared/types'
 import type { Preview } from '../../shared/sessionPreview'
 import { selectAction, resolveOnIdle } from '../../shared/sessionPreview'
@@ -148,7 +149,7 @@ export function useSessionManager(opts: UseSessionManagerOptions): UseSessionMan
       setPreview(null)
       void fetchSessions()
     } catch (err) {
-      console.error('[wraith] newConversation error:', err)
+      logger.error('wraith', 'newConversation error:', err)
     }
   }, [dispatch, fetchSessions, getTurn, getWorkspace, setModelFallbackNotice, setPreview, setSubmitError, setView, statusThrottleRef])
 
@@ -162,7 +163,7 @@ export function useSessionManager(opts: UseSessionManagerOptions): UseSessionMan
       const { sessionId: newId } = await window.wraith.branchSession(srcId)
       await commitSwitchTo(newId)
     } catch (err) {
-      console.error('[wraith] branchSession error:', err)
+      logger.error('wraith', 'branchSession error:', err)
       setSubmitError(err instanceof Error ? err.message : '创建分支失败')
     } finally {
       setBranchingMsgIndex(null)
@@ -179,13 +180,13 @@ export function useSessionManager(opts: UseSessionManagerOptions): UseSessionMan
         const { messages, cards } = await window.wraith.peekSession(id)
         setPreview({ kind: 'session', sessionId: id, items: spliceCards(messagesToItems(messages), cards ?? []) })
       } catch (err) {
-        console.error('[wraith] peekSession error:', err)
+        logger.error('wraith', 'peekSession error:', err)
       }
       return
     }
     // full-switch(idle)
     try { setPreview(null); await commitSwitchTo(id) }
-    catch (err) { console.error('[wraith] resumeSession error:', err) }
+    catch (err) { logger.error('wraith', 'resumeSession error:', err) }
   }, [commitSwitchTo, getSessionId, getTurn, setPreview, setView])
 
   // ── handleRenameSession ─────────────────────────────────────────────────
@@ -212,12 +213,12 @@ export function useSessionManager(opts: UseSessionManagerOptions): UseSessionMan
     try {
       const { ok } = await window.wraith.setSessionArchived(sessionId, true)
       if (!ok) {
-        console.error('[wraith] setSessionArchived returned ok:false for', sessionId)
+        logger.error('wraith', 'setSessionArchived returned ok:false for', sessionId)
         return
       }
       void fetchSessions()
     } catch (err) {
-      console.error('[wraith] setSessionArchived error:', err)
+      logger.error('wraith', 'setSessionArchived error:', err)
     }
   }, [fetchSessions])
 
@@ -265,7 +266,7 @@ export function useSessionManager(opts: UseSessionManagerOptions): UseSessionMan
       void fetchMcpResources()
       return true
     } catch (err) {
-      console.error('[wraith] switchToProject error:', err)
+      logger.error('wraith', 'switchToProject error:', err)
       void fetchProjects()
       return false
     }
@@ -277,13 +278,13 @@ export function useSessionManager(opts: UseSessionManagerOptions): UseSessionMan
       await window.wraith.setProjectStarred(projectPath, starred)
       void fetchProjects()
     } catch (err) {
-      console.error('[wraith] setProjectStarred error:', err)
+      logger.error('wraith', 'setProjectStarred error:', err)
     }
   }, [fetchProjects])
 
   const handleMoveProject = useCallback(async (projectPath: string, targetIndex: number) => {
     try { await window.wraith.reorderProject(projectPath, targetIndex); await fetchProjects() }
-    catch (err) { console.error('[wraith] reorderProject error:', err); await fetchProjects() }
+    catch (err) { logger.error('wraith', 'reorderProject error:', err); await fetchProjects() }
   }, [fetchProjects])
 
   // ── 项目面板:批量归档某项目的聊天(破坏性,先确认) ────────────────────────

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { logger } from '../lib/logger'
 import { Loader2 } from 'lucide-react'
 import type { McpServerView } from '../../shared/types'
 import { buildFormValue, envRowsFromKeys, type EnvRow, type McpFormValue } from '../../shared/mcpFormValue'
@@ -59,7 +60,7 @@ export default function McpServerForm({ mode, initial, prefill, busy, onCancel, 
       const r = await window.wraith.mcpTest(v)   // 临时进程探测,不落盘
       setTestResult(formatMcpTestResult(r))
     } catch (err) {
-      console.error('[wraith] mcpTest error:', err)
+      logger.error('wraith', 'mcpTest error:', err)
       setTestResult({ kind: 'err', text: '❌ 连接失败:后端未连接或测试请求失败' })
     }
     setTesting(false)

@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { logger } from './logger'
 import type { ApprovalResponsePayload } from '../../shared/buildApprovalResponse'
 
 export interface UseApprovalHandlersOptions {
@@ -62,7 +63,7 @@ export function useApprovalHandlers(
       try {
         await window.wraith.setApprovalMode(auto)
       } catch (err) {
-        console.error('[wraith] setApprovalMode error:', err)
+        logger.error('wraith', 'setApprovalMode error:', err)
         dispatch({ type: 'setApprovalMode', mode: auto ? 'ask' : 'auto' })
       }
     },

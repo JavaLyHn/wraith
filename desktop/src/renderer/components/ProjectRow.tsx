@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { logger } from '../lib/logger'
 import { Folder, ChevronDown, Star, SquarePen } from 'lucide-react'
 import { shortRelativeTime, type ProjectRowData } from '../lib/projectsView'
 import { sessionDisplayName } from '../lib/sessionView'
@@ -50,7 +51,7 @@ export default function ProjectRow({
       const { sessions: list } = await window.wraith.listSessionsForProject(path, EXPAND_LIMIT)
       setSessions(list)
     } catch (err) {
-      console.error('[wraith] listSessionsForProject error:', err)
+      logger.error('wraith', 'listSessionsForProject error:', err)
       setSessions([])   // 置空数组而不是留 null,免得每次展开都重试
     } finally {
       setLoading(false)

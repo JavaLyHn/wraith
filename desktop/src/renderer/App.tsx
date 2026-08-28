@@ -1,4 +1,5 @@
 import { useReducer, useEffect, useRef, useState, useCallback } from 'react'
+import { logger } from './lib/logger'
 import CommandPalette from './components/CommandPalette'
 import type { BackendEvent, SessionMeta, RunMode } from '../shared/types'
 
@@ -833,7 +834,7 @@ export default function App(): JSX.Element {
                   // 归档的若是当前项目,侧栏会话列表要立刻重拉
                   if (target.path === state.workspace) void fetchSessions()
                 } catch (err) {
-                  console.error('[wraith] archiveProjectSessions error:', err)
+                  logger.error('wraith', 'archiveProjectSessions error:', err)
                 }
               }}
               className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg"

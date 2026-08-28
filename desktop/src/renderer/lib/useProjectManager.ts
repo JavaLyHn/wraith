@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { logger } from './logger'
 
 export interface UseProjectManagerOptions {
   getTurn: () => 'idle' | 'running'
@@ -32,7 +33,7 @@ export function useProjectManager(
       void fetchProjects()
       if (picked !== getWorkspace()) await switchToProject(picked)
     } catch (err) {
-      console.error('[wraith] addProject error:', err)
+      logger.error('wraith', 'addProject error:', err)
     }
   }, [getTurn, getWorkspace, fetchProjects, switchToProject])
 
@@ -42,7 +43,7 @@ export function useProjectManager(
         await window.wraith.removeProject(projectPath)
         void fetchProjects()
       } catch (err) {
-        console.error('[wraith] removeProject error:', err)
+        logger.error('wraith', 'removeProject error:', err)
       }
     },
     [fetchProjects],
@@ -54,7 +55,7 @@ export function useProjectManager(
         await window.wraith.renameProject(projectPath, name)
         void fetchProjects()
       } catch (err) {
-        console.error('[wraith] renameProject error:', err)
+        logger.error('wraith', 'renameProject error:', err)
       }
     },
     [fetchProjects],

@@ -1,5 +1,6 @@
 // desktop/src/renderer/components/DiffView.tsx
 import { useEffect, useRef, useState } from 'react'
+import { logger } from '../lib/logger'
 
 interface DiffViewProps {
   filePath: string
@@ -95,7 +96,7 @@ export default function DiffView({ filePath, before, after, onStats, fill, sideB
           }
         })
       } catch (err) {
-        console.error('[wraith] monaco load failed:', err)
+        logger.error('wraith', 'monaco load failed:', err)
         setFailed(true)
         setLoading(false)
       }

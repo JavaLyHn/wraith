@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
+import { logger } from '../lib/logger'
 import { Popover, PopoverTrigger, PopoverContent } from './ui/popover'
 import type { ModelListResult } from '../../shared/types'
 import { configuredProviders, providerOptionLabel } from '../lib/modelSwitcher'
@@ -37,7 +38,7 @@ export default function ModelSwitcher({ initialModel, running, onSwitched }: Mod
         setData(result)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error('[ModelSwitcher] model.list failed:', msg)
+        logger.error('ModelSwitcher', 'model.list failed:', msg)
         setError('加载模型列表失败')
       }
     }
@@ -51,7 +52,7 @@ export default function ModelSwitcher({ initialModel, running, onSwitched }: Mod
       onSwitched?.(result.model)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error('[ModelSwitcher] session.setModel failed:', msg)
+      logger.error('ModelSwitcher', 'session.setModel failed:', msg)
       setError('切换模型失败')
     }
   }, [onSwitched])
@@ -64,7 +65,7 @@ export default function ModelSwitcher({ initialModel, running, onSwitched }: Mod
       setData(prev => prev ? { ...prev, default: providerName } : prev)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error('[ModelSwitcher] config.setDefaultProvider failed:', msg)
+      logger.error('ModelSwitcher', 'config.setDefaultProvider failed:', msg)
       setError('设置默认 provider 失败')
     } finally {
       setSettingDefault(false)

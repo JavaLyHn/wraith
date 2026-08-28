@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { logger } from '../lib/logger'
 import type { AutomationRun } from '../../shared/types'
 
 interface AutomationRunsProps {
@@ -29,7 +30,7 @@ async function handleRespondApproval(
     }
     await fetchRuns()
   } catch (err) {
-    console.error('[wraith] automationRespondApproval error:', err)
+    logger.error('wraith', 'automationRespondApproval error:', err)
     onNotDelivered?.('决定未能送达,请重试。')
   }
 }
@@ -51,7 +52,7 @@ export default function AutomationRuns({ taskId, projectPath, onOpenSession, onA
     try {
       const { runs } = await window.wraith.automationRuns()
       setRuns(runs.filter(r => r.taskId === taskId).sort((a, b) => b.startedAt - a.startedAt))
-    } catch (err) { console.error('[wraith] automationRuns error:', err) }
+    } catch (err) { logger.error('wraith', 'automationRuns error:', err) }
   }, [taskId])
 
   useEffect(() => {

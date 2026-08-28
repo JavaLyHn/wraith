@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { logger } from '../lib/logger'
 import { ArrowLeft } from 'lucide-react'
 import type { McpServerView, McpResourceView, BuiltinToolView, SearchStatusView } from '../../shared/types'
 import McpServerForm, { type McpFormValue, type McpPrefill } from './McpServerForm'
@@ -67,7 +68,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
       try {
         setSearchStatus(await window.wraith.configGetSearch())
       } catch (err) {
-        console.error('[wraith] configGetSearch error:', err)
+        logger.error('wraith', 'configGetSearch error:', err)
       }
     })()
   }, [])
@@ -103,7 +104,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
           if (!stale) setTabContent(c => ({ ...c, logs: lines }))
         }
       } catch (err) {
-        console.error('[wraith] mcp tab fetch error:', err)
+        logger.error('wraith', 'mcp tab fetch error:', err)
       }
     })()
     return () => { stale = true }
@@ -116,7 +117,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
       const { tools } = await window.wraith.listBuiltinTools()
       setBuiltinCatalog(tools); setBuiltinError(false)
     } catch (err) {
-      console.error('[wraith] listBuiltinTools error:', err); setBuiltinError(true)
+      logger.error('wraith', 'listBuiltinTools error:', err); setBuiltinError(true)
     }
   }, [])
 
@@ -387,7 +388,7 @@ export default function PluginsPanel(props: PluginsPanelProps): JSX.Element {
                         const { lines } = await window.wraith.mcpLogs(current.name)
                         setTabContent(c => ({ ...c, logs: lines }))
                       } catch (err) {
-                        console.error('[wraith] mcp logs refresh error:', err)
+                        logger.error('wraith', 'mcp logs refresh error:', err)
                       }
                     }}>
                     ⟳ 刷新

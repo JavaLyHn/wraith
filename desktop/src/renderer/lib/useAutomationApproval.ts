@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
+import { logger } from './logger'
 
 export interface AutomationApprovalPayload {
   runId: string
@@ -25,7 +26,7 @@ export function useAutomationApproval(): UseAutomationApprovalReturn {
     try {
       await window.wraith.automationRespondApproval(String(cur.payload['approvalId']), 'approve')
     } catch (err) {
-      console.error('[wraith] automation respond error:', err)
+      logger.error('wraith', 'automation respond error:', err)
     }
   }, [automationApproval])
 
@@ -37,7 +38,7 @@ export function useAutomationApproval(): UseAutomationApprovalReturn {
     try {
       await window.wraith.automationRespondApproval(String(cur.payload['approvalId']), 'reject')
     } catch (err) {
-      console.error('[wraith] automation reject error:', err)
+      logger.error('wraith', 'automation reject error:', err)
     }
   }, [automationApproval])
 

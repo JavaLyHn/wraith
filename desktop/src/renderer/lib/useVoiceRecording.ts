@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { logger } from './logger'
 import { blobToBase64, insertAtCursor } from './dictation'
 import { VadSegmenter, DEFAULT_VAD } from './vadSegmenter'
 import { OrderedAppender } from './orderedAppender'
@@ -106,7 +107,7 @@ export function useVoiceRecording(opts: UseVoiceRecordingOptions): UseVoiceRecor
       ])
       flushSegment(seq, text)
     } catch (err) {
-      console.warn('[stt] 段转写失败，跳过:', (err as Error).message)
+      logger.warn('stt', '段转写失败，跳过:', (err as Error).message)
       flushSegment(seq, '')
     } finally {
       inFlightRef.current--

@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { logger } from './logger'
 
 import type { BackendEvent } from '../../shared/types'
 
@@ -33,7 +34,7 @@ export function useMessageOperations(
         dispatch({ type: 'markStarted' })
         await window.wraith.submitTurn(text)
       } catch (err) {
-        console.error('[wraith] rewindAndResubmit error:', err)
+        logger.error('wraith', 'rewindAndResubmit error:', err)
         dispatch({ kind: 'notification', method: 'turn.failed', params: {} } as BackendEvent)
         const reason = err instanceof Error ? err.message : String(err)
         const short = reason.replace(/https?:\/\/\S+/g, '').replace(/sk-\S+/g, '').slice(0, 80).trim()
@@ -61,7 +62,7 @@ export function useMessageOperations(
         dispatch({ type: 'truncateAtUser', ordinal })
         void fetchSessions()
       } catch (err) {
-        console.error('[wraith] deleteMessage error:', err)
+        logger.error('wraith', 'deleteMessage error:', err)
       }
     },
     [getTurn, dispatch, fetchSessions],

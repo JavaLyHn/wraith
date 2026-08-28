@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { logger } from './logger'
 
 export interface UseSystemControlsReturn {
   handleRestart: () => Promise<void>
@@ -10,7 +11,7 @@ export function useSystemControls(): UseSystemControlsReturn {
     try {
       await window.wraith.restartBackend()
     } catch (err) {
-      console.error('[wraith] restartBackend error:', err)
+      logger.error('wraith', 'restartBackend error:', err)
     }
   }, [])
 
@@ -18,7 +19,7 @@ export function useSystemControls(): UseSystemControlsReturn {
     try {
       await window.wraith.interrupt()
     } catch (err) {
-      console.error('[wraith] interrupt error:', err)
+      logger.error('wraith', 'interrupt error:', err)
     }
   }, [])
 

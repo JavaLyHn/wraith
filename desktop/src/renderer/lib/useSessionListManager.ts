@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { logger } from './logger'
 import type { SessionMeta } from '../../shared/types'
 
 /**
@@ -49,7 +50,7 @@ export function useSessionListManager(
       const { sessions } = await window.wraith.listSessions()
       setSessions(applyManualOrder(sessions))
     } catch (err) {
-      console.error('[wraith] listSessions error:', err)
+      logger.error('wraith', 'listSessions error:', err)
     }
   }, [applyManualOrder])
 

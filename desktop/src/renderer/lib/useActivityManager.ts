@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { logger } from './logger'
 import type { ActivitySnapshot } from '../../shared/types'
 
 /**
@@ -30,7 +31,7 @@ export function useActivityManager(): UseActivityManagerReturn {
       setActivitySnapshot(previous => hasSnapshotRef.current
         ? { ...previous, stale: true, error: message }
         : { activities: [], stale: false, error: message })
-      if (!silent) console.error('[wraith] activityList error:', error)
+      if (!silent) logger.error('wraith', 'activityList error:', error)
     }
   }, [])
 

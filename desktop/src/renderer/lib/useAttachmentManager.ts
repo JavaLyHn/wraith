@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import { logger } from './logger'
 import type { AttachmentItem } from '../components/Composer'
 
 /**
@@ -14,7 +15,7 @@ export function useAttachmentManager() {
         setAttachments(prev => [...prev, ...picked])
       }
     } catch (err) {
-      console.error('[wraith] pickAttachments error:', err)
+      logger.error('wraith', 'pickAttachments error:', err)
     }
   }, [])
 

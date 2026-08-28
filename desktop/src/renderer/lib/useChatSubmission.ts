@@ -1,4 +1,5 @@
 import { useCallback } from 'react'
+import { logger } from './logger'
 import { shouldBlockImageSend } from '../../shared/modelVision'
 import { pendingModeAfterSubmit } from './nextPendingMode'
 import type { RunMode } from '../../shared/types'
@@ -45,7 +46,7 @@ export function useChatSubmission(opts: UseChatSubmissionOptions): UseChatSubmis
       )
       opts.setPendingMode(pendingModeAfterSubmit(mode))
     } catch (err) {
-      console.error('[wraith] submitTurn error:', err)
+      logger.error('wraith', 'submitTurn error:', err)
       opts.dispatch({ kind: 'notification', method: 'turn.failed', params: {} })
       const reason = err instanceof Error ? err.message : String(err)
       const short = reason.replace(/https?:\/\/\S+/g, '').replace(/sk-\S+/g, '').slice(0, 80).trim()

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { logger } from '../lib/logger'
 import { ArrowLeft, History, RotateCcw, RefreshCw, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import type { SnapshotEntryView, SnapshotSettingsView } from '../../shared/types'
 import { phaseLabel, phaseMeaning, modeLabel, absTime, relativeTime, summaryInput } from '../lib/snapshotView'
@@ -67,7 +68,7 @@ export default function SnapshotPanel({ onBack }: { onBack: () => void }): JSX.E
     try {
       setSettings(await window.wraith.snapshotSettings())
     } catch (err) {
-      console.error('[wraith] snapshotSettings error:', err)
+      logger.error('wraith', 'snapshotSettings error:', err)
     }
   }, [])
 
