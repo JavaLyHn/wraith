@@ -5,7 +5,7 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import { baseName } from '../lib/paths'
-import { blobToBase64, insertAtCursor } from '../lib/dictation'
+import { blobToBase64 } from '../lib/dictation'
 import VoiceBars from './VoiceBars'
 import { shouldSendOnEnter } from '../../shared/composerKeys'
 import StatusChip from './StatusChip'
@@ -13,13 +13,10 @@ import ModelSwitcher from './ModelSwitcher'
 import ModeSwitcher from './ModeSwitcher'
 import type { StatusData, McpResourceView, RunMode } from '../../shared/types'
 import type { WatermarkView } from './StatusChip'
-import { detectMention, filterMentionItems, insertMention } from '../../shared/mentionTrigger'
-import type { MentionState } from '../../shared/mentionTrigger'
 import { isImageMime, imageExtFromMime, pathsToAttachments } from '../lib/composerAttachments'
-import { VadSegmenter, DEFAULT_VAD } from '../lib/vadSegmenter'
-import { OrderedAppender } from '../lib/orderedAppender'
-import { micLevel } from '../lib/waveform'
 import { useInputHistory } from '../lib/useInputHistory'
+import { useVoiceRecording } from '../lib/useVoiceRecording'
+import { useMentionPopover } from '../lib/useMentionPopover'
 
 export interface AttachmentItem {
   path: string
@@ -82,52 +79,25 @@ export default function Composer({
   focusSignal,
   sessionId,
 }: ComposerProps): JSX.Element {
-  const [mention, setMention] = useState<MentionState>({ active: false, start: 0, query: '' })
-  const [mentionIndex, setMentionIndex] = useState(0)
   const [dragOver, setDragOver] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
   const [previews, setPreviews] = useState<Record<string, string>>({})
   const previewReqRef = useRef<Set<string>>(new Set())
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const [recording, setRecording] = useState(false)
-  const [transcribing, setTranscribing] = useState(false)
-  const [sttError, setSttError] = useState<string | null>(null)
-  const mediaRef = useRef<MediaRecorder | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const cancelledRef = useRef(false)
-  const stopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const mountedRef = useRef(true)
+  const onChangeRef = useRef(onChange); onChangeRef.current = onChange
 
-  // 分段录音新增 ref
-  const vadCtxRef = useRef<AudioContext | null>(null)
-  const vadRafRef = useRef<number | null>(null)
-  const vadRef = useRef<VadSegmenter | null>(null)
-  const appenderRef = useRef<OrderedAppender | null>(null)
-  const segSeqRef = useRef(0)
-  const stoppingRef = useRef(false)   // true=会话结束，onstop 不再 restart
-  const insertPosRef = useRef<number | null>(null)  // 追加插入点（随每段前移）
-  const inFlightRef = useRef(0)                      // 飞行中转写段计数
+  // @-mention 弹出框
+  const mentionHook = useMentionPopover({
+    value,
+    onChange,
+    onValueChangeRef: onChangeRef,
+    resources,
+  })
 
-  // 挂载/重挂载清理：每次 mount 重置 mountedRef；cleanup 释放 VAD + stream
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      if (stopTimerRef.current) clearTimeout(stopTimerRef.current)
-      if (vadRafRef.current) cancelAnimationFrame(vadRafRef.current)
-      void vadCtxRef.current?.close()
-      streamRef.current?.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-    }
-  }, [])
+  // 语音分段录音
+  const voice = useVoiceRecording({ value, onChange, textareaRef })
 
-  // 首页示例卡「填入并聚焦」:信号变化即聚焦输入框(首帧 0 不触发)
-  useEffect(() => { if (focusSignal) textareaRef.current?.focus() }, [focusSignal])
-
-  const items = mention.active ? filterMentionItems(resources, mention.query) : []
-  const popoverOpen = mention.active && items.length > 0
-
-  // ── 输入历史:↑/↓ 回显之前提交过的文本 ──────────────────────────────────
+  // 输入历史:↑/↓ 回显之前提交过的文本
   const {
     isBrowsing,
     goOlder,
@@ -138,6 +108,9 @@ export default function Composer({
     sessionId: sessionId ?? '',
     onValueChange: onChange,
   })
+
+  // 首页示例卡「填入并聚焦」:信号变化即聚焦输入框(首帧 0 不触发)
+  useEffect(() => { if (focusSignal) textareaRef.current?.focus() }, [focusSignal])
 
   // 为图片附件按需拉取缩略图 data:URL(每条只拉一次)
   useEffect(() => {
@@ -156,26 +129,22 @@ export default function Composer({
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       // @-mention popover interception — before shouldSendOnEnter
       // IME guard: composing Enter must never select a mention
-      if (popoverOpen && !e.nativeEvent.isComposing && e.keyCode !== 229) {
-        if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(i => (i + 1) % items.length); return }
-        if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex(i => (i - 1 + items.length) % items.length); return }
-        if (e.key === 'Escape') { e.preventDefault(); setMention({ active: false, start: 0, query: '' }); return }
+      if (mentionHook.popoverOpen && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+        if (e.key === 'ArrowDown') { e.preventDefault(); mentionHook.nextItem(); return }
+        if (e.key === 'ArrowUp') { e.preventDefault(); mentionHook.prevItem(); return }
+        if (e.key === 'Escape') { e.preventDefault(); mentionHook.closePopover(); return }
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault()
-          const it = items[mentionIndex]
-          if (it) {
-            const r = insertMention(value, mention, it.insert)
-            onChange(r.next)
-            setMention(detectMention(r.next, r.caret))
-            // restore caret to insertion point
-            requestAnimationFrame(() => textareaRef.current?.setSelectionRange(r.caret, r.caret))
+          if (mentionHook.confirmInsert()) {
+            // restore caret
+            requestAnimationFrame(() => textareaRef.current?.focus())
           }
           return
         }
       }
 
       // 历史浏览:↑/↓ 回显(仅在 @-mention 弹出框未打开时)
-      if (!popoverOpen && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+      if (!mentionHook.popoverOpen && !e.nativeEvent.isComposing && e.keyCode !== 229) {
         if (e.key === 'ArrowUp') {
           e.preventDefault()
           exitBrowsing()
@@ -203,7 +172,7 @@ export default function Composer({
         onSubmit()
       }
     },
-    [onSubmit, running, popoverOpen, items, mentionIndex, mention, value, onChange,
+    [onSubmit, running, mentionHook, value,
      goOlder, goNewer, exitBrowsing, addToHistory],
   )
 
@@ -274,130 +243,7 @@ export default function Composer({
     if (e.currentTarget === e.target) setDragOver(false)
   }, [])
 
-  // 段落转写完成 → 按序 flush → 依次插入到追加点（段间空格分隔）
-  const flushSegment = useCallback((seq: number, text: string) => {
-    const ready = (appenderRef.current ??= new OrderedAppender()).arrive(seq, text.trim())
-    if (ready.length === 0) return
-    const ta = textareaRef.current
-    let cur = ta?.value ?? value
-    let pos = insertPosRef.current ?? (ta?.selectionStart ?? cur.length)
-    for (const piece of ready) {
-      const prefix = pos > 0 && !/\s$/.test(cur.slice(0, pos)) ? ' ' : ''
-      const r = insertAtCursor(cur, pos, pos, prefix + piece)
-      cur = r.value; pos = r.caret
-    }
-    insertPosRef.current = pos
-    onChange(cur)
-    requestAnimationFrame(() => { ta?.focus(); ta?.setSelectionRange(pos, pos) })
-  }, [value, onChange])
-
-  // 单段转写（fire-and-forget）：失败/空段当空处理，不弹全局错，不中断会话
-  // inFlightRef 计数驱动 transcribing 状态：任一段飞行中则 true，全落地则 false
-  const transcribeSegment = useCallback(async (seq: number, blob: Blob, mime: string) => {
-    inFlightRef.current++
-    setTranscribing(true)
-    try {
-      const b64 = await blobToBase64(blob)
-      const { text } = await Promise.race([
-        window.wraith.transcribe(b64, mime),
-        new Promise<{ text: string }>((_, rej) => setTimeout(() => rej(new Error('转写超时')), 30_000)),
-      ])
-      flushSegment(seq, text)
-    } catch (err) {
-      console.warn('[stt] 段转写失败，跳过:', (err as Error).message)
-      flushSegment(seq, '')   // 失败当空段：推进序号，不插入、不弹全局错
-    } finally {
-      inFlightRef.current--
-      if (inFlightRef.current <= 0) { inFlightRef.current = 0; setTranscribing(false) }
-    }
-  }, [flushSegment])
-
-  // 开启下一段录音：每段独立 MediaRecorder，stop 时产出完整可解码 webm
-  const startSegment = useCallback(() => {
-    const stream = streamRef.current
-    if (!stream || stoppingRef.current) return
-    const mr = new MediaRecorder(stream)
-    const seq = segSeqRef.current++
-    const chunks: Blob[] = []
-    mr.ondataavailable = e => { if (e.data.size) chunks.push(e.data) }
-    mr.onstop = () => {
-      const mime = mr.mimeType || 'audio/webm'
-      if (!cancelledRef.current && chunks.length > 0) {
-        void transcribeSegment(seq, new Blob(chunks, { type: mime }), mime)
-      }
-      if (!stoppingRef.current && !cancelledRef.current) { startSegment(); return }
-      // 会话结束/取消：释放 stream（最后一段已在上面提交转写）
-      streamRef.current?.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-    }
-    mr.start()
-    mediaRef.current = mr
-  }, [transcribeSegment])
-
-  const stopVadLoop = useCallback(() => {
-    if (vadRafRef.current) { cancelAnimationFrame(vadRafRef.current); vadRafRef.current = null }
-    void vadCtxRef.current?.close(); vadCtxRef.current = null
-  }, [])
-
-  const stopRec = useCallback(() => {
-    if (stopTimerRef.current) { clearTimeout(stopTimerRef.current); stopTimerRef.current = null }
-    stoppingRef.current = true            // onstop 不再 restart
-    stopVadLoop()
-    mediaRef.current?.stop()              // flush 最后一段
-    setRecording(false)
-  }, [stopVadLoop])
-
-  const cancelRec = useCallback(() => {
-    cancelledRef.current = true
-    stopRec()
-  }, [stopRec])
-
-  const startRec = useCallback(async () => {
-    setSttError(null)
-    let stream: MediaStream | null = null
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return }   // #1: 授权期间已卸载→释放
-      streamRef.current = stream
-      cancelledRef.current = false
-      stoppingRef.current = false
-      segSeqRef.current = 0
-      insertPosRef.current = textareaRef.current?.selectionStart ?? null
-      appenderRef.current = new OrderedAppender()
-      vadRef.current = new VadSegmenter(DEFAULT_VAD)
-
-      // VAD 循环：独立 AudioContext+Analyser（与 VoiceBars 并存）；算 level 喂 vad，cut→切段
-      try {
-        const ctx = new AudioContext()
-        vadCtxRef.current = ctx
-        const src = ctx.createMediaStreamSource(stream)
-        const analyser = ctx.createAnalyser()
-        analyser.fftSize = 256
-        src.connect(analyser)
-        const data = new Uint8Array(analyser.fftSize)
-        let last = performance.now()
-        const tick = (): void => {
-          const now = performance.now()
-          const dt = now - last; last = now
-          analyser.getByteTimeDomainData(data)
-          const d = vadRef.current?.feed(micLevel(data), dt)
-          if (d?.cut) { vadRef.current?.reset(); mediaRef.current?.stop() }  // 切段：stop→onstop 转写+restart
-          vadRafRef.current = requestAnimationFrame(tick)
-        }
-        vadRafRef.current = requestAnimationFrame(tick)
-      } catch {
-        // AudioContext 不可用 → 无 VAD，退化为单段（靠会话上限/手动停）
-      }
-
-      startSegment()
-      setRecording(true)
-      stopTimerRef.current = setTimeout(() => stopRec(), 300_000)   // 宽松会话总上限 5min 防跑飞
-    } catch {
-      stream?.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-      setSttError('无法访问麦克风，请在系统设置里授权')
-    }
-  }, [startSegment, stopRec])
+  // 语音分段录音逻辑已提取到 useVoiceRecording hook
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -418,19 +264,16 @@ export default function Composer({
           </div>
         )}
         {/* @-mention popover */}
-        {popoverOpen && (
+        {mentionHook.popoverOpen && (
           <div data-testid="mention-popover"
             className="absolute bottom-full left-3 z-40 mb-1 max-h-56 w-96 overflow-y-auto rounded-lg border border-border bg-surface p-1 shadow-md">
-            {items.map((it, i) => (
+            {mentionHook.mentionItems.map((it, i) => (
               <button key={it.insert} data-testid="mention-item"
                 onMouseDown={e => {
                   e.preventDefault() // 不丢 textarea 焦点
-                  const r = insertMention(value, mention, it.insert)
-                  onChange(r.next)
-                  setMention(detectMention(r.next, r.caret))
-                  requestAnimationFrame(() => textareaRef.current?.setSelectionRange(r.caret, r.caret))
+                  mentionHook.confirmInsert()
                 }}
-                className={'flex w-full flex-col rounded-md px-2 py-1.5 text-left ' + (i === mentionIndex ? 'bg-bg' : 'hover:bg-bg/60')}>
+                className={'flex w-full flex-col rounded-md px-2 py-1.5 text-left ' + (i === mentionHook.mentionIndex ? 'bg-bg' : 'hover:bg-bg/60')}>
                 <span className="font-mono text-xs text-fg">{it.label}</span>
                 <span className="text-2xs text-fg-subtle">{it.hint}</span>
               </button>
@@ -473,10 +316,10 @@ export default function Composer({
           </div>
         )}
 
-        {sttError && (
+        {voice.sttError && (
           <div data-testid="stt-error" className="px-3 pt-2 text-2xs text-danger">
-            {sttError}
-            {sttError.includes('未配置') && <span className="text-fg-subtle">（到 Provider 配置里填 SiliconFlow 的 key）</span>}
+            {voice.sttError}
+            {voice.sttError.includes('未配置') && <span className="text-fg-subtle">（到 Provider 配置里填 SiliconFlow 的 key）</span>}
           </div>
         )}
 
@@ -493,8 +336,7 @@ export default function Composer({
             // 历史浏览模式下用户开始输入 → 自动退出浏览
             if (isBrowsing) exitBrowsing()
             onChange(e.target.value)
-            setMention(detectMention(e.target.value, e.target.selectionStart ?? e.target.value.length))
-            setMentionIndex(0)
+            mentionHook.handleMentionChange(e.target.value, e.target.selectionStart ?? e.target.value.length)
           }}
           onKeyDown={handleKeyDown}
           onPaste={e => { void handlePaste(e) }}
@@ -517,31 +359,31 @@ export default function Composer({
           </button>
 
           {/* 语音听写 */}
-          {!recording && !transcribing && (
+          {!voice.recording && !voice.transcribing && (
             <button
               data-testid="stt-mic"
               disabled={running}
               aria-label="语音输入"
               title="按一下开始说话,再按停止转写"
-              onClick={() => void startRec()}
+              onClick={() => void voice.startRecording()}
               className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:text-fg disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <VoiceBars active={false} streamRef={streamRef} />
+              <VoiceBars active={false} streamRef={voice.streamRef} />
             </button>
           )}
-          {recording && (
+          {voice.recording && (
             <div className="flex shrink-0 items-center gap-1">
-              <button data-testid="stt-stop" onClick={stopRec} aria-label="停止并转写"
+              <button data-testid="stt-stop" onClick={voice.stopRecording} aria-label="停止并转写"
                 className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-danger/10 px-2 text-xs text-danger">
-                <VoiceBars active streamRef={streamRef} /> 停止
+                <VoiceBars active streamRef={voice.streamRef} /> 停止
               </button>
-              <button data-testid="stt-cancel" onClick={cancelRec} aria-label="取消"
+              <button data-testid="stt-cancel" onClick={voice.cancelRecording} aria-label="取消"
                 className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-fg-subtle hover:text-fg">
                 <X className="h-3.5 w-3.5" strokeWidth={1.5} />
               </button>
             </div>
           )}
-          {transcribing && (
+          {voice.transcribing && (
             <span data-testid="stt-transcribing" className="shrink-0 whitespace-nowrap text-xs text-fg-muted">转写中…</span>
           )}
 
@@ -590,7 +432,7 @@ export default function Composer({
 
           <button
             onClick={onSubmit}
-            disabled={running || recording || transcribing || !value.trim()}
+            disabled={running || voice.recording || voice.transcribing || !value.trim()}
             className="shrink-0 whitespace-nowrap rounded-lg bg-accent px-4 py-1.5 text-xs font-semibold text-accent-fg disabled:cursor-not-allowed disabled:opacity-40"
           >
             发送
