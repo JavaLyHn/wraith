@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+﻿import { useState, useRef, useEffect } from 'react'
 import { cn } from '../lib/utils'
 import {
   Tooltip,
@@ -7,14 +7,15 @@ import {
   TooltipProvider,
 } from './ui/tooltip'
 import {
-  Plus, Search, Blocks, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
-  Star, ListTree, List, Pencil, Archive, Settings, Wrench, ChevronDown, ListTodo, Shield, User, FolderOpen, Activity, AlertTriangle,
-  type LucideIcon,
+  Plus, Search, Clock, MessageSquare, Plug, BookOpen, Brain, History, Globe, ScanSearch,
+  Star, ListTree, List, Pencil, Archive, Settings, ChevronDown, ListTodo, Shield, User, FolderOpen, Activity, AlertTriangle,
 } from 'lucide-react'
 import ProjectSwitcher from './ProjectSwitcher'
 import Logo from './Logo'
 import { sessionDisplayName, partitionStarred, groupSessionsByTime } from '../lib/sessionView'
 import { userAvatarGlyph, accountGlyphDuplicatesName } from '../lib/chatIdentity'
+import { TOOL_GROUPS, SIDEBAR_TOOLS_ICON, type ToolNav } from '../lib/sidebarConfig'
+import { useSessionDrag } from '../lib/useSessionDrag'
 import type { ProfilePrefs } from '../settings/prefs'
 import type { SessionMeta, ProjectView } from '../../shared/types'
 
@@ -153,60 +154,6 @@ export function SessionRow({ s, active, running, failed, onSelect, onToggleStar,
   )
 }
 
-type ToolNav = 'plugins' | 'automations' | 'im-gateway' | 'providers' | 'skills'
-  | 'memory' | 'snapshots' | 'policy' | 'browser' | 'rag' | 'tasks' | 'documents'
-  | 'activity' | 'workspace'
-
-/**
- * 工具项分组。依据是**什么时候会点它**,不是功能相似:
- *   配置 — 装好一次,几周不动;改完就走,不看结果
- *   运行 — 有东西在后台跑着,想看它怎么样了;有状态、会变、可能带红点
- *   观察 — 出事了回头查;只读为主,查完就关
- * 附带的好处:红点只可能出现在「运行」组,眼睛知道往哪儿扫。
- *
- * 11 项平铺时扫一遍要过 11 行。这里只加小标题、不做逐组折叠 —— 分段是为了扫得快,
- * 不是为了藏起来;「工具」本身已能整体折叠,再套一层只会给每次点击多加一步。
- */
-const TOOL_GROUPS: { label: string; items: { nav: ToolNav; testId: string; label: string; Icon: LucideIcon }[] }[] = [
-  {
-    label: '配置',
-    items: [
-      { nav: 'plugins', testId: 'nav-plugins', label: 'MCP', Icon: Blocks },
-      { nav: 'providers', testId: 'nav-providers', label: 'Provider 配置', Icon: Plug },
-      { nav: 'skills', testId: 'nav-skills', label: '技能', Icon: BookOpen },
-    ],
-  },
-  {
-    label: '运行',
-    items: [
-      { nav: 'activity', testId: 'nav-activity', label: '活动', Icon: Activity },
-      { nav: 'automations', testId: 'nav-automations', label: '自动化', Icon: Clock },
-      { nav: 'im-gateway', testId: 'nav-im-gateway', label: 'IM 网关', Icon: MessageSquare },
-      { nav: 'tasks', testId: 'nav-tasks', label: '后台任务', Icon: ListTodo },
-    ],
-  },
-  {
-    label: '观察',
-    items: [
-      { nav: 'memory', testId: 'nav-memory', label: '记忆', Icon: Brain },
-      { nav: 'snapshots', testId: 'nav-snapshots', label: '快照', Icon: History },
-      // 中性盾:状态语义(ok/未启用)由顶栏那个盾承担,这里只是分类图标,别用带勾的
-      { nav: 'policy', testId: 'nav-policy', label: '安全', Icon: Shield },
-      { nav: 'browser', testId: 'nav-browser', label: '浏览器', Icon: Globe },
-      { nav: 'rag', testId: 'nav-rag', label: '代码检索', Icon: ScanSearch },
-    ],
-  },
-  {
-    // 前三组讲的是「agent 怎么工作」,这一组是「我的东西」——塞进任何一组
-    // 都会让那组的分类依据失效,所以单开。目前一项,后续剪藏/归档也归这里。
-    label: '资料',
-    items: [
-      { nav: 'documents', testId: 'nav-documents', label: '文档', Icon: FolderOpen },
-      { nav: 'workspace', testId: 'nav-workspace', label: '文件', Icon: ListTree },
-    ],
-  },
-]
-
 interface SidebarProps {
   workspace: string
   projects: ProjectView[]
@@ -308,7 +255,7 @@ export default function Sidebar({
   }, [activeNav])
   const showTools = toolsExpanded
   // 拖拽排序状态
-  const [dragState, setDragState] = useState<{ draggingId: string | null; overId: string | null }>({ draggingId: null, overId: null })
+  const { dragState, beginDrag, updateOver, endDrag, completeDrop } = useSessionDrag({ onReorder: onReorderSession })
   // 会话列表分组模式:recent=最新平铺(默认)/ time=按时间分组;记忆在 localStorage
   const [groupMode, setGroupMode] = useState<'recent' | 'time'>(() => {
     try { return localStorage.getItem('wraith.sidebar.sessionGroupMode') === 'time' ? 'time' : 'recent' } catch { return 'recent' }
@@ -399,7 +346,7 @@ export default function Sidebar({
             onClick={() => setToolsExpanded(v => !v)}
             className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-left text-xs text-fg-muted hover:bg-fg/5"
           >
-            <Wrench className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />工具
+            <SIDEBAR_TOOLS_ICON className="h-3.5 w-3.5 shrink-0" strokeWidth={1.5} />工具
             {/* 折叠态:自动化红点(需处理)与后台任务计数(仅告知)都要冒上来,否则收起就看不见了。
                 两者语义不同 —— 红 = 等你处理,accent = 正在跑,所以不合并成一个点。 */}
             {!showTools && taskActiveCount > 0 && (
@@ -472,10 +419,10 @@ export default function Sidebar({
                   onSelect={onSelectSession} onToggleStar={onToggleStar}
                   onRename={onRenameSession} onArchive={onArchiveSession}
                   dragState={dragState}
-                  onDragStart={(id) => setDragState({ draggingId: id, overId: null })}
-                  onDragOver={(id) => setDragState(prev => prev.draggingId ? { ...prev, overId: id } : prev)}
-                  onDrop={(id) => { if (dragState.draggingId && dragState.draggingId !== id) onReorderSession?.(dragState.draggingId, id, section); setDragState({ draggingId: null, overId: null }) }}
-                  onDragEnd={() => setDragState({ draggingId: null, overId: null })} />
+                  onDragStart={beginDrag}
+                  onDragOver={updateOver}
+                  onDrop={(id) => completeDrop(id, section)}
+                  onDragEnd={endDrag} />
               ))
               // sticky 表头:滚动时标题不动,内容从下方滑过(半透明 + 模糊)
               const headerCls = 'sticky top-0 z-20 mt-4 sidebar-sticky pl-5 pr-3 pb-1.5 pt-2 text-3xs uppercase tracking-wider text-fg-subtle'

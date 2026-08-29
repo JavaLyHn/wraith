@@ -33,6 +33,8 @@ export function useInputHistory(opts: UseInputHistoryOptions): UseInputHistoryRe
   const [historyIndex, setHistoryIndex] = useState<number>(-1)
   const historyRef = useRef<string[]>([])
   const indexRef = useRef<number>(-1)
+  /** 用于忽略过期的异步 loadHistory 结果 */
+  const loadIdRef = useRef(0)
 
   const syncRefs = () => {
     historyRef.current = history
@@ -41,12 +43,15 @@ export function useInputHistory(opts: UseInputHistoryOptions): UseInputHistoryRe
   syncRefs()
 
   const loadHistory = useCallback((sid: string) => {
+    const myId = ++loadIdRef.current
     if (!sid) {
       setHistory([])
       setHistoryIndex(-1)
       return
     }
     void window.wraith.inputHistory.get(sid).then(entries => {
+      // 只接受最新一次请求的结果,忽略过期异步返回
+      if (myId !== loadIdRef.current) return
       setHistory(entries)
       setHistoryIndex(-1)
     })
