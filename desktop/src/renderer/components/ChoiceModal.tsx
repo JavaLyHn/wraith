@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog'
 import type { ChoiceOption } from '../../shared/types'
+import { useEventListener } from '../lib/useEventListener'
 
 interface ChoiceModalProps {
   title: string
@@ -21,25 +22,22 @@ export default function ChoiceModal({
 }: ChoiceModalProps): JSX.Element {
   const [highlighted, setHighlighted] = useState(0)
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setHighlighted(h => (h + 1) % options.length)
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setHighlighted(h => (h - 1 + options.length) % options.length)
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        onRespond(highlighted)
-      } else if (e.key === 'Escape' && allowCancel) {
-        e.preventDefault()
-        onReject()
-      }
+  const onKey = useCallback((e: KeyboardEvent): void => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlighted(h => (h + 1) % options.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlighted(h => (h - 1 + options.length) % options.length)
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      onRespond(highlighted)
+    } else if (e.key === 'Escape' && allowCancel) {
+      e.preventDefault()
+      onReject()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
   }, [options.length, highlighted, allowCancel, onRespond, onReject])
+  useEventListener('keydown', onKey)
 
   const defaultHint = allowCancel
     ? '↑↓ 选择  Enter 确认  ESC 取消  或点击'

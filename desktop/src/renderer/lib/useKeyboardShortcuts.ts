@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEventListener } from './useEventListener'
 
 export interface UseKeyboardShortcutsOptions {
   getTurn: () => 'idle' | 'running'
@@ -12,27 +12,23 @@ export interface UseKeyboardShortcutsOptions {
 }
 
 export function useKeyboardShortcuts(opts: UseKeyboardShortcutsOptions): void {
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape' && opts.getTurn() === 'running'
-        && !opts.getPendingApproval() && !opts.getPendingChoice() && !opts.getAutomationApproval()) {
-        e.preventDefault()
-        void opts.onInterrupt()
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        opts.onPaletteOpen()
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
-        e.preventDefault()
-        void opts.onNewConversation()
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
-        e.preventDefault()
-        opts.onToggleProviders()
-      }
+  useEventListener('keydown', (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && opts.getTurn() === 'running'
+      && !opts.getPendingApproval() && !opts.getPendingChoice() && !opts.getAutomationApproval()) {
+      e.preventDefault()
+      void opts.onInterrupt()
     }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [])
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault()
+      opts.onPaletteOpen()
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+      e.preventDefault()
+      void opts.onNewConversation()
+    }
+    if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+      e.preventDefault()
+      opts.onToggleProviders()
+    }
+  })
 }

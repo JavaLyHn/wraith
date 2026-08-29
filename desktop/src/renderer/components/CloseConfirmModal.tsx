@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Moon, Power, X } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from './ui/dialog'
+import { useEventListener } from '../lib/useEventListener'
 
 interface CloseConfirmModalProps {
   onRespond: (mode: 'background' | 'quit', remember: boolean) => void
@@ -16,23 +17,20 @@ export default function CloseConfirmModal({ onRespond, onCancel }: CloseConfirmM
   const [remember, setRemember] = useState(false)
   const [highlighted, setHighlighted] = useState<0 | 1>(0)
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        e.preventDefault()
-        setHighlighted(h => (h === 0 ? 1 : 0))
-      } else if (e.key === 'Enter') {
-        e.preventDefault()
-        const mode: 'background' | 'quit' = highlighted === 0 ? 'background' : 'quit'
-        onRespond(mode, remember)
-      } else if (e.key === 'Escape') {
-        e.preventDefault()
-        onCancel()
-      }
+  const onKey = useCallback((e: KeyboardEvent): void => {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlighted(h => (h === 0 ? 1 : 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      const mode: 'background' | 'quit' = highlighted === 0 ? 'background' : 'quit'
+      onRespond(mode, remember)
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      onCancel()
     }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
   }, [highlighted, remember, onRespond, onCancel])
+  useEventListener('keydown', onKey)
 
   const options: { key: 'background' | 'quit'; label: string; desc: string; Icon: typeof Moon }[] = [
     {
