@@ -245,7 +245,9 @@ export function useSessionManager(opts: UseSessionManagerOptions): UseSessionMan
       setSessions(sessions)
       if (sessions.length > 0) {
         // session.list 按 updatedAt 倒序:第一条即最近会话
-        const { sessionId, messages, model, modelFallback, cards } = await window.wraith.resumeSession(sessions[0]!.id)
+        const first = sessions[0]
+        if (!first) return false
+        const { sessionId, messages, model, modelFallback, cards } = await window.wraith.resumeSession(first.id)
         dispatch({ type: 'loadHistory', items: spliceCards(messagesToItems(messages), cards) })
         dispatch({ type: 'setSessionId', sessionId })
         dispatch({ type: 'markResumed' })

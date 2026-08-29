@@ -1,5 +1,6 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+﻿import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { List } from 'react-window'
+import type { ListImperativeAPI } from 'react-window'
 import type { Item } from '../../shared/transcriptReducer'
 import type { RunMode } from '../../shared/types'
 import WorkingIndicator from './WorkingIndicator'
@@ -83,7 +84,7 @@ interface RowProps {
 export default function Transcript({ items, busy, onEditMessage, onDeleteMessage, onResendMessage, onPlanReview, mode, onOpenArtifact, onOpenDiff, onUndo, editors, workspace, onOpenPanel, onImBound, onBranch, branchingMsgIndex }: TranscriptProps): JSX.Element {
   const totalUsers = items.filter(i => i.type === 'user').length
   const containerRef = useRef<HTMLDivElement>(null)
-  const listRef = useRef<any>(null)
+  const listRef = useRef<ListImperativeAPI | null>(null)
   const stickRef = useRef(true)
   const [hoveredHid, setHoveredHid] = useState<string | null>(null)
   const [listHeight, setListHeight] = useState(600)
@@ -330,13 +331,13 @@ export default function Transcript({ items, busy, onEditMessage, onDeleteMessage
         data-testid="transcript"
         className="min-w-0 flex-1 overflow-hidden"
       >
-        <List
+        <List<RowProps>
           listRef={listRef}
           style={{ height: listHeight, width: '100%' }}
           rowCount={totalRowCount}
           rowHeight={dynamicRowHeight}
           rowComponent={RowComponent}
-          rowProps={rowProps as any}
+          rowProps={rowProps}
           overscanCount={5}
           className="overflow-y-auto [overflow-anchor:none]"
         />

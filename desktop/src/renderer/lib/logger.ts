@@ -10,8 +10,7 @@ function levelFromEnv(): LogLevel {
     const override = (window as unknown as { __LOG_LEVEL__?: LogLevel }).__LOG_LEVEL__
     if (override) return override
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const env = (import.meta as any).env as Record<string, string | undefined> | undefined
+  const env = (import.meta as ImportMeta).env as Record<string, string | undefined> | undefined
   if (env?.VITE_DEBUG === 'true') return 'debug'
   // 开发模式下用 info 级别,生产默认 warn
   return env?.DEV ? 'info' : 'warn'

@@ -269,13 +269,15 @@ export default function AutomationsPanel({ projects, onBack, onOpenSession, onAp
                   className={'px-3 py-1.5 text-xs disabled:opacity-40 ' + (tab === 'runs' ? 'border-b-2 border-accent text-fg' : 'text-fg-muted')}>运行历史</button>
               </div>
               {tab === 'def' ? (
-                <AutomationForm key={creating ? 'new' : current!.id}
+                <AutomationForm key={creating ? 'new' : (current?.id ?? '')}
                   initial={creating ? null : current}
                   projects={projects}
                   onSave={handleSave} onRunNow={handleRunNow} onToggle={handleToggle}
                   onRemove={handleRemove} removeConfirming={removeConfirming} />
               ) : (
-                <AutomationRuns taskId={current!.id} projectPath={current!.workspace ?? current!.projectPath} onOpenSession={onOpenSession} onApprove={onApprove} />
+                current && (
+                  <AutomationRuns taskId={current.id} projectPath={current.workspace ?? current.projectPath} onOpenSession={onOpenSession} onApprove={onApprove} />
+                )
               )}
             </>
           )}
