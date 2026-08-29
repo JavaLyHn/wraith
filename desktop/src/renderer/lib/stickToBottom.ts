@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useElementEventListener } from './useEventListener'
 
 /**
  * 流式输出框的自动贴底。
@@ -33,13 +34,11 @@ export function useStickToBottom<T extends HTMLElement>(dep: unknown): React.Ref
   const ref = useRef<T>(null)
   const stick = useRef(true)   // 默认跟随:框刚出现时用户还没表达过意图
 
-  useEffect(() => {
+  useElementEventListener('scroll', () => {
     const el = ref.current
     if (!el) return
-    const onScroll = (): void => { stick.current = shouldStickToBottom(el) }
-    el.addEventListener('scroll', onScroll)
-    return () => el.removeEventListener('scroll', onScroll)
-  }, [])
+    stick.current = shouldStickToBottom(el)
+  }, { target: ref })
 
   useEffect(() => {
     const el = ref.current

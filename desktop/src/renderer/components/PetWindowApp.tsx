@@ -3,6 +3,7 @@ import PetSprite from './PetSprite'
 import type { PetConfig } from '../../main/settings'
 import type { PetSprite as PetSpriteType, PetState } from '../../shared/pets'
 import type { PetStateSignal } from '../../shared/petState'
+import { useEventListener } from '../lib/useEventListener'
 import { nextPetState, TRANSIENT_MS } from '../../shared/petState'
 import { spriteRowFor, motionFor, RUN_RIGHT_ROW, RUN_LEFT_ROW } from '../lib/petMotion'
 import { isOpaqueAt, spriteHitPixel, containScale, STATIC_IMAGE_MAX_PX, stepScale, clampScale, petBreathingMargin } from '../../shared/petWindow'
@@ -208,27 +209,23 @@ export default function PetWindowApp(): JSX.Element {
     return () => { alive = false }
   }, [preview?.previewUrl, preview?.sprite])
 
-  useEffect(() => {
-    const onMove = (e: MouseEvent): void => {
-      if (draggingRef.current) return // 拖动期间挂起命中测试,见组件顶部注释
-      const hit = hitRef.current
-      let opaque = false
-      if (hit) {
-        const s = scaleRef.current * hit.capRatio
-        // 精灵被"呼吸边距"(petBreathingMargin)推离窗口左上角居中放,命中反算前先减掉该边距,
-        // 让 spriteHitPixel 收到的是相对精灵左上角的坐标(与窗口尺寸/渲染内边距同一份 margin)。
-        const m = petBreathingMargin(scaleRef.current)
-        const px = spriteHitPixel(e.clientX - m, e.clientY - m, s, frameColRef.current, rowRef.current, hit.frameW, hit.frameH)
-        if (px) opaque = isOpaqueAt(hit.data, hit.sheetW, px.px, px.py)
-      }
-      if (opaque === ignoringRef.current) { // 需要翻转(当前状态与命中结果不一致)
-        ignoringRef.current = !opaque
-        window.wraithPet.setIgnoreMouse(!opaque)
-      }
+  useEventListener('mousemove', (e: MouseEvent) => {
+    if (draggingRef.current) return // 拖动期间挂起命中测试,见组件顶部注释
+    const hit = hitRef.current
+    let opaque = false
+    if (hit) {
+      const s = scaleRef.current * hit.capRatio
+      // 精灵被"呼吸边距"(petBreathingMargin)推离窗口左上角居中放,命中反算前先减掉该边距,
+      // 让 spriteHitPixel 收到的是相对精灵左上角的坐标(与窗口尺寸/渲染内边距同一份 margin)。
+      const m = petBreathingMargin(scaleRef.current)
+      const px = spriteHitPixel(e.clientX - m, e.clientY - m, s, frameColRef.current, rowRef.current, hit.frameW, hit.frameH)
+      if (px) opaque = isOpaqueAt(hit.data, hit.sheetW, px.px, px.py)
     }
-    window.addEventListener('mousemove', onMove)
-    return () => window.removeEventListener('mousemove', onMove)
-  }, [])
+    if (opaque === ignoringRef.current) { // 需要翻转(当前状态与命中结果不一致)
+      ignoringRef.current = !opaque
+      window.wraithPet.setIgnoreMouse(!opaque)
+    }
+  })
 
   // macOS 触控板捏合缩放:Chromium/Electron 把触控板捏合派发为 gesturestart/change/end
   // (带累积倍率 e.scale),而非 wheel——所以两指上下滑动(wheel→handleWheel)能缩放,
