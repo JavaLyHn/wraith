@@ -1,14 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
-import { logger } from '../lib/logger'
+﻿import { useCallback, useEffect, useState } from 'react'
 import { ArrowLeft } from 'lucide-react'
-import type { GatewayBindPhase, GatewayConfigView, GatewayState, GatewayStatus } from '../../shared/gateway'
+import type { GatewayState } from '../../shared/gateway'
 import { maskId, bindPhaseLabel, platformStatusText, platformStatusColor } from '../lib/gatewayLabels'
 import { IM_PLATFORMS } from '../lib/imPlatforms'
 import { PlatformIcon } from '../lib/imPlatformIcons'
 import { feishuConfigPayload } from '../lib/feishuConfigPayload'
 import { wecomConfigPayload } from '../lib/wecomConfigPayload'
 import { consoleLink } from '../lib/imConsoleLinks'
-import { applyBindEvent } from '../lib/imBind'
+import { useImGateway } from '../lib/useImGateway'
 
 interface ImGatewayPanelProps {
   onBack: () => void
@@ -32,20 +31,18 @@ const BTN_PRIMARY = 'rounded-lg bg-accent px-4 py-2 text-xs text-white disabled:
 const BTN_SECONDARY = 'rounded-lg border border-border px-4 py-2 text-xs text-fg-muted hover:bg-surface/60'
 
 export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Element {
-  const [config, setConfig] = useState<GatewayConfigView | null>(null)
-  const [status, setStatus] = useState<GatewayStatus>({ state: 'stopped' })
-  const [bind, setBind] = useState<{ phase: GatewayBindPhase; message?: string; qr?: string; url?: string } | null>(null)
+  const {
+    config, status, bind, logs, showLogs, anyBound, boundByPlatform, hint,
+    handleBind, handleBindCancel, handleSaveSecret, handlePickWorkspace,
+    handleToggleDaemon, handleShowLogs, handleRefreshLogs,
+    handleSetFeishuConfig, handleSetWecomConfig, handleBindWeixin, handleSetWeixinConfig,
+    setHint, setBind, setShowLogs,
+    selectedPlatform, setSelectedPlatform,
+  } = useImGateway('qq')
+
+  // 平台表单输入(受控)
   const [secretInput, setSecretInput] = useState('')
   const [secretBusy, setSecretBusy] = useState(false)
-  const [hint, setHint] = useState<string | null>(null)
-  const [logs, setLogs] = useState<string[]>([])
-  const [showLogs, setShowLogs] = useState(false)
-  const [selectedPlatform, setSelectedPlatform] = useState<string>('qq')
-  // 网关是全局单进程:任一平台已配置即可启动;anyBound 汇总所有平台的绑定态。
-  const [anyBound, setAnyBound] = useState(false)
-  // 每个平台各自的绑定态(驱动接入平台网格里各卡片自己的「已配置」标签,不受当前选中项影响)。
-  const [boundByPlatform, setBoundByPlatform] = useState<Record<string, boolean>>({})
-  // 飞书表单输入(受控)
   const [fsAppId, setFsAppId] = useState('')
   const [fsAppSecret, setFsAppSecret] = useState('')
   const [fsOwner, setFsOwner] = useState('')
@@ -65,172 +62,83 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
   const [wxBusy, setWxBusy] = useState(false)
   const [wxHint, setWxHint] = useState<string | null>(null)
 
-  const refreshConfig = useCallback(async () => {
-    setConfig(null)
-    try {
-      const cfg = await window.wraith.gatewayGetConfig(selectedPlatform)
-      setConfig(cfg)
-      if (selectedPlatform === 'feishu') {
-        setFsAppId(cfg.appId ?? '')
-        setFsOwner(cfg.ownerOpenid ?? '')
-        setFsRegion(cfg.region ?? 'feishu')
-        setFsWorkspace(cfg.workspace ?? '')
-        // appSecret 永不回填(后端只回 hasSecret);留空 = 保持已存密钥
-      }
-      if (selectedPlatform === 'wecom') {
-        setWcBotId(cfg.botId ?? '')
-        setWcOwner(cfg.ownerUserid ?? '')
-        setWcWorkspace(cfg.workspace ?? '')
-        // secret 永不回填(后端只回 hasSecret);留空 = 保持已存密钥
-      }
-      if (selectedPlatform === 'weixin') {
-        setWxWorkspace(cfg.workspace ?? '')
-      }
-    } catch (err) {
-      logger.error('wraith', 'gatewayGetConfig error:', err)
-      if (selectedPlatform === 'feishu') setFsHint('读取配置失败')
-      else if (selectedPlatform === 'wecom') setWcHint('读取配置失败')
-      else if (selectedPlatform === 'weixin') setWxHint('读取配置失败')
-      else setHint('读取配置失败')
-    }
-    // 网关是全局进程:汇总所有平台绑定态,决定「启动网关」是否可点(与当前选中平台无关)。
-    try {
-      const [qq, fs, wc, wx] = await Promise.all([
-        window.wraith.gatewayGetConfig('qq'),
-        window.wraith.gatewayGetConfig('feishu'),
-        window.wraith.gatewayGetConfig('wecom'),
-        window.wraith.gatewayGetConfig('weixin'),
-      ])
-      setAnyBound(!!qq?.bound || !!fs?.bound || !!wc?.bound || !!wx?.bound)
-      setBoundByPlatform({ qq: !!qq?.bound, feishu: !!fs?.bound, wecom: !!wc?.bound, weixin: !!wx?.bound })
-    } catch {
-      /* 忽略:失败则按钮保持禁用 */
-    }
-  }, [selectedPlatform])
-
-  const refreshStatus = useCallback(async () => {
-    try { setStatus(await window.wraith.gatewayStatus()) }
-    catch (err) { logger.error('wraith', 'gatewayStatus error:', err) }
-  }, [])
-
+  // 平台配置回填:gateway 配置变更时按当前平台回填表单字段
   useEffect(() => {
-    void refreshConfig()
-    void refreshStatus()
-    const unsub = window.wraith.onGatewayEvent(evt => {
-      if (evt.kind === 'status') setStatus(evt.status)
-      else if (evt.kind === 'bind') {
-        setBind(prev => applyBindEvent(prev, evt))
-        if (evt.phase === 'bound' || evt.phase === 'secret-invalid') void refreshConfig()
-      }
-    })
-    return () => { unsub() }
-  }, [refreshConfig, refreshStatus])
+    if (!config) return
+    if (selectedPlatform === 'feishu') {
+      setFsAppId(config.appId ?? '')
+      setFsOwner(config.ownerOpenid ?? '')
+      setFsRegion(config.region ?? 'feishu')
+      setFsWorkspace(config.workspace ?? '')
+    } else if (selectedPlatform === 'wecom') {
+      setWcBotId(config.botId ?? '')
+      setWcOwner(config.ownerUserid ?? '')
+      setWcWorkspace(config.workspace ?? '')
+    } else if (selectedPlatform === 'weixin') {
+      setWxWorkspace(config.workspace ?? '')
+    }
+  }, [config, selectedPlatform])
 
-  // 微信扫码绑定期间,若用户展开了日志则每 2s 刷新;二维码本身走图片事件(见下方 QR 卡片),不再依赖日志区。
-  useEffect(() => {
-    if (selectedPlatform !== 'weixin' || bind?.phase !== 'scanning' || !showLogs) return
-    const t = setInterval(async () => {
-      try { const { lines } = await window.wraith.gatewayLogs(); setLogs(lines) }
-      catch { /* ignore */ }
-    }, 2000)
-    return () => clearInterval(t)
-  }, [selectedPlatform, bind?.phase, showLogs])
-
-  const handleBind = useCallback(() => {
-    setBind({ phase: 'scanning' })
-    void window.wraith.gatewayBindStart()
-  }, [])
-
-  const handleSaveSecret = useCallback(async () => {
-    const s = secretInput.trim()
-    if (!s) return
+  const handleSaveSecretClick = useCallback(async () => {
     setSecretBusy(true)
     try {
-      await window.wraith.gatewaySetSecret(s)
-      setSecretInput('')
-      setHint('机器人密钥已保存')
-      setBind(null)
-      await refreshConfig()
-    } catch (err) {
-      setHint('保存失败: ' + (err as Error).message)
+      const ok = await handleSaveSecret(secretInput)
+      if (ok) setSecretInput('')
     } finally {
       setSecretBusy(false)
     }
-  }, [secretInput, refreshConfig])
+  }, [handleSaveSecret, secretInput])
 
-  const handlePickWorkspace = useCallback(async () => {
-    const dir = await window.wraith.gatewayPickWorkspace()
-    if (dir) { await window.wraith.gatewaySetWorkspace(dir); await refreshConfig(); setHint('工作目录已更新') }
-  }, [refreshConfig])
-
-  const handleToggleDaemon = useCallback(() => {
-    if (status.state === 'running' || status.state === 'starting') void window.wraith.gatewayStop()
-    else void window.wraith.gatewayStart()
-  }, [status.state])
-
-  const handleShowLogs = useCallback(async () => {
-    const next = !showLogs
-    setShowLogs(next)
-    if (next) {
-      try { const { lines } = await window.wraith.gatewayLogs(); setLogs(lines) }
-      catch (err) { logger.error('wraith', 'gatewayLogs error:', err) }
-    }
-  }, [showLogs])
-
-  const handleSaveFeishu = async () => {
+  const handleSaveFeishu = useCallback(async () => {
     setFsBusy(true)
     setFsHint(null)
     try {
       const payload = feishuConfigPayload({
         appId: fsAppId, appSecret: fsAppSecret, ownerOpenid: fsOwner, region: fsRegion, workspace: fsWorkspace,
       })
-      await window.wraith.gatewaySetFeishuConfig(payload)
-      setFsAppSecret('')              // 保存后清空密钥输入(不回显)
+      await handleSetFeishuConfig(payload)
+      setFsAppSecret('')
       setFsHint('已保存')
-      await refreshConfig()
-    } catch (err) {
+    } catch {
       setFsHint('保存失败')
     } finally {
       setFsBusy(false)
     }
-  }
+  }, [fsAppId, fsAppSecret, fsOwner, fsRegion, fsWorkspace, handleSetFeishuConfig])
 
-  const handleBindWeixin = () => {
-    setBind({ phase: 'scanning' })
-    void window.wraith.gatewayBindWeixinStart(wxWorkspace.trim() || undefined)
-  }
+  const handleBindWeixinClick = useCallback(() => {
+    handleBindWeixin(wxWorkspace.trim() || undefined)
+  }, [handleBindWeixin, wxWorkspace])
 
-  const handleSaveWeixinWorkspace = async () => {
+  const handleSaveWeixinWorkspace = useCallback(async () => {
     setWxBusy(true)
     setWxHint(null)
     try {
-      await window.wraith.gatewaySetWeixinConfig({ workspace: wxWorkspace.trim() })
+      await handleSetWeixinConfig({ workspace: wxWorkspace.trim() })
       setWxHint('已保存')
-      await refreshConfig()
     } catch {
       setWxHint('保存失败')
     } finally {
       setWxBusy(false)
     }
-  }
+  }, [wxWorkspace, handleSetWeixinConfig])
 
-  const handleSaveWecom = async () => {
+  const handleSaveWecom = useCallback(async () => {
     setWcBusy(true)
     setWcHint(null)
     try {
       const payload = wecomConfigPayload({
         botId: wcBotId, secret: wcSecret, ownerUserid: wcOwner, workspace: wcWorkspace,
       })
-      await window.wraith.gatewaySetWecomConfig(payload)
-      setWcSecret('')                 // 保存后清空密钥输入(不回显)
+      await handleSetWecomConfig(payload)
+      setWcSecret('')
       setWcHint('已保存')
-      await refreshConfig()
-    } catch (err) {
+    } catch {
       setWcHint('保存失败')
     } finally {
       setWcBusy(false)
     }
-  }
+  }, [wcBotId, wcSecret, wcOwner, wcWorkspace, handleSetWecomConfig])
 
   const bound = config?.bound ?? false
   const running = status.state === 'running' || status.state === 'starting'
@@ -332,7 +240,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
                   className={INPUT} />
               </label>
               <div className="mt-2 flex items-center gap-2">
-                <button data-testid="im-secret-save" onClick={() => void handleSaveSecret()}
+                <button data-testid="im-secret-save" onClick={() => void handleSaveSecretClick()}
                   disabled={secretBusy || secretInput.trim().length === 0} className={BTN_PRIMARY}>保存密钥</button>
                 {hint && <span className="text-xs text-fg-subtle">{hint}</span>}
               </div>
@@ -457,7 +365,7 @@ export default function ImGatewayPanel({ onBack }: ImGatewayPanelProps): JSX.Ele
                 placeholder="/path/to/workspace" className={INPUT} />
             </label>
             <div className="mt-2 flex items-center gap-2">
-              <button data-testid="im-wx-bind" onClick={handleBindWeixin}
+              <button data-testid="im-wx-bind" onClick={() => handleBindWeixinClick()}
                 className={bound ? BTN_SECONDARY : BTN_PRIMARY}>{bound ? '重新扫码绑定' : '扫码绑定'}</button>
               {bind?.phase === 'scanning' && (
                 <button onClick={() => void window.wraith.gatewayBindCancel()} className={BTN_SECONDARY}>取消</button>
