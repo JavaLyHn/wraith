@@ -71,6 +71,7 @@ import {
 } from './activityStore'
 import { registerActivityIpc } from './activityIpc'
 import { getSessionHistory, addToSessionHistory, clearSessionHistory } from './inputHistoryStore'
+import { IPC } from '../shared/ipcChannels'
 
 // T12 多会话过滤门控 MULTI_SESSION_FILTER_ENABLED 现由 notificationFilter.ts 导出
 // (v1 必须保持 false;单测锁定其值防误翻)。
@@ -524,22 +525,22 @@ function startPetWindowOnce(): void {
 // ---------------------------------------------------------------------------
 
 // 窗口控制(Windows 无边框自绘窗控用;mac/Linux 调用无害)
-ipcMain.handle('wraith:win:minimize', () => { mainWindow?.minimize() })
-ipcMain.handle('wraith:win:toggleMaximize', () => {
+ipcMain.handle(IPC.WRAITH_WIN_MINIMIZE, () => { mainWindow?.minimize() })
+ipcMain.handle(IPC.WRAITH_WIN_TOGGLEMAXIMIZE, () => {
   if (!mainWindow) return
   if (mainWindow.isMaximized()) mainWindow.unmaximize()
   else mainWindow.maximize()
 })
-ipcMain.handle('wraith:win:close', () => { mainWindow?.close() })
-ipcMain.handle('wraith:win:isMaximized', () => !!mainWindow?.isMaximized())
+ipcMain.handle(IPC.WRAITH_WIN_CLOSE, () => { mainWindow?.close() })
+ipcMain.handle(IPC.WRAITH_WIN_ISMAXIMIZED, () => !!mainWindow?.isMaximized())
 
 // 关闭行为 IPC:
 // - close:getMode: renderer 启动时读已记住的 closeMode,决定是否直接执行
 // - close:execute: renderer 回传用户选择(弹 modal 后或直接按记住的 mode)
-ipcMain.handle('wraith:close:getMode', () => {
+ipcMain.handle(IPC.WRAITH_CLOSE_GETMODE, () => {
   return readCloseMode(app.getPath('userData'))
 })
-ipcMain.handle('wraith:close:execute', async (_e, payload: CloseExecutePayload) => {
+ipcMain.handle(IPC.WRAITH_CLOSE_EXECUTE, async (_e, payload: CloseExecutePayload) => {
   const userData = app.getPath('userData')
   // 持久化 remember(仅当用户勾了「下次别问」)
   if (payload.remember === 'background' || payload.remember === 'quit') {
@@ -563,29 +564,29 @@ ipcMain.handle('wraith:close:execute', async (_e, payload: CloseExecutePayload) 
 })
 
 // 设置面板「恢复询问」:把 closeMode 重置为 'ask',下次关窗重新弹确认框。
-ipcMain.handle('wraith:close:resetMode', () => {
+ipcMain.handle(IPC.WRAITH_CLOSE_RESETMODE, () => {
   writeCloseMode(app.getPath('userData'), 'ask')
 })
 
 // ── 输入历史:按会话持久化,供 Composer ↑/↓ 回显 ────────────────────────────
-ipcMain.handle('wraith:inputHistory:get', (_e, sessionId: string) => {
+ipcMain.handle(IPC.WRAITH_INPUTHISTORY_GET, (_e, sessionId: string) => {
   return getSessionHistory(app.getPath('userData'), sessionId)
 })
 
-ipcMain.handle('wraith:inputHistory:add', (_e, sessionId: string, text: string) => {
+ipcMain.handle(IPC.WRAITH_INPUTHISTORY_ADD, (_e, sessionId: string, text: string) => {
   addToSessionHistory(app.getPath('userData'), sessionId, text)
 })
 
-ipcMain.handle('wraith:inputHistory:clear', (_e, sessionId: string) => {
+ipcMain.handle(IPC.WRAITH_INPUTHISTORY_CLEAR, (_e, sessionId: string) => {
   clearSessionHistory(app.getPath('userData'), sessionId)
 })
 
-ipcMain.handle('wraith:initialize', async (_e, workspaceDir: string | null) => {
+ipcMain.handle(IPC.WRAITH_INITIALIZE, async (_e, workspaceDir: string | null) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('initialize', { clientInfo: 'wraith-desktop', workspaceDir })
 })
 
-ipcMain.handle('wraith:startSession', async (_e, workspaceDir: string | null) => {
+ipcMain.handle(IPC.WRAITH_STARTSESSION, async (_e, workspaceDir: string | null) => {
   if (!client) throw new Error('Backend not connected')
   const result = await client.request('session.start', { workspaceDir })
   const r = result as { sessionId: string }
@@ -594,7 +595,7 @@ ipcMain.handle('wraith:startSession', async (_e, workspaceDir: string | null) =>
   return r
 })
 
-ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { path: string; kind: string }[], mode?: 'react' | 'plan' | 'team') => {
+ipcMain.handle(IPC.WRAITH_SUBMITTURN, async (_e, input: string, attachments?: { path: string; kind: string }[], mode?: 'react' | 'plan' | 'team') => {
   if (!client) throw new Error('Backend not connected')
   const rpcClient = client
   return submitActivityTurn({
@@ -608,7 +609,7 @@ ipcMain.handle('wraith:submitTurn', async (_e, input: string, attachments?: { pa
   }, input, attachments, mode)
 })
 
-ipcMain.handle('wraith:pickAttachments', async () => {
+ipcMain.handle(IPC.WRAITH_PICKATTACHMENTS, async () => {
   // E2E 分支:WRAITH_E2E_ATTACH 是 JSON 数组 of paths,直接返回注入值。照 WRAITH_E2E_PICK 先例。
   if (process.env['WRAITH_E2E'] === '1' && process.env['WRAITH_E2E_ATTACH']) {
     let paths: string[] = []
@@ -648,7 +649,7 @@ ipcMain.handle('wraith:pickAttachments', async () => {
 
 // 粘贴图片:renderer 只有内存 blob、无磁盘路径,先落临时文件再走附件通道。
 let pastedImageSeq = 0
-ipcMain.handle('wraith:saveTempImage', async (_e, base64: string, ext: string) => {
+ipcMain.handle(IPC.WRAITH_SAVETEMPIMAGE, async (_e, base64: string, ext: string) => {
   const { validImageExt, tempImageName } = await import('./tempImage.js')
   const safeExt = validImageExt(ext)
   if (!safeExt) throw new Error('不支持的图片格式(支持 png/jpg/jpeg/gif/webp)')
@@ -665,7 +666,7 @@ ipcMain.handle('wraith:saveTempImage', async (_e, base64: string, ext: string) =
 })
 
 // 附件缩略图:把磁盘图片读成 data: URL 供 renderer <img> 直接显示(无 CSP,data: 可用)。
-ipcMain.handle('wraith:readImageDataUrl', async (_e, filePath: string) => {
+ipcMain.handle(IPC.WRAITH_READIMAGEDATAURL, async (_e, filePath: string) => {
   const { validImageExt } = await import('./tempImage.js')
   const ext = validImageExt(path.extname(filePath))
   if (!ext) return null
@@ -741,41 +742,41 @@ async function importPetPackageFromDialog(win: BrowserWindow | null, userDataDir
   }
 }
 
-ipcMain.handle('wraith:petsList', async () => ({
+ipcMain.handle(IPC.WRAITH_PETSLIST, async () => ({
   pets: await listPets({ userDataDir: app.getPath('userData'), petdexRoot: petdexRoot() }),
 }))
 // 导入/删除成功后桌宠窗可能需要现身/消失/换预览——统一在既有校验结果算出之后
 // 追加同步,不改动 petStore 的任何校验逻辑。syncPetWindow/pushCurrentPetPreview
 // 都是 best-effort(内部自吞异常),无条件调用即可,失败/取消(pet:null)时是
 // 一次无害的重复检查。
-ipcMain.handle('wraith:petsImportImage', async () => {
+ipcMain.handle(IPC.WRAITH_PETSIMPORTIMAGE, async () => {
   const result = await importPetImageFromDialog(mainWindow, app.getPath('userData'))
   const cfg = readPetConfig(app.getPath('userData'))
   void syncPetWindow(cfg)
   pushCurrentPetPreview(cfg)
   return result
 })
-ipcMain.handle('wraith:petsImportPackage', async () => {
+ipcMain.handle(IPC.WRAITH_PETSIMPORTPACKAGE, async () => {
   const result = await importPetPackageFromDialog(mainWindow, app.getPath('userData'))
   const cfg = readPetConfig(app.getPath('userData'))
   void syncPetWindow(cfg)
   pushCurrentPetPreview(cfg)
   return result
 })
-ipcMain.handle('wraith:petsRemove', async (_e, id: string, source: PetSource) => {
+ipcMain.handle(IPC.WRAITH_PETSREMOVE, async (_e, id: string, source: PetSource) => {
   await removePet({ userDataDir: app.getPath('userData'), petdexRoot: petdexRoot(), id, source })
   const cfg = readPetConfig(app.getPath('userData'))
   void syncPetWindow(cfg)
   pushCurrentPetPreview(cfg)
   return { ok: true }
 })
-ipcMain.handle('wraith:petsPreview', (_e, id: string) =>
+ipcMain.handle(IPC.WRAITH_PETSPREVIEW, (_e, id: string) =>
   previewDataUrl({ userDataDir: app.getPath('userData'), petdexRoot: petdexRoot(), id })
 )
 // 应用内 Petdex 安装:跑 `npx petdex@latest install <名>`(名字白名单+定长参数+shell:false,见 petInstall.ts)。
 // 过程 stdout/stderr 经 wraith:petsInstall-output 流式回推给发起的渲染进程(e.sender);装完(ok)照
 // petsImport* 收尾——petdex 默认装进 ~/.codex/pets,syncPetWindow+pushCurrentPetPreview 让新宠物即时可用。
-ipcMain.handle('wraith:petsInstall', async (e, name: string) => {
+ipcMain.handle(IPC.WRAITH_PETSINSTALL, async (e, name: string) => {
   const result = await runPetdexInstall(name, {
     cwd: os.homedir(),
     onOutput: (chunk) => { try { e.sender.send('wraith:petsInstall-output', chunk) } catch { /* 渲染进程已销毁 */ } },
@@ -839,8 +840,8 @@ ipcMain.on('pet:setIgnoreMouse', (_e, ignore: boolean) => {
   getPetWindow()?.setIgnoreMouseEvents(!!ignore, { forward: true })
 })
 
-ipcMain.handle('pet:getConfig', () => readPetConfig(app.getPath('userData')))
-ipcMain.handle('pet:setConfig', (_e, patch: Partial<PetConfig>) => {
+ipcMain.handle(IPC.PET_GETCONFIG, () => readPetConfig(app.getPath('userData')))
+ipcMain.handle(IPC.PET_SETCONFIG, (_e, patch: Partial<PetConfig>) => {
   const prev = readPetConfig(app.getPath('userData'))
   const next = writePetConfig(app.getPath('userData'), patch)
   broadcastPetConfig(next)
@@ -959,7 +960,7 @@ ipcMain.on('pet:contextMenu', () => {
 })
 
 ipcMain.handle(
-  'wraith:respondApproval',
+  IPC.WRAITH_RESPONDAPPROVAL,
   async (
     _e,
     approvalId: string,
@@ -977,7 +978,7 @@ ipcMain.handle(
 )
 
 ipcMain.handle(
-  'wraith:respondChoice',
+  IPC.WRAITH_RESPONDCHOICE,
   async (_e, choiceId: string, cancelled: boolean, selectedIndex: number) => {
     if (!client) throw new Error('Backend not connected')
     await client.request('choice.respond', { choiceId, cancelled, selectedIndex })
@@ -985,12 +986,12 @@ ipcMain.handle(
 )
 
 // Plan mode 审批响应:将用户决策(execute/supplement/cancel)透传给后端 plan.review.respond。
-ipcMain.handle('wraith:respondPlanReview', async (_e, reviewId: string, decision: string, feedback: string | null) => {
+ipcMain.handle(IPC.WRAITH_RESPONDPLANREVIEW, async (_e, reviewId: string, decision: string, feedback: string | null) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('plan.review.respond', { reviewId, decision, ...(feedback ? { feedback } : {}) })
 })
 
-ipcMain.handle('wraith:interrupt', async () => {
+ipcMain.handle(IPC.WRAITH_INTERRUPT, async () => {
   if (!client) throw new Error('Backend not connected')
   // T11 硬化:resolveInterruptTurnId 确保早窗(currentTurnId 已清零)发 null,
   // 而非陈旧的上一 turn id。后端按线程中断不读 turnId,行为不变(纯防御性)。
@@ -1008,7 +1009,7 @@ ipcMain.handle('wraith:interrupt', async () => {
  * the project switcher "添加项目" button or the composer's "重选目录" button
  * (both route to wraith:addProject), which is the only place a native dialog appears.
  */
-ipcMain.handle('wraith:getInitialWorkspace', async () => {
+ipcMain.handle(IPC.WRAITH_GETINITIALWORKSPACE, async () => {
   // E2E: startup workspace is injected directly (unset → null → backend default).
   if (process.env['WRAITH_E2E'] === '1') {
     return process.env['WRAITH_E2E_WORKSPACE'] ?? null
@@ -1016,12 +1017,12 @@ ipcMain.handle('wraith:getInitialWorkspace', async () => {
   return resolvePersistedWorkspace(app.getPath('userData')) ?? os.homedir()
 })
 
-ipcMain.handle('wraith:listProjects', async () => {
+ipcMain.handle(IPC.WRAITH_LISTPROJECTS, async () => {
   return { projects: projectViews(app.getPath('userData')) }
 })
 
 /** 激活项目:目录校验 → upsert 刷 lastUsedAt → 持久化为当前 workspace。 */
-ipcMain.handle('wraith:activateProject', async (_e, projectPath: string) => {
+ipcMain.handle(IPC.WRAITH_ACTIVATEPROJECT, async (_e, projectPath: string) => {
   try {
     if (!fs.statSync(projectPath).isDirectory()) return { ok: false }
   } catch {
@@ -1034,7 +1035,7 @@ ipcMain.handle('wraith:activateProject', async (_e, projectPath: string) => {
 })
 
 /** 添加项目:弹目录选择框,选中即入列表并激活(取消返回 null)。 */
-ipcMain.handle('wraith:addProject', async () => {
+ipcMain.handle(IPC.WRAITH_ADDPROJECT, async () => {
   const ud = app.getPath('userData')
   let picked: string | null
   if (process.env['WRAITH_E2E'] === '1') {
@@ -1053,234 +1054,234 @@ ipcMain.handle('wraith:addProject', async () => {
   return picked
 })
 
-ipcMain.handle('wraith:removeProject', async (_e, projectPath: string) => {
+ipcMain.handle(IPC.WRAITH_REMOVEPROJECT, async (_e, projectPath: string) => {
   removeProject(app.getPath('userData'), projectPath)
 })
 
-ipcMain.handle('wraith:renameProject', async (_e, projectPath: string, name: string) => {
+ipcMain.handle(IPC.WRAITH_RENAMEPROJECT, async (_e, projectPath: string, name: string) => {
   renameProject(app.getPath('userData'), projectPath, name)
 })
 
-ipcMain.handle('wraith:setProjectStarred', async (_e, projectPath: string, starred: boolean) => {
+ipcMain.handle(IPC.WRAITH_SETPROJECTSTARRED, async (_e, projectPath: string, starred: boolean) => {
   setProjectStarred(app.getPath('userData'), projectPath, starred)
 })
 
-ipcMain.handle('wraith:reorderProject', async (_e, projectPath: string, targetIndex: number) => {
+ipcMain.handle(IPC.WRAITH_REORDERPROJECT, async (_e, projectPath: string, targetIndex: number) => {
   reorderProject(app.getPath('userData'), projectPath, targetIndex)
 })
 
-ipcMain.handle('wraith:projectSummary', async (_e, paths: string[]) => {
+ipcMain.handle(IPC.WRAITH_PROJECTSUMMARY, async (_e, paths: string[]) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.projectSummary', { paths })
 })
 
-ipcMain.handle('wraith:listSessionsForProject', async (_e, path: string, limit?: number) => {
+ipcMain.handle(IPC.WRAITH_LISTSESSIONSFORPROJECT, async (_e, path: string, limit?: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.listForProject', { path, ...(limit === undefined ? {} : { limit }) })
 })
 
-ipcMain.handle('wraith:setSessionArchived', async (_e, sessionId: string, archived: boolean, path?: string) => {
+ipcMain.handle(IPC.WRAITH_SETSESSIONARCHIVED, async (_e, sessionId: string, archived: boolean, path?: string) => {
   if (!client) throw new Error('Backend not connected')
   // path 只在跨项目操作(设置 › 归档)时给;不给 → 后端走活跃项目
   return client.request('session.setArchived', { sessionId, archived, ...(path ? { path } : {}) })
 })
 
-ipcMain.handle('wraith:listArchivedSessions', async (_e, paths: string[], limit?: number) => {
+ipcMain.handle(IPC.WRAITH_LISTARCHIVEDSESSIONS, async (_e, paths: string[], limit?: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.listArchived', { paths, ...(limit === undefined ? {} : { limit }) })
 })
 
-ipcMain.handle('wraith:archiveProjectSessions', async (_e, path: string) => {
+ipcMain.handle(IPC.WRAITH_ARCHIVEPROJECTSESSIONS, async (_e, path: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.archiveProject', { path })
 })
 
-ipcMain.handle('wraith:mcpList', async () => {
+ipcMain.handle(IPC.WRAITH_MCPLIST, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.list', {})
 })
 
-ipcMain.handle('wraith:mcpEnable', async (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_MCPENABLE, async (_e, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.enable', { name })
 })
 
-ipcMain.handle('wraith:mcpDisable', async (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_MCPDISABLE, async (_e, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.disable', { name })
 })
 
-ipcMain.handle('wraith:mcpRestart', async (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_MCPRESTART, async (_e, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.restart', { name })
 })
 
-ipcMain.handle('wraith:mcpLogs', async (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_MCPLOGS, async (_e, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.logs', { name })
 })
 
-ipcMain.handle('wraith:mcpResources', async (_e, name: string | undefined) => {
+ipcMain.handle(IPC.WRAITH_MCPRESOURCES, async (_e, name: string | undefined) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.resources', name ? { name } : {})
 })
 
-ipcMain.handle('wraith:mcpPrompts', async (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_MCPPROMPTS, async (_e, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.prompts', { name })
 })
 
-ipcMain.handle('wraith:mcpConfigUpsert', async (_e, payload: unknown) => {
+ipcMain.handle(IPC.WRAITH_MCPCONFIGUPSERT, async (_e, payload: unknown) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.config.upsert', payload as Record<string, unknown>)
 })
 
-ipcMain.handle('wraith:mcpTest', async (_e, payload: unknown) => {
+ipcMain.handle(IPC.WRAITH_MCPTEST, async (_e, payload: unknown) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.test', payload as Record<string, unknown>)
 })
 
-ipcMain.handle('wraith:mcpConfigRemove', async (_e, scope: string, name: string) => {
+ipcMain.handle(IPC.WRAITH_MCPCONFIGREMOVE, async (_e, scope: string, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('mcp.config.remove', { scope, name })
 })
 
-ipcMain.handle('wraith:restartBackend', async () => {
+ipcMain.handle(IPC.WRAITH_RESTARTBACKEND, async () => {
   currentSessionId = null
   currentTurnId = null
   spawnBackend()
   // Renderer is responsible for re-running initialize/startSession after restart.
 })
 
-ipcMain.handle('wraith:modelList', async () => {
+ipcMain.handle(IPC.WRAITH_MODELLIST, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('model.list', {})
 })
 
-ipcMain.handle('wraith:setModel', async (_e, provider: string) => {
+ipcMain.handle(IPC.WRAITH_SETMODEL, async (_e, provider: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.setModel', { sessionId: currentSessionId, provider })
 })
 
-ipcMain.handle('wraith:setDefaultProvider', async (_e, provider: string) => {
+ipcMain.handle(IPC.WRAITH_SETDEFAULTPROVIDER, async (_e, provider: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.setDefaultProvider', { provider })
 })
 
-ipcMain.handle('wraith:setProvider', async (_e, p: { id: string; apiKey: string; model?: string; baseUrl?: string; protocol?: string; label?: string }) => {
+ipcMain.handle(IPC.WRAITH_SETPROVIDER, async (_e, p: { id: string; apiKey: string; model?: string; baseUrl?: string; protocol?: string; label?: string }) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.setProvider', p)
 })
 
-ipcMain.handle('wraith:removeProvider', async (_e, id: string) => {
+ipcMain.handle(IPC.WRAITH_REMOVEPROVIDER, async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.removeProvider', { id })
 })
 
-ipcMain.handle('wraith:testProvider', async (_e, p: { id: string; apiKey?: string; model?: string; baseUrl?: string; protocol?: string }) => {
+ipcMain.handle(IPC.WRAITH_TESTPROVIDER, async (_e, p: { id: string; apiKey?: string; model?: string; baseUrl?: string; protocol?: string }) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.testProvider', p)
 })
 
-ipcMain.handle('wraith:skillsList', async () => {
+ipcMain.handle(IPC.WRAITH_SKILLSLIST, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.list', {})
 })
 
 // 长期记忆查看/管理(转发 AppServer memory.* RPC)
-ipcMain.handle('wraith:memoryList', async () => {
+ipcMain.handle(IPC.WRAITH_MEMORYLIST, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.list', {})
 })
-ipcMain.handle('wraith:memorySearch', async (_e, query: string) => {
+ipcMain.handle(IPC.WRAITH_MEMORYSEARCH, async (_e, query: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.search', { query })
 })
-ipcMain.handle('wraith:memoryDelete', async (_e, id: string) => {
+ipcMain.handle(IPC.WRAITH_MEMORYDELETE, async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.delete', { id })
 })
-ipcMain.handle('wraith:memorySave', async (_e, fact: string, scope: string) => {
+ipcMain.handle(IPC.WRAITH_MEMORYSAVE, async (_e, fact: string, scope: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.save', { fact, scope })
 })
-ipcMain.handle('wraith:memoryInitProject', async (_e, force: boolean) => {
+ipcMain.handle(IPC.WRAITH_MEMORYINITPROJECT, async (_e, force: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.initProject', { force: !!force })
 })
-ipcMain.handle('wraith:memoryClear', async () => {
+ipcMain.handle(IPC.WRAITH_MEMORYCLEAR, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.clear', {})
 })
-ipcMain.handle('wraith:memoryPendingList', async () => {
+ipcMain.handle(IPC.WRAITH_MEMORYPENDINGLIST, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.pendingList', {})
 })
-ipcMain.handle('wraith:memoryPendingApprove', async (_e, id: string) => {
+ipcMain.handle(IPC.WRAITH_MEMORYPENDINGAPPROVE, async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.pendingApprove', { id })
 })
-ipcMain.handle('wraith:memoryPendingApproveReplacing', async (_e, id: string, oldId: string) => {
+ipcMain.handle(IPC.WRAITH_MEMORYPENDINGAPPROVEREPLACING, async (_e, id: string, oldId: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.pendingApproveReplacing', { id, oldId })
 })
-ipcMain.handle('wraith:memoryPendingReject', async (_e, id: string) => {
+ipcMain.handle(IPC.WRAITH_MEMORYPENDINGREJECT, async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.pendingReject', { id })
 })
-ipcMain.handle('wraith:memoryPendingClear', async () => {
+ipcMain.handle(IPC.WRAITH_MEMORYPENDINGCLEAR, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.pendingClear', {})
 })
-ipcMain.handle('wraith:memoryExtractNow', async () => {
+ipcMain.handle(IPC.WRAITH_MEMORYEXTRACTNOW, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('memory.extractNow', {})
 })
 
 // side-git 快照时间线 + 恢复(转发 AppServer snapshot.* RPC)
-ipcMain.handle('wraith:snapshotList', async (_e, limit?: number) => {
+ipcMain.handle(IPC.WRAITH_SNAPSHOTLIST, async (_e, limit?: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('snapshot.list', { limit: limit ?? 0 })
 })
-ipcMain.handle('wraith:snapshotRestore', async (_e, offset: number) => {
+ipcMain.handle(IPC.WRAITH_SNAPSHOTRESTORE, async (_e, offset: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('snapshot.restore', { offset })
 })
-ipcMain.handle('wraith:snapshotRestoreCommit', async (_e, commitId: string) => {
+ipcMain.handle(IPC.WRAITH_SNAPSHOTRESTORECOMMIT, async (_e, commitId: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('snapshot.restoreCommit', { commitId })
 })
-ipcMain.handle('wraith:snapshotClean', async () => {
+ipcMain.handle(IPC.WRAITH_SNAPSHOTCLEAN, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('snapshot.clean', {})
 })
 // 快照开关。此前**关快照只有环境变量一条路**,桌面端没有任何入口 ——
 // 因为没地方存(SnapshotConfig 只读 env + 系统属性)。现在多了 config.json 的 snapshot 节。
-ipcMain.handle('wraith:snapshotSettings', async () => {
+ipcMain.handle(IPC.WRAITH_SNAPSHOTSETTINGS, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('snapshot.settings', {})
 })
 // 写盘 + 立刻对本会话生效。只写盘的话本次会话仍在照旧存快照(SideGitManager 的 config
 // 是构造时捕获的)—— 那是本仓库第八次 snapshot-vs-live。
-ipcMain.handle('wraith:snapshotSetEnabled', async (_e, enabled: boolean) => {
+ipcMain.handle(IPC.WRAITH_SNAPSHOTSETENABLED, async (_e, enabled: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('snapshot.setEnabled', { enabled })
 })
 
 // 手动压缩当前对话历史(转发 AppServer session.compact,后端后台线程跑)
-ipcMain.handle('wraith:compactHistory', async () => {
+ipcMain.handle(IPC.WRAITH_COMPACTHISTORY, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.compact', {})
 })
 
 // 上下文状态快照(启动/切会话时拉一次,修"发消息前空白")
-ipcMain.handle('wraith:contextState', async () => {
+ipcMain.handle(IPC.WRAITH_CONTEXTSTATE, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('context.state.get', {})
 })
 
 // 后台任务(转发 AppServer task.*;与 CLI /task 共享 ~/.wraith/tasks/tasks.db)
-ipcMain.handle('wraith:taskList', async (_e, limit: number) => {
+ipcMain.handle(IPC.WRAITH_TASKLIST, async (_e, limit: number) => {
   if (!client) throw new Error('Backend not connected')
   try {
     const result = await client.request('task.list', { limit: limit ?? 20 }) as { tasks?: DurableTaskView[] }
@@ -1300,11 +1301,11 @@ ipcMain.handle('wraith:taskList', async (_e, limit: number) => {
     throw e
   }
 })
-ipcMain.handle('wraith:taskAdd', async (_e, prompt: string) => {
+ipcMain.handle(IPC.WRAITH_TASKADD, async (_e, prompt: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('task.add', { prompt })
 })
-ipcMain.handle('wraith:taskGet', async (_e, id: string) => {
+ipcMain.handle(IPC.WRAITH_TASKGET, async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   try {
     const result = await client.request('task.get', { id }) as DurableTaskView
@@ -1316,7 +1317,7 @@ ipcMain.handle('wraith:taskGet', async (_e, id: string) => {
     throw error
   }
 })
-ipcMain.handle('wraith:taskCancel', async (_e, id: string) => {
+ipcMain.handle(IPC.WRAITH_TASKCANCEL, async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   const result = await client.request('task.cancel', { id })
   // task.cancel is an { ok } acknowledgement, not a DurableTaskView. Polling
@@ -1324,159 +1325,159 @@ ipcMain.handle('wraith:taskCancel', async (_e, id: string) => {
   if (isDurableTaskSnapshot(result)) registerTaskActivities([result])
   return result
 })
-ipcMain.handle('wraith:taskDelete', async (_e, id: string) => {
+ipcMain.handle(IPC.WRAITH_TASKDELETE, async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('task.delete', { id })
 })
 
 // 安全策略状态 + 危险工具审计(只读,转发 AppServer policy.status / audit.list)
-ipcMain.handle('wraith:policyStatus', async () => {
+ipcMain.handle(IPC.WRAITH_POLICYSTATUS, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('policy.status', {})
 })
-ipcMain.handle('wraith:auditList', async (_e, limit?: number) => {
+ipcMain.handle(IPC.WRAITH_AUDITLIST, async (_e, limit?: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('audit.list', { limit: limit ?? 20 })
 })
-ipcMain.handle('wraith:sandboxGet', async () => {
+ipcMain.handle(IPC.WRAITH_SANDBOXGET, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('sandbox.get', {})
 })
-ipcMain.handle('wraith:sandboxSet', async (_e, networkAllowed: boolean) => {
+ipcMain.handle(IPC.WRAITH_SANDBOXSET, async (_e, networkAllowed: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('sandbox.set', { networkAllowed: !!networkAllowed })
 })
 
 // 浏览器会话管理(转发 AppServer browser.* RPC;文本直通)
-ipcMain.handle('wraith:browserStatus', async () => {
+ipcMain.handle(IPC.WRAITH_BROWSERSTATUS, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('browser.status', {})
 })
-ipcMain.handle('wraith:browserConnect', async (_e, port?: string) => {
+ipcMain.handle(IPC.WRAITH_BROWSERCONNECT, async (_e, port?: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('browser.connect', { port: port ?? null })
 })
-ipcMain.handle('wraith:browserDisconnect', async () => {
+ipcMain.handle(IPC.WRAITH_BROWSERDISCONNECT, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('browser.disconnect', {})
 })
-ipcMain.handle('wraith:browserTabs', async () => {
+ipcMain.handle(IPC.WRAITH_BROWSERTABS, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('browser.tabs', {})
 })
 
 // Embedding 后端配置 + RAG 检索 / 代码图谱(转发 config.*Embedding / rag.* RPC)
-ipcMain.handle('wraith:configGetEmbedding', async () => {
+ipcMain.handle(IPC.WRAITH_CONFIGGETEMBEDDING, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.getEmbedding', {})
 })
-ipcMain.handle('wraith:configSetEmbedding', async (_e, cfg: { provider: string; model: string; baseUrl: string; apiKey: string }) => {
+ipcMain.handle(IPC.WRAITH_CONFIGSETEMBEDDING, async (_e, cfg: { provider: string; model: string; baseUrl: string; apiKey: string }) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.setEmbedding', cfg)
 })
 // 「测试连接」:发一次真实 embedding 请求。传的是**表单草稿**(不写盘),apiKey 空=后端沿用已存。
 // 后端那支是 dispatchAsync 的,所以这次请求不会占住 app-server 的 reader 线程。
-ipcMain.handle('wraith:configGetRagScope', async () => {
+ipcMain.handle(IPC.WRAITH_CONFIGGETRAGSCOPE, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.getRagScope', {})
 })
 // 只写配置,不动索引:重建是一次整库扫描(实测 bge-m3 18 分钟),不该由一次勾选触发
-ipcMain.handle('wraith:configSetRagScope', async (_e, scope: { excludeTests: boolean; excludeDocs: boolean }) => {
+ipcMain.handle(IPC.WRAITH_CONFIGSETRAGSCOPE, async (_e, scope: { excludeTests: boolean; excludeDocs: boolean }) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.setRagScope', scope)
 })
-ipcMain.handle('wraith:configTestEmbedding', async (_e, cfg: { provider: string; model: string; baseUrl: string; apiKey: string }) => {
+ipcMain.handle(IPC.WRAITH_CONFIGTESTEMBEDDING, async (_e, cfg: { provider: string; model: string; baseUrl: string; apiKey: string }) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.testEmbedding', cfg)
 })
 // 搜索后端的实时状态(只读,不含 key)。「能力概览」那张卡片的角标靠它,
 // 否则只能显示写死的「需配置」——配好了也永远是黄的。
-ipcMain.handle('wraith:configGetSearch', async () => {
+ipcMain.handle(IPC.WRAITH_CONFIGGETSEARCH, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.getSearch', {})
 })
 
 // renderer 只拿真实仓库的只读视图，不接触通用 RPC；这样不会绕过 preload 的窄权限边界。
 // 逐字段投影且不补默认值：null、空列表与 error 都必须如实到达，不能伪装成干净仓库。
-ipcMain.handle('wraith:gitStatus', async () => {
+ipcMain.handle(IPC.WRAITH_GITSTATUS, async () => {
   if (!client) throw new Error('Backend not connected')
   return requestGitStatus(client)
 })
 // 写搜索后端。此前**只有读没有写** —— 卡片只能指着 CLI 的 /config search,
 // 用户问「这个不是必须要 cli 才能配置吧」。校验与落盘语义都在后端的 SearchConfigRules,
 // 与 /config search 同一份(否则桌面能存进 CLI 认为非法的配置)。
-ipcMain.handle('wraith:configSetSearch', async (_e, cfg: { provider: string; apiKey: string; baseUrl: string }) => {
+ipcMain.handle(IPC.WRAITH_CONFIGSETSEARCH, async (_e, cfg: { provider: string; apiKey: string; baseUrl: string }) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.setSearch', cfg)
 })
 // 「测试连接」:发一次真实搜索。传的是**表单草稿**(不写盘),apiKey 空=后端沿用已存。
 // 后端那支是 dispatchAsync 的,所以这次请求不会占住 app-server 的 reader 线程。
-ipcMain.handle('wraith:configTestSearch', async (_e, cfg: { provider: string; apiKey: string; baseUrl: string }) => {
+ipcMain.handle(IPC.WRAITH_CONFIGTESTSEARCH, async (_e, cfg: { provider: string; apiKey: string; baseUrl: string }) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.testSearch', cfg)
 })
 // 模型计价(转发 config.getPricing / config.setPricing RPC)
-ipcMain.handle('wraith:configGetPricing', async () => {
+ipcMain.handle(IPC.WRAITH_CONFIGGETPRICING, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.getPricing', {})
 })
-ipcMain.handle('wraith:configSetPricing', async (_e, entries: unknown[]) => {
+ipcMain.handle(IPC.WRAITH_CONFIGSETPRICING, async (_e, entries: unknown[]) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('config.setPricing', { entries })
 })
-ipcMain.handle('wraith:ragStatus', async () => {
+ipcMain.handle(IPC.WRAITH_RAGSTATUS, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('rag.status', {})
 })
-ipcMain.handle('wraith:ragIndex', async () => {
+ipcMain.handle(IPC.WRAITH_RAGINDEX, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('rag.index', {})
 })
-ipcMain.handle('wraith:ragSearch', async (_e, query: string, topK?: number) => {
+ipcMain.handle(IPC.WRAITH_RAGSEARCH, async (_e, query: string, topK?: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('rag.search', { query, topK: topK ?? 8 })
 })
-ipcMain.handle('wraith:ragGraph', async (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_RAGGRAPH, async (_e, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('rag.graph', { name })
 })
 
-ipcMain.handle('wraith:setSkillEnabled', async (_e, name: string, enabled: boolean) => {
+ipcMain.handle(IPC.WRAITH_SETSKILLENABLED, async (_e, name: string, enabled: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.setEnabled', { name, enabled })
 })
 
-ipcMain.handle('wraith:getSkill', async (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_GETSKILL, async (_e, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.get', { name })
 })
 
-ipcMain.handle('wraith:upsertSkill', async (_e, payload: SkillUpsertPayload) => {
+ipcMain.handle(IPC.WRAITH_UPSERTSKILL, async (_e, payload: SkillUpsertPayload) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.upsert', payload)
 })
 
-ipcMain.handle('wraith:deleteSkill', async (_e, scope: 'user' | 'project', name: string) => {
+ipcMain.handle(IPC.WRAITH_DELETESKILL, async (_e, scope: 'user' | 'project', name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.delete', { scope, name })
 })
 
-ipcMain.handle('wraith:skillExistsInScope', async (_e, scope: 'user' | 'project', name: string) => {
+ipcMain.handle(IPC.WRAITH_SKILLEXISTSINSCOPE, async (_e, scope: 'user' | 'project', name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.existsInScope', { scope, name })
 })
 
-ipcMain.handle('wraith:transcribe', async (_e, audioBase64: string, mime: string) => {
+ipcMain.handle(IPC.WRAITH_TRANSCRIBE, async (_e, audioBase64: string, mime: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('stt.transcribe', { audioBase64, mime })
 })
 
-ipcMain.handle('wraith:forkSkill', async (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_FORKSKILL, async (_e, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('skills.fork', { name })
 })
 
-ipcMain.handle('wraith:setApprovalMode', async (_e, auto: boolean) => {
+ipcMain.handle(IPC.WRAITH_SETAPPROVALMODE, async (_e, auto: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.setApprovalMode', {
     sessionId: currentSessionId,
@@ -1484,51 +1485,51 @@ ipcMain.handle('wraith:setApprovalMode', async (_e, auto: boolean) => {
   })
 })
 
-ipcMain.handle('wraith:listSessions', async () => {
+ipcMain.handle(IPC.WRAITH_LISTSESSIONS, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.list', {})
 })
 
-ipcMain.handle('wraith:listBuiltinTools', async () => {
+ipcMain.handle(IPC.WRAITH_LISTBUILTINTOOLS, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('tools.list', {})
 })
 
-ipcMain.handle('wraith:resumeSession', async (_e, sessionId: string) => {
+ipcMain.handle(IPC.WRAITH_RESUMESESSION, async (_e, sessionId: string) => {
   if (!client) throw new Error('Backend not connected')
   const result = await client.request('session.resume', { sessionId }) as { sessionId?: string }
   currentSessionId = result.sessionId ?? sessionId
   return result
 })
 
-ipcMain.handle('wraith:peekSession', async (_e, sessionId: string) => {
+ipcMain.handle(IPC.WRAITH_PEEKSESSION, async (_e, sessionId: string) => {
   if (!client) throw new Error('Backend not connected')
   // 只读预览:不更新 currentSessionId(这是运行中会话的活跃指针)。
   return client.request('session.peek', { sessionId })
 })
 
-ipcMain.handle('wraith:branchSession', async (_e, sessionId: string) => {
+ipcMain.handle(IPC.WRAITH_BRANCHSESSION, async (_e, sessionId: string) => {
   if (!client) throw new Error('Backend not connected')
   // 从源会话创建分支:不切换 currentSessionId(分支由 renderer 主动切换)。
   return client.request('session.branch', { sessionId })
 })
 
-ipcMain.handle('wraith:rewindSession', async (_e, userOrdinal: number) => {
+ipcMain.handle(IPC.WRAITH_REWINDSESSION, async (_e, userOrdinal: number) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.rewind', { sessionId: currentSessionId, userOrdinal })
 })
 
-ipcMain.handle('wraith:setSessionStarred', async (_e, sessionId: string, starred: boolean) => {
+ipcMain.handle(IPC.WRAITH_SETSESSIONSTARRED, async (_e, sessionId: string, starred: boolean) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.setStarred', { sessionId, starred })
 })
 
-ipcMain.handle('wraith:renameSession', async (_e, sessionId: string, name: string) => {
+ipcMain.handle(IPC.WRAITH_RENAMESESSION, async (_e, sessionId: string, name: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.rename', { sessionId, name })
 })
 
-ipcMain.handle('wraith:deleteSession', async (_e, sessionId: string, path?: string) => {
+ipcMain.handle(IPC.WRAITH_DELETESESSION, async (_e, sessionId: string, path?: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('session.delete', { sessionId, ...(path ? { path } : {}) })
 })
@@ -1549,30 +1550,30 @@ function ensureWorkspace(task: AutomationTask): AutomationTask {
 }
 
 // --- singular (renderer-facing, backward-compat) ---
-ipcMain.handle('wraith:automationList', async () => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONLIST, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.list', {})
 })
-ipcMain.handle('wraith:automationUpsert', async (_e, task: AutomationTask) => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONUPSERT, async (_e, task: AutomationTask) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.upsert', ensureWorkspace(task))
 })
-ipcMain.handle('wraith:automationRemove', async (_e, id: string) => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONREMOVE, async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   const res = await client.request('automations.remove', { id })
   pushBadge()
   return res
 })
-ipcMain.handle('wraith:automationRunNow', async (_e, id: string) => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONRUNNOW, async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.runNow', { id })
 })
 // v1: 定时任务为进程内回合,不可中断 — UI 层不再暴露 STOP 按钮;此 handler 仅保留为存根。
-ipcMain.handle('wraith:automationStop', async (_e, runId: string) => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONSTOP, async (_e, runId: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.stop', { runId })
 })
-ipcMain.handle('wraith:automationRuns', async () => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONRUNS, async () => {
   if (!client) throw new Error('Backend not connected')
   try {
     const result = await client.request('automations.runs', {}) as { runs?: AutomationRun[] }
@@ -1585,32 +1586,32 @@ ipcMain.handle('wraith:automationRuns', async () => {
   }
 })
 // Fix-B: param contract aligned to Fix-A — forwards { approvalId, decision } to daemon.
-ipcMain.handle('wraith:automationRespondApproval', async (_e, approvalId: string, decision: 'approve' | 'reject') => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONRESPONDAPPROVAL, async (_e, approvalId: string, decision: 'approve' | 'reject') => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.respondApproval', { approvalId, decision })
 })
-ipcMain.handle('wraith:automationPanelOpened', async () => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONPANELOPENED, async () => {
   writeLastPanelOpenedAt(app.getPath('userData'), Date.now())
   pushBadge()
   return { ok: true }
 })
 
 // --- plural (Task 16 preload channels) ---
-ipcMain.handle('wraith:automationsList', async () => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONSLIST, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.list', {})
 })
-ipcMain.handle('wraith:automationsUpsert', async (_e, task: AutomationTask) => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONSUPSERT, async (_e, task: AutomationTask) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.upsert', ensureWorkspace(task))
 })
-ipcMain.handle('wraith:automationsRemove', async (_e, id: string) => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONSREMOVE, async (_e, id: string) => {
   if (!client) throw new Error('Backend not connected')
   const res = await client.request('automations.remove', { id })
   pushBadge()
   return res
 })
-ipcMain.handle('wraith:automationsRuns', async (_e, taskId?: string) => {
+ipcMain.handle(IPC.WRAITH_AUTOMATIONSRUNS, async (_e, taskId?: string) => {
   if (!client) throw new Error('Backend not connected')
   try {
     const result = await client.request('automations.runs', taskId ? { taskId } : {}) as { runs?: AutomationRun[] }
@@ -1653,11 +1654,11 @@ registerActivityIpc({
   }),
 })
 
-ipcMain.handle('wraith:qqPending', async () => {
+ipcMain.handle(IPC.WRAITH_QQPENDING, async () => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.qqPending', {})
 })
-ipcMain.handle('wraith:qqPendingClear', async (_e, id?: string) => {
+ipcMain.handle(IPC.WRAITH_QQPENDINGCLEAR, async (_e, id?: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('automations.qqPendingClear', id ? { id } : {})
 })
@@ -1665,61 +1666,61 @@ ipcMain.handle('wraith:qqPendingClear', async (_e, id?: string) => {
 // ---------------------------------------------------------------------------
 // IM 网关(QQ)—— Phase F
 // ---------------------------------------------------------------------------
-ipcMain.handle('wraith:gatewayGetConfig', async (_e, platform?: string) => {
+ipcMain.handle(IPC.WRAITH_GATEWAYGETCONFIG, async (_e, platform?: string) => {
   if (!client) throw new Error('Backend not connected')
   return client.request('gateway.config.get', platform ? { platform } : {})
 })
-ipcMain.handle('wraith:gatewaySetFeishuConfig', async (_e, fields: Record<string, string | undefined>) => {
+ipcMain.handle(IPC.WRAITH_GATEWAYSETFEISHUCONFIG, async (_e, fields: Record<string, string | undefined>) => {
   if (!client) throw new Error('Backend not connected')
   await client.request('gateway.config.set', { platform: 'feishu', ...fields })
   return { ok: true }
 })
-ipcMain.handle('wraith:gatewaySetWecomConfig', async (_e, fields: Record<string, string | undefined>) => {
+ipcMain.handle(IPC.WRAITH_GATEWAYSETWECOMCONFIG, async (_e, fields: Record<string, string | undefined>) => {
   if (!client) throw new Error('Backend not connected')
   await client.request('gateway.config.set', { platform: 'wecom', ...fields })
   return { ok: true }
 })
-ipcMain.handle('wraith:gatewayBindWeixinStart', (_e, workspace?: string) => {
+ipcMain.handle(IPC.WRAITH_GATEWAYBINDWEIXINSTART, (_e, workspace?: string) => {
   gatewayManager?.bindWeixinStart(workspace)
 })
-ipcMain.handle('wraith:gatewaySetWeixinConfig', async (_e, fields: Record<string, string | undefined>) => {
+ipcMain.handle(IPC.WRAITH_GATEWAYSETWEIXINCONFIG, async (_e, fields: Record<string, string | undefined>) => {
   if (!client) throw new Error('Backend not connected')
   await client.request('gateway.config.set', { platform: 'weixin', ...fields })
   return { ok: true }
 })
-ipcMain.handle('wraith:gatewaySetSecret', async (_e, secret: string) => {
+ipcMain.handle(IPC.WRAITH_GATEWAYSETSECRET, async (_e, secret: string) => {
   if (!client) throw new Error('Backend not connected')
   await client.request('gateway.config.set', { clientSecret: secret })
   return { ok: true }
 })
-ipcMain.handle('wraith:gatewaySetWorkspace', async (_e, workspace: string) => {
+ipcMain.handle(IPC.WRAITH_GATEWAYSETWORKSPACE, async (_e, workspace: string) => {
   if (!client) throw new Error('Backend not connected')
   await client.request('gateway.config.set', { workspace })
   return { ok: true }
 })
-ipcMain.handle('wraith:gatewayPickWorkspace', async () => {
+ipcMain.handle(IPC.WRAITH_GATEWAYPICKWORKSPACE, async () => {
   const res = mainWindow
     ? await dialog.showOpenDialog(mainWindow, { properties: ['openDirectory'] })
     : await dialog.showOpenDialog({ properties: ['openDirectory'] })
   if (res.canceled || res.filePaths.length === 0) return null
   return res.filePaths[0]
 })
-ipcMain.handle('wraith:gatewayStart', async () => { gatewayManager?.start(); return { ok: true } })
-ipcMain.handle('wraith:gatewayStop', async () => { gatewayManager?.stop(); return { ok: true } })
-ipcMain.handle('wraith:gatewayRestart', async () => { gatewayManager?.restart(); return { ok: true } })
-ipcMain.handle('wraith:gatewayStatus', async () => gatewayManager?.getStatus() ?? { state: 'stopped' })
-ipcMain.handle('wraith:gatewayLogs', async () => ({ lines: gatewayManager?.getLogs() ?? [] }))
-ipcMain.handle('wraith:gatewayBindStart', async () => { gatewayManager?.bindStart(); return { ok: true } })
-ipcMain.handle('wraith:gatewayBindCancel', async () => { gatewayManager?.cancelBind(); return { ok: true } })
+ipcMain.handle(IPC.WRAITH_GATEWAYSTART, async () => { gatewayManager?.start(); return { ok: true } })
+ipcMain.handle(IPC.WRAITH_GATEWAYSTOP, async () => { gatewayManager?.stop(); return { ok: true } })
+ipcMain.handle(IPC.WRAITH_GATEWAYRESTART, async () => { gatewayManager?.restart(); return { ok: true } })
+ipcMain.handle(IPC.WRAITH_GATEWAYSTATUS, async () => gatewayManager?.getStatus() ?? { state: 'stopped' })
+ipcMain.handle(IPC.WRAITH_GATEWAYLOGS, async () => ({ lines: gatewayManager?.getLogs() ?? [] }))
+ipcMain.handle(IPC.WRAITH_GATEWAYBINDSTART, async () => { gatewayManager?.bindStart(); return { ok: true } })
+ipcMain.handle(IPC.WRAITH_GATEWAYBINDCANCEL, async () => { gatewayManager?.cancelBind(); return { ok: true } })
 
-ipcMain.handle('wraith:appInfo', () => ({
+ipcMain.handle(IPC.WRAITH_APPINFO, () => ({
   version: app.getVersion(),
   repoUrl: 'https://github.com/JavaLyHn/wraith',
   dataDir: path.join(os.homedir(), '.wraith'),
 }))
 
 const RELEASES_URL = 'https://github.com/JavaLyHn/wraith/releases'
-ipcMain.handle('wraith:checkUpdate', async (_e, beta: boolean) => {
+ipcMain.handle(IPC.WRAITH_CHECKUPDATE, async (_e, beta: boolean) => {
   const current = app.getVersion()
   try {
     const res = await fetch('https://api.github.com/repos/JavaLyHn/wraith/releases', {
@@ -1737,22 +1738,22 @@ ipcMain.handle('wraith:checkUpdate', async (_e, beta: boolean) => {
   }
 })
 
-ipcMain.handle('wraith:openExternal', (_e, url: string) => { void shell.openExternal(url) })
-ipcMain.handle('wraith:openPath', (_e, p: string) => shell.openPath(p))
+ipcMain.handle(IPC.WRAITH_OPENEXTERNAL, (_e, url: string) => { void shell.openExternal(url) })
+ipcMain.handle(IPC.WRAITH_OPENPATH, (_e, p: string) => shell.openPath(p))
 
-ipcMain.handle('wraith:revealInFinder', (_e, p: string) => { shell.showItemInFolder(p) })
+ipcMain.handle(IPC.WRAITH_REVEALINFINDER, (_e, p: string) => { shell.showItemInFolder(p) })
 
 // ── 「文档」面板:~/.wraith/documents/ 资料库 ──────────────────────────
 // 入参一律是库内文件名而非路径 —— renderer 不该有能力指定任意路径,尤其对 remove。
 function docsDir(): string { return documentsDir(os.homedir()) }
 
-ipcMain.handle('wraith:documents:list', async () => {
+ipcMain.handle(IPC.WRAITH_DOCUMENTS_LIST, async () => {
   const dir = docsDir()
   await ensureDocumentsDir(dir)
   return listDocuments(dir)
 })
 
-ipcMain.handle('wraith:documents:add', async (_e, paths?: string[]) => {
+ipcMain.handle(IPC.WRAITH_DOCUMENTS_ADD, async (_e, paths?: string[]) => {
   const dir = docsDir()
   let sources = paths
   if (!sources || sources.length === 0) {
@@ -1766,18 +1767,18 @@ ipcMain.handle('wraith:documents:add', async (_e, paths?: string[]) => {
   return addDocuments(dir, sources)
 })
 
-ipcMain.handle('wraith:documents:remove', async (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_DOCUMENTS_REMOVE, async (_e, name: string) => {
   await removeDocument(docsDir(), name)
 })
 
-ipcMain.handle('wraith:documents:open', async (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_DOCUMENTS_OPEN, async (_e, name: string) => {
   const r = resolveInVault(docsDir(), name)
   if (r.status === 'missing') throw new Error('文件已不存在')
   const err = await shell.openPath(r.path)
   if (err) throw new Error(err)   // openPath 失败时返回非空错误串
 })
 
-ipcMain.handle('wraith:documents:reveal', (_e, name: string) => {
+ipcMain.handle(IPC.WRAITH_DOCUMENTS_REVEAL, (_e, name: string) => {
   const r = resolveInVault(docsDir(), name)
   if (r.status === 'missing') throw new Error('文件已不存在')
   shell.showItemInFolder(r.path)
@@ -1789,23 +1790,23 @@ const getWorkspaceRoot = (): string => {
   return readSettings(app.getPath('userData')).workspace ?? process.cwd()
 }
 
-ipcMain.handle('wraith:fs:tree', async (_e, rootPath: string, opts?: { maxDepth?: number }) => {
+ipcMain.handle(IPC.WRAITH_FS_TREE, async (_e, rootPath: string, opts?: { maxDepth?: number }) => {
   return fileX.listTree(rootPath, getWorkspaceRoot, opts)
 })
-ipcMain.handle('wraith:fs:readText', async (_e, absPath: string, maxBytes?: number) => {
+ipcMain.handle(IPC.WRAITH_FS_READTEXT, async (_e, absPath: string, maxBytes?: number) => {
   return fileX.readText(absPath, getWorkspaceRoot, maxBytes)
 })
-ipcMain.handle('wraith:fs:stat', async (_e, absPath: string) => {
+ipcMain.handle(IPC.WRAITH_FS_STAT, async (_e, absPath: string) => {
   return fileX.statFile(absPath, getWorkspaceRoot)
 })
-ipcMain.handle('wraith:fs:reveal', async (_e, absPath: string) => {
+ipcMain.handle(IPC.WRAITH_FS_REVEAL, async (_e, absPath: string) => {
   return fileX.revealInFolder(absPath, getWorkspaceRoot)
 })
-ipcMain.handle('wraith:fs:openExternal', async (_e, absPath: string) => {
+ipcMain.handle(IPC.WRAITH_FS_OPENEXTERNAL, async (_e, absPath: string) => {
   return fileX.openWithDefault(absPath, getWorkspaceRoot)
 })
 
-ipcMain.handle('wraith:downloadCopy', async (_e, p: string): Promise<string> => {
+ipcMain.handle(IPC.WRAITH_DOWNLOADCOPY, async (_e, p: string): Promise<string> => {
   const downloads = path.join(os.homedir(), 'Downloads')
   await fs.promises.mkdir(downloads, { recursive: true })
   const existing = new Set(await fs.promises.readdir(downloads).catch(() => [] as string[]))
@@ -1833,7 +1834,7 @@ function computeEditors(): EditorApp[] {
   return editorsCache
 }
 
-ipcMain.handle('wraith:openWithApp', (_e, p: string, appPath: string) => {
+ipcMain.handle(IPC.WRAITH_OPENWITHAPP, (_e, p: string, appPath: string) => {
   if (!computeEditors().some(ed => ed.appPath === appPath)) throw new Error('无效的应用')
   const plan = resolveOpenWithPlan(process.platform, appPath, p)
   if (plan.kind === 'spawn') {
@@ -1843,20 +1844,20 @@ ipcMain.handle('wraith:openWithApp', (_e, p: string, appPath: string) => {
   }
 })
 
-ipcMain.handle('wraith:listEditors', (): EditorApp[] => computeEditors())
+ipcMain.handle(IPC.WRAITH_LISTEDITORS, (): EditorApp[] => computeEditors())
 
-ipcMain.handle('wraith:undoFileEdit', async (_e, payload: { path: string; before: string; kind: 'created' | 'modified' }): Promise<{ ok: boolean; message?: string }> => {
+ipcMain.handle(IPC.WRAITH_UNDOFILEEDIT, async (_e, payload: { path: string; before: string; kind: 'created' | 'modified' }): Promise<{ ok: boolean; message?: string }> => {
   const ws = resolvePersistedWorkspace(app.getPath('userData'))
   return performUndo({ workspace: ws, path: payload.path, before: payload.before, kind: payload.kind })
 })
 
-ipcMain.handle('wraith:ptyCreate', (_e, opts?: { cwd?: string; cols?: number; rows?: number; theme?: 'light' | 'dark' }) => ptyManager?.create(opts ?? {}) ?? { id: '' })
-ipcMain.handle('wraith:ptyInput', (_e, id: string, data: string) => { ptyManager?.write(id, data) })
-ipcMain.handle('wraith:ptyResize', (_e, id: string, cols: number, rows: number) => { ptyManager?.resize(id, cols, rows) })
-ipcMain.handle('wraith:ptyKill', (_e, id: string) => { ptyManager?.kill(id) })
+ipcMain.handle(IPC.WRAITH_PTYCREATE, (_e, opts?: { cwd?: string; cols?: number; rows?: number; theme?: 'light' | 'dark' }) => ptyManager?.create(opts ?? {}) ?? { id: '' })
+ipcMain.handle(IPC.WRAITH_PTYINPUT, (_e, id: string, data: string) => { ptyManager?.write(id, data) })
+ipcMain.handle(IPC.WRAITH_PTYRESIZE, (_e, id: string, cols: number, rows: number) => { ptyManager?.resize(id, cols, rows) })
+ipcMain.handle(IPC.WRAITH_PTYKILL, (_e, id: string) => { ptyManager?.kill(id) })
 
 // 导出对话:渲染层把序列化好的 Markdown 传来,弹保存对话框写盘(纯 Electron 主进程,不经 Java 后端)
-ipcMain.handle('wraith:saveTextFile', async (_e, defaultName: string, content: string) => {
+ipcMain.handle(IPC.WRAITH_SAVETEXTFILE, async (_e, defaultName: string, content: string) => {
   const opts = {
     defaultPath: defaultName,
     filters: [{ name: 'Markdown', extensions: ['md'] }, { name: '所有文件', extensions: ['*'] }],

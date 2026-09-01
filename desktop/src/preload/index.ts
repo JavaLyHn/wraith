@@ -4,6 +4,7 @@ import type { FeishuConfigFields, WecomConfigFields, WeixinConfigFields, Gateway
 import type { PetView, PetImportResult, PetInstallResult, PetSource } from '../shared/pets'
 import type { PetConfig } from '../main/settings'
 import type { EditorApp } from '../shared/editors'
+import { IPC } from '../shared/ipcChannels'
 
 /**
  * WraithApi — typed bridge exposed to the renderer as window.wraith.
@@ -269,23 +270,23 @@ export interface CloseBehaviorApi {
 const wraith: WraithApi = {
   platform: process.platform,
   initialize(workspaceDir) {
-    return ipcRenderer.invoke('wraith:initialize', workspaceDir)
+    return ipcRenderer.invoke(IPC.WRAITH_INITIALIZE, workspaceDir)
   },
 
   startSession(workspaceDir) {
-    return ipcRenderer.invoke('wraith:startSession', workspaceDir)
+    return ipcRenderer.invoke(IPC.WRAITH_STARTSESSION, workspaceDir)
   },
 
   submitTurn(input, attachments, mode) {
-    return ipcRenderer.invoke('wraith:submitTurn', input, attachments, mode ?? 'react')
+    return ipcRenderer.invoke(IPC.WRAITH_SUBMITTURN, input, attachments, mode ?? 'react')
   },
 
   pickAttachments() {
-    return ipcRenderer.invoke('wraith:pickAttachments') as Promise<{ path: string; name: string; kind: string }[]>
+    return ipcRenderer.invoke(IPC.WRAITH_PICKATTACHMENTS) as Promise<{ path: string; name: string; kind: string }[]>
   },
 
   saveTempImage(base64, ext) {
-    return ipcRenderer.invoke('wraith:saveTempImage', base64, ext) as Promise<{ path: string; name: string; kind: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_SAVETEMPIMAGE, base64, ext) as Promise<{ path: string; name: string; kind: string }>
   },
 
   pathForFile(file) {
@@ -293,91 +294,91 @@ const wraith: WraithApi = {
   },
 
   readImageDataUrl(path) {
-    return ipcRenderer.invoke('wraith:readImageDataUrl', path) as Promise<string | null>
+    return ipcRenderer.invoke(IPC.WRAITH_READIMAGEDATAURL, path) as Promise<string | null>
   },
 
   respondApproval(approvalId, decision, opts) {
-    return ipcRenderer.invoke('wraith:respondApproval', approvalId, decision, opts ?? null)
+    return ipcRenderer.invoke(IPC.WRAITH_RESPONDAPPROVAL, approvalId, decision, opts ?? null)
   },
 
   respondChoice(choiceId, cancelled, selectedIndex) {
-    return ipcRenderer.invoke('wraith:respondChoice', choiceId, cancelled, selectedIndex)
+    return ipcRenderer.invoke(IPC.WRAITH_RESPONDCHOICE, choiceId, cancelled, selectedIndex)
   },
 
   respondPlanReview(reviewId, decision, feedback) {
-    return ipcRenderer.invoke('wraith:respondPlanReview', reviewId, decision, feedback ?? null) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_RESPONDPLANREVIEW, reviewId, decision, feedback ?? null) as Promise<{ ok: boolean }>
   },
 
   interrupt() {
-    return ipcRenderer.invoke('wraith:interrupt')
+    return ipcRenderer.invoke(IPC.WRAITH_INTERRUPT)
   },
 
   getInitialWorkspace() {
-    return ipcRenderer.invoke('wraith:getInitialWorkspace')
+    return ipcRenderer.invoke(IPC.WRAITH_GETINITIALWORKSPACE)
   },
 
   listProjects() {
-    return ipcRenderer.invoke('wraith:listProjects') as Promise<{ projects: ProjectView[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_LISTPROJECTS) as Promise<{ projects: ProjectView[] }>
   },
 
   activateProject(path) {
-    return ipcRenderer.invoke('wraith:activateProject', path) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_ACTIVATEPROJECT, path) as Promise<{ ok: boolean }>
   },
 
   addProject() {
-    return ipcRenderer.invoke('wraith:addProject') as Promise<string | null>
+    return ipcRenderer.invoke(IPC.WRAITH_ADDPROJECT) as Promise<string | null>
   },
 
   removeProject(path) {
-    return ipcRenderer.invoke('wraith:removeProject', path) as Promise<void>
+    return ipcRenderer.invoke(IPC.WRAITH_REMOVEPROJECT, path) as Promise<void>
   },
 
   renameProject(path, name) {
-    return ipcRenderer.invoke('wraith:renameProject', path, name) as Promise<void>
+    return ipcRenderer.invoke(IPC.WRAITH_RENAMEPROJECT, path, name) as Promise<void>
   },
 
   setProjectStarred(path, starred) {
-    return ipcRenderer.invoke('wraith:setProjectStarred', path, starred) as Promise<void>
+    return ipcRenderer.invoke(IPC.WRAITH_SETPROJECTSTARRED, path, starred) as Promise<void>
   },
 
   reorderProject(path, targetIndex) {
-    return ipcRenderer.invoke('wraith:reorderProject', path, targetIndex) as Promise<void>
+    return ipcRenderer.invoke(IPC.WRAITH_REORDERPROJECT, path, targetIndex) as Promise<void>
   },
 
   projectSummary(paths) {
-    return ipcRenderer.invoke('wraith:projectSummary', paths) as Promise<{ summaries: ProjectSummary[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_PROJECTSUMMARY, paths) as Promise<{ summaries: ProjectSummary[] }>
   },
 
   listSessionsForProject(path, limit) {
-    return ipcRenderer.invoke('wraith:listSessionsForProject', path, limit) as Promise<{ sessions: SessionMeta[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_LISTSESSIONSFORPROJECT, path, limit) as Promise<{ sessions: SessionMeta[] }>
   },
 
   setSessionArchived(sessionId, archived, path) {
-    return ipcRenderer.invoke('wraith:setSessionArchived', sessionId, archived, path) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_SETSESSIONARCHIVED, sessionId, archived, path) as Promise<{ ok: boolean }>
   },
 
   listArchivedSessions(paths, limit) {
-    return ipcRenderer.invoke('wraith:listArchivedSessions', paths, limit) as Promise<{ sessions: SessionMeta[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_LISTARCHIVEDSESSIONS, paths, limit) as Promise<{ sessions: SessionMeta[] }>
   },
 
   archiveProjectSessions(path) {
-    return ipcRenderer.invoke('wraith:archiveProjectSessions', path) as Promise<{ archived: number }>
+    return ipcRenderer.invoke(IPC.WRAITH_ARCHIVEPROJECTSESSIONS, path) as Promise<{ archived: number }>
   },
 
   restartBackend() {
-    return ipcRenderer.invoke('wraith:restartBackend')
+    return ipcRenderer.invoke(IPC.WRAITH_RESTARTBACKEND)
   },
 
   setApprovalMode(auto) {
-    return ipcRenderer.invoke('wraith:setApprovalMode', auto) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_SETAPPROVALMODE, auto) as Promise<{ ok: boolean }>
   },
 
   listSessions() {
-    return ipcRenderer.invoke('wraith:listSessions') as Promise<{ sessions: SessionMeta[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_LISTSESSIONS) as Promise<{ sessions: SessionMeta[] }>
   },
 
   resumeSession(sessionId) {
-    return ipcRenderer.invoke('wraith:resumeSession', sessionId) as Promise<{
+    return ipcRenderer.invoke(IPC.WRAITH_RESUMESESSION, sessionId) as Promise<{
       sessionId: string
       messages: ResumedMessage[]
       provider?: string
@@ -388,7 +389,7 @@ const wraith: WraithApi = {
   },
 
   peekSession(sessionId) {
-    return ipcRenderer.invoke('wraith:peekSession', sessionId) as Promise<{
+    return ipcRenderer.invoke(IPC.WRAITH_PEEKSESSION, sessionId) as Promise<{
       sessionId: string
       messages: ResumedMessage[]
       cards?: Array<{ turnOrdinal: number; events: Array<{ method: string; params: unknown }> }>
@@ -396,67 +397,67 @@ const wraith: WraithApi = {
   },
 
   rewindSession(userOrdinal) {
-    return ipcRenderer.invoke('wraith:rewindSession', userOrdinal) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_REWINDSESSION, userOrdinal) as Promise<{ ok: boolean }>
   },
 
   setSessionStarred(sessionId, starred) {
-    return ipcRenderer.invoke('wraith:setSessionStarred', sessionId, starred) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_SETSESSIONSTARRED, sessionId, starred) as Promise<{ ok: boolean }>
   },
 
   renameSession(sessionId, name) {
-    return ipcRenderer.invoke('wraith:renameSession', sessionId, name) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_RENAMESESSION, sessionId, name) as Promise<{ ok: boolean }>
   },
 
   deleteSession(sessionId, path) {
-    return ipcRenderer.invoke('wraith:deleteSession', sessionId, path) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_DELETESESSION, sessionId, path) as Promise<{ ok: boolean }>
   },
 
   branchSession(sessionId) {
-    return ipcRenderer.invoke('wraith:branchSession', sessionId) as Promise<{ sessionId: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_BRANCHSESSION, sessionId) as Promise<{ sessionId: string }>
   },
 
   mcpList() {
-    return ipcRenderer.invoke('wraith:mcpList') as Promise<McpListResult>
+    return ipcRenderer.invoke(IPC.WRAITH_MCPLIST) as Promise<McpListResult>
   },
 
   listBuiltinTools() {
-    return ipcRenderer.invoke('wraith:listBuiltinTools') as Promise<{ tools: BuiltinToolView[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_LISTBUILTINTOOLS) as Promise<{ tools: BuiltinToolView[] }>
   },
 
   mcpEnable(name) {
-    return ipcRenderer.invoke('wraith:mcpEnable', name) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MCPENABLE, name) as Promise<{ ok: boolean }>
   },
 
   mcpDisable(name) {
-    return ipcRenderer.invoke('wraith:mcpDisable', name) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MCPDISABLE, name) as Promise<{ ok: boolean }>
   },
 
   mcpRestart(name) {
-    return ipcRenderer.invoke('wraith:mcpRestart', name) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MCPRESTART, name) as Promise<{ ok: boolean }>
   },
 
   mcpLogs(name) {
-    return ipcRenderer.invoke('wraith:mcpLogs', name) as Promise<{ lines: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_MCPLOGS, name) as Promise<{ lines: string }>
   },
 
   mcpResources(name) {
-    return ipcRenderer.invoke('wraith:mcpResources', name) as Promise<{ resources: McpResourceView[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_MCPRESOURCES, name) as Promise<{ resources: McpResourceView[] }>
   },
 
   mcpPrompts(name) {
-    return ipcRenderer.invoke('wraith:mcpPrompts', name) as Promise<{ text: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_MCPPROMPTS, name) as Promise<{ text: string }>
   },
 
   mcpConfigUpsert(payload) {
-    return ipcRenderer.invoke('wraith:mcpConfigUpsert', payload) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MCPCONFIGUPSERT, payload) as Promise<{ ok: boolean }>
   },
 
   mcpTest(payload) {
-    return ipcRenderer.invoke('wraith:mcpTest', payload) as Promise<McpTestResult>
+    return ipcRenderer.invoke(IPC.WRAITH_MCPTEST, payload) as Promise<McpTestResult>
   },
 
   mcpConfigRemove(scope, name) {
-    return ipcRenderer.invoke('wraith:mcpConfigRemove', scope, name) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MCPCONFIGREMOVE, scope, name) as Promise<{ ok: boolean }>
   },
 
   onEvent(cb) {
@@ -469,11 +470,11 @@ const wraith: WraithApi = {
   },
 
   activityList(limit) {
-    return ipcRenderer.invoke('wraith:activityList', limit) as Promise<ActivitySnapshot>
+    return ipcRenderer.invoke(IPC.WRAITH_ACTIVITYLIST, limit) as Promise<ActivitySnapshot>
   },
 
   activityCancel(item) {
-    return ipcRenderer.invoke('wraith:activityCancel', item) as Promise<ActivityCancelResult>
+    return ipcRenderer.invoke(IPC.WRAITH_ACTIVITYCANCEL, item) as Promise<ActivityCancelResult>
   },
 
   onActivityEvent(cb) {
@@ -483,35 +484,35 @@ const wraith: WraithApi = {
   },
 
   automationList() {
-    return ipcRenderer.invoke('wraith:automationList') as Promise<{ tasks: AutomationTask[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONLIST) as Promise<{ tasks: AutomationTask[] }>
   },
 
   automationUpsert(task) {
-    return ipcRenderer.invoke('wraith:automationUpsert', task) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONUPSERT, task) as Promise<{ ok: boolean }>
   },
 
   automationRemove(id) {
-    return ipcRenderer.invoke('wraith:automationRemove', id) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONREMOVE, id) as Promise<{ ok: boolean }>
   },
 
   automationRunNow(id) {
-    return ipcRenderer.invoke('wraith:automationRunNow', id) as Promise<{ ok: boolean; reason?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONRUNNOW, id) as Promise<{ ok: boolean; reason?: string }>
   },
 
   automationStop(runId) {
-    return ipcRenderer.invoke('wraith:automationStop', runId) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONSTOP, runId) as Promise<{ ok: boolean }>
   },
 
   automationRuns() {
-    return ipcRenderer.invoke('wraith:automationRuns') as Promise<{ runs: AutomationRun[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONRUNS) as Promise<{ runs: AutomationRun[] }>
   },
 
   automationRespondApproval(approvalId, decision) {
-    return ipcRenderer.invoke('wraith:automationRespondApproval', approvalId, decision) as Promise<{ ok: boolean; reason?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONRESPONDAPPROVAL, approvalId, decision) as Promise<{ ok: boolean; reason?: string }>
   },
 
   automationPanelOpened() {
-    return ipcRenderer.invoke('wraith:automationPanelOpened') as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONPANELOPENED) as Promise<{ ok: boolean }>
   },
 
   onAutomationEvent(cb) {
@@ -522,242 +523,242 @@ const wraith: WraithApi = {
 
   // Task 16: 守护进程路由的 CRUD(plural 前缀,main-process handlers 在 Task 18 接线)
   automationsList() {
-    return ipcRenderer.invoke('wraith:automationsList') as Promise<{ tasks: AutomationTask[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONSLIST) as Promise<{ tasks: AutomationTask[] }>
   },
 
   automationsUpsert(task) {
-    return ipcRenderer.invoke('wraith:automationsUpsert', task) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONSUPSERT, task) as Promise<{ ok: boolean }>
   },
 
   automationsRemove(id) {
-    return ipcRenderer.invoke('wraith:automationsRemove', id) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONSREMOVE, id) as Promise<{ ok: boolean }>
   },
 
   automationsRuns(taskId?) {
-    return ipcRenderer.invoke('wraith:automationsRuns', taskId) as Promise<{ runs: AutomationRun[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_AUTOMATIONSRUNS, taskId) as Promise<{ runs: AutomationRun[] }>
   },
 
   qqPending() {
-    return ipcRenderer.invoke('wraith:qqPending') as Promise<{ items: QqPendingItem[]; count: number }>
+    return ipcRenderer.invoke(IPC.WRAITH_QQPENDING) as Promise<{ items: QqPendingItem[]; count: number }>
   },
   qqPendingClear(id) {
-    return ipcRenderer.invoke('wraith:qqPendingClear', id) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_QQPENDINGCLEAR, id) as Promise<{ ok: boolean }>
   },
 
   modelList() {
-    return ipcRenderer.invoke('wraith:modelList') as Promise<ModelListResult>
+    return ipcRenderer.invoke(IPC.WRAITH_MODELLIST) as Promise<ModelListResult>
   },
 
   setModel(provider) {
-    return ipcRenderer.invoke('wraith:setModel', provider) as Promise<{ provider: string; model: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_SETMODEL, provider) as Promise<{ provider: string; model: string }>
   },
 
   setDefaultProvider(provider) {
-    return ipcRenderer.invoke('wraith:setDefaultProvider', provider) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_SETDEFAULTPROVIDER, provider) as Promise<{ ok: boolean }>
   },
 
   setProvider(p) {
-    return ipcRenderer.invoke('wraith:setProvider', p) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_SETPROVIDER, p) as Promise<{ ok: boolean }>
   },
 
   removeProvider(id) {
-    return ipcRenderer.invoke('wraith:removeProvider', id) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_REMOVEPROVIDER, id) as Promise<{ ok: boolean }>
   },
   testProvider(p) {
-    return ipcRenderer.invoke('wraith:testProvider', p) as Promise<{ ok: boolean; model?: string; latencyMs?: number; error?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_TESTPROVIDER, p) as Promise<{ ok: boolean; model?: string; latencyMs?: number; error?: string }>
   },
 
   skillsList() {
-    return ipcRenderer.invoke('wraith:skillsList') as Promise<SkillListResult>
+    return ipcRenderer.invoke(IPC.WRAITH_SKILLSLIST) as Promise<SkillListResult>
   },
   memoryList() {
-    return ipcRenderer.invoke('wraith:memoryList') as Promise<MemoryListResult>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYLIST) as Promise<MemoryListResult>
   },
   memorySearch(query) {
-    return ipcRenderer.invoke('wraith:memorySearch', query) as Promise<MemoryListResult>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYSEARCH, query) as Promise<MemoryListResult>
   },
   memoryDelete(id) {
-    return ipcRenderer.invoke('wraith:memoryDelete', id) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYDELETE, id) as Promise<{ ok: boolean }>
   },
   memorySave(fact, scope) {
-    return ipcRenderer.invoke('wraith:memorySave', fact, scope) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYSAVE, fact, scope) as Promise<{ ok: boolean }>
   },
   memoryClear() {
-    return ipcRenderer.invoke('wraith:memoryClear') as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYCLEAR) as Promise<{ ok: boolean }>
   },
   memoryInitProject(force) {
-    return ipcRenderer.invoke('wraith:memoryInitProject', force) as Promise<ProjectMemoryInitResult>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYINITPROJECT, force) as Promise<ProjectMemoryInitResult>
   },
   memoryPendingList() {
-    return ipcRenderer.invoke('wraith:memoryPendingList') as Promise<PendingListResult>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYPENDINGLIST) as Promise<PendingListResult>
   },
   memoryPendingApprove(id) {
-    return ipcRenderer.invoke('wraith:memoryPendingApprove', id) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYPENDINGAPPROVE, id) as Promise<{ ok: boolean }>
   },
   memoryPendingApproveReplacing(id, oldId) {
-    return ipcRenderer.invoke('wraith:memoryPendingApproveReplacing', id, oldId) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYPENDINGAPPROVEREPLACING, id, oldId) as Promise<{ ok: boolean }>
   },
   memoryPendingReject(id) {
-    return ipcRenderer.invoke('wraith:memoryPendingReject', id) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYPENDINGREJECT, id) as Promise<{ ok: boolean }>
   },
   memoryPendingClear() {
-    return ipcRenderer.invoke('wraith:memoryPendingClear') as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYPENDINGCLEAR) as Promise<{ ok: boolean }>
   },
   memoryExtractNow() {
-    return ipcRenderer.invoke('wraith:memoryExtractNow') as Promise<ExtractNowResult>
+    return ipcRenderer.invoke(IPC.WRAITH_MEMORYEXTRACTNOW) as Promise<ExtractNowResult>
   },
   snapshotList(limit) {
-    return ipcRenderer.invoke('wraith:snapshotList', limit) as Promise<SnapshotListResult>
+    return ipcRenderer.invoke(IPC.WRAITH_SNAPSHOTLIST, limit) as Promise<SnapshotListResult>
   },
   snapshotRestore(offset) {
-    return ipcRenderer.invoke('wraith:snapshotRestore', offset) as Promise<SnapshotRestoreResult>
+    return ipcRenderer.invoke(IPC.WRAITH_SNAPSHOTRESTORE, offset) as Promise<SnapshotRestoreResult>
   },
   snapshotRestoreCommit(commitId) {
-    return ipcRenderer.invoke('wraith:snapshotRestoreCommit', commitId) as Promise<SnapshotRestoreResult>
+    return ipcRenderer.invoke(IPC.WRAITH_SNAPSHOTRESTORECOMMIT, commitId) as Promise<SnapshotRestoreResult>
   },
   snapshotSettings() {
-    return ipcRenderer.invoke('wraith:snapshotSettings') as Promise<SnapshotSettingsView>
+    return ipcRenderer.invoke(IPC.WRAITH_SNAPSHOTSETTINGS) as Promise<SnapshotSettingsView>
   },
   snapshotSetEnabled(enabled) {
-    return ipcRenderer.invoke('wraith:snapshotSetEnabled', enabled) as Promise<{ ok: boolean; enabled?: boolean; warning?: string; message?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_SNAPSHOTSETENABLED, enabled) as Promise<{ ok: boolean; enabled?: boolean; warning?: string; message?: string }>
   },
   snapshotClean() {
-    return ipcRenderer.invoke('wraith:snapshotClean') as Promise<{ ok: boolean; message?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_SNAPSHOTCLEAN) as Promise<{ ok: boolean; message?: string }>
   },
   policyStatus() {
-    return ipcRenderer.invoke('wraith:policyStatus') as Promise<PolicyStatusView>
+    return ipcRenderer.invoke(IPC.WRAITH_POLICYSTATUS) as Promise<PolicyStatusView>
   },
   auditList(limit) {
-    return ipcRenderer.invoke('wraith:auditList', limit) as Promise<AuditListResult>
+    return ipcRenderer.invoke(IPC.WRAITH_AUDITLIST, limit) as Promise<AuditListResult>
   },
   sandboxGet() {
-    return ipcRenderer.invoke('wraith:sandboxGet') as Promise<SandboxState>
+    return ipcRenderer.invoke(IPC.WRAITH_SANDBOXGET) as Promise<SandboxState>
   },
   sandboxSet(networkAllowed) {
-    return ipcRenderer.invoke('wraith:sandboxSet', networkAllowed) as Promise<SandboxState>
+    return ipcRenderer.invoke(IPC.WRAITH_SANDBOXSET, networkAllowed) as Promise<SandboxState>
   },
   browserStatus() {
-    return ipcRenderer.invoke('wraith:browserStatus') as Promise<BrowserCmdResult>
+    return ipcRenderer.invoke(IPC.WRAITH_BROWSERSTATUS) as Promise<BrowserCmdResult>
   },
   browserConnect(port) {
-    return ipcRenderer.invoke('wraith:browserConnect', port) as Promise<BrowserCmdResult>
+    return ipcRenderer.invoke(IPC.WRAITH_BROWSERCONNECT, port) as Promise<BrowserCmdResult>
   },
   browserDisconnect() {
-    return ipcRenderer.invoke('wraith:browserDisconnect') as Promise<BrowserCmdResult>
+    return ipcRenderer.invoke(IPC.WRAITH_BROWSERDISCONNECT) as Promise<BrowserCmdResult>
   },
   browserTabs() {
-    return ipcRenderer.invoke('wraith:browserTabs') as Promise<BrowserCmdResult>
+    return ipcRenderer.invoke(IPC.WRAITH_BROWSERTABS) as Promise<BrowserCmdResult>
   },
   configGetEmbedding() {
-    return ipcRenderer.invoke('wraith:configGetEmbedding') as Promise<EmbeddingConfigView>
+    return ipcRenderer.invoke(IPC.WRAITH_CONFIGGETEMBEDDING) as Promise<EmbeddingConfigView>
   },
   configSetEmbedding(cfg) {
-    return ipcRenderer.invoke('wraith:configSetEmbedding', cfg) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_CONFIGSETEMBEDDING, cfg) as Promise<{ ok: boolean }>
   },
   configTestEmbedding(cfg) {
-    return ipcRenderer.invoke('wraith:configTestEmbedding', cfg) as Promise<EmbeddingTestResult>
+    return ipcRenderer.invoke(IPC.WRAITH_CONFIGTESTEMBEDDING, cfg) as Promise<EmbeddingTestResult>
   },
   configGetRagScope() {
-    return ipcRenderer.invoke('wraith:configGetRagScope') as Promise<RagScopeView>
+    return ipcRenderer.invoke(IPC.WRAITH_CONFIGGETRAGSCOPE) as Promise<RagScopeView>
   },
   configSetRagScope(scope) {
-    return ipcRenderer.invoke('wraith:configSetRagScope', scope) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_CONFIGSETRAGSCOPE, scope) as Promise<{ ok: boolean }>
   },
   configGetSearch() {
-    return ipcRenderer.invoke('wraith:configGetSearch') as Promise<SearchStatusView>
+    return ipcRenderer.invoke(IPC.WRAITH_CONFIGGETSEARCH) as Promise<SearchStatusView>
   },
   gitStatus() {
-    return ipcRenderer.invoke('wraith:gitStatus') as Promise<GitStatusView>
+    return ipcRenderer.invoke(IPC.WRAITH_GITSTATUS) as Promise<GitStatusView>
   },
   configSetSearch(cfg) {
-    return ipcRenderer.invoke('wraith:configSetSearch', cfg) as Promise<{ ok: boolean; error?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_CONFIGSETSEARCH, cfg) as Promise<{ ok: boolean; error?: string }>
   },
   configTestSearch(cfg) {
-    return ipcRenderer.invoke('wraith:configTestSearch', cfg) as Promise<SearchTestResult>
+    return ipcRenderer.invoke(IPC.WRAITH_CONFIGTESTSEARCH, cfg) as Promise<SearchTestResult>
   },
   configGetPricing() {
-    return ipcRenderer.invoke('wraith:configGetPricing') as Promise<PricingListResult>
+    return ipcRenderer.invoke(IPC.WRAITH_CONFIGGETPRICING) as Promise<PricingListResult>
   },
   configSetPricing(entries) {
-    return ipcRenderer.invoke('wraith:configSetPricing', entries) as Promise<{ ok: boolean; error?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_CONFIGSETPRICING, entries) as Promise<{ ok: boolean; error?: string }>
   },
   ragStatus() {
-    return ipcRenderer.invoke('wraith:ragStatus') as Promise<RagStatus>
+    return ipcRenderer.invoke(IPC.WRAITH_RAGSTATUS) as Promise<RagStatus>
   },
   ragIndex() {
-    return ipcRenderer.invoke('wraith:ragIndex') as Promise<RagIndexResult>
+    return ipcRenderer.invoke(IPC.WRAITH_RAGINDEX) as Promise<RagIndexResult>
   },
   ragSearch(query, topK) {
-    return ipcRenderer.invoke('wraith:ragSearch', query, topK) as Promise<RagSearchResult>
+    return ipcRenderer.invoke(IPC.WRAITH_RAGSEARCH, query, topK) as Promise<RagSearchResult>
   },
   ragGraph(name) {
-    return ipcRenderer.invoke('wraith:ragGraph', name) as Promise<RagGraphResult>
+    return ipcRenderer.invoke(IPC.WRAITH_RAGGRAPH, name) as Promise<RagGraphResult>
   },
 
   setSkillEnabled(name, enabled) {
-    return ipcRenderer.invoke('wraith:setSkillEnabled', name, enabled) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_SETSKILLENABLED, name, enabled) as Promise<{ ok: boolean }>
   },
 
   getSkill(name) {
-    return ipcRenderer.invoke('wraith:getSkill', name) as Promise<SkillDetail>
+    return ipcRenderer.invoke(IPC.WRAITH_GETSKILL, name) as Promise<SkillDetail>
   },
   upsertSkill(payload) {
-    return ipcRenderer.invoke('wraith:upsertSkill', payload) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_UPSERTSKILL, payload) as Promise<{ ok: boolean }>
   },
   deleteSkill(scope, name) {
-    return ipcRenderer.invoke('wraith:deleteSkill', scope, name) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_DELETESKILL, scope, name) as Promise<{ ok: boolean }>
   },
   skillExistsInScope(scope, name) {
-    return ipcRenderer.invoke('wraith:skillExistsInScope', scope, name) as Promise<{ exists: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_SKILLEXISTSINSCOPE, scope, name) as Promise<{ exists: boolean }>
   },
   forkSkill(name) {
-    return ipcRenderer.invoke('wraith:forkSkill', name) as Promise<{ ok: boolean; name: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_FORKSKILL, name) as Promise<{ ok: boolean; name: string }>
   },
 
   gatewayGetConfig(platform?: string) {
-    return ipcRenderer.invoke('wraith:gatewayGetConfig', platform) as Promise<GatewayConfigView>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYGETCONFIG, platform) as Promise<GatewayConfigView>
   },
   gatewaySetFeishuConfig(fields: FeishuConfigFields) {
-    return ipcRenderer.invoke('wraith:gatewaySetFeishuConfig', fields) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYSETFEISHUCONFIG, fields) as Promise<{ ok: boolean }>
   },
   gatewaySetWecomConfig(fields: WecomConfigFields) {
-    return ipcRenderer.invoke('wraith:gatewaySetWecomConfig', fields) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYSETWECOMCONFIG, fields) as Promise<{ ok: boolean }>
   },
   gatewayBindWeixinStart(workspace?: string) {
-    return ipcRenderer.invoke('wraith:gatewayBindWeixinStart', workspace) as Promise<void>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYBINDWEIXINSTART, workspace) as Promise<void>
   },
   gatewaySetWeixinConfig(fields: WeixinConfigFields) {
-    return ipcRenderer.invoke('wraith:gatewaySetWeixinConfig', fields) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYSETWEIXINCONFIG, fields) as Promise<{ ok: boolean }>
   },
   gatewaySetSecret(secret) {
-    return ipcRenderer.invoke('wraith:gatewaySetSecret', secret) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYSETSECRET, secret) as Promise<{ ok: boolean }>
   },
   gatewaySetWorkspace(workspace) {
-    return ipcRenderer.invoke('wraith:gatewaySetWorkspace', workspace) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYSETWORKSPACE, workspace) as Promise<{ ok: boolean }>
   },
   gatewayPickWorkspace() {
-    return ipcRenderer.invoke('wraith:gatewayPickWorkspace') as Promise<string | null>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYPICKWORKSPACE) as Promise<string | null>
   },
   gatewayStart() {
-    return ipcRenderer.invoke('wraith:gatewayStart') as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYSTART) as Promise<{ ok: boolean }>
   },
   gatewayStop() {
-    return ipcRenderer.invoke('wraith:gatewayStop') as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYSTOP) as Promise<{ ok: boolean }>
   },
   gatewayRestart() {
-    return ipcRenderer.invoke('wraith:gatewayRestart') as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYRESTART) as Promise<{ ok: boolean }>
   },
   gatewayStatus() {
-    return ipcRenderer.invoke('wraith:gatewayStatus') as Promise<GatewayStatus>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYSTATUS) as Promise<GatewayStatus>
   },
   gatewayLogs() {
-    return ipcRenderer.invoke('wraith:gatewayLogs') as Promise<{ lines: string[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYLOGS) as Promise<{ lines: string[] }>
   },
   gatewayBindStart() {
-    return ipcRenderer.invoke('wraith:gatewayBindStart') as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYBINDSTART) as Promise<{ ok: boolean }>
   },
   gatewayBindCancel() {
-    return ipcRenderer.invoke('wraith:gatewayBindCancel') as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_GATEWAYBINDCANCEL) as Promise<{ ok: boolean }>
   },
   onGatewayEvent(cb) {
     const listener = (_e: Electron.IpcRendererEvent, evt: GatewayEvent) => cb(evt)
@@ -765,53 +766,53 @@ const wraith: WraithApi = {
     return () => { ipcRenderer.removeListener('wraith:gateway-event', listener) }
   },
   appInfo() {
-    return ipcRenderer.invoke('wraith:appInfo') as Promise<AppInfo>
+    return ipcRenderer.invoke(IPC.WRAITH_APPINFO) as Promise<AppInfo>
   },
   checkUpdate(beta) {
-    return ipcRenderer.invoke('wraith:checkUpdate', beta) as Promise<UpdateResult>
+    return ipcRenderer.invoke(IPC.WRAITH_CHECKUPDATE, beta) as Promise<UpdateResult>
   },
   openExternal(url) {
-    return ipcRenderer.invoke('wraith:openExternal', url) as Promise<void>
+    return ipcRenderer.invoke(IPC.WRAITH_OPENEXTERNAL, url) as Promise<void>
   },
   openPath(path) {
-    return ipcRenderer.invoke('wraith:openPath', path) as Promise<void>
+    return ipcRenderer.invoke(IPC.WRAITH_OPENPATH, path) as Promise<void>
   },
-  revealInFinder(p) { return ipcRenderer.invoke('wraith:revealInFinder', p) as Promise<void> },
-  openWithApp(p, appPath) { return ipcRenderer.invoke('wraith:openWithApp', p, appPath) as Promise<void> },
-  downloadCopy(p) { return ipcRenderer.invoke('wraith:downloadCopy', p) as Promise<string> },
-  listEditors() { return ipcRenderer.invoke('wraith:listEditors') as Promise<EditorApp[]> },
-  undoFileEdit(payload) { return ipcRenderer.invoke('wraith:undoFileEdit', payload) as Promise<{ ok: boolean; message?: string }> },
+  revealInFinder(p) { return ipcRenderer.invoke(IPC.WRAITH_REVEALINFINDER, p) as Promise<void> },
+  openWithApp(p, appPath) { return ipcRenderer.invoke(IPC.WRAITH_OPENWITHAPP, p, appPath) as Promise<void> },
+  downloadCopy(p) { return ipcRenderer.invoke(IPC.WRAITH_DOWNLOADCOPY, p) as Promise<string> },
+  listEditors() { return ipcRenderer.invoke(IPC.WRAITH_LISTEDITORS) as Promise<EditorApp[]> },
+  undoFileEdit(payload) { return ipcRenderer.invoke(IPC.WRAITH_UNDOFILEEDIT, payload) as Promise<{ ok: boolean; message?: string }> },
   saveTextFile(defaultName, content) {
-    return ipcRenderer.invoke('wraith:saveTextFile', defaultName, content) as Promise<{ ok: boolean; path?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_SAVETEXTFILE, defaultName, content) as Promise<{ ok: boolean; path?: string }>
   },
   transcribe(audioBase64, mime) {
-    return ipcRenderer.invoke('wraith:transcribe', audioBase64, mime) as Promise<{ text: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_TRANSCRIBE, audioBase64, mime) as Promise<{ text: string }>
   },
   compactHistory() {
-    return ipcRenderer.invoke('wraith:compactHistory') as Promise<{ compacted: boolean; beforeTokens: number; afterTokens: number; error?: string | null; summarized?: boolean; fallback?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_COMPACTHISTORY) as Promise<{ compacted: boolean; beforeTokens: number; afterTokens: number; error?: string | null; summarized?: boolean; fallback?: string }>
   },
   contextState() {
-    return ipcRenderer.invoke('wraith:contextState') as Promise<Record<string, unknown>>
+    return ipcRenderer.invoke(IPC.WRAITH_CONTEXTSTATE) as Promise<Record<string, unknown>>
   },
   taskList(limit) {
-    return ipcRenderer.invoke('wraith:taskList', limit ?? 20) as Promise<TaskListResult>
+    return ipcRenderer.invoke(IPC.WRAITH_TASKLIST, limit ?? 20) as Promise<TaskListResult>
   },
   taskAdd(prompt) {
-    return ipcRenderer.invoke('wraith:taskAdd', prompt) as Promise<{ ok: boolean; id?: string; message?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_TASKADD, prompt) as Promise<{ ok: boolean; id?: string; message?: string }>
   },
   taskGet(id) {
-    return ipcRenderer.invoke('wraith:taskGet', id) as Promise<DurableTaskView>
+    return ipcRenderer.invoke(IPC.WRAITH_TASKGET, id) as Promise<DurableTaskView>
   },
   taskDelete(id) {
-    return ipcRenderer.invoke('wraith:taskDelete', id) as Promise<{ ok: boolean; message?: string }>
+    return ipcRenderer.invoke(IPC.WRAITH_TASKDELETE, id) as Promise<{ ok: boolean; message?: string }>
   },
   taskCancel(id) {
-    return ipcRenderer.invoke('wraith:taskCancel', id) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_TASKCANCEL, id) as Promise<{ ok: boolean }>
   },
-  ptyCreate(opts) { return ipcRenderer.invoke('wraith:ptyCreate', opts) as Promise<{ id: string }> },
-  ptyInput(id, data) { return ipcRenderer.invoke('wraith:ptyInput', id, data) as Promise<void> },
-  ptyResize(id, cols, rows) { return ipcRenderer.invoke('wraith:ptyResize', id, cols, rows) as Promise<void> },
-  ptyKill(id) { return ipcRenderer.invoke('wraith:ptyKill', id) as Promise<void> },
+  ptyCreate(opts) { return ipcRenderer.invoke(IPC.WRAITH_PTYCREATE, opts) as Promise<{ id: string }> },
+  ptyInput(id, data) { return ipcRenderer.invoke(IPC.WRAITH_PTYINPUT, id, data) as Promise<void> },
+  ptyResize(id, cols, rows) { return ipcRenderer.invoke(IPC.WRAITH_PTYRESIZE, id, cols, rows) as Promise<void> },
+  ptyKill(id) { return ipcRenderer.invoke(IPC.WRAITH_PTYKILL, id) as Promise<void> },
   onPtyData(cb) {
     const l = (_e: Electron.IpcRendererEvent, p: { id: string; data: string }) => cb(p)
     ipcRenderer.on('wraith:pty-data', l)
@@ -824,22 +825,22 @@ const wraith: WraithApi = {
   },
 
   petsList() {
-    return ipcRenderer.invoke('wraith:petsList') as Promise<{ pets: PetView[] }>
+    return ipcRenderer.invoke(IPC.WRAITH_PETSLIST) as Promise<{ pets: PetView[] }>
   },
   petsImportImage() {
-    return ipcRenderer.invoke('wraith:petsImportImage') as Promise<PetImportResult>
+    return ipcRenderer.invoke(IPC.WRAITH_PETSIMPORTIMAGE) as Promise<PetImportResult>
   },
   petsImportPackage() {
-    return ipcRenderer.invoke('wraith:petsImportPackage') as Promise<PetImportResult>
+    return ipcRenderer.invoke(IPC.WRAITH_PETSIMPORTPACKAGE) as Promise<PetImportResult>
   },
   petsRemove(id, source) {
-    return ipcRenderer.invoke('wraith:petsRemove', id, source) as Promise<{ ok: boolean }>
+    return ipcRenderer.invoke(IPC.WRAITH_PETSREMOVE, id, source) as Promise<{ ok: boolean }>
   },
   petsPreview(id) {
-    return ipcRenderer.invoke('wraith:petsPreview', id) as Promise<string | null>
+    return ipcRenderer.invoke(IPC.WRAITH_PETSPREVIEW, id) as Promise<string | null>
   },
   petsInstall(name) {
-    return ipcRenderer.invoke('wraith:petsInstall', name) as Promise<PetInstallResult>
+    return ipcRenderer.invoke(IPC.WRAITH_PETSINSTALL, name) as Promise<PetInstallResult>
   },
   onPetInstallOutput(cb) {
     const l = (_e: Electron.IpcRendererEvent, chunk: string) => cb(chunk)
@@ -848,10 +849,10 @@ const wraith: WraithApi = {
   },
 
   petGetConfig() {
-    return ipcRenderer.invoke('pet:getConfig') as Promise<PetConfig>
+    return ipcRenderer.invoke(IPC.PET_GETCONFIG) as Promise<PetConfig>
   },
   petSetConfig(patch) {
-    return ipcRenderer.invoke('pet:setConfig', patch) as Promise<PetConfig>
+    return ipcRenderer.invoke(IPC.PET_SETCONFIG, patch) as Promise<PetConfig>
   },
   onPetConfig(cb) {
     const listener = (_e: Electron.IpcRendererEvent, c: PetConfig) => cb(c)
@@ -860,37 +861,37 @@ const wraith: WraithApi = {
   },
 
   documents: {
-    list() { return ipcRenderer.invoke('wraith:documents:list') as Promise<DocEntry[]> },
-    add(paths) { return ipcRenderer.invoke('wraith:documents:add', paths) as Promise<DocAddResult> },
-    remove(name) { return ipcRenderer.invoke('wraith:documents:remove', name) as Promise<void> },
-    open(name) { return ipcRenderer.invoke('wraith:documents:open', name) as Promise<void> },
-    reveal(name) { return ipcRenderer.invoke('wraith:documents:reveal', name) as Promise<void> },
+    list() { return ipcRenderer.invoke(IPC.WRAITH_DOCUMENTS_LIST) as Promise<DocEntry[]> },
+    add(paths) { return ipcRenderer.invoke(IPC.WRAITH_DOCUMENTS_ADD, paths) as Promise<DocAddResult> },
+    remove(name) { return ipcRenderer.invoke(IPC.WRAITH_DOCUMENTS_REMOVE, name) as Promise<void> },
+    open(name) { return ipcRenderer.invoke(IPC.WRAITH_DOCUMENTS_OPEN, name) as Promise<void> },
+    reveal(name) { return ipcRenderer.invoke(IPC.WRAITH_DOCUMENTS_REVEAL, name) as Promise<void> },
   },
 
   /** 工作区文件浏览器:只读,所有路径必经 main 侧 withinWorkspace 守卫。入参必须是绝对路径。 */
   fs: {
     tree(rootPath: string, opts?: { maxDepth?: number }) {
-      return ipcRenderer.invoke('wraith:fs:tree', rootPath, opts) as ReturnType<typeof import('../main/fileExplorer').listTree>
+      return ipcRenderer.invoke(IPC.WRAITH_FS_TREE, rootPath, opts) as ReturnType<typeof import('../main/fileExplorer').listTree>
     },
     readText(absPath: string, maxBytes?: number) {
-      return ipcRenderer.invoke('wraith:fs:readText', absPath, maxBytes) as ReturnType<typeof import('../main/fileExplorer').readText>
+      return ipcRenderer.invoke(IPC.WRAITH_FS_READTEXT, absPath, maxBytes) as ReturnType<typeof import('../main/fileExplorer').readText>
     },
     stat(absPath: string) {
-      return ipcRenderer.invoke('wraith:fs:stat', absPath) as Promise<import('../shared/types').FsNode>
+      return ipcRenderer.invoke(IPC.WRAITH_FS_STAT, absPath) as Promise<import('../shared/types').FsNode>
     },
     reveal(absPath: string) {
-      return ipcRenderer.invoke('wraith:fs:reveal', absPath) as Promise<void>
+      return ipcRenderer.invoke(IPC.WRAITH_FS_REVEAL, absPath) as Promise<void>
     },
     openExternal(absPath: string) {
-      return ipcRenderer.invoke('wraith:fs:openExternal', absPath) as Promise<void>
+      return ipcRenderer.invoke(IPC.WRAITH_FS_OPENEXTERNAL, absPath) as Promise<void>
     },
   },
 
   windowControls: {
-    minimize() { void ipcRenderer.invoke('wraith:win:minimize') },
-    toggleMaximize() { void ipcRenderer.invoke('wraith:win:toggleMaximize') },
-    close() { void ipcRenderer.invoke('wraith:win:close') },
-    isMaximized() { return ipcRenderer.invoke('wraith:win:isMaximized') as Promise<boolean> },
+    minimize() { void ipcRenderer.invoke(IPC.WRAITH_WIN_MINIMIZE) },
+    toggleMaximize() { void ipcRenderer.invoke(IPC.WRAITH_WIN_TOGGLEMAXIMIZE) },
+    close() { void ipcRenderer.invoke(IPC.WRAITH_WIN_CLOSE) },
+    isMaximized() { return ipcRenderer.invoke(IPC.WRAITH_WIN_ISMAXIMIZED) as Promise<boolean> },
     onMaximizeChange(cb) {
       const listener = (_e: Electron.IpcRendererEvent, max: boolean) => cb(max)
       ipcRenderer.on('wraith:win:maximizeChanged', listener)
@@ -899,21 +900,21 @@ const wraith: WraithApi = {
   },
 
   closeBehavior: {
-    getMode() { return ipcRenderer.invoke('wraith:close:getMode') as Promise<CloseMode> },
+    getMode() { return ipcRenderer.invoke(IPC.WRAITH_CLOSE_GETMODE) as Promise<CloseMode> },
     onRequest(cb) {
       const listener = (): void => cb()
       ipcRenderer.on('wraith:close:request', listener)
       return () => { ipcRenderer.removeListener('wraith:close:request', listener) }
     },
-    execute(payload) { return ipcRenderer.invoke('wraith:close:execute', payload) as Promise<void> },
-    resetMode() { return ipcRenderer.invoke('wraith:close:resetMode') as Promise<void> },
+    execute(payload) { return ipcRenderer.invoke(IPC.WRAITH_CLOSE_EXECUTE, payload) as Promise<void> },
+    resetMode() { return ipcRenderer.invoke(IPC.WRAITH_CLOSE_RESETMODE) as Promise<void> },
   },
 
   // 输入历史:按会话持久化,供 Composer ↑/↓ 回显
   inputHistory: {
-    get(sessionId: string) { return ipcRenderer.invoke('wraith:inputHistory:get', sessionId) as Promise<string[]> },
-    add(sessionId: string, text: string) { return ipcRenderer.invoke('wraith:inputHistory:add', sessionId, text) as Promise<void> },
-    clear(sessionId: string) { return ipcRenderer.invoke('wraith:inputHistory:clear', sessionId) as Promise<void> },
+    get(sessionId: string) { return ipcRenderer.invoke(IPC.WRAITH_INPUTHISTORY_GET, sessionId) as Promise<string[]> },
+    add(sessionId: string, text: string) { return ipcRenderer.invoke(IPC.WRAITH_INPUTHISTORY_ADD, sessionId, text) as Promise<void> },
+    clear(sessionId: string) { return ipcRenderer.invoke(IPC.WRAITH_INPUTHISTORY_CLEAR, sessionId) as Promise<void> },
   },
 }
 
